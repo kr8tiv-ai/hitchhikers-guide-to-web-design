@@ -12,10 +12,11 @@ export interface PackageBoundary {
  * Allowed dependency edges. cli is published as hitchhikers-guide.
  * Nothing may depend on the cli package. grok-plugin stays isolated.
  * allowDeps values are workspace:*. allowExternal names a pinned package
- * from a later prompt (gsap on the app, prompt 010).
+ * from a later prompt (gsap on the app, prompt 010; pdfjs-dist on the
+ * engine, prompt 025).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
-  { name: "@hitchhiker/engine", allowDeps: [] },
+  { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
   { name: "@hitchhiker/orchestrator", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/grok-plugin", allowDeps: [] },
   { name: "@hitchhiker/app", allowDeps: ["@hitchhiker/engine"], allowExternal: ["gsap"] },

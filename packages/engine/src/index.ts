@@ -86,3 +86,28 @@ export type { AnswerRecord } from "./required.ts";
 export { InterviewError, openInterview } from "./interview.ts";
 export type { InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
 export { coverageReport, pushbackFor } from "./pushback.ts";
+export {
+  BRAND_GUIDE_SCHEMA,
+  BRAND_GUIDE_TASK,
+  BRAND_VOICE_IDS,
+  HAPPY_CARD,
+  IngestError,
+  MAX_INGEST_BYTES,
+  TEXT_CAP,
+  brandGuideInput,
+  brandGuideRequest,
+  extractPdfText,
+  importBrandGuide,
+  readImageFacts,
+  suggestAnswerPatches,
+} from "./ingest.ts";
+export type {
+  BrandGuideAdapter,
+  BrandGuideModel,
+  ImageFacts,
+  ImportedGuideCard,
+  IngestErrorCode,
+  IngestFileStat,
+  IngestOptions,
+  PdfExtract,
+} from "./ingest.ts";

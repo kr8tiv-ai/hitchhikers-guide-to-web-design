@@ -100,3 +100,22 @@ whisper.cpp
   No model weights are shipped in git. The user installs the executable
   and downloads a model themselves. This repo does not fetch either one.
 
+@hitchhiker/engine runtime
+--------------------------
+
+pdfjs-dist 5.4.530
+  Registry: https://www.npmjs.com/package/pdfjs-dist
+  Repository: https://github.com/mozilla/pdf.js
+  License: Apache-2.0
+  Confirmed from the registry license field and the installed LICENSE
+  (Apache License, Version 2.0, January 2004). The package is Mozilla PDF.js.
+  Pinned. Used to read PDF text in Node from the legacy build. The worker
+  runs in-process. No Poppler binary is required.
+  6.4.299 was not installed: its engines field asks for Node >=22.22.3 or
+  >=24.15.0, and this repo allows Node >=22.
+  Optional dependency @napi-rs/canvas 0.1.100 is MIT.
+  Registry: https://www.npmjs.com/package/@napi-rs/canvas
+  Repository: https://github.com/Brooooooklyn/canvas
+  ingest.ts does not import it. PNG and JPEG sizes are read from the file
+  header. The image file is not rewritten.
+

@@ -17,5 +17,8 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "pdfjs-dist": "5.4.530"
   }
 }
