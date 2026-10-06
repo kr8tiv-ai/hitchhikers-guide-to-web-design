@@ -14,6 +14,21 @@ export type DeployTarget =
   | "cloudflare"
   | "undecided";
 
+/**
+ * Per-task effort overrides live beside `default`. Values are effort names.
+ * The index signature is `string` so a task key and `default` share one map.
+ */
+export interface AiEffort {
+  default: Effort;
+  [task: string]: string;
+}
+
+export interface AiConfig {
+  model: string;
+  effort: AiEffort;
+  timeoutMs: number;
+}
+
 export interface GuideConfig {
   model: string;
   effort: Effort;
@@ -31,6 +46,7 @@ export interface GuideConfig {
     seoMin: number;
     desktopFpsMin: number;
   };
+  ai: AiConfig;
 }
 
 /**
@@ -45,6 +61,11 @@ export const IMAGINE_BUDGET_USD_MAX = 1000;
  * This is a cap, not a price.
  */
 export const TOKEN_BUDGET_MAX = 200_000;
+
+/** think() wall clock. One hundred twenty seconds, then the child tree is killed. */
+export const AI_TIMEOUT_MS = 120_000;
+export const AI_TIMEOUT_MIN_MS = 1_000;
+export const AI_TIMEOUT_MAX_MS = 3_600_000;
 
 const EFFORTS = ["medium", "high", "xhigh"] as const;
 const INTERVIEW_DEPTHS = ["express", "standard", "deep"] as const;
@@ -69,7 +90,10 @@ const TOP_KEYS = [
   "imagineBudgetUsd",
   "tokenBudget",
   "gates",
+  "ai",
 ] as const;
+
+const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
 
 const GATE_KEYS = [
   "phonePerfMin",
@@ -240,6 +264,63 @@ function readTokenBudget(value: unknown): number {
   return amount;
 }
 
+function rejectNull(field: string, value: unknown): unknown {
+  if (value === null) fail(field, "null is not allowed.");
+  return value;
+}
+
+function readAiEffort(value: unknown, fallback: Effort): AiEffort {
+  const checked = rejectNull("ai.effort", value);
+  if (!isRecord(checked)) fail("ai.effort", "expected an object.");
+  const result: AiEffort = {
+    default: Object.hasOwn(checked, "default")
+      ? readEnum("ai.effort.default", rejectNull("ai.effort.default", checked.default), EFFORTS)
+      : fallback,
+  };
+  for (const key of Object.keys(checked)) {
+    if (key === "default") continue;
+    if (key.trim().length === 0) fail("ai.effort", "task name is empty.");
+    result[key] = readEnum(
+      `ai.effort.${key}`,
+      rejectNull(`ai.effort.${key}`, checked[key]),
+      EFFORTS,
+    );
+  }
+  return result;
+}
+
+/**
+ * Missing `ai` copies the top-level model and effort so one config field still
+ * drives think(). An explicit `ai.model` or `ai.effort` wins over that copy.
+ */
+function readAi(value: unknown, modelFallback: string, effortFallback: Effort): AiConfig {
+  if (value === undefined) {
+    return {
+      model: modelFallback,
+      effort: { default: effortFallback },
+      timeoutMs: AI_TIMEOUT_MS,
+    };
+  }
+  const checked = rejectNull("ai", value);
+  if (!isRecord(checked)) fail("ai", "expected an object.");
+  rejectUnknown(checked, AI_KEYS, "ai");
+  const model = Object.hasOwn(checked, "model")
+    ? readString("ai.model", rejectNull("ai.model", checked.model))
+    : modelFallback;
+  const effort = Object.hasOwn(checked, "effort")
+    ? readAiEffort(checked.effort, effortFallback)
+    : { default: effortFallback };
+  const timeoutMs = Object.hasOwn(checked, "timeoutMs")
+    ? readIntInRange(
+        "ai.timeoutMs",
+        rejectNull("ai.timeoutMs", checked.timeoutMs),
+        AI_TIMEOUT_MIN_MS,
+        AI_TIMEOUT_MAX_MS,
+      )
+    : AI_TIMEOUT_MS;
+  return { model, effort, timeoutMs };
+}
+
 export function defaultConfig(): GuideConfig {
   return {
     model: "grok-4.7",
@@ -258,6 +339,11 @@ export function defaultConfig(): GuideConfig {
       seoMin: 90,
       desktopFpsMin: 30,
     },
+    ai: {
+      model: "grok-4.7",
+      effort: { default: "medium" },
+      timeoutMs: AI_TIMEOUT_MS,
+    },
   };
 }
 
@@ -269,13 +355,15 @@ export function parseConfig(raw: unknown): GuideConfig {
   if (!isRecord(raw)) fail("config", "expected a JSON object.");
   rejectUnknown(raw, TOP_KEYS, "");
   const defaults = defaultConfig();
+  const model = readOptional(raw, "model", defaults.model, (value) =>
+    readString("model", value),
+  );
+  const effort = readOptional(raw, "effort", defaults.effort, (value) =>
+    readEnum("effort", value, EFFORTS),
+  );
   return {
-    model: readOptional(raw, "model", defaults.model, (value) =>
-      readString("model", value),
-    ),
-    effort: readOptional(raw, "effort", defaults.effort, (value) =>
-      readEnum("effort", value, EFFORTS),
-    ),
+    model,
+    effort,
     interviewDepth: readOptional(
       raw,
       "interviewDepth",
@@ -313,6 +401,7 @@ export function parseConfig(raw: unknown): GuideConfig {
       readTokenBudget,
     ),
     gates: readOptional(raw, "gates", defaults.gates, readGates),
+    ai: readAi(Object.hasOwn(raw, "ai") ? raw.ai : undefined, model, effort),
   };
 }
 

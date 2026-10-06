@@ -111,9 +111,20 @@ test("package.json dependencies match BOUNDARIES", () => {
         ? (dependencies as Record<string, unknown>)
         : {};
     const names = Object.keys(deps).sort();
-    assert.deepEqual(names, [...boundary.allowDeps].sort());
-    for (const name of names) {
+    const externalAllow = [...(boundary.allowExternal ?? [])].sort();
+    const workspaceNames = names.filter((name) => !externalAllow.includes(name));
+    assert.deepEqual(workspaceNames, [...boundary.allowDeps].sort());
+    assert.deepEqual(
+      names.filter((name) => externalAllow.includes(name)),
+      externalAllow,
+    );
+    for (const name of workspaceNames) {
       assert.equal(deps[name], "workspace:*");
+    }
+    for (const name of externalAllow) {
+      const version = deps[name];
+      assert.equal(typeof version, "string");
+      assert.notEqual(version, "workspace:*");
     }
   }
 

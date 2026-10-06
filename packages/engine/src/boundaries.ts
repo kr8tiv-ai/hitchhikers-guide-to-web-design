@@ -4,17 +4,21 @@ import path from "node:path";
 export interface PackageBoundary {
   name: string;
   allowDeps: readonly string[];
+  /** Pinned third-party packages. Workspace edges stay in allowDeps. */
+  allowExternal?: readonly string[];
 }
 
 /**
- * Allowed npm dependency edges. cli is published as hitchhikers-guide.
+ * Allowed dependency edges. cli is published as hitchhikers-guide.
  * Nothing may depend on the cli package. grok-plugin stays isolated.
+ * allowDeps values are workspace:*. allowExternal names a pinned package
+ * from a later prompt (gsap on the app, prompt 010).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [] },
   { name: "@hitchhiker/orchestrator", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/grok-plugin", allowDeps: [] },
-  { name: "@hitchhiker/app", allowDeps: ["@hitchhiker/engine"] },
+  { name: "@hitchhiker/app", allowDeps: ["@hitchhiker/engine"], allowExternal: ["gsap"] },
   { name: "hitchhikers-guide", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/voice", allowDeps: [] },
   { name: "@hitchhiker/crawler", allowDeps: [] },

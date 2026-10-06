@@ -16,6 +16,8 @@ export {
   saveConfig,
 } from "./config.ts";
 export type {
+  AiConfig,
+  AiEffort,
   DeployTarget,
   Effort,
   GuideConfig,
@@ -23,6 +25,44 @@ export type {
   SessionIdMode,
   VoiceEngine,
 } from "./config.ts";
+export {
+  AI_TIMEOUT_MAX_MS,
+  AI_TIMEOUT_MIN_MS,
+  AI_TIMEOUT_MS,
+} from "./config.ts";
+export {
+  CassetteError,
+  CassetteMissError,
+  CassetteModeError,
+  GrokMissingError,
+  GrokUnavailableError,
+  PROMPT_FILE_BYTES,
+  READ_ONLY_TOOLS,
+  ThinkInputError,
+  ThinkRunError,
+  ThinkSchemaError,
+  ThinkTimeoutError,
+  buildGrokArgv,
+  cassetteKey,
+  cassetteMode,
+  writeCassette,
+  flagsFromHelp,
+  redact,
+  resolveGrokCommand,
+  spawnGrok,
+  think,
+  validateJson,
+} from "./ai/index.ts";
+export type {
+  CassetteMode,
+  CassetteRecord,
+  JsonSchema,
+  SpawnLike,
+  SpawnOutput,
+  ThinkDeps,
+  ThinkRequest,
+  ThinkResult,
+} from "./ai/index.ts";
 export {
   LockHeld,
   STALE_LOCK_MS,

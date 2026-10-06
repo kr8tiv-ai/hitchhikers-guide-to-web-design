@@ -12,6 +12,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  AI_TIMEOUT_MS,
+  AI_TIMEOUT_MAX_MS,
   ConfigError,
   IMAGINE_BUDGET_USD_MAX,
   TOKEN_BUDGET_MAX,
@@ -200,9 +202,12 @@ test("gate integers stay inside their ranges", () => {
 });
 
 test("GuideConfig has no secret fields", () => {
-  const keys = Object.keys(defaultConfig());
-  const gateKeys = Object.keys(defaultConfig().gates);
-  const joined = [...keys, ...gateKeys].join(" ");
+  const config = defaultConfig();
+  const keys = Object.keys(config);
+  const gateKeys = Object.keys(config.gates);
+  const aiKeys = Object.keys(config.ai);
+  const effortKeys = Object.keys(config.ai.effort);
+  const joined = [...keys, ...gateKeys, ...aiKeys, ...effortKeys].join(" ");
   assert.equal(/api|key|bearer|email|secret|password|budgets/i.test(joined), false);
   assert.equal(keys.includes("gsapFallback"), false);
   assert.equal(keys.includes("motionFallback"), false);
@@ -249,7 +254,80 @@ test("loadConfig reads a present file and fills missing keys", () => {
     assert.equal(config.worktrees, false);
     assert.equal(config.voiceEngine, "local");
     assert.equal(config.gates.phonePerfMin, 90);
+    assert.equal(config.ai.model, "grok-4.7");
+    assert.equal(config.ai.effort.default, "high");
+    assert.equal(config.ai.timeoutMs, AI_TIMEOUT_MS);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("ai block defaults to grok-4.7 and accepts a task effort", () => {
+  const config = defaultConfig();
+  assert.equal(config.ai.model, "grok-4.7");
+  assert.equal(config.ai.effort.default, "medium");
+  assert.equal(config.ai.timeoutMs, AI_TIMEOUT_MS);
+  const custom = parseConfig({
+    ai: {
+      model: "grok-4.7",
+      timeoutMs: 5_000,
+      effort: { default: "high", "live-smoke": "xhigh" },
+    },
+  });
+  assert.equal(custom.ai.model, "grok-4.7");
+  assert.equal(custom.ai.effort.default, "high");
+  assert.equal(custom.ai.effort["live-smoke"], "xhigh");
+  assert.equal(custom.ai.timeoutMs, 5_000);
+  assert.equal(custom.model, "grok-4.7");
+});
+
+test("an explicit ai.model stays independent of the top-level model", () => {
+  const config = parseConfig({
+    model: "grok-4",
+    effort: "xhigh",
+    ai: { model: "grok-4.7" },
+  });
+  assert.equal(config.model, "grok-4");
+  assert.equal(config.effort, "xhigh");
+  assert.equal(config.ai.model, "grok-4.7");
+  assert.equal(config.ai.effort.default, "xhigh");
+  assert.equal(config.ai.timeoutMs, AI_TIMEOUT_MS);
+});
+
+test("ai rejects unknown keys, a low effort, and a timeout outside range", () => {
+  assert.throws(
+    () => parseConfig({ ai: { apiKey: "nope" } }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(error.field, "ai.apiKey");
+      assert.match(error.message, /unknown key/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => parseConfig({ ai: { effort: { default: "low" } } }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(error.field, "ai.effort.default");
+      assert.match(error.message, /medium, high, xhigh/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => parseConfig({ ai: null }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(error.field, "ai");
+      assert.match(error.message, /null/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => parseConfig({ ai: { timeoutMs: AI_TIMEOUT_MAX_MS + 1 } }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(error.field, "ai.timeoutMs");
+      return true;
+    },
+  );
 });
