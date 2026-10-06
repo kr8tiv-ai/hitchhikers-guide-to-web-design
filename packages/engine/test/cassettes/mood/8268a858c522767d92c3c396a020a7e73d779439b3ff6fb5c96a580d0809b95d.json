@@ -1,0 +1,122 @@
+{
+  "task": "mood",
+  "model": "grok-4.7",
+  "effort": "medium",
+  "key": "8268a858c522767d92c3c396a020a7e73d779439b3ff6fb5c96a580d0809b95d",
+  "result": {
+    "perImage": [
+      {
+        "file": "01-shot-1.png",
+        "whatItSays": "Swatch 1 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "Helvetica"
+      },
+      {
+        "file": "02-shot-2.png",
+        "whatItSays": "Swatch 2 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "humanist sans"
+      },
+      {
+        "file": "03-shot-3.png",
+        "whatItSays": "Swatch 3 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "humanist sans"
+      },
+      {
+        "file": "04-shot-4.png",
+        "whatItSays": "Swatch 4 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "humanist sans"
+      },
+      {
+        "file": "05-shot-5.png",
+        "whatItSays": "Swatch 5 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "humanist sans"
+      },
+      {
+        "file": "06-shot-6.png",
+        "whatItSays": "Swatch 6 is a quiet field of color.",
+        "palette": [
+          "#112233",
+          "#445566"
+        ],
+        "typeClass": "humanist sans"
+      }
+    ],
+    "directions": [
+      {
+        "name": "Brass paper",
+        "palette": [
+          "#f3efe4",
+          "#c4a574",
+          "#1f1a17",
+          "#8c9a86",
+          "#f7f4ee"
+        ],
+        "typeClasses": {
+          "display": "high-contrast serif",
+          "text": "humanist sans"
+        },
+        "mood": "Warm paper, brass, and a quiet counter.",
+        "references": [
+          "shot-1.png"
+        ]
+      },
+      {
+        "name": "Ink slab",
+        "palette": [
+          "#14181c",
+          "#d8d2c8",
+          "#8a3b2c",
+          "#e6e1d8",
+          "#3d4c3f"
+        ],
+        "typeClasses": {
+          "display": "slab",
+          "text": "grotesk"
+        },
+        "mood": "Printed ink on a thick slab.",
+        "references": [
+          "shot-2.png"
+        ]
+      },
+      {
+        "name": "Morning tile",
+        "palette": [
+          "#f7f1e8",
+          "#2f5d50",
+          "#e3b23c",
+          "#1c1c1c",
+          "#d9cfc3"
+        ],
+        "typeClasses": {
+          "display": "geometric sans",
+          "text": "old-style serif"
+        },
+        "mood": "Tile, herb green, and a pale morning.",
+        "references": [
+          "shot-3.png"
+        ]
+      }
+    ]
+  },
+  "raw": "{\"perImage\":[{\"file\":\"01-shot-1.png\",\"whatItSays\":\"Swatch 1 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"Helvetica\"},{\"file\":\"02-shot-2.png\",\"whatItSays\":\"Swatch 2 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"humanist sans\"},{\"file\":\"03-shot-3.png\",\"whatItSays\":\"Swatch 3 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"humanist sans\"},{\"file\":\"04-shot-4.png\",\"whatItSays\":\"Swatch 4 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"humanist sans\"},{\"file\":\"05-shot-5.png\",\"whatItSays\":\"Swatch 5 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"humanist sans\"},{\"file\":\"06-shot-6.png\",\"whatItSays\":\"Swatch 6 is a quiet field of color.\",\"palette\":[\"#112233\",\"#445566\"],\"typeClass\":\"humanist sans\"}],\"directions\":[{\"name\":\"Brass paper\",\"palette\":[\"#f3efe4\",\"#c4a574\",\"#1f1a17\",\"#8c9a86\",\"#f7f4ee\"],\"typeClasses\":{\"display\":\"high-contrast serif\",\"text\":\"humanist sans\"},\"mood\":\"Warm paper, brass, and a quiet counter.\",\"references\":[\"shot-1.png\"]},{\"name\":\"Ink slab\",\"palette\":[\"#14181c\",\"#d8d2c8\",\"#8a3b2c\",\"#e6e1d8\",\"#3d4c3f\"],\"typeClasses\":{\"display\":\"slab\",\"text\":\"grotesk\"},\"mood\":\"Printed ink on a thick slab.\",\"references\":[\"shot-2.png\"]},{\"name\":\"Morning tile\",\"palette\":[\"#f7f1e8\",\"#2f5d50\",\"#e3b23c\",\"#1c1c1c\",\"#d9cfc3\"],\"typeClasses\":{\"display\":\"geometric sans\",\"text\":\"old-style serif\"},\"mood\":\"Tile, herb green, and a pale morning.\",\"references\":[\"shot-3.png\"]}]}",
+  "durationMs": 4
+}

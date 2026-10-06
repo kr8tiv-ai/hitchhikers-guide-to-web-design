@@ -29,6 +29,14 @@ export interface AiConfig {
   timeoutMs: number;
 }
 
+/**
+ * Opt-in network integrations. Every flag defaults off.
+ * Pinterest capture is a public-board scroll. It does not log in.
+ */
+export interface IntegrationsConfig {
+  pinterestCapture: boolean;
+}
+
 export interface GuideConfig {
   model: string;
   effort: Effort;
@@ -47,6 +55,7 @@ export interface GuideConfig {
     desktopFpsMin: number;
   };
   ai: AiConfig;
+  integrations: IntegrationsConfig;
 }
 
 /**
@@ -91,9 +100,15 @@ const TOP_KEYS = [
   "tokenBudget",
   "gates",
   "ai",
+  "integrations",
 ] as const;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
+
+const INTEGRATION_KEYS = ["pinterestCapture"] as const;
+
+/** Public board capture stays off until a project opts in. */
+const PINTEREST_CAPTURE_DEFAULT = false;
 
 const GATE_KEYS = [
   "phonePerfMin",
@@ -293,6 +308,31 @@ function readAiEffort(value: unknown, fallback: Effort): AiEffort {
  * Missing `ai` copies the top-level model and effort so one config field still
  * drives think(). An explicit `ai.model` or `ai.effort` wins over that copy.
  */
+function readIntegrationFlag(
+  record: Record<string, unknown>,
+  key: string,
+  fallback: boolean,
+): boolean {
+  const field = `integrations.${key}`;
+  if (!Object.hasOwn(record, key)) return fallback;
+  const value = record[key];
+  if (value === null) fail(field, "null is not allowed.");
+  if (typeof value !== "boolean") fail(field, "expected a boolean.");
+  return value;
+}
+
+function readIntegrations(value: unknown): IntegrationsConfig {
+  if (!isRecord(value)) fail("integrations", "expected an object.");
+  rejectUnknown(value, INTEGRATION_KEYS, "integrations");
+  return {
+    pinterestCapture: readIntegrationFlag(
+      value,
+      "pinterestCapture",
+      PINTEREST_CAPTURE_DEFAULT,
+    ),
+  };
+}
+
 function readAi(value: unknown, modelFallback: string, effortFallback: Effort): AiConfig {
   if (value === undefined) {
     return {
@@ -343,6 +383,9 @@ export function defaultConfig(): GuideConfig {
       model: "grok-4.7",
       effort: { default: "medium" },
       timeoutMs: AI_TIMEOUT_MS,
+    },
+    integrations: {
+      pinterestCapture: PINTEREST_CAPTURE_DEFAULT,
     },
   };
 }
@@ -402,6 +445,7 @@ export function parseConfig(raw: unknown): GuideConfig {
     ),
     gates: readOptional(raw, "gates", defaults.gates, readGates),
     ai: readAi(Object.hasOwn(raw, "ai") ? raw.ai : undefined, model, effort),
+    integrations: readOptional(raw, "integrations", defaults.integrations, readIntegrations),
   };
 }
 
