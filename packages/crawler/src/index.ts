@@ -19,3 +19,23 @@ export {
   sniffStack,
 } from "./crawl.ts";
 export type { BrowserSession, CrawlDeps, CrawlResult, FakePage, Viewport } from "./crawl.ts";
+
+export {
+  CURATED_PACK_FILE,
+  DEFAULT_GALLERY_ALLOW,
+  GALLERY_CACHE_MAX_AGE_MS,
+  GALLERY_FETCH_TIMEOUT_MS,
+  cacheIsFresh,
+  loadCurated,
+  refreshGalleries,
+  suggestReferences,
+} from "./galleries.ts";
+export type {
+  GalleryCache,
+  GalleryEntry,
+  GallerySource,
+  GalleryStyleWorld,
+  RefreshOptions,
+  RefreshResult,
+  SuggestQuery,
+} from "./galleries.ts";

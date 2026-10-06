@@ -119,3 +119,12 @@ pdfjs-dist 5.4.530
   ingest.ts does not import it. PNG and JPEG sizes are read from the file
   header. The image file is not rewritten.
 
+Gallery shortlist
+-----------------
+
+packages/knowledge/galleries/curated.json is an offline pack. Gallery names
+are facts about public awards, not a copy of gallery copy. The pack does
+not fetch Godly or Awwwards, and it does not assume a Godly API. Site of
+the Day is not labeled Site of the Year. A live refresh runs only when a
+caller passes a fetcher and a non-empty allow list.
+

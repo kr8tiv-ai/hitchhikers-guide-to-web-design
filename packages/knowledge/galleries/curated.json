@@ -1,0 +1,124 @@
+[
+  {
+    "name": "Lando Norris",
+    "url": "https://landonorris.com/",
+    "source": "awwwards",
+    "industry": "personal",
+    "style_world": "3d-world",
+    "motion_level": 8,
+    "year": 2025,
+    "award": "SOTY 2025",
+    "noted": "Look at how OFF+BRAND lets one signature moment organize a personal site. Taken from the research record, not a live check."
+  },
+  {
+    "name": "CoMinVi",
+    "url": "https://www.cominvi.com.mx/",
+    "source": "awwwards",
+    "industry": "other",
+    "style_world": "editorial",
+    "motion_level": 5,
+    "date": "2026-09-30",
+    "award": "SOTD",
+    "noted": "Look at a Site of the Day as one day's award, kept apart from Site of the Year. The record date is 2026-09-30, and this pack does not claim the page is unchanged."
+  },
+  {
+    "name": "Igloo Inc",
+    "url": "https://www.igloo.inc/",
+    "source": "other",
+    "industry": "agency",
+    "style_world": "3d-world",
+    "motion_level": 9,
+    "award": "none",
+    "noted": "Look at how a pinned scroll can carry one story without adding a second idea."
+  },
+  {
+    "name": "Lusion",
+    "url": "https://lusion.co/",
+    "source": "other",
+    "industry": "agency",
+    "style_world": "3d-world",
+    "motion_level": 9,
+    "award": "none",
+    "noted": "Look at how a studio can make the work itself the way you move through the site."
+  },
+  {
+    "name": "Bruno Simon",
+    "url": "https://bruno-simon.com/",
+    "source": "other",
+    "industry": "portfolio",
+    "style_world": "3d-world",
+    "motion_level": 9,
+    "award": "none",
+    "noted": "Look at how a portfolio can be a place the visitor moves through, with the person as the guide."
+  },
+  {
+    "name": "Opal Tadpole",
+    "url": "https://www.opalcamera.com/opal-tadpole",
+    "source": "other",
+    "industry": "e-commerce",
+    "style_world": "3d-world",
+    "motion_level": 8,
+    "award": "none",
+    "noted": "Look at how one product gesture can explain the object, so the page does not need a second pitch."
+  },
+  {
+    "name": "Pangram Pangram",
+    "url": "https://pangrampangram.com/",
+    "source": "other",
+    "industry": "other",
+    "style_world": "editorial",
+    "motion_level": 4,
+    "award": "none",
+    "noted": "Look at how type can do the job of an image, and the rest of the page can stay quiet."
+  },
+  {
+    "name": "Simply Chocolate",
+    "url": "https://simplychocolate.dk",
+    "source": "other",
+    "industry": "food-drink",
+    "style_world": "playful",
+    "motion_level": 6,
+    "award": "none",
+    "noted": "Look at how a food shop can play along the scroll and still keep the product as the point."
+  },
+  {
+    "name": "Frans Hals Museum",
+    "url": "https://www.franshalsmuseum.nl/en/",
+    "source": "other",
+    "industry": "other",
+    "style_world": "editorial",
+    "motion_level": 4,
+    "award": "none",
+    "noted": "Look at how a museum visit can lead with the collection, and let type host the room."
+  },
+  {
+    "name": "Messenger",
+    "url": "https://messenger.abeto.co",
+    "source": "other",
+    "industry": "other",
+    "style_world": "3d-world",
+    "motion_level": 9,
+    "award": "none",
+    "noted": "Look at how a small world can explain a service by letting someone move through it."
+  },
+  {
+    "name": "Synchronized Studio",
+    "url": "https://synchronized.studio/",
+    "source": "other",
+    "industry": "agency",
+    "style_world": "editorial",
+    "motion_level": 4,
+    "award": "none",
+    "noted": "Look at how a studio can let letters carry the motion, and keep every other element spare."
+  },
+  {
+    "name": "Active Theory",
+    "url": "https://activetheory.net",
+    "source": "other",
+    "industry": "agency",
+    "style_world": "3d-world",
+    "motion_level": 9,
+    "award": "none",
+    "noted": "Look at how a body of work can still offer one path through it."
+  }
+]
