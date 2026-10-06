@@ -1,7 +1,7 @@
 # run-build.ps1 : builds The Hitchhiker's Guide to Web Design from hh-build-plan/prompts, one prompt at a time.
 #
 # Each prompt runs in a fresh headless Grok session on the DEFAULT login (C:\Users\lucid\.grok; GROK_HOME is unset, never changed).
-#   grok -p <prompt file contents> -m grok-4.7 --effort <prompt effort> --output-format streaming-json --max-turns <N>
+#   grok -p=<prompt file contents> -m grok-4.7 --effort <prompt effort> --output-format streaming-json --max-turns <N>
 #        --always-approve --sandbox workspace --deny <rules...> --rules <driver rules>    (cwd = project root)
 # After each prompt: a new commit must exist and the tree must be clean; leftovers are committed with the prompt's own commit message.
 # After every checkpoint (and the once-over): git push origin main (normal push, never force).
@@ -93,7 +93,8 @@ $DriverRules = 'You are running headless under an automated build driver in ' + 
   'Use PowerShell syntax for terminal commands (no && chaining; use ;). When the prompt is done, make the commit named in its Commit section and leave the working tree clean. Nobody can answer questions: make the reasonable choice, note it in the report, and keep going.'
 
 function Build-Args([string]$text, [string]$effort, [int]$turns) {
-  $a = @('-p', (Q $text), '-m', $Model, '--effort', $effort, '--output-format', 'streaming-json', '--max-turns', "$turns",
+  # -p=<contents>: the prompt files start with '---' frontmatter, which a bare -p value would be parsed as a flag.
+  $a = @((Q ('-p=' + $text)), '-m', $Model, '--effort', $effort, '--output-format', 'streaming-json', '--max-turns', "$turns",
          '--always-approve', '--sandbox', 'workspace', '--cwd', (Q $Root))
   foreach ($d in $DenyRules) { $a += @('--deny', (Q $d)) }
   $a += @('--rules', (Q $DriverRules))
@@ -122,9 +123,14 @@ function Run-Once($p, [int]$attempt) {
   $argStr = Build-Args $p.text $p.effort $p.turns
   Save @{ current = $p.id; file = $p.name; kind = $p.kind; effort = $p.effort; started = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'); status = 'running'; attempt = $attempt }
   L "START $($p.id) $($p.name) kind=$($p.kind) effort=$($p.effort) turns=$($p.turns) attempt=$attempt argsLen=$($argStr.Length)"
-  $proc = Start-Process -FilePath $Grok -ArgumentList $argStr -WorkingDirectory $Root -NoNewWindow -PassThru `
-            -RedirectStandardOutput $log -RedirectStandardError $err -RedirectStandardInput $EmptyIn
+  $proc = $null
+  try {
+    $proc = Start-Process -FilePath $Grok -ArgumentList $argStr -WorkingDirectory $Root -NoNewWindow -PassThru `
+              -RedirectStandardOutput $log -RedirectStandardError $err -RedirectStandardInput $EmptyIn -ErrorAction Stop
+  } catch { L "SPAWN ERROR $($p.id): $($_.Exception.Message)"; return 'fail' }
+  if (-not $proc) { L "SPAWN ERROR $($p.id): no process object"; return 'fail' }
   $null = $proc.Handle   # keep a handle so ExitCode is readable after exit
+  L "SPAWNED $($p.id) grok pid $($proc.Id)"
   Save @{ grok_pid = $proc.Id }
   $lastSize = -1; $lastGrow = Get-Date
   while (-not $proc.HasExited) {
