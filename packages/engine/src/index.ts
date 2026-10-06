@@ -79,3 +79,5 @@ export { homeIndexPath, upsertHomeProject } from "./home-index.ts";
 export type { HomeProject } from "./home-index.ts";
 export { TreeError, loadTree, questionsForDepth } from "./tree.ts";
 export type { Question } from "./tree.ts";
+export { SITE_TYPES } from "./site-types.ts";
+export type { SiteTypeHint } from "./site-types.ts";

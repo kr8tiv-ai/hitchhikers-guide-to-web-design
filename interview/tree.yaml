@@ -252,3 +252,385 @@ questions:
     writes:
       - "ASSETS.md#inventory"
       - "ASSETS.md#protected"
+
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "Why are you building this website, in one sentence?"
+    why: "This is the site why, the job the website is for. The brand why already lives on its own question. A sentence that only says you want to exist online is not a job."
+    input: [text, voice]
+    skip_default: "Site why not stated. One sentence still owed."
+    suggest: "To [help this person do this] so that [this change happens]."
+    pushback_if:
+      - "to have an online presence"
+      - "online presence"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md"
+
+  - id: DP-2.2
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What do you hope it accomplishes? What is the one action a visitor should take?"
+    why: "One action keeps the page honest. A second action can exist, but it does not get to be the point."
+    input: [text, voice]
+    skip_default: "One visitor action not named."
+    suggest: "Name a verb a visitor can finish in one sitting: book, buy, call, read, register, or reply."
+    pushback_if:
+      - "everything"
+      - "it depends"
+    writes:
+      - "SITE-BRIEF.md#action"
+
+  - id: DP-2.3
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What kind of site is this? Pick any that fit: sales, funnel, calls, reservations, sign-ups, portfolio, content, local, event, personal, nonprofit, recruiting, investor, app."
+    why: "Multiple types are allowed. Each type has one primary KPI, in words, and one knowledge pack. The packs named for these types include sales-psychology, seo, or ux-conversion. No fake numbers live on the type."
+    input: [choice, text]
+    skip_default: "No site type chosen."
+    suggest: "The engine will offer these types."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#site-types"
+      - "KPIS.md#site-types"
+
+  - id: DP-2.4
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What is the key outcome, and which KPIs matter? How many leads, bookings, or sales a month would make you happy?"
+    why: "If you do not know, a four-question helper asks for current numbers, the goal, visitors needed at a stated assumed conversion range, and which page carries it. Ranges are assumptions. Nothing here fills in a rate."
+    input: [text, voice]
+    skip_default: "KPIs not set. Ranges stay assumptions until you name a goal."
+    suggest: "Name the outcome in words, then the count that would count as a good month. Leave the range blank if you do not have one."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "KPIS.md"
+
+  - id: DP-2.5
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "Should it be a funnel, with one offer and one path, a brand experience, with story and world, or a hybrid?"
+    why: "A funnel is one offer and one path, short on purpose. A brand experience is story and world, with more than one path, and a hybrid keeps both: an immersive opening plus one path to the offer."
+    input: [choice, text, voice]
+    skip_default: "Hybrid. An immersive opening and one path to the offer."
+    suggest: "Hybrid when the work needs a world and a next step. Funnel when one offer is the whole site. Brand when the visit itself is the point."
+    writes:
+      - "SITE-BRIEF.md#shape"
+
+  - id: DP-2.6
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "Who is the visitor? Name one specific person: what they want, what they fear, and what device they are on."
+    why: "A named person beats a crowd. Want, fear, and device decide the offer, the proof, and how heavy the page can be."
+    input: [text, voice]
+    skip_default: "Visitor not named. Want, fear, and device still owed."
+    suggest: "One person, one want, one fear, and phone or desk."
+    pushback_if:
+      - "everyone"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#visitor"
+
+  - id: DP-2.7
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What do you sell or give away, and why should anyone care?"
+    why: "The offer is the thing that changes hands. Caring is the reason this visitor, not a generic one, would stop."
+    input: [text, voice]
+    skip_default: "Offer not stated."
+    suggest: "Name the thing, the price or the gift, and the change it makes for the person in the previous answer."
+    pushback_if:
+      - "quality"
+      - "the best"
+    writes:
+      - "SITE-BRIEF.md#offer"
+
+  - id: DP-2.8
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "Which pages and sections do you think you need? This list gets fixed later."
+    why: "Your list is a starting sketch. The section plan can add, cut, or rename once the offer and the visitor are clear."
+    input: [text, voice]
+    skip_default: "Page list not stated. The later plan will draft one."
+    suggest: "Name the pages you already picture, in the order a visitor would meet them."
+    writes:
+      - "SITE-BRIEF.md#pages"
+
+  - id: DP-3.1
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you want an email intake or a contact form? The default is yes. Which fields, and where should submissions go?"
+    why: "A form is the ordinary way a stranger reaches you. Fields and the destination matter more than the widget."
+    input: [choice, text, voice]
+    skip_default: "Yes. A contact form with name, email, and a message, sent to the site owner."
+    suggest: "Yes, with name, email, and a message. Send it to the address you already answer."
+    writes:
+      - "SITE-BRIEF.md#contact"
+
+  - id: DP-3.2
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you sell products on the site? How many, and are they physical, digital, or subscriptions?"
+    why: "A payment link or a buy button can ship in the default build. A full store, including a Shopify store with its own catalog and checkout, escalates. It is not the default build."
+    input: [choice, text, voice]
+    skip_default: "No store. Contact or content only."
+    suggest: "Stripe Payment Links or a Shopify Buy Button. A full store escalates."
+    pushback_if:
+      - "shopify store"
+      - "full store"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#commerce"
+
+  - id: DP-3.3
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you need bookings, reservations, or calls?"
+    why: "A booking is a different tool from a contact form. The widget should match how the visit is confirmed."
+    input: [choice, text, voice]
+    skip_default: "No bookings."
+    suggest: "Cal.com, Calendly, or a restaurant widget, if a time slot is the action."
+    writes:
+      - "SITE-BRIEF.md#bookings"
+
+  - id: DP-3.4
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you want a newsletter? If yes, which platform: Kit, Mailchimp, MailerLite, Beehiiv, Brevo, Klaviyo, or Hostinger Reach?"
+    why: "The platform is a choice, not a guess. The list is the set this Guide knows how to hand off."
+    input: [choice, text, voice]
+    skip_default: "No newsletter."
+    suggest: "Name the platform you already pay for. If you have none, say so and the later plan can compare them."
+    writes:
+      - "SITE-BRIEF.md#newsletter"
+
+  - id: DP-3.5
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you want a blog or another CMS, and do you want to edit the content yourself later?"
+    why: "Editing later decides the tool. A folder of files is enough for some people. Others need a desk they can open without a code editor."
+    input: [choice, text, voice]
+    skip_default: "No blog. No later self-editing."
+    suggest: "Content collections if you rarely edit. Keystatic or Sanity if you want a desk of your own."
+    writes:
+      - "SITE-BRIEF.md#blog-cms"
+
+  - id: DP-3.6
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Do you need video, other media, or a portfolio of work on the site?"
+    why: "Media weight and a portfolio grid change the page plan. Say what must be watchable, listenable, or browsable."
+    input: [choice, text, voice]
+    skip_default: "No video, media library, or portfolio."
+    suggest: "Name the pieces you already have, and whether a visitor should watch, listen, or browse."
+    writes:
+      - "SITE-BRIEF.md#media"
+
+  - id: DP-3.7
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Any special features? For example MLS listings, maps, member areas, a configurator, an editor, a visualization, or something unusual like blockchain."
+    why: "Suggest for me proposes features from the site type and the industry. Anything non-standard can look up APIs and MCP servers. Discovery is approval-gated."
+    input: [text, voice]
+    skip_default: "No special features."
+    suggest: "Suggest for me, based on the site type and the industry. Nothing is installed from that pass."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#specials"
+
+  - id: DP-3.8
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Which analytics do you want: Plausible, Umami, or GA4 with consent?"
+    why: "Plausible and Umami skip the cookie banner. GA4 needs consent before it runs. Events come from the KPI file, not from a template."
+    input: [choice, text, voice]
+    skip_default: "Plausible. No cookie banner."
+    suggest: "Plausible or Umami when you want a quiet count. GA4 with consent when you already live in that report."
+    writes:
+      - "SITE-BRIEF.md#analytics"
+
+  - id: DP-3.9
+    module: tools
+    depth: [express, standard, deep]
+    ask: "Which languages or locales should the site speak?"
+    why: "A second locale is a real set of pages, not a toggle pasted on at the end."
+    input: [text, voice]
+    skip_default: "One locale. The language of this interview."
+    suggest: "Name each language and the region, if the region changes the offer."
+    writes:
+      - "SITE-BRIEF.md#locales"
+
+  - id: DP-4.1
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Who are your main competitors? Drop their sites."
+    why: "Names and URLs land here. A later pass can read positioning, audience, visual identity, voice, weaknesses, and complaints, then look for the sea of sameness and three white spaces. This question does not crawl."
+    input: [text, voice]
+    skip_default: "No competitors named."
+    suggest: "Three competitors, each with a URL if you have one."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "COMPETITORS.md"
+
+  - id: DP-4.2
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "What do they do well that you secretly envy, and what is boring about them?"
+    why: "Envy is the part worth learning from. Boredom is the opening. Both need a specific page, line, or habit, not a shrug."
+    input: [text, voice]
+    skip_default: "No envy and no boredom named."
+    suggest: "One envied move and one boring habit, tied to a page you have actually seen."
+    pushback_if:
+      - "nothing"
+      - "they are fine"
+    writes:
+      - "COMPETITORS.md#envy"
+
+  - id: DP-4.3
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Do you want a blog, and should keyword-based posts be written for you? Bring seed keywords if you have them, including ones competitors already rank for."
+    why: "Keywords come from a later crawl, the industry, the SEO pack, and any keyword-tool export you supply. Do not invent search volumes."
+    input: [choice, text, voice]
+    skip_default: "No blog. No keyword posts."
+    suggest: "Yes or no on the blog, then any seeds you already trust. Leave volume blank."
+    writes:
+      - "SITE-BRIEF.md#keyword-posts"
+
+  - id: DP-4.4
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Where are your customers: a local city, a country, or worldwide?"
+    why: "Place decides whether local search and a LocalBusiness description belong on the site."
+    input: [choice, text, voice]
+    skip_default: "Customers not placed."
+    suggest: "Name the city if you serve one, the country if you serve that, or worldwide if the offer travels."
+    writes:
+      - "SITE-BRIEF.md#where"
+
+  - id: DP-4.5
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Do you have answer-engine goals for Grok, ChatGPT, or Perplexity?"
+    why: "Clear entity facts, structured data, and a real FAQ help a machine read the site. This does not promise citations."
+    input: [choice, text, voice]
+    skip_default: "No answer-engine goal."
+    suggest: "Say the goal in your own words. The build can make the facts easy to read. It cannot promise a citation."
+    writes:
+      - "SITE-BRIEF.md#answer-engines"
+
+  - id: DP-5.1
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "Name three to five sites you love, from any industry, and exactly what you love about each: type, scroll, layout, color, motion, or menu."
+    why: "Three to five keeps the board small enough to use. The note is the part you love, not the whole site as a costume."
+    input: [text, voice]
+    skip_default: "No loved sites named."
+    suggest: "Three to five URLs. For each, one sentence on the part you would steal the thinking from."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#references"
+
+  - id: DP-5.2
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "If you have none, take a guided walk. Each round shows two Godly cards and two Awwwards cards. Say love, meh, or hate, and why."
+    why: "The ten-site walk is the gallery instruction, not the saved board. Likes gathered on the walk narrow to three to five before they are saved."
+    input: [choice, text, voice]
+    skip_default: "No gallery walk."
+    suggest: "Repeat the rounds until the likes are enough to narrow, then keep three to five. An offline shortlist can stand in when the galleries are quiet."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#references"
+
+  - id: DP-5.3
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "Give the vibe in three words, and three words it must never feel like."
+    why: "Three words for the feeling, and three for the feeling to refuse. Empty praise words do not count as a vibe."
+    input: [text, voice]
+    skip_default: "Vibe not stated. Three words and three never-words still owed."
+    suggest: "Three concrete words, then three refusals. If a word could sit on any brand, it is not done."
+    pushback_if:
+      - "modern"
+      - "clean"
+      - "professional"
+      - "unique"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#vibe"
+      - "VISUAL-DIRECTION.md#vibe"
+
+  - id: DP-5.4
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "Visual interview, eight topics in the follow-ups, ending on this: what is the signature moment, the one thing people will screenshot?"
+    why: "The eight topics settle type, color, motion, texture, and imagery. The signature moment is the last answer, the one picture a person would send to a friend."
+    input: [text, voice]
+    skip_default: "No signature moment named."
+    suggest: "Answer the topics in order. Stop on one signature moment. A second wow splits the page."
+    follow_ups:
+      - id: DP-5.4a
+        ask: "Five mood words, and three words it must never feel like."
+      - id: DP-5.4b
+        ask: "Three to five award sites, and exactly which part of each you love."
+      - id: DP-5.4c
+        ask: "How loud should the headlines be, and how large is the contrast with the body text?"
+      - id: DP-5.4d
+        ask: "Color temperature: warm, cool, or neutral, and how often the accent shows up?"
+      - id: DP-5.4e
+        ask: "Motion personality: calm and expensive, snappy and playful, heavy and cinematic, or name another, with a real-world comparison."
+      - id: DP-5.4f
+        ask: "Texture: flat, film grain, paper, glass, noise, or something physical from this world?"
+      - id: DP-5.4g
+        ask: "Imagery: photo, illustration, 3D, or video. What light, and what never shows up?"
+      - id: DP-5.4h
+        ask: "What is the signature moment, the one thing people will screenshot?"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "VISUAL-DIRECTION.md#signature"
+
+  - id: DP-5.5
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "Light: dark and moody, bright and airy, or paper and ink?"
+    why: "Three lights, shown later as thumbnails. The choice sets the page ground before any palette math."
+    input: [choice, text, voice]
+    skip_default: "Paper and ink."
+    suggest: "Moody for a low room, airy for a bright one, paper for ink on a sheet."
+    writes:
+      - "VISUAL-DIRECTION.md#light"
+
+  - id: DP-5.6
+    module: point-of-view-gun
+    depth: [express, standard, deep]
+    ask: "Imagery: photography, illustration, 3D, or type-only?"
+    why: "The picture system is one of these four. Mixing comes later, and only if this answer cannot carry the page."
+    input: [choice, text, voice]
+    skip_default: "Photography."
+    suggest: "Photography, illustration, 3D, or type-only. Name one primary."
+    writes:
+      - "VISUAL-DIRECTION.md#imagery"
