@@ -1,0 +1,153 @@
+---
+id: "027"
+kind: build
+phase: dont-panic
+slice: Vogon Neighbors
+title: "Turn a crawl into competitor and SEO notes"
+tier: Gargle Blaster
+effort: high
+model: grok-4.7
+depends_on: ["026"]
+files: ["packages/crawler/src/cards.ts", "packages/crawler/test/cards.test.ts"]
+requirements: ["HH-CRAWL-02"]
+review_checkpoint_embedded: true
+---
+
+# 027. Turn a crawl into competitor and SEO notes
+
+## RULES
+
+You are Grok 4.7 in Grok Build, building The Hitchhiker's Guide to Web Design. This prompt builds the Guide app itself, not a client's website.
+
+- TypeScript strict. No `any` unless a line in this prompt names the exception and the reason.
+- Tests ship with the behavior. Run the verification commands before you finish.
+- No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.
+- MIT-compatible dependencies only. Before adding a package, check the registry: exact name, license field, repository URL, and that the repo is the project you meant. Record the result in NOTICE. GPL and AGPL are out. Apache-2.0, BSD, ISC, MIT, Unlicense, Zlib, and MPL-2.0 (file-level, noted in NOTICE) are allowed. Font files may be SIL OFL-1.1. Media assets (models, HDRIs, textures, images) may be CC0 or CC-BY-4.0 with a CREDITS.json entry.
+- Do not bundle `@theatre/studio` (AGPL-3.0). Theatre runtime means `@theatre/core` only, pinned, never `@latest`.
+- Motion toolkit (D-001): GSAP is the base engine (ScrollTrigger, SplitText, and the other free plugins), and Three.js, raw WebGL/GLSL (OGL or WebGL2), Motion, anime.js, Theatre.js core, Lenis, CSS scroll-driven animations, and vanilla JS all ship. The picker chooses per effect. No replacement or fallback paths.
+- One job. Do not implement the next prompt.
+- The app UI obeys the anti-slop rulebook: no purple-to-blue gradients, no magnetic buttons, no default Tailwind indigo look, no lorem, no banned words in user-facing copy, no exclamation marks. App screens use the Guide design system in packages/app/src/design/ (tokens, type, motion, components). Never ship an unstyled or default-looking screen. The app must look agency-grade with Don't Panic energy.
+- Windows, macOS, and Linux. Use `node:path` and `node:os`. No hardcoded POSIX paths. No required `pdftotext`, Homebrew, or apt.
+- If a doc in the repo disagrees with this prompt, stop and write the conflict in the summary. Do not invent an API.
+- Authority: context/matt-answers.md (Matt's 40 answers) and DECISIONS.md override everything, including this prompt and CONTEXT-PACKAGE.v2.md. CONTEXT-PACKAGE.md (v1) holds full detail where v2 says "as in v1". If this prompt contradicts Matt, follow Matt and record the conflict.
+- Commit when the checks pass. Do not push. Do not create a GitHub repo. Do not deploy.
+
+## Goal
+
+Reduce up to three crawl results into a COMPETITORS.md body and an SEO note that lists real on-page phrases only. Mark the sea of sameness when titles share the same pattern. Never invent a search volume or a ranking.
+
+## Why this prompt exists
+
+The interview asks for neighbors and keywords. A prose model will hallucinate volumes unless the data layer refuses to emit them.
+
+## Read first
+
+Read these before editing. They are the contract. Do not re-read the whole vendor tree.
+
+- hh-build-plan/CONTEXT-PACKAGE.v2.md section 8.3 module 4
+- packages/crawler/src/crawl.ts
+- hh-build-plan/CONTEXT-PACKAGE.v2.md section 14 (anti-slop, sea of sameness)
+
+## Files to create or change
+
+- packages/crawler/src/cards.ts
+- packages/crawler/test/cards.test.ts
+
+Do not modify files outside this list unless a test harness forces a one-line export, and then name that file in the summary.
+
+## Context for a fresh session
+
+buildCompetitorReport(results) returns markdown. For each result include finalUrl, title, h1, stackHint, and one line `Loved for:` left as a blank underscore because only the user knows that. sameness(results) returns a string if at least two titles normalize to the same bag of words, else `No shared title pattern in this set.` SEO section lists meta descriptions that exist, and h1s. It ends with `Search volumes are not estimated.` There is no number of searches. Cap the input at 3 results. A fourth throws. Reference cards for the user's loved sites are a separate function referenceCard({ url, note }) that requires a non-empty note. The note is the user's reason. Empty note throws. This stops a board of links with no why.
+
+## Interfaces and data shapes
+
+```ts
+export function buildCompetitorReport(results: CrawlResult[]): string;
+export function sameness(results: CrawlResult[]): string;
+export function referenceCard(input: { url: string; note: string }): string;
+```
+
+## Steps
+
+1. Implement sameness by lowercasing titles, dropping words shorter than 4 characters, and comparing sets. Two titles that both reduce to `home remodeling` match.
+
+2. The report heading is `Competitors`. No exclamation marks. No em dashes.
+
+3. A test with two identical titles expects the sameness line to name the shared words.
+
+4. A test with three distinct titles expects `No shared title pattern`.
+
+5. Passing four results throws. Passing one result still renders.
+
+6. referenceCard throws on a blank note and on a note that is only `nice` or `cool` or `love it`. Require at least 12 characters so the why is a clause. Document the threshold.
+
+7. The SEO section fixture uses a description `Emergency plumbing in Red Deer` and expects that exact phrase, and expects the report not to match `/\d+\s+searches/`.
+
+8. Do not call crawl() inside this module. It accepts results so tests stay offline.
+
+9. Export the three functions.
+
+## Edge cases
+
+- Empty h1 list renders `No h1 found` rather than omitting the page.
+- Titles in another script still run through the same lowercase path. Do not special-case Latin.
+- URLs are printed as given. Do not fetch them again.
+
+## Acceptance criteria
+
+- [ ] Shared titles produce a sameness line.
+- [ ] The report contains the sentence that volumes are not estimated.
+- [ ] A short reference note is rejected.
+- [ ] No network in the test.
+
+## must_haves
+
+truths:
+
+- Competitor notes are derived from crawl fields plus the user's reason.
+- Search volumes are not generated.
+- At most three competitors enter the report.
+
+artifacts:
+
+- packages/crawler/src/cards.ts
+
+key_links:
+
+- buildCompetitorReport consumes CrawlResult from crawl.ts.
+- referenceCard enforces a real note for DP-5.1.
+
+prohibitions:
+
+- Do not add search-volume numbers.
+- Do not scrape a keyword tool.
+- Do not auto-love a reference.
+
+## Verification
+
+Run from the repo root:
+
+```powershell
+pnpm --filter @hitchhiker/crawler test
+```
+
+## Report back
+
+Write `packages/engine/summaries/` only if this prompt says so. Otherwise put a summary of at most 150 words in the commit body and in `.hitchhiker-dev/summaries/027.md` if that directory exists. The summary names files changed, tests run, and anything assumed.
+
+## Commit
+
+```
+feat(crawler): write competitor cards without fake volumes
+```
+## REVIEW CHECKPOINT
+
+This build closes a review group. After this commit, the driver runs the fresh-session reviewer prompt `028-review-025-027.md` before the next build prompt. Do not start that review inside this session.
+
+The reviewer covers:
+
+- `025` Ingest a brand PDF and grade an image file (Sub-Etha, Gargle Blaster, high)
+- `026` Crawl a public page with robots.txt and screenshots (Vogon Neighbors, Heart of Gold, high)
+- `027` Turn a crawl into competitor and SEO notes (Vogon Neighbors, Gargle Blaster, high)
+
+Policy the reviewer will apply: goal-backward check of each must_haves block, tests green, no files outside each prompt's file list, anti-slop and design-system check on any UI, desktop and mobile screenshots if a UI file changed. Auto-fix at most twice, then stop. The reviewer does not begin the next feature.

@@ -1,3 +1,14 @@
 node_modules/
 dist/
 .env*
+
+# Grok run logs (plan generation and build driver)
+hh-build-plan/_grok-run.*
+*.log
+*.log.gz
+.hh-driver/logs/
+.hh-driver/STATE.json
+.hh-driver/PAUSE
+.hh-driver/BLOCKED.md
+.hh-driver/*.out
+.hh-driver/*.err
