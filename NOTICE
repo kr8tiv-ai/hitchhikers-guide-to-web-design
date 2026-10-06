@@ -88,3 +88,15 @@ Literata (text)
     Literata-opsz16-wght600.woff2
     Literata-Italic-opsz16-wght400.woff2
 
+Optional local binary (not a dependency of this repo)
+-----------------------------------------------------
+
+whisper.cpp
+  Upstream: https://github.com/ggml-org/whisper.cpp
+  License: MIT
+  Copyright: 2023-2026 The ggml authors
+  License file: https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE
+  optional local binary whisper.cpp, MIT, not distributed with this repo.
+  No model weights are shipped in git. The user installs the executable
+  and downloads a model themselves. This repo does not fetch either one.
+
