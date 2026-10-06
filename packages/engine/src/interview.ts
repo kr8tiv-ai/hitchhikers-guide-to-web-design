@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { withStateLock } from "./lock.ts";
+import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
 import { loadState, type GuideState } from "./state.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
@@ -9,16 +10,20 @@ import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 /**
  * Don't Panic, one question at a time.
  *
- * Answer stores ANSWERED. Suggest stores the question's suggest text, or a
- * fixed fallback when the tree has none. Skip stores SKIPPED and the tree
- * skip default. This module does not call the network. A later prompt wires
- * live Suggest through the adapter. Pushback is not handled here.
+ * Answer stores ANSWERED. A soft answer is held while this id has been
+ * pushed fewer than twice (D-004): lastPushback is set and nothing is
+ * appended. The third soft answer stores SOFT. A concrete answer stores
+ * ANSWERED. Suggest stores the question's suggest text, or a fixed fallback
+ * when the tree has none. Skip stores SKIPPED and the tree skip default.
+ * Suggest and Skip clear a pending hold and store immediately. Only the
+ * answer command can push. This module does not call the network.
  *
  * Concurrent command() calls are not supported. The session is single-flight:
  * a second call that arrives while the first is still saving is rejected.
  *
  * The session offers the current question only. It does not list the rest
  * of the ask strings. AnswerRecord is the status record missingRequired reads.
+ * command resolves to null when the answer is held for pushback.
  */
 
 export type InterviewCommand =
@@ -28,7 +33,7 @@ export type InterviewCommand =
 
 export interface InterviewSession {
   next(): Question | null;
-  command(input: InterviewCommand): Promise<AnswerRecord>;
+  command(input: InterviewCommand): Promise<AnswerRecord | null>;
   coverage(): {
     answered: number;
     suggested: number;
@@ -36,6 +41,7 @@ export interface InterviewSession {
     soft: number;
     imported: number;
   };
+  readonly lastPushback: string | null;
 }
 
 export type InterviewErrorCode =
@@ -58,6 +64,13 @@ export class InterviewError extends Error {
 const SUGGEST_FALLBACK = "No suggestion is written for this question yet.";
 const INTERVIEW_PREFIX = "interview:";
 const ANSWER_STATUSES = ["ANSWERED", "SUGGESTED", "SKIPPED", "SOFT", "IMPORTED"] as const;
+/** Two holds, then the next soft answer is stored. D-004. */
+const PUSH_LIMIT = 2;
+
+interface PushedCount {
+  id: string;
+  count: number;
+}
 
 type Coverage = ReturnType<InterviewSession["coverage"]>;
 
@@ -83,14 +96,24 @@ export async function openInterview(
   const dir = path.join(projectDir, ".hitchhiker");
   await mkdir(dir, { recursive: true });
   const questions = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
-  const answers = loadAnswers(path.join(dir, "interview.json"));
+  const saved = loadInterview(path.join(dir, "interview.json"));
   const state = loadState(projectDir);
-  const cursor = placeCursor(questions, answers, state?.promptId ?? null);
-  const run = new InterviewRun(projectDir, questions, answers, cursor, clock);
+  const cursor = placeCursor(questions, saved.answers, state?.promptId ?? null);
+  const run = new InterviewRun(
+    projectDir,
+    questions,
+    saved.answers,
+    saved.pushedIds,
+    cursor,
+    clock,
+  );
   return {
     next: () => run.next(),
     command: (input) => run.command(input),
     coverage: () => run.coverage(),
+    get lastPushback() {
+      return run.lastPushback;
+    },
   };
 }
 
@@ -98,22 +121,31 @@ class InterviewRun {
   #projectDir: string;
   #questions: readonly Question[];
   #answers: AnswerRecord[];
+  #pushed: readonly PushedCount[];
   #cursor: number;
   #clock: () => Date;
   #busy = false;
+  #pendingId: string | null = null;
+  #lastPushback: string | null = null;
 
   constructor(
     projectDir: string,
     questions: readonly Question[],
     answers: AnswerRecord[],
+    pushedIds: readonly PushedCount[],
     cursor: number,
     clock: () => Date,
   ) {
     this.#projectDir = projectDir;
     this.#questions = questions;
     this.#answers = answers;
+    this.#pushed = pushedIds;
     this.#cursor = cursor;
     this.#clock = clock;
+  }
+
+  get lastPushback(): string | null {
+    return this.#lastPushback;
   }
 
   next(): Question | null {
@@ -123,8 +155,10 @@ class InterviewRun {
   /**
    * Single-flight. The busy flag is set before the first await so an
    * overlapping call is rejected instead of interleaving two saves.
+   * pushbackFor runs before an answer is appended. A hold persists the
+   * push count and leaves the cursor on this id.
    */
-  async command(input: InterviewCommand): Promise<AnswerRecord> {
+  async command(input: InterviewCommand): Promise<AnswerRecord | null> {
     if (this.#busy) {
       throw new InterviewError(
         "busy",
@@ -137,19 +171,76 @@ class InterviewRun {
       if (question === undefined) {
         throw new InterviewError("finished", "The interview is finished.");
       }
+      if (input.type === "answer") {
+        return await this.#answer(question, input.text);
+      }
       const record = recordFor(question, input);
-      const answers = [...this.#answers, record];
-      const cursor = this.#cursor + 1;
-      const nextQuestion = this.#questions[cursor] ?? null;
-      const promptId =
-        nextQuestion === null ? "interview:done" : `${INTERVIEW_PREFIX}${nextQuestion.id}`;
-      await persistPair(this.#projectDir, answers, promptId, this.#clock, nextQuestion);
-      this.#answers = answers;
-      this.#cursor = cursor;
+      await this.#commit(record);
       return record;
     } finally {
       this.#busy = false;
     }
+  }
+
+  async #answer(question: Question, text: string): Promise<AnswerRecord | null> {
+    if (text.trim() === "") {
+      throw new InterviewError(
+        "empty-answer",
+        "An empty answer is not stored. Skip to keep the assumption.",
+      );
+    }
+    if (this.#pendingId !== null && this.#pendingId !== question.id) {
+      this.#pendingId = null;
+    }
+    const push = pushbackFor(question, text);
+    if (push !== null && this.#countFor(question.id) < PUSH_LIMIT) {
+      const pushed = bumpCopy(this.#pushed, question.id);
+      await this.#save(this.#answers, this.#cursor, pushed);
+      this.#pushed = pushed;
+      this.#pendingId = question.id;
+      this.#lastPushback = push;
+      return null;
+    }
+    const status = push !== null ? "SOFT" : "ANSWERED";
+    const record: AnswerRecord = { id: question.id, status, value: text };
+    await this.#commit(record);
+    return record;
+  }
+
+  async #commit(record: AnswerRecord): Promise<void> {
+    const answers = [...this.#answers, record];
+    const cursor = this.#cursor + 1;
+    await this.#save(answers, cursor, this.#pushed);
+    this.#answers = answers;
+    this.#cursor = cursor;
+    this.#pendingId = null;
+    this.#lastPushback = null;
+  }
+
+  async #save(
+    answers: readonly AnswerRecord[],
+    cursor: number,
+    pushedIds: readonly PushedCount[],
+  ): Promise<void> {
+    const nextQuestion = this.#questions[cursor] ?? null;
+    const promptId =
+      nextQuestion === null ? "interview:done" : `${INTERVIEW_PREFIX}${nextQuestion.id}`;
+    await persistPair(
+      this.#projectDir,
+      answers,
+      cursor,
+      pushedIds,
+      promptId,
+      this.#clock,
+      nextQuestion,
+    );
+  }
+
+  #countFor(id: string): number {
+    for (const item of this.#pushed) {
+      if (item.id === id) return item.count;
+    }
+    return 0;
   }
 
   coverage(): Coverage {
@@ -167,16 +258,10 @@ class InterviewRun {
   }
 }
 
-function recordFor(question: Question, input: InterviewCommand): AnswerRecord {
-  if (input.type === "answer") {
-    if (input.text.trim() === "") {
-      throw new InterviewError(
-        "empty-answer",
-        "An empty answer is not stored. Skip to keep the assumption.",
-      );
-    }
-    return { id: question.id, status: "ANSWERED", value: input.text };
-  }
+function recordFor(
+  question: Question,
+  input: Exclude<InterviewCommand, { type: "answer" }>,
+): AnswerRecord {
   if (input.type === "suggest") {
     return {
       id: question.id,
@@ -245,8 +330,8 @@ function resolveTreePath(projectDir: string): string {
   return path.resolve(import.meta.dirname, "..", "..", "..", "interview", "tree.yaml");
 }
 
-function loadAnswers(filePath: string): AnswerRecord[] {
-  if (!existsSync(filePath)) return [];
+function loadInterview(filePath: string): { answers: AnswerRecord[]; pushedIds: PushedCount[] } {
+  if (!existsSync(filePath)) return { answers: [], pushedIds: [] };
   const raw = readFileSync(filePath, "utf8");
   let value: unknown;
   try {
@@ -254,13 +339,82 @@ function loadAnswers(filePath: string): AnswerRecord[] {
   } catch {
     throw new InterviewError("corrupt-answers", "interview.json is not valid JSON.");
   }
-  if (!Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    return {
+      answers: value.map((item, index) => parseAnswer(item, index)),
+      pushedIds: [],
+    };
+  }
+  if (!isRecord(value) || value.version !== 1) {
     throw new InterviewError(
       "corrupt-answers",
-      "interview.json must be an array of answers.",
+      "interview.json must be an array of answers or version 1.",
     );
   }
-  return value.map((item, index) => parseAnswer(item, index));
+  if (!Array.isArray(value.answers)) {
+    throw new InterviewError("corrupt-answers", "interview.json answers must be an array.");
+  }
+  if (typeof value.cursor !== "number" || !Number.isInteger(value.cursor) || value.cursor < 0) {
+    throw new InterviewError(
+      "corrupt-answers",
+      "interview.json cursor must be a non-negative integer.",
+    );
+  }
+  return {
+    answers: value.answers.map((item, index) => parseAnswer(item, index)),
+    pushedIds: parsePushedIds(value.pushedIds),
+  };
+}
+
+function parsePushedIds(value: unknown): PushedCount[] {
+  if (!Array.isArray(value)) {
+    throw new InterviewError("corrupt-answers", "interview.json pushedIds must be an array.");
+  }
+  const seen = new Set<string>();
+  const pushed: PushedCount[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    if (!isRecord(item)) {
+      throw new InterviewError(
+        "corrupt-answers",
+        `interview.json pushedIds item ${index + 1} is not a count.`,
+      );
+    }
+    const { id, count } = item;
+    if (typeof id !== "string" || id.trim() === "") {
+      throw new InterviewError(
+        "corrupt-answers",
+        `interview.json pushedIds item ${index + 1} is missing an id.`,
+      );
+    }
+    if (typeof count !== "number" || !Number.isInteger(count) || count < 1) {
+      throw new InterviewError(
+        "corrupt-answers",
+        `interview.json pushedIds item ${index + 1} has an invalid count.`,
+      );
+    }
+    if (seen.has(id)) {
+      throw new InterviewError("corrupt-answers", `interview.json pushedIds repeats ${id}.`);
+    }
+    seen.add(id);
+    pushed.push({ id, count });
+  }
+  return pushed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function bumpCopy(pushed: readonly PushedCount[], id: string): PushedCount[] {
+  const next = pushed.map((item) => ({ id: item.id, count: item.count }));
+  const found = next.find((item) => item.id === id);
+  if (found !== undefined) {
+    found.count += 1;
+    return next;
+  }
+  next.push({ id, count: 1 });
+  return next;
 }
 
 function parseAnswer(item: unknown, index: number): AnswerRecord {
@@ -305,6 +459,8 @@ function isAnswerStatus(value: string): value is AnswerRecord["status"] {
 async function persistPair(
   projectDir: string,
   answers: readonly AnswerRecord[],
+  cursor: number,
+  pushedIds: readonly PushedCount[],
   promptId: string,
   clock: () => Date,
   nextQuestion: Question | null,
@@ -316,7 +472,7 @@ async function persistPair(
     const state = mergeState(loadState(projectDir), promptId, clock().toISOString(), nextQuestion);
     const answersTemp = tempSibling(answersPath);
     const stateTemp = tempSibling(stateFile);
-    await writeFile(answersTemp, renderAnswers(answers), "utf8");
+    await writeFile(answersTemp, renderInterview(answers, cursor, pushedIds), "utf8");
     try {
       await writeFile(stateTemp, renderState(state), "utf8");
     } catch (error) {
@@ -369,8 +525,18 @@ function mergeState(
   };
 }
 
-function renderAnswers(answers: readonly AnswerRecord[]): string {
-  return `${JSON.stringify(answers, null, 2)}\n`;
+function renderInterview(
+  answers: readonly AnswerRecord[],
+  cursor: number,
+  pushedIds: readonly PushedCount[],
+): string {
+  const file = {
+    version: 1,
+    answers,
+    cursor,
+    pushedIds: pushedIds.map((item) => ({ id: item.id, count: item.count })),
+  };
+  return `${JSON.stringify(file, null, 2)}\n`;
 }
 
 function section(heading: string, body: string): string {

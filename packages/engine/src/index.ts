@@ -85,3 +85,4 @@ export { missingRequired, renderBrief } from "./required.ts";
 export type { AnswerRecord } from "./required.ts";
 export { InterviewError, openInterview } from "./interview.ts";
 export type { InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
+export { coverageReport, pushbackFor } from "./pushback.ts";

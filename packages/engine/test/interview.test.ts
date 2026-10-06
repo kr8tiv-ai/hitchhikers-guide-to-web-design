@@ -43,9 +43,28 @@ function answersPath(projectDir: string): string {
 }
 
 function readAnswers(projectDir: string): AnswerRecord[] {
+  return readSaved(projectDir).answers;
+}
+
+function readSaved(projectDir: string): {
+  version: number;
+  answers: AnswerRecord[];
+  cursor: number;
+  pushedIds: Array<{ id: string; count: number }>;
+} {
   const parsed: unknown = JSON.parse(readFileSync(answersPath(projectDir), "utf8"));
-  assert.ok(Array.isArray(parsed));
-  return parsed as AnswerRecord[];
+  assert.ok(parsed !== null && typeof parsed === "object" && !Array.isArray(parsed));
+  const file = parsed as Record<string, unknown>;
+  assert.equal(file.version, 1);
+  assert.ok(Array.isArray(file.answers));
+  assert.equal(typeof file.cursor, "number");
+  assert.ok(Array.isArray(file.pushedIds));
+  return {
+    version: typeof file.version === "number" ? file.version : 0,
+    answers: file.answers as AnswerRecord[],
+    cursor: typeof file.cursor === "number" ? file.cursor : -1,
+    pushedIds: file.pushedIds as Array<{ id: string; count: number }>,
+  };
 }
 
 function writeAnswers(projectDir: string, answers: AnswerRecord[]): void {
@@ -97,7 +116,8 @@ test("open offers one question and does not write answers yet", async () => {
     const current = session.next();
     assert.equal(Array.isArray(current), false);
     assert.equal(current?.id, "DP-0.1");
-    assert.deepEqual(Object.keys(session).sort(), ["command", "coverage", "next"]);
+    assert.deepEqual(Object.keys(session).sort(), ["command", "coverage", "lastPushback", "next"]);
+    assert.equal(session.lastPushback, null);
     assert.equal("questions" in session, false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker")), true);
     assert.equal(existsSync(answersPath(dir)), false);
@@ -133,6 +153,10 @@ test("resume continues at the third question", async () => {
     const saved = readAnswers(dir);
     assert.equal(saved.length, 2);
     assert.equal(Array.isArray(saved), true);
+    const file = readSaved(dir);
+    assert.equal(file.version, 1);
+    assert.equal(file.cursor, 2);
+    assert.deepEqual(file.pushedIds, []);
     assert.equal(loadStateFromIndex(dir)?.promptId, `interview:${third.id}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
