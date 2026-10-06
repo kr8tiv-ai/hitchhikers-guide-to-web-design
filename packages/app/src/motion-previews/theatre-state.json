@@ -1,0 +1,43 @@
+{
+  "sheetsById": {
+    "Preview": {
+      "staticOverrides": { "byObject": {} },
+      "sequence": {
+        "type": "PositionalSequence",
+        "length": 2,
+        "subUnitsPerUnit": 30,
+        "tracksByObject": {
+          "Mark": {
+            "trackIdByPropPath": { "[\"x\"]": "x" },
+            "trackData": {
+              "x": {
+                "type": "BasicKeyframedTrack",
+                "__debugName": "x",
+                "keyframes": [
+                  {
+                    "id": "a",
+                    "position": 0,
+                    "value": 0,
+                    "type": "bezier",
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0]
+                  },
+                  {
+                    "id": "b",
+                    "position": 2,
+                    "value": 48,
+                    "type": "bezier",
+                    "connectedRight": true,
+                    "handles": [0.5, 1, 0.5, 0]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitionVersion": "0.4.0",
+  "revisionHistory": ["hh-motion-preview"]
+}

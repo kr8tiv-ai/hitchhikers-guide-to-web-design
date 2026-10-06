@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
@@ -40,6 +40,7 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
@@ -106,6 +107,10 @@ const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
 const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
+const MOTION_SOURCE = path.resolve(SRC_ROOT, "motion-previews", "index.ts");
+const MOTION_ROOT = path.resolve(SRC_ROOT, "motion-previews");
+const APP_NODE = path.resolve(import.meta.dirname, "..", "..", "node_modules");
+const PNPM_STORE = path.resolve(import.meta.dirname, "..", "..", "..", "..", "node_modules", ".pnpm");
 
 const STATIC_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -128,7 +133,7 @@ const SAFE = {
   "cross-origin-resource-policy": "same-origin",
 } as const;
 
-type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard" | "/gallery";
+type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard" | "/gallery" | "/motion";
 
 const moduleCache = new Map<string, string>();
 
@@ -564,6 +569,46 @@ async function handleGet(
     sendBytes(req, res, 200, "image/webp", shot);
     return;
   }
+  if (pathname === "/motion") {
+    sendHtml(req, res, 200, renderMotion(token));
+    return;
+  }
+  if (pathname === "/client/motion.js") {
+    const compiled = compileAppModule(MOTION_SOURCE);
+    if (compiled === null) {
+      sendHtml(req, res, 404, renderMissing(token));
+      return;
+    }
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
+    return;
+  }
+  if (pathname === "/vendor/theatre-core.mjs") {
+    try {
+      sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(buildTheatreBundle()));
+    } catch {
+      sendHtml(req, res, 404, renderMissing(token));
+    }
+    return;
+  }
+  if (pathname.startsWith("/vendor-pkg/")) {
+    const body = readVendorModule(pathname);
+    if (body === null) {
+      sendHtml(req, res, 404, renderMissing(token));
+      return;
+    }
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(body));
+    return;
+  }
+  if (pathname.startsWith("/src/motion-previews/") && pathname.endsWith(".js")) {
+    const rel = pathname.slice("/src/".length).replace(/\.js$/, ".ts");
+    const compiled = compileAppModule(path.resolve(SRC_ROOT, rel));
+    if (compiled === null) {
+      sendHtml(req, res, 404, renderMissing(token));
+      return;
+    }
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
+    return;
+  }
   if (pathname === "/brand") {
     sendHtml(req, res, 200, renderBrand(token));
     return;
@@ -775,7 +820,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = mustReplace(
     html,
     '<link rel="stylesheet" href="src/shell.css" />',
-    '<link rel="stylesheet" href="src/shell.css" />\n    <link rel="stylesheet" href="src/card.css" />',
+    '<link rel="stylesheet" href="src/shell.css" />\n    <link rel="stylesheet" href="src/card.css" />\n    <link rel="stylesheet" href="src/motion-previews/motion.css" />',
     "shell css",
   );
   html = html.replaceAll('href="src/', 'href="/src/');
@@ -803,7 +848,10 @@ function renderDesk(token: string, session: DeskSession): string {
     `<footer class="hh-status" data-region="status">\n        ${session.statusHtml}\n      </footer>`,
     "status",
   );
-  return html.replace("</body>", `    <script type="module" src="/client/desk.js"></script>\n  </body>`);
+  return html.replace(
+    "</body>",
+    `    <script type="module" src="/client/desk.js"></script>\n    <script type="module" src="/client/motion.js"></script>\n  </body>`,
+  );
 }
 
 function renderBrand(token: string): string {
@@ -872,6 +920,19 @@ function renderDashboard(token: string): string {
           </div>
         </aside>
       </div>`,
+  });
+}
+
+function renderMotion(token: string): string {
+  return renderPanel({
+    token,
+    title: "Motion",
+    current: "/motion",
+    kicker: "Motion",
+    status: "Pick a number after the loops.",
+    extraCss: ["/src/motion-previews/motion.css"],
+    script: "/client/motion.js",
+    main: renderMotionPage(),
   });
 }
 
@@ -949,6 +1010,7 @@ function routeNav(current: RouteName): string {
     ["/approve", "Approvals"],
     ["/hh-dashboard", "/hh-dashboard"],
     ["/gallery", "Gallery"],
+    ["/motion", "Motion"],
   ] as const;
   const links = items.map(([href, label]) => {
     const on = href === current;
@@ -970,6 +1032,279 @@ function browserModule(filePath: string): string {
   );
   moduleCache.set(filePath, js);
   return js;
+}
+
+const VENDOR_ALLOW = new Set([
+  "gsap",
+  "three",
+  "ogl",
+  "motion",
+  "framer-motion",
+  "motion-dom",
+  "motion-utils",
+  "tslib",
+  "animejs",
+  "lenis",
+]);
+
+const packageRoots = new Map<string, string>();
+let theatreBundle: string | null = null;
+
+function packageJsonExists(dir: string): boolean {
+  return existsSync(path.join(dir, "package.json"));
+}
+
+function findInPnpm(name: string): string | null {
+  if (!existsSync(PNPM_STORE)) return null;
+  const needle = name.startsWith("@") ? `${name.slice(1).replace("/", "+")}@` : `${name}@`;
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(PNPM_STORE);
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith(needle)) continue;
+    const candidate = path.join(PNPM_STORE, entry, "node_modules", ...name.split("/"));
+    if (packageJsonExists(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findPackageRoot(fromFile: string, name: string): string | null {
+  const cached = packageRoots.get(name);
+  if (cached !== undefined && packageJsonExists(cached)) return cached;
+  const segments = name.split("/");
+  let dir = path.dirname(fromFile);
+  try {
+    dir = path.dirname(realpathSync(fromFile));
+  } catch {
+    dir = path.dirname(fromFile);
+  }
+  for (let hop = 0; hop < 14; hop += 1) {
+    const nested = path.join(dir, "node_modules", ...segments);
+    if (packageJsonExists(nested)) {
+      packageRoots.set(name, nested);
+      return nested;
+    }
+    if (path.basename(dir) === "node_modules") {
+      const sibling = path.join(dir, ...segments);
+      if (packageJsonExists(sibling)) {
+        packageRoots.set(name, sibling);
+        return sibling;
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  const fromApp = path.join(APP_NODE, ...segments);
+  if (packageJsonExists(fromApp)) {
+    packageRoots.set(name, fromApp);
+    return fromApp;
+  }
+  const stored = findInPnpm(name);
+  if (stored !== null) {
+    packageRoots.set(name, stored);
+    return stored;
+  }
+  return null;
+}
+
+function pickBrowser(value: unknown, depth = 0): string | null {
+  if (depth > 8) return null;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = pickBrowser(item, depth + 1);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (value === null || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ["browser", "import", "module", "default"]) {
+    if (!(key in record)) continue;
+    const found = pickBrowser(record[key], depth + 1);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+function matchExport(exportsField: unknown, subpath: string): string | null {
+  if (typeof exportsField === "string") return subpath === "." ? exportsField : null;
+  if (exportsField === null || typeof exportsField !== "object" || Array.isArray(exportsField)) {
+    return null;
+  }
+  const record = exportsField as Record<string, unknown>;
+  if (subpath in record) return pickBrowser(record[subpath]);
+  const keys = Object.keys(record).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (!key.includes("*")) continue;
+    const star = key.indexOf("*");
+    const prefix = key.slice(0, star);
+    const suffix = key.slice(star + 1);
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix)) continue;
+    const mid = subpath.slice(prefix.length, subpath.length - suffix.length);
+    const picked = pickBrowser(record[key]);
+    if (picked === null || !picked.includes("*")) continue;
+    return picked.replace("*", mid);
+  }
+  return null;
+}
+
+function resolveBare(spec: string, fromFile: string): string | null {
+  if (spec === "@theatre/core") return "/vendor/theatre-core.mjs";
+  if (spec === "@theatre/studio" || spec.startsWith("@theatre/studio/")) return null;
+  const name = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : (spec.split("/")[0] ?? spec);
+  if (!VENDOR_ALLOW.has(name)) return null;
+  const root = findPackageRoot(fromFile, name);
+  if (root === null) return null;
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  if (manifest === null || typeof manifest !== "object") return null;
+  const record = manifest as { exports?: unknown; module?: unknown; main?: unknown };
+  const subpath = spec === name ? "." : `./${spec.slice(name.length + 1)}`;
+  let relative = record.exports !== undefined ? matchExport(record.exports, subpath) : null;
+  if (relative === null && subpath === ".") {
+    if (typeof record.module === "string") relative = record.module;
+    else if (typeof record.main === "string") relative = record.main;
+  }
+  if (relative === null || relative.startsWith("..")) return null;
+  const file = path.resolve(root, relative);
+  const rel = path.relative(root, file);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return `/vendor-pkg/${name}/${rel.replaceAll("\\", "/")}`;
+}
+
+function rewriteSpecifiers(code: string, fromFile: string): string {
+  const apply = (lead: string, quote: string, spec: string): string => {
+    if (spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("node:")) {
+      return `${lead}${quote}${spec}${quote}`;
+    }
+    const next = resolveBare(spec, fromFile);
+    if (next === null) return `${lead}${quote}${spec}${quote}`;
+    return `${lead}${quote}${next}${quote}`;
+  };
+  let rewritten = code.replace(
+    /(^|\n)([ \t]*(?:import|export)\b[^;\n]*?\bfrom\s*)(['"])([^'"]+)\3/g,
+    (_full, brk: string, lead: string, quote: string, spec: string) => `${brk}${apply(lead, quote, spec)}`,
+  );
+  rewritten = rewritten.replace(
+    /(\bimport\s*\(\s*)(['"])([^'"]+)\2/g,
+    (_full, lead: string, quote: string, spec: string) => apply(lead, quote, spec),
+  );
+  return rewritten;
+}
+
+function compileAppModule(filePath: string): string | null {
+  const cached = moduleCache.get(`motion:${filePath}`);
+  if (cached !== undefined) return cached;
+  const relative = path.relative(MOTION_ROOT, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative) || !filePath.endsWith(".ts")) return null;
+  if (!existsSync(filePath)) return null;
+  const stripped = stripTypeScriptTypes(readFileSync(filePath, "utf8"), { mode: "strip" });
+  const withLocal = stripped.replace(
+    /((?:\bfrom\s*|\bimport\s*\(\s*))(['"])(\.[^'"]+)\2/g,
+    (_full, lead: string, quote: string, spec: string) => {
+      const cleaned = spec.replace(/\.ts$/, "");
+      const resolved = path.resolve(path.dirname(filePath), cleaned);
+      const tsFile = `${resolved}.ts`;
+      if (!existsSync(tsFile)) return `${lead}${quote}${spec}${quote}`;
+      const url = `/src/${path.relative(SRC_ROOT, tsFile).replaceAll("\\", "/").replace(/\.ts$/, ".js")}`;
+      return `${lead}${quote}${url}${quote}`;
+    },
+  );
+  const js = rewriteSpecifiers(withLocal, filePath);
+  moduleCache.set(`motion:${filePath}`, js);
+  return js;
+}
+
+function readVendorModule(urlPath: string): string | null {
+  const cached = moduleCache.get(`vendor:${urlPath}`);
+  if (cached !== undefined) return cached;
+  const rest = urlPath.slice("/vendor-pkg/".length);
+  if (rest.includes("..") || rest.includes("\\") || rest.includes("\0")) return null;
+  const parts = rest.split("/").filter((part) => part.length > 0);
+  let name = parts[0] ?? "";
+  let relParts = parts.slice(1);
+  if (name.startsWith("@")) {
+    const scope = parts[1];
+    if (scope === undefined) return null;
+    name = `${name}/${scope}`;
+    relParts = parts.slice(2);
+  }
+  if (!VENDOR_ALLOW.has(name)) return null;
+  const leaf = relParts[relParts.length - 1] ?? "";
+  const ext = path.extname(leaf).toLowerCase();
+  if (ext !== ".js" && ext !== ".mjs") return null;
+  const root =
+    packageRoots.get(name) ??
+    findPackageRoot(path.join(APP_NODE, "motion", "package.json"), name) ??
+    findInPnpm(name);
+  if (root === null) return null;
+  const target = path.resolve(root, ...relParts);
+  const rel = path.relative(root, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  let realRoot = "";
+  let realTarget = "";
+  try {
+    realRoot = realpathSync(root);
+    realTarget = realpathSync(target);
+  } catch {
+    return null;
+  }
+  const realRel = path.relative(realRoot, realTarget);
+  if (realRel.startsWith("..") || path.isAbsolute(realRel)) return null;
+  let source = readFileSync(realTarget, "utf8");
+  if (/\bprocess\b/.test(source)) {
+    source = `const process = globalThis.process ?? { env: { NODE_ENV: "production" } };\n${source}`;
+  }
+  const js = rewriteSpecifiers(source, realTarget);
+  moduleCache.set(`vendor:${urlPath}`, js);
+  return js;
+}
+
+function buildTheatreBundle(): string {
+  if (theatreBundle !== null) return theatreBundle;
+  const coreRoot = findPackageRoot(path.join(APP_NODE, "@theatre", "core", "package.json"), "@theatre/core");
+  if (coreRoot === null) throw new Error("Theatre core is not installed.");
+  const coreFile = path.join(coreRoot, "dist", "index.js");
+  const dataRoot = findPackageRoot(coreFile, "@theatre/dataverse");
+  if (dataRoot === null) throw new Error("Theatre dataverse is not installed.");
+  const dataverse = readFileSync(path.join(dataRoot, "dist", "index.js"), "utf8");
+  const core = readFileSync(coreFile, "utf8");
+  theatreBundle =
+    "const process = { env: { NODE_ENV: \"production\" } };\n" +
+    "const __hhDataverse = {};\n" +
+    "const __hhDataverseModule = { exports: __hhDataverse };\n" +
+    "(function (exports, module, require) {\n" +
+    dataverse +
+    "\n})(__hhDataverse, __hhDataverseModule, function (name) {\n" +
+    "  throw new Error('Theatre preview refused ' + String(name));\n" +
+    "});\n" +
+    "const __hhCoreExports = {};\n" +
+    "const __hhCoreModule = { exports: __hhCoreExports };\n" +
+    "(function (exports, module, require) {\n" +
+    core +
+    "\n})(__hhCoreExports, __hhCoreModule, function (name) {\n" +
+    "  if (name === '@theatre/dataverse') return __hhDataverseModule.exports;\n" +
+    "  if (name === 'util') return { types: {} };\n" +
+    "  throw new Error('Theatre preview refused ' + String(name));\n" +
+    "});\n" +
+    "const __hhCore = __hhCoreModule.exports;\n" +
+    "export const getProject = __hhCore.getProject;\n" +
+    "export const createRafDriver = __hhCore.createRafDriver;\n" +
+    "export const onChange = __hhCore.onChange;\n" +
+    "export const val = __hhCore.val;\n" +
+    "export const types = __hhCore.types;\n" +
+    "export const notify = __hhCore.notify;\n" +
+    "export default __hhCore;\n";
+  return theatreBundle;
 }
 
 function treeFile(projectDir: string): string {

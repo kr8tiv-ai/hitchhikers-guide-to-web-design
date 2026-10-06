@@ -1,0 +1,253 @@
+/* Motion family previews. Colour and type stay on the Guide tokens. */
+
+.hh-motion {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.hh-motion__ban {
+  margin: 0;
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.hh-motion__grid,
+.hh-motion__split {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+  min-width: 0;
+}
+
+.hh-motion__card,
+.hh-motion__panel,
+.hh-motion__film,
+.hh-motion__costs {
+  min-width: 0;
+}
+
+.hh-motion__frame {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 200px;
+  overflow: hidden;
+  color: var(--color-surface);
+  background: var(--color-ink);
+  border-radius: var(--radius-md);
+}
+
+.hh-motion__tool,
+.hh-motion__links,
+.hh-motion__label {
+  margin: 0;
+}
+
+.hh-motion__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.hh-motion__links a {
+  color: var(--color-accent);
+}
+
+.hh-motion__still {
+  position: relative;
+  height: 100%;
+  margin: 0;
+}
+
+.hh-motion__marksvg,
+.hh-motion__gl,
+.hh-motion__stage,
+.hh-motion__fade,
+.hh-motion__cssport {
+  width: 100%;
+  height: 100%;
+}
+
+.hh-motion__marksvg,
+.hh-motion__gl {
+  display: block;
+}
+
+.hh-motion__caption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-surface);
+  font-size: var(--type-small);
+}
+
+.hh-motion__fade,
+.hh-motion__stage {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+}
+
+.hh-motion__cssport {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.hh-motion__reveal {
+  position: relative;
+  height: 100%;
+}
+
+.hh-motion__reveal-label {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-3);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--type-small);
+}
+
+.hh-motion__cssline {
+  margin: 48px var(--space-4) 0;
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  animation: hh-motion-fallback 1.6s var(--motion-easing-in-out) infinite alternate;
+}
+
+.hh-motion__csspad,
+.hh-motion__lenis-content {
+  height: 280px;
+}
+
+.hh-motion__seq {
+  height: 200px;
+  display: grid;
+  align-items: center;
+  padding: 0 var(--space-4);
+}
+
+.hh-motion__bar,
+.hh-motion__knob,
+.hh-motion__orb {
+  display: block;
+  width: 36px;
+  height: 36px;
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.hh-motion__track {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--space-4);
+}
+
+.hh-motion__headline {
+  margin: 0;
+  padding: var(--space-5) var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  line-height: 1.2;
+}
+
+.hh-motion__range {
+  width: 100%;
+  min-height: 44px;
+  accent-color: var(--color-accent);
+}
+
+.hh-motion__hold {
+  display: grid;
+  gap: var(--space-3);
+  align-content: end;
+  height: 100%;
+  margin: 0;
+  padding: var(--space-3);
+}
+
+.hh-motion__hold p {
+  margin: 0;
+}
+
+.hh-motion__hold .hh-btn {
+  min-height: 44px;
+}
+
+.hh-motion__panel,
+.hh-motion__costs,
+.hh-motion__film {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hh-motion__costs ul {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.hh-motion [data-in-range="false"] {
+  opacity: 0.72;
+}
+
+@supports (animation-timeline: view()) {
+  .hh-motion__cssline {
+    animation-name: hh-motion-reveal;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: view();
+    animation-range: contain 0% contain 100%;
+  }
+}
+
+@keyframes hh-motion-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hh-motion-fallback {
+  from {
+    opacity: 0.35;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .hh-motion__grid,
+  .hh-motion__split {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hh-motion__cssline,
+  .hh-motion__bar,
+  .hh-motion__knob,
+  .hh-motion__orb,
+  .hh-motion__fade {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+}
