@@ -1,0 +1,115 @@
+# Licence audit and secret scan. No deploy. No publish. No repository secret is read.
+name: Audit
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  licence:
+    name: Licence audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::warning::No pnpm-lock.yaml yet. Falling back to pnpm install."
+            pnpm install
+          fi
+
+      # Prompt 156 adds packages/qa/src/licenses.ts (auditDeps). Until that file
+      # exists, this step fails the job when `pnpm licenses list` reports GPL or AGPL.
+      - name: Licence audit
+        shell: bash
+        run: |
+          node --experimental-strip-types --input-type=module <<'EOF'
+          import { execSync } from "node:child_process";
+          import { existsSync } from "node:fs";
+          import path from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const raw = execSync("pnpm licenses list --json", { encoding: "utf8" });
+          const start = raw.indexOf("{");
+          const end = raw.lastIndexOf("}");
+          if (start < 0 || end < start) {
+            console.error("pnpm licenses list did not return JSON.");
+            process.exit(1);
+          }
+          const parsed = JSON.parse(raw.slice(start, end + 1));
+          const entries = [];
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            for (const [group, packages] of Object.entries(parsed)) {
+              if (!Array.isArray(packages)) continue;
+              for (const pkg of packages) {
+                const name = pkg && typeof pkg.name === "string" ? pkg.name : "(unnamed)";
+                const license = pkg && typeof pkg.license === "string" ? pkg.license : String(group);
+                entries.push({ name, license });
+              }
+            }
+          }
+
+          const licenseFile = path.resolve("packages/qa/src/licenses.ts");
+          if (existsSync(licenseFile)) {
+            const mod = await import(pathToFileURL(licenseFile).href);
+            if (typeof mod.auditDeps !== "function") {
+              console.error("packages/qa/src/licenses.ts does not export auditDeps.");
+              process.exit(1);
+            }
+            const result = mod.auditDeps(entries);
+            if (!result || result.ok !== true) {
+              const problems = result && Array.isArray(result.problems) ? result.problems.join("\n") : "auditDeps failed";
+              console.error(problems);
+              process.exit(1);
+            }
+            console.log("Licence audit (prompt 156 auditDeps) passed for " + entries.length + " packages.");
+            process.exit(0);
+          }
+
+          const banned = /AGPL|(^|[^A-Za-z])GPL/i;
+          const problems = [];
+          for (const entry of entries) {
+            if (typeof entry.license === "string" && banned.test(entry.license)) {
+              problems.push(entry.name + ": " + entry.license);
+            }
+          }
+          if (problems.length > 0) {
+            console.error("GPL or AGPL licences found:");
+            console.error(problems.join("\n"));
+            process.exit(1);
+          }
+          console.log("No GPL or AGPL licences in pnpm licenses list. Prompt 156 auditDeps is not in the tree yet.");
+          EOF
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # Automatic job token. Not a repository secret.
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"

@@ -1,0 +1,48 @@
+# Playwright end-to-end tests on Linux. No deploy. No publish.
+name: E2E
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::warning::No pnpm-lock.yaml yet. Falling back to pnpm install."
+            pnpm install
+          fi
+
+      - name: Install Playwright Chromium
+        shell: bash
+        run: |
+          if pnpm exec playwright --version; then
+            pnpm exec playwright install --with-deps chromium
+          else
+            echo "::warning::Playwright is not installed in this workspace yet. Skipping the Chromium download."
+          fi
+
+      - name: End-to-end tests
+        run: pnpm -r run --if-present e2e
