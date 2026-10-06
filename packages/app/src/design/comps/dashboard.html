@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>/hh-dashboard</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="../type.css" />
+    <link rel="stylesheet" href="../components.css" />
+  </head>
+  <body>
+    <div class="hh-shell">
+      <header class="hh-mast hh-rise">
+        <div class="hh-mast__row">
+          <p class="hh-kicker">Local queue</p>
+          <p class="hh-kicker">Towel &amp; Tea · fixture</p>
+        </div>
+        <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
+        <h1 class="hh-headline">/hh-dashboard</h1>
+        <p class="hh-dek">The fixture project, so this skeleton has real rows. Not a live client, and not xAI's agent dashboard.</p>
+      </header>
+
+      <div class="hh-dash">
+        <section class="hh-rise hh-rise--2" aria-labelledby="queue-title">
+          <h2 class="hh-title" id="queue-title">Prompt queue</h2>
+          <div class="hh-table-wrap">
+            <table class="hh-table">
+              <thead>
+                <tr>
+                  <th>Prompt</th>
+                  <th>Status</th>
+                  <th>Model</th>
+                  <th>Effort</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td data-label="Prompt">014 Menu chapter</td>
+                  <td class="hh-state--fixed" data-label="Status">Fixed</td>
+                  <td data-label="Model">grok-4.7</td>
+                  <td data-label="Effort">high</td>
+                </tr>
+                <tr class="is-current">
+                  <td data-label="Prompt">015 Origin story</td>
+                  <td class="hh-state--running" data-label="Status">Running</td>
+                  <td data-label="Model">grok-4.7</td>
+                  <td data-label="Effort">xhigh</td>
+                </tr>
+                <tr>
+                  <td data-label="Prompt">016 Visit and hours</td>
+                  <td class="hh-state--review" data-label="Status">Review</td>
+                  <td data-label="Model">grok-4.7</td>
+                  <td data-label="Effort">high</td>
+                </tr>
+                <tr>
+                  <td data-label="Prompt">017 Quiet hours</td>
+                  <td class="hh-state--queued" data-label="Status">Queued</td>
+                  <td data-label="Model">grok-4.7</td>
+                  <td data-label="Effort">medium</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="hh-side hh-rise hh-rise--3">
+          <div class="hh-phase-mark">
+            <p class="hh-phase-mark__num">01</p>
+            <p class="hh-kicker">Don't Panic</p>
+            <p class="hh-dek">Field notes are open. Phone Lighthouse has not run.</p>
+          </div>
+          <div class="hh-empty">
+            <h2 class="hh-empty__title">No escalations</h2>
+            <p>Marvin has nothing to complain about, which is his version of a good hour.</p>
+            <p class="hh-empty__next">When a prompt stalls, the answer lands here.</p>
+          </div>
+          <div class="hh-error" role="alert">
+            <p class="hh-kicker">Prompt 012</p>
+            <h2 class="hh-error__title">The type check failed</h2>
+            <p>The queue is paused. The work already saved is still on disk.</p>
+            <p class="hh-error__next">Open the log, fix the line, then rerun 012.</p>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="hh-status">
+        <span>/hh-dashboard</span>
+        <span>Fixture</span>
+        <span>Not a live client</span>
+        <span class="hh-status__spacer"></span>
+        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle>Night desk</button>
+      </footer>
+    </div>
+    <script>
+      const root = document.documentElement;
+      const toggle = document.querySelector("[data-theme-toggle]");
+      function night() {
+        if (root.dataset.theme === "dark") return true;
+        if (root.dataset.theme === "light") return false;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches;
+      }
+      function paint() {
+        if (toggle) toggle.textContent = night() ? "Day desk" : "Night desk";
+      }
+      paint();
+      toggle?.addEventListener("click", () => {
+        root.dataset.theme = night() ? "light" : "dark";
+        paint();
+      });
+    </script>
+  </body>
+</html>

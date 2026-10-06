@@ -1,0 +1,131 @@
+/* Desk Lamp. Canonical values live once. Themes only rebind the aliases. */
+
+:root {
+  --color-surface-light: #f3ebdd;
+  --color-surface-dark: #12100e;
+  --color-ink-light: #1c1612;
+  --color-ink-dark: #f4ede3;
+  --color-muted-light: #564a40;
+  --color-muted-dark: #b0a090;
+  --color-accent-light: #8e2f1a;
+  --color-accent-dark: #e6a15c;
+  --color-accent-ink-light: #fbf6ee;
+  --color-accent-ink-dark: #1a120c;
+  --color-success-light: #1b5c3a;
+  --color-success-dark: #9dceb6;
+  --color-warning-light: #7a4208;
+  --color-warning-dark: #f0c98a;
+  --color-danger-light: #8e2430;
+  --color-danger-dark: #f0b0a6;
+  --color-focus-light: #8e2f1a;
+  --color-focus-dark: #e6a15c;
+
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  --motion-duration-fast: 140ms;
+  --motion-duration-base: 280ms;
+  --motion-duration-slow: 560ms;
+  --motion-easing-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-easing-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-easing-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+
+  --shadow-sm-light: 0 1px 0 rgb(28 22 18 / 8%);
+  --shadow-md-light: 0 18px 40px rgb(28 22 18 / 7%);
+  --shadow-lg-light: 0 32px 70px rgb(28 22 18 / 12%);
+  --shadow-sm-dark: 0 1px 0 rgb(0 0 0 / 45%);
+  --shadow-md-dark: 0 18px 40px rgb(0 0 0 / 35%);
+  --shadow-lg-dark: 0 32px 70px rgb(0 0 0 / 48%);
+
+  --type-display: clamp(3.25rem, 1.15rem + 8vw, 7.5rem);
+  --type-headline: clamp(1.875rem, 1.2rem + 2.4vw, 3.5rem);
+  --type-title: clamp(1.25rem, 1.05rem + 0.8vw, 1.75rem);
+  --type-body: clamp(1.0625rem, 1rem + 0.2vw, 1.1875rem);
+  --type-small: clamp(0.875rem, 0.84rem + 0.15vw, 1rem);
+  --type-micro: 0.6875rem;
+
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-text: "Literata", serif;
+
+  --measure: 40rem;
+  --rail: 17.5rem;
+  --spine: 7px;
+
+  color-scheme: light;
+  --color-surface: var(--color-surface-light);
+  --color-ink: var(--color-ink-light);
+  --color-muted: var(--color-muted-light);
+  --color-accent: var(--color-accent-light);
+  --color-accent-ink: var(--color-accent-ink-light);
+  --color-success: var(--color-success-light);
+  --color-warning: var(--color-warning-light);
+  --color-danger: var(--color-danger-light);
+  --color-focus: var(--color-focus-light);
+  --shadow-sm: var(--shadow-sm-light);
+  --shadow-md: var(--shadow-md-light);
+  --shadow-lg: var(--shadow-lg-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-surface: var(--color-surface-dark);
+    --color-ink: var(--color-ink-dark);
+    --color-muted: var(--color-muted-dark);
+    --color-accent: var(--color-accent-dark);
+    --color-accent-ink: var(--color-accent-ink-dark);
+    --color-success: var(--color-success-dark);
+    --color-warning: var(--color-warning-dark);
+    --color-danger: var(--color-danger-dark);
+    --color-focus: var(--color-focus-dark);
+    --shadow-sm: var(--shadow-sm-dark);
+    --shadow-md: var(--shadow-md-dark);
+    --shadow-lg: var(--shadow-lg-dark);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-surface: var(--color-surface-dark);
+  --color-ink: var(--color-ink-dark);
+  --color-muted: var(--color-muted-dark);
+  --color-accent: var(--color-accent-dark);
+  --color-accent-ink: var(--color-accent-ink-dark);
+  --color-success: var(--color-success-dark);
+  --color-warning: var(--color-warning-dark);
+  --color-danger: var(--color-danger-dark);
+  --color-focus: var(--color-focus-dark);
+  --shadow-sm: var(--shadow-sm-dark);
+  --shadow-md: var(--shadow-md-dark);
+  --shadow-lg: var(--shadow-lg-dark);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface: var(--color-surface-light);
+  --color-ink: var(--color-ink-light);
+  --color-muted: var(--color-muted-light);
+  --color-accent: var(--color-accent-light);
+  --color-accent-ink: var(--color-accent-ink-light);
+  --color-success: var(--color-success-light);
+  --color-warning: var(--color-warning-light);
+  --color-danger: var(--color-danger-light);
+  --color-focus: var(--color-focus-light);
+  --shadow-sm: var(--shadow-sm-light);
+  --shadow-md: var(--shadow-md-light);
+  --shadow-lg: var(--shadow-lg-light);
+}

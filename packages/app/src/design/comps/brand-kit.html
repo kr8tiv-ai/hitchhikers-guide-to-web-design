@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Don't Panic brand kit</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <link rel="stylesheet" href="../type.css" />
+    <link rel="stylesheet" href="../components.css" />
+  </head>
+  <body>
+    <div class="hh-shell">
+      <header class="hh-mast hh-rise">
+        <div class="hh-mast__row">
+          <p class="hh-kicker">Plate 01 · Brand kit</p>
+          <p class="hh-kicker">Reveal</p>
+        </div>
+        <div class="hh-wordmark hh-wordmark--plate" role="img" aria-label="Don't Panic"></div>
+        <p class="hh-dek hh-italic">Warm paper, a venetian stamp, and letters with a human wobble.</p>
+      </header>
+
+      <div class="hh-kit">
+        <div class="hh-kit__split">
+          <section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="type-title">
+            <p class="hh-kicker" id="type-title">Type</p>
+            <p class="hh-specimen__display">Large, friendly letters.</p>
+            <p class="hh-specimen__text">Bricolage Grotesque carries the wordmark and the chrome. Literata carries the interview, because this desk is mostly reading.</p>
+            <p class="hh-small">Display 800 at optical size 96. UI 600 at optical size 16. Text 400, italic 400, semibold 600.</p>
+            <blockquote class="hh-voice">
+              <p>Right. Three words for how the site should feel. Not what it does. Feels.</p>
+              <p class="hh-italic">If you say clean, I will ask which kind of clean, and I will wait.</p>
+            </blockquote>
+          </section>
+
+          <ul class="hh-swatches hh-rise hh-rise--3" aria-label="Palette">
+            <li class="hh-swatch" style="--swatch: #f3ebdd; --swatch-ink: #1c1612"><span>Paper</span><b>#F3EBDD</b></li>
+            <li class="hh-swatch" style="--swatch: #1c1612; --swatch-ink: #f4ede3"><span>Ink</span><b>#1C1612</b></li>
+            <li class="hh-swatch" style="--swatch: #8e2f1a; --swatch-ink: #fbf6ee"><span>Venetian</span><b>#8E2F1A</b></li>
+            <li class="hh-swatch" style="--swatch: #e6a15c; --swatch-ink: #1a120c"><span>Brass</span><b>#E6A15C</b></li>
+            <li class="hh-swatch" style="--swatch: #1b5c3a; --swatch-ink: #fbf6ee"><span>Field</span><b>#1B5C3A</b></li>
+          </ul>
+        </div>
+
+        <div class="hh-approval hh-rise hh-rise--4">
+          <button class="hh-btn hh-btn--primary" type="button">Approve</button>
+          <button class="hh-btn hh-btn--secondary" type="button">Redo</button>
+          <p class="hh-approval__note">Happy with this? Redo keeps the desk and tries another direction. Night desk swaps the stamp for brass.</p>
+        </div>
+      </div>
+
+      <footer class="hh-status">
+        <span>Desk Lamp</span>
+        <span>Plate 01</span>
+        <span>Self-hosted type</span>
+        <span class="hh-status__spacer"></span>
+        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle>Night desk</button>
+      </footer>
+    </div>
+    <script>
+      const root = document.documentElement;
+      const toggle = document.querySelector("[data-theme-toggle]");
+      function night() {
+        if (root.dataset.theme === "dark") return true;
+        if (root.dataset.theme === "light") return false;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches;
+      }
+      function paint() {
+        if (toggle) toggle.textContent = night() ? "Day desk" : "Night desk";
+      }
+      paint();
+      toggle?.addEventListener("click", () => {
+        root.dataset.theme = night() ? "light" : "dark";
+        paint();
+      });
+    </script>
+  </body>
+</html>

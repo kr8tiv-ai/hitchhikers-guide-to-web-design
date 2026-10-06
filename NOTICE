@@ -31,3 +31,60 @@ typescript 5.9.3
   Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
   License: MIT
 
+@hitchhiker/app runtime
+-----------------------
+
+gsap 3.15.0
+  Registry: https://www.npmjs.com/package/gsap
+  Repository: https://github.com/greensock/GSAP
+  License field: Standard 'no charge' license: https://gsap.com/standard-license
+  Required by the Guide design system (prompt 010) and by D-001 / D-008.
+  The app imports GSAP core inside each motion function for its own
+  micro-interactions. Native scroll only. Lenis is not used in the app.
+  The registry license string is not GPL and not AGPL.
+
+Dev dependencies of @hitchhiker/app
+-----------------------------------
+
+@playwright/test 1.63.0
+  Registry: https://www.npmjs.com/package/@playwright/test
+  Repository: https://github.com/microsoft/playwright
+  License: Apache-2.0
+  Used only to screenshot the design comps. Chromium is not shipped in git.
+
+opentype.js 2.0.0
+  Registry: https://www.npmjs.com/package/opentype.js
+  Repository: https://github.com/opentypejs/opentype.js
+  License: MIT
+  Dev-only. Used to outline the display face into wordmark.svg.
+  Not imported by the app at runtime.
+
+Fonts, self-hosted, SIL OFL-1.1, no CDN
+---------------------------------------
+
+Bricolage Grotesque (display and UI)
+  Designer: Mathieu Triay
+  Copyright 2022 The Bricolage Grotesque Project Authors
+  (https://github.com/ateliertriay/bricolage)
+  Name-table version: Version 1.001;gftools[0.9.33.dev8+g029e19f]
+  google/fonts file commit: b9f6c712059d72742282ebdf06eadfc264c827f3
+  Upstream commit named in METADATA.pb: 84745e5b96261ae5f8c6c856e262fe78d1d6efdd
+  License file: packages/app/public/fonts/BricolageGrotesque-OFL.txt
+  Shipped weights (static instances, Latin subset, woff2 only):
+    BricolageGrotesque-opsz96-wght800.woff2
+    BricolageGrotesque-opsz16-wght600.woff2
+
+Literata (text)
+  Design: TypeTogether
+  Copyright 2017 The Literata Project Authors
+  (https://github.com/googlefonts/literata)
+  Name-table version: Version 3.103;gftools[0.9.29]
+  google/fonts file commit: c8018e986708f2aed63c928b1e9026826da1553d
+  Upstream commit named in METADATA.pb: 0c2761b727a1b3a7cffd313c37f0f5163dfc7a63
+  OFL text commit: 62dc5cc4728c30fd5bbf7edb5f54364634ad78e7
+  License file: packages/app/public/fonts/Literata-OFL.txt
+  Shipped weights (static instances, Latin subset, woff2 only):
+    Literata-opsz16-wght400.woff2
+    Literata-opsz16-wght600.woff2
+    Literata-Italic-opsz16-wght400.woff2
+

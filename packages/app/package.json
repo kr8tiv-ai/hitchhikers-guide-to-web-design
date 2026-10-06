@@ -16,9 +16,14 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hitchhiker/engine": "workspace:*"
+    "@hitchhiker/engine": "workspace:*",
+    "gsap": "3.15.0"
   },
   "scripts": {
-    "test": "node -e \"process.exit(0)\""
+    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "opentype.js": "2.0.0"
   }
 }
