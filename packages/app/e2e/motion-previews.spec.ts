@@ -62,10 +62,12 @@ async function exercise(
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-ceiling-level", "1");
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-webgl", "false");
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-max-js", "90");
+  await expect(page.locator("[data-appetite-webgl]")).toHaveText("WebGL in the ceiling: no.");
   await page.locator("#hh-appetite").fill("10");
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-ceiling-level", "10");
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-webgl", "true");
   await expect(page.locator("#hh-appetite-panel")).toHaveAttribute("data-max-js", "250");
+  await expect(page.locator("[data-appetite-webgl]")).toHaveText("WebGL in the ceiling: yes, one context.");
   await expect(page.locator("[data-family='tiny-fade']")).toHaveAttribute("data-in-range", "true");
   await expect(page.locator("[data-live='true']").first()).toBeVisible({ timeout: 20_000 });
   const liveWebgl = await page.locator("[data-webgl-live='true']").count();

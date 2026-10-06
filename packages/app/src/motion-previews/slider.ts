@@ -76,6 +76,13 @@ export function appetiteName(level: number): string {
   return name;
 }
 
+export function webglCeilingSentence(level: number): string {
+  assertLevel(level);
+  return weightCeiling(level).webgl
+    ? "WebGL in the ceiling: yes, one context."
+    : "WebGL in the ceiling: no.";
+}
+
 export function phoneNote(level: number): string {
   assertLevel(level);
   if (level >= 6) {
@@ -340,6 +347,6 @@ export function renderAppetite(level: number): string {
   <p data-appetite-note>${escapeHtml(ceiling.note)}</p>
   <p data-appetite-kb>JS ceiling ${kb} KB gzip.</p>
   <p data-phone-note>${escapeHtml(phoneNote(level))}</p>
-  <p class="hh-dek">WebGL in the ceiling: ${ceiling.webgl ? "yes, one context" : "no"}.</p>
+  <p class="hh-dek" data-appetite-webgl>${escapeHtml(webglCeilingSentence(level))}</p>
 </section>`;
 }

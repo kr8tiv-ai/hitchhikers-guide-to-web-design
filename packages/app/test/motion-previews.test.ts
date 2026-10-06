@@ -27,6 +27,7 @@ import {
   releaseWebgl,
   resetSharedTickerForTests,
   resetWebglForTests,
+  webglCeilingSentence,
   type TickFn,
 } from "../src/motion-previews/slider.ts";
 import {
@@ -72,6 +73,11 @@ test("weight ceilings at 1, 5, and 10 match the v2 table", () => {
   assert.equal(weightCeiling(6).webgl, true);
   assert.equal(weightCeiling(6).maxJsKb, 160);
   assert.equal(weightCeiling(8).maxJsKb, 250);
+  assert.equal(webglCeilingSentence(1), "WebGL in the ceiling: no.");
+  assert.equal(webglCeilingSentence(5), "WebGL in the ceiling: no.");
+  assert.equal(webglCeilingSentence(6), "WebGL in the ceiling: yes, one context.");
+  assert.equal(webglCeilingSentence(10), "WebGL in the ceiling: yes, one context.");
+  assert.match(renderMotionPage(), /data-appetite-webgl>WebGL in the ceiling: no\./);
   for (const level of [0, 11, 1.5, Number.NaN]) {
     assert.throws(() => weightCeiling(level), /whole number/);
   }

@@ -9,6 +9,7 @@ import {
   holdsPoster,
   phoneNote,
   renderAppetite,
+  webglCeilingSentence,
   weightCeiling,
 } from "./slider.ts";
 
@@ -117,6 +118,8 @@ function applyLevel(root: ParentNode, level: number): void {
   if (kb !== null) kb.textContent = `JS ceiling ${ceiling.maxJsKb} KB gzip.`;
   const phone = root.querySelector("[data-phone-note]");
   if (phone !== null) phone.textContent = phoneNote(level);
+  const webgl = root.querySelector("[data-appetite-webgl]");
+  if (webgl !== null) webgl.textContent = webglCeilingSentence(level);
   const label = root.querySelector('label[for="hh-appetite"]');
   if (label !== null) {
     label.textContent = `Motion appetite, 1 to 10. ${appetiteName(level)} is the current step.`;
