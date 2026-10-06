@@ -130,3 +130,23 @@ export type {
   SiteBrief,
   SuggestOption,
 } from "./guide/schemas.ts";
+export {
+  LOVE_TARGET,
+  MISSING_PROMPT,
+  ROUND_CAP,
+  ROUND_SIZE,
+  WHY_NUDGE,
+  chooseShortlist,
+  dealRound,
+  defaultGalleryCacheDir,
+  draftThread,
+  emptyWalk,
+  galleryCachePaths,
+  loveCount,
+  nextRound,
+  parseWalkState,
+  recordVerdict,
+  shortlistBounds,
+  writeReferences,
+} from "./gallery-walk.ts";
+export type { Deal, Verdict, VerdictInput, WalkQuery, WalkState } from "./gallery-walk.ts";

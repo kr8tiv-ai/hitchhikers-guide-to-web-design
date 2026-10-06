@@ -1,29 +1,46 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import {
   GrokUnavailableError,
   InterviewError,
+  WHY_NUDGE,
+  chooseShortlist,
+  dealRound,
+  defaultGalleryCacheDir,
+  draftThread,
+  emptyWalk,
+  galleryCachePaths,
   guideThinkFromScript,
   loadConfig,
+  loadGallery,
   loadState,
   loadTree,
+  loveCount,
   openInterview,
+  parseWalkState,
   questionsForDepth,
+  recordVerdict,
   runTurn,
   seedExpressAssumptions,
   think,
+  writeReferences,
   type AnswerRecord,
+  type GalleryEntry,
   type GuideSession,
   type GuideState,
   type GuideTurn,
   type InterviewSession,
   type Question,
   type ThinkRequest,
+  type VerdictInput,
+  type WalkQuery,
+  type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
@@ -88,6 +105,7 @@ const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
 
 const STATIC_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -110,7 +128,7 @@ const SAFE = {
   "cross-origin-resource-policy": "same-origin",
 } as const;
 
-type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard";
+type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard" | "/gallery";
 
 const moduleCache = new Map<string, string>();
 
@@ -176,7 +194,7 @@ export async function createDeskApp(opts: {
         await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue);
         return;
       }
-      await handleGet(req, res, pathname, token, view, hub);
+      await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/");
     },
   };
 }
@@ -352,6 +370,14 @@ async function handlePost(
     await handleAudio(req, res, projectDir);
     return;
   }
+  if (pathname === "/api/gallery/verdict") {
+    await handleGalleryVerdict(req, res, projectDir, enqueue);
+    return;
+  }
+  if (pathname === "/api/gallery/shortlist") {
+    await handleGalleryShortlist(req, res, projectDir, enqueue);
+    return;
+  }
   sendJson(req, res, 404, { error: "That route is not on the desk." });
 }
 
@@ -510,10 +536,32 @@ async function handleGet(
   token: string,
   view: () => DeskSession,
   hub: SseHub,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  rawUrl: string,
 ): Promise<void> {
   if (pathname === "/") {
     const session = view();
     sendHtml(req, res, 200, renderDesk(token, session));
+    return;
+  }
+  if (pathname === "/gallery") {
+    const opened = await enqueue(() => openGallery(projectDir, rawUrl));
+    sendHtml(req, res, 200, renderGallery(token, opened.view));
+    return;
+  }
+  if (pathname === "/api/gallery") {
+    const opened = await enqueue(() => openGallery(projectDir, rawUrl));
+    sendJson(req, res, 200, galleryJson(opened));
+    return;
+  }
+  if (pathname === "/api/gallery/shot") {
+    const shot = await readGalleryShot(shotTarget(rawUrl));
+    if (shot === null) {
+      sendJson(req, res, 404, { error: "That shot is not in the cache." });
+      return;
+    }
+    sendBytes(req, res, 200, "image/webp", shot);
     return;
   }
   if (pathname === "/brand") {
@@ -542,6 +590,10 @@ async function handleGet(
   }
   if (pathname === "/client/card.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(CARD_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/walk.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(WALK_SOURCE)));
     return;
   }
   if (pathname.startsWith("/src/") || pathname.startsWith("/public/")) {
@@ -845,7 +897,14 @@ function renderPanel(opts: {
   kicker: string;
   main: string;
   status: string;
+  extraCss?: readonly string[];
+  script?: string;
 }): string {
+  const extra = (opts.extraCss ?? [])
+    .map((href) => `    <link rel="stylesheet" href="${escapeHtml(href)}" />`)
+    .join("\n");
+  const script =
+    opts.script === undefined ? "" : `    <script type="module" src="${escapeHtml(opts.script)}"></script>\n`;
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -858,6 +917,7 @@ function renderPanel(opts: {
     <link rel="stylesheet" href="/src/design/components.css" />
     <link rel="stylesheet" href="/src/shell.css" />
     <link rel="stylesheet" href="/src/card.css" />
+${extra}
   </head>
   <body>
     <a class="hh-skip" href="#main">Skip to the panel</a>
@@ -877,7 +937,7 @@ function renderPanel(opts: {
         <span>${escapeHtml(opts.status)}</span>
       </footer>
     </div>
-  </body>
+${script}  </body>
 </html>
 `;
 }
@@ -888,6 +948,7 @@ function routeNav(current: RouteName): string {
     ["/brand", "Brand kit"],
     ["/approve", "Approvals"],
     ["/hh-dashboard", "/hh-dashboard"],
+    ["/gallery", "Gallery"],
   ] as const;
   const links = items.map(([href, label]) => {
     const on = href === current;
@@ -973,6 +1034,415 @@ async function readInside(root: string, relPath: string): Promise<Buffer | null>
   } catch {
     return null;
   }
+}
+
+/**
+ * Gallery walk. The desk reads a local cache and never fetches the site,
+ * so a robots denial stays a note on the card. Prompt 047 is not called.
+ */
+interface GalleryQuery {
+  industry: string | null;
+  styleWorld: string | null;
+}
+
+interface GalleryDisk {
+  query: GalleryQuery;
+  state: WalkState;
+}
+
+interface OpenedGallery {
+  view: GalleryView;
+  state: WalkState;
+}
+
+interface JsonResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function handleGalleryVerdict(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const value = await readJsonBody(req, res);
+  if (value === null) return;
+  const parsed = parseVerdictBody(value);
+  if ("error" in parsed) {
+    sendJson(req, res, 400, { error: parsed.error });
+    return;
+  }
+  const outcome = await enqueue(() => applyVerdict(projectDir, parsed.input));
+  sendJson(req, res, outcome.status, outcome.body);
+}
+
+async function handleGalleryShortlist(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const value = await readJsonBody(req, res);
+  if (value === null) return;
+  const parsed = parseShortlistBody(value);
+  if ("error" in parsed) {
+    sendJson(req, res, 400, { error: parsed.error });
+    return;
+  }
+  const outcome = await enqueue(() => applyShortlist(projectDir, parsed.urls, parsed.thread));
+  sendJson(req, res, outcome.status, outcome.body);
+}
+
+async function applyVerdict(projectDir: string, input: VerdictInput): Promise<JsonResult> {
+  const saved = await readGalleryDisk(projectDir);
+  const state = saved?.state ?? emptyWalk();
+  const query = saved?.query ?? { industry: null, styleWorld: null };
+  const next = recordVerdict(state, input);
+  if (walkUnchanged(state, next)) {
+    return { status: 400, body: { error: "That site is not in this round." } };
+  }
+  await writeGalleryDisk(projectDir, { query, state: next });
+  if (next.verdicts.length === state.verdicts.length && next.nudge !== null) {
+    return {
+      status: 200,
+      body: { ok: true, nudge: true, message: WHY_NUDGE, phase: next.phase },
+    };
+  }
+  return {
+    status: 200,
+    body: { ok: true, nudge: false, phase: next.phase, loves: loveCount(next) },
+  };
+}
+
+async function applyShortlist(projectDir: string, urls: readonly string[], thread: string): Promise<JsonResult> {
+  const saved = await readGalleryDisk(projectDir);
+  const state = saved?.state ?? emptyWalk();
+  const query = saved?.query ?? { industry: null, styleWorld: null };
+  if (state.phase !== "narrowing") {
+    return { status: 409, body: { error: "The shortlist is not open." } };
+  }
+  const chosen = chooseShortlist(state, urls);
+  if (chosen.shortlistError !== null) {
+    return { status: 400, body: { error: chosen.shortlistError } };
+  }
+  const pack = readPack();
+  const note = thread.trim().length > 0 ? thread.trim() : draftThread(chosen, pack);
+  try {
+    await writeReferences(projectDir, chosen, pack, note);
+  } catch (error: unknown) {
+    const mapped = referenceError(error);
+    return { status: mapped.status, body: { error: mapped.message } };
+  }
+  const done: WalkState = { ...chosen, phase: "done", shortlistError: null };
+  await writeGalleryDisk(projectDir, { query, state: done });
+  return { status: 200, body: { ok: true, phase: "done" } };
+}
+
+async function openGallery(projectDir: string, rawUrl: string): Promise<OpenedGallery> {
+  const pack = readPack();
+  const saved = await readGalleryDisk(projectDir);
+  let query = saved?.query ?? { industry: null, styleWorld: null };
+  let state = saved?.state ?? emptyWalk();
+  if (isFreshWalk(state)) query = queryFromUrl(rawUrl);
+  const deal =
+    pack.length === 0 && isFreshWalk(state)
+      ? { state, cards: [] as GalleryEntry[] }
+      : dealRound(state, pack, toWalkQuery(query));
+  await writeGalleryDisk(projectDir, { query, state: deal.state });
+  return { state: deal.state, view: await toGalleryView(projectDir, deal.state, deal.cards, pack) };
+}
+
+function galleryJson(opened: OpenedGallery): Record<string, unknown> {
+  return {
+    ok: true,
+    phase: opened.view.phase,
+    round: opened.view.round,
+    loves: opened.view.loves,
+    fillNote: opened.view.fillNote,
+    missingPrompt: opened.view.missingPrompt,
+    shortlist: opened.state.shortlist,
+    cards: opened.view.cards.map((card) => ({
+      name: card.name,
+      url: card.url,
+      source: card.source,
+      noted: card.noted,
+    })),
+  };
+}
+
+function renderGallery(token: string, view: GalleryView): string {
+  return renderPanel({
+    token,
+    title: "Gallery walk",
+    current: "/gallery",
+    kicker: "Point of view",
+    status: galleryStatus(view),
+    extraCss: ["/src/gallery/gallery.css"],
+    script: "/client/walk.js",
+    main: renderGalleryBody(view),
+  });
+}
+
+async function toGalleryView(
+  projectDir: string,
+  state: WalkState,
+  cards: readonly GalleryEntry[],
+  pack: readonly GalleryEntry[],
+): Promise<GalleryView> {
+  const nudgeUrl = state.nudge === null ? null : state.nudge.url;
+  return {
+    phase: state.phase,
+    round: state.round,
+    loves: loveCount(state),
+    fillNote: state.fillNote,
+    missingPrompt: state.missingPrompt,
+    nudgeUrl,
+    nudgeMessage: nudgeUrl === null ? null : WHY_NUDGE,
+    cards: state.phase === "walking" ? cards.map((card) => cardModel(card)) : [],
+    lovesList: lovesOf(state, pack),
+    thread: state.phase === "narrowing" ? draftThread(state, pack) : "",
+    written: state.phase === "done" ? await writtenNames(projectDir) : [],
+  };
+}
+
+function cardModel(entry: GalleryEntry): GalleryCardModel {
+  const shot = readCachedShot(entry.url);
+  return {
+    name: entry.name,
+    url: entry.url,
+    source: entry.source,
+    noted: entry.noted,
+    award: entry.award,
+    shotNote: shot.note,
+    imageUrl: shot.image ? `/api/gallery/shot?u=${encodeURIComponent(entry.url)}` : null,
+  };
+}
+
+function lovesOf(state: WalkState, pack: readonly GalleryEntry[]): GalleryLoveModel[] {
+  const list: GalleryLoveModel[] = [];
+  for (const verdict of state.verdicts) {
+    if (verdict.verdict !== "love") continue;
+    const entry = pack.find((item) => item.url === verdict.url);
+    list.push({ url: verdict.url, name: entry?.name ?? verdict.url, why: verdict.why });
+  }
+  return list;
+}
+
+function readCachedShot(url: string): { note: string | null; image: boolean } {
+  const cacheDir = galleryCacheDir();
+  const paths = galleryCachePaths(cacheDir, url);
+  const root = path.resolve(cacheDir);
+  const image = path.resolve(paths.image);
+  const metaPath = path.resolve(paths.meta);
+  if (!isInside(root, image) || !isInside(root, metaPath) || !existsSync(metaPath)) {
+    return { note: null, image: false };
+  }
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(metaPath, "utf8"));
+    if (!isThumbMeta(parsed)) return { note: null, image: false };
+    if (parsed.placeholder) {
+      const note = parsed.note.trim();
+      return { note: note.length > 0 ? note : null, image: false };
+    }
+    return { note: null, image: existsSync(image) };
+  } catch {
+    return { note: null, image: false };
+  }
+}
+
+async function readGalleryShot(url: string | null): Promise<Buffer | null> {
+  if (url === null) return null;
+  const cacheDir = galleryCacheDir();
+  const paths = galleryCachePaths(cacheDir, url);
+  const root = path.resolve(cacheDir);
+  const image = path.resolve(paths.image);
+  const metaPath = path.resolve(paths.meta);
+  if (!isInside(root, image) || !isInside(root, metaPath)) return null;
+  if (!existsSync(metaPath) || !existsSync(image)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(metaPath, "utf8"));
+  } catch {
+    return null;
+  }
+  if (!isThumbMeta(parsed) || parsed.placeholder) return null;
+  try {
+    const realRoot = await realpath(root);
+    const realImage = await realpath(image);
+    if (!isInside(realRoot, realImage)) return null;
+    return await readFile(realImage);
+  } catch {
+    return null;
+  }
+}
+
+function galleryPackFile(): string {
+  const fromEnv = process.env.HH_GALLERY_FILE;
+  if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
+  return path.resolve(import.meta.dirname, "..", "..", "..", "knowledge", "galleries", "curated.json");
+}
+
+function galleryCacheDir(): string {
+  const fromEnv = process.env.HH_GALLERY_CACHE;
+  if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
+  return defaultGalleryCacheDir();
+}
+
+function readPack(): GalleryEntry[] {
+  try {
+    return loadGallery(galleryPackFile());
+  } catch {
+    return [];
+  }
+}
+
+async function readGalleryDisk(projectDir: string): Promise<GalleryDisk | null> {
+  const file = path.join(projectDir, ".hitchhiker", "gallery-walk.json");
+  try {
+    const value: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!isRecord(value) || !isRecord(value.query)) return null;
+    const state = parseWalkState(value.state);
+    if (state === null) return null;
+    const industry = value.query.industry;
+    const styleWorld = value.query.styleWorld;
+    if (industry !== null && typeof industry !== "string") return null;
+    if (styleWorld !== null && typeof styleWorld !== "string") return null;
+    return {
+      query: {
+        industry: typeof industry === "string" ? industry : null,
+        styleWorld: typeof styleWorld === "string" ? styleWorld : null,
+      },
+      state,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeGalleryDisk(projectDir: string, disk: GalleryDisk): Promise<void> {
+  const dir = path.join(projectDir, ".hitchhiker");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, "gallery-walk.json"), `${JSON.stringify(disk)}\n`, "utf8");
+}
+
+async function writtenNames(projectDir: string): Promise<string[]> {
+  try {
+    const names = await readdir(path.join(projectDir, ".hitchhiker", "references"));
+    return names.filter((name) => name.endsWith(".md")).sort();
+  } catch {
+    return [];
+  }
+}
+
+function isFreshWalk(state: WalkState): boolean {
+  return state.phase === "walking" && state.round === 0 && state.seen.length === 0 && state.verdicts.length === 0;
+}
+
+function queryFromUrl(rawUrl: string): GalleryQuery {
+  const params = new URLSearchParams(rawUrl.split("?")[1] ?? "");
+  const industry = params.get("industry");
+  const styleWorld = params.get("styleWorld");
+  return {
+    industry: industry === null || industry.trim() === "" ? null : industry.trim().slice(0, 80),
+    styleWorld: styleWorld === null || styleWorld.trim() === "" ? null : styleWorld.trim().slice(0, 40),
+  };
+}
+
+function toWalkQuery(query: GalleryQuery): WalkQuery {
+  const next: WalkQuery = {};
+  if (query.industry !== null && query.industry.trim() !== "") next.industry = query.industry.trim();
+  if (query.styleWorld !== null && query.styleWorld.trim() !== "") next.styleWorld = query.styleWorld.trim();
+  return next;
+}
+
+function shotTarget(rawUrl: string): string | null {
+  const value = new URLSearchParams(rawUrl.split("?")[1] ?? "").get("u");
+  if (value === null || value.length === 0 || value.length > 2_000) return null;
+  return value;
+}
+
+function walkUnchanged(before: WalkState, after: WalkState): boolean {
+  return (
+    before.phase === after.phase &&
+    before.verdicts.length === after.verdicts.length &&
+    before.nudge?.url === after.nudge?.url &&
+    before.nudge?.verdict === after.nudge?.verdict
+  );
+}
+
+function parseVerdictBody(value: unknown): { input: VerdictInput } | { error: string } {
+  if (!isRecord(value)) return { error: "The desk could not read that request." };
+  const url = value.url;
+  const verdict = value.verdict;
+  const why = value.why === undefined ? "" : value.why;
+  if (typeof url !== "string" || url.length === 0 || url.length > 2_000) {
+    return { error: "That site is not in this round." };
+  }
+  if (verdict !== "love" && verdict !== "meh" && verdict !== "hate") {
+    return { error: "Choose love, meh, or hate." };
+  }
+  if (typeof why !== "string" || why.length > 4_000) return { error: "That note is too long." };
+  const input: VerdictInput = { url, verdict, why };
+  if (value.allowBlank === true) input.allowBlank = true;
+  return { input };
+}
+
+function parseShortlistBody(value: unknown): { urls: string[]; thread: string } | { error: string } {
+  if (!isRecord(value)) return { error: "The desk could not read that request." };
+  const urlsRaw = value.urls === undefined ? [] : value.urls;
+  if (!Array.isArray(urlsRaw) || urlsRaw.length > 20) return { error: "Pick 3 to 5 loved sites." };
+  const urls: string[] = [];
+  for (const item of urlsRaw) {
+    if (typeof item !== "string" || item.length > 2_000) return { error: "Pick 3 to 5 loved sites." };
+    urls.push(item);
+  }
+  const thread = value.thread === undefined ? "" : value.thread;
+  if (typeof thread !== "string" || thread.length > 8_000) return { error: "That note is too long." };
+  return { urls, thread };
+}
+
+async function readJsonBody(req: IncomingMessage, res: ServerResponse): Promise<unknown | null> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return null;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return null;
+  }
+  try {
+    return JSON.parse(capped.body.toString("utf8")) as unknown;
+  } catch {
+    sendJson(req, res, 400, { error: "The desk could not read that request." });
+    return null;
+  }
+}
+
+function referenceError(error: unknown): { status: number; message: string } {
+  if (error instanceof Error) {
+    if (
+      error.message === "The shortlist needs 3 to 5 loved sites." ||
+      error.message === "There is no love to write." ||
+      error.message === "The walk has not reached the shortlist."
+    ) {
+      return { status: 400, message: error.message };
+    }
+  }
+  return { status: 500, message: "The shortlist did not save." };
+}
+
+function isThumbMeta(value: unknown): value is { at: number; placeholder: boolean; note: string } {
+  if (!isRecord(value)) return false;
+  return typeof value.at === "number" && typeof value.placeholder === "boolean" && typeof value.note === "string";
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(root, target);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 function normalizePath(url: string): string | null {
