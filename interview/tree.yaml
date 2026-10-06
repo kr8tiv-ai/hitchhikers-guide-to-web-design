@@ -1,0 +1,254 @@
+# Interview tree. Questions are data. The loader rejects a duplicate id or a missing field.
+# Modules 2 through 9 arrive in the next prompts. Do not renumber modules 0 and 1.
+# Express, Standard, and Deep filter this file. They are not separate trees.
+
+questions:
+  - id: DP-0.1
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Is this site for you, or for a client?"
+    why: "A client job needs its own workspace and a brief you can hand over. Your own site does not."
+    input: [choice, text, voice]
+    skip_default: "For myself."
+    suggest: "Yourself, or one named client."
+    pushback_if:
+      - "both"
+      - "not sure"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "PROJECT.md#audience"
+
+  - id: DP-0.2
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Have you built a website before, and with what? Drop any URLs, including the old ones."
+    why: "Prior sites and tools set your level. A URL can be crawled later for assets and for taste."
+    input: [text, voice]
+    skip_default: "No prior site. No builder named."
+    suggest: "Name the tool, such as a site builder, Webflow, WordPress, Framer, or code, and paste a URL if one exists."
+    required_for:
+      - DP-0.2a
+    writes:
+      - "PROJECT.md#prior-sites"
+
+  - id: DP-0.2a
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "What do you love about that site, and what makes you wince?"
+    why: "Love and wince are the taste signal. A crawl without them is only a screenshot."
+    input: [text, voice]
+    skip_default: "No prior site to love or wince at."
+    suggest: "One thing to keep, and one thing that has to go."
+    pushback_if:
+      - "it's fine"
+      - "nothing"
+    writes:
+      - "PROJECT.md#prior-sites"
+
+  - id: DP-0.3
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "How comfortable are you with web work? Four rungs: new to it, used a site builder, design or build sites, or write code."
+    why: "The rung sets how much to explain. Technical vocabulary can move you up. Two asks of what a term means move you down."
+    input: [choice, text, voice]
+    skip_default: "New to it."
+    suggest: "Pick the rung that matches the work you do."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "PROJECT.md#user-profile"
+
+  - id: DP-0.4
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Do you already have brand assets: a logo, colors, fonts, a guide, or photos? Drop what you have. PDFs, screenshots, and links all work."
+    why: "Existing assets open a fast path. Each field still gets a check for whether you are happy with it."
+    input: [upload, text, voice]
+    skip_default: "No brand assets yet."
+    suggest: "Logo, palette, type, a written guide, and photos. Send any of them."
+    writes:
+      - "ASSETS.md#brand-assets"
+      - "BRAND.md#imported"
+
+  - id: DP-0.5
+    module: towel-check
+    # Express does not ask this. The id stays in the tree and the ASSUMED default is written.
+    depth: [standard, deep]
+    ask: "Want to connect your X account so the Guide can read your voice from posts? Optional, and read-only."
+    why: "Posts can supply voice samples and imagery. Nothing is posted. Express does not ask this and writes the ASSUMED default."
+    input: [choice, voice]
+    skip_default: "No X connection."
+    suggest: "Skip it if you would rather describe the voice yourself."
+    writes:
+      - "VOICE.md#x"
+
+  - id: DP-0.6
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "How do you want to answer: hold the mic, or use the keyboard?"
+    why: "You can talk the whole way. The Guide replies in text either way."
+    input: [choice, voice]
+    skip_default: "Keyboard."
+    suggest: "Mic if speaking is faster. Keyboard if you want to edit each line."
+    writes:
+      - "PROJECT.md#input-mode"
+
+  - id: DP-0.7
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "How much time do you have today? Choose a depth: Deep (the full Guide, recommended), Standard, or Express. The interview can be saved and resumed."
+    why: "Every mode keeps every id. Express only writes ASSUMED defaults for what it does not ask. You can change depth later."
+    input: [choice, text, voice]
+    skip_default: "Deep"
+    suggest: "Deep if you can stay for the full Guide. Standard if you want every question with a shorter walk. Express if you want speed and will review assumptions."
+    writes:
+      - "PROJECT.md#interview-depth"
+
+  - id: DP-1.1
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Do you have a logo?"
+    why: "The logo anchors color, type, and tone. A weak mark makes every later choice lean on it."
+    input: [upload, text, voice]
+    skip_default: "Generate logo concepts in Babel Fish."
+    suggest: "Three directions: wordmark, symbol, or combination."
+    pushback_if:
+      - "it's fine"
+      - "raster under 512px"
+    follow_ups:
+      - id: DP-1.1a
+        ask: "Are you happy with it?"
+      - id: DP-1.1b
+        ask: "Want suggestions or an improved version?"
+    levels:
+      beginner: explain
+      pro: terse
+    required_for:
+      - babel-fish.logo
+    writes:
+      - "BRAND.md#logo"
+      - "ASSETS.md#logo"
+
+  - id: DP-1.2
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Which colors do you want, and what should each one mean for this brand?"
+    why: "Color psychology research is mixed. A single color does not have one emotion for all cultures, and a chart of meanings is not a brief. Standing apart from competitors matters more than a borrowed meaning."
+    input: [text, voice]
+    skip_default: "No palette yet. Babel Fish will draft three, with contrast checked."
+    suggest: "Three palettes from mood, industry, and competitors, each with a 60-30-10 split."
+    pushback_if:
+      - "blue"
+      - "make it pop"
+    writes:
+      - "BRAND.md#color"
+
+  - id: DP-1.3
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Do you have a slogan or tagline?"
+    why: "A slogan is the brand in one line. It can wait if the voice is still forming."
+    input: [text, voice]
+    skip_default: "No slogan yet."
+    suggest: "Babel Fish can draft a set across several styles, then you keep five."
+    follow_ups:
+      - id: DP-1.3a
+        ask: "Want suggestions?"
+    writes:
+      - "BRAND.md#slogan"
+      - "VOICE.md#slogans"
+
+  - id: DP-1.4
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Which images or backgrounds resonate with you? Drop up to 5, or a board link. For each one, say why it resonates and how it feels."
+    why: "Mood is evidence. Five images, each with a why, beat a folder of unlabeled pictures."
+    input: [upload, text, voice]
+    skip_default: "No mood images yet."
+    suggest: "Cap the set at 5. One sentence of why for each image."
+    pushback_if:
+      - "nice pictures"
+      - "modern"
+    writes:
+      - "BRAND.md#mood"
+      - "ASSETS.md#mood"
+
+  - id: DP-1.5
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Do you have fonts in mind, and what kind of letters feel like you?"
+    why: "Two families are enough: one for headlines, one for text. The pairing has to survive a real sentence."
+    input: [text, voice, upload]
+    skip_default: "No type yet. Show the six pairings."
+    suggest: "Send screenshots, or set your headline in one of these six pairings: Bebas Neue + Barlow, Space Grotesk + Inter, DM Serif Display + DM Sans, Fraunces + Work Sans, Archivo Black + Archivo, Clash Display + Satoshi."
+    follow_ups:
+      - id: DP-1.5a
+        ask: "Send screenshots of fonts you like, or I can show you pairings"
+    writes:
+      - "BRAND.md#type"
+
+  - id: DP-1.6
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "How does your company speak to people? If it were a person or an animal, what would it be?"
+    why: "A person or an animal is easier to imitate than a pile of adjectives. Optional sliders can place the voice from funny to serious, formal to casual, respectful to irreverent, and enthusiastic to matter-of-fact."
+    input: [text, voice]
+    skip_default: "A calm, precise person. No animal named."
+    suggest: "Name the person or the animal, then name 5 to 10 brands whose voices you trust with your customers."
+    pushback_if:
+      - "professional"
+      - "friendly"
+    follow_ups:
+      - id: DP-1.6a
+        ask: "Which brands' voices do you like? I can suggest 5 to 10 that speak to your customers"
+    writes:
+      - "VOICE.md#character"
+
+  - id: DP-1.7
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Why did you build this, and what is the origin story?"
+    why: "This is the brand why, the reason the work exists. Deep runs the Why Finder here, along the Golden Circle. Express and Standard keep a one-sentence stub and may defer the long finder to Babel Fish. The site why is a later question."
+    input: [text, voice]
+    skip_default: "Brand why not stated. One sentence still owed."
+    suggest: "One sentence: To [contribution] so that [impact]."
+    pushback_if:
+      - "to make money"
+      - "it felt right"
+    follow_ups:
+      - id: DP-1.7a
+        ask: "Do you understand your why?"
+      - id: DP-1.7-finder
+        ask: "Let's find it with the Golden Circle"
+    required_for:
+      - babel-fish.why
+    writes:
+      - "BRAND.md#why"
+
+  - id: DP-1.8
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Which brands are like yours, and which unrelated brands do you love?"
+    why: "Kindred brands show the neighborhood. Unrelated loves show taste you will not copy line for line."
+    input: [text, voice]
+    skip_default: "No kindred brands named."
+    suggest: "Three brands in your field, and two you love from outside it. Say what you love, not only the name."
+    writes:
+      - "BRAND.md#kindred"
+
+  - id: DP-1.9
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "What assets do you already have, and what must never change?"
+    why: "Photos, video, copy, real testimonials, certifications, and press go in the inventory. The protected list is the line the build does not cross."
+    input: [upload, text, voice]
+    skip_default: "No inventory yet. Nothing marked protected."
+    suggest: "List what exists, then name the pages, words, or pictures that stay as they are."
+    pushback_if:
+      - "everything can change"
+    writes:
+      - "ASSETS.md#inventory"
+      - "ASSETS.md#protected"
