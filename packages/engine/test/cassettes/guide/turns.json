@@ -1,0 +1,153 @@
+{
+  "pushback-judge": [
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } },
+    {
+      "result": {
+        "vague": true,
+        "quote": "it's fine",
+        "sharperChoice": "You wrote that it is fine. What is one concrete detail the shop site should keep?"
+      }
+    },
+    {
+      "result": {
+        "vague": true,
+        "quote": "it's fine",
+        "sharperChoice": "Still soft. What is one page, tool, or URL the shop actually has?"
+      }
+    },
+    {
+      "result": {
+        "vague": true,
+        "quote": "it's fine",
+        "sharperChoice": "Still soft. What is one page, tool, or URL the shop actually has?"
+      }
+    },
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } },
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } },
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } },
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } },
+    { "result": { "vague": false, "quote": "", "sharperChoice": "" } }
+  ],
+  "guide-message": [
+    {
+      "result": {
+        "message": "Towel and Tea stays in your hands, which is the right number of hands. Have you built a website before, and which parts still feel like yours?",
+        "explanationLevel": "beginner",
+        "joke": true
+      }
+    },
+    {
+      "result": {
+        "message": "That note is soft, and we can sharpen it later. How comfortable are you with web work, from new to writing code?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "A site builder is a real rung. Do you already have a logo, colors, or photos for the shop?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "Assets can wait on the desk. In one sentence, why does this site exist?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "The reason is the order, not the ornament. Which real sites should we walk for Towel and Tea?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "Four references are on the desk. Which three words should the shop feel like, and which three should it refuse?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "Warm paper and a quiet counter can carry the page. What motion level should the shop carry, from still to cinematic?",
+        "explanationLevel": "pro",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "What did I get wrong?",
+        "explanationLevel": "pro",
+        "joke": false
+      }
+    }
+  ],
+  "suggest": [
+    {
+      "result": {
+        "options": [
+          {
+            "label": "A quiet order page",
+            "why": "The neighbor needs a way to order without a call.",
+            "source": "answer:DP-2.1"
+          },
+          {
+            "label": "Show the tin photo large",
+            "why": "The photo of the tins is already in the uploads.",
+            "source": "upload:tins.jpg"
+          },
+          {
+            "label": "Keep the menu page type",
+            "why": "The crawl notes a simple menu page.",
+            "source": "crawl:menu"
+          },
+          {
+            "label": "A warm paper ground",
+            "why": "Food and drink sites in this industry often keep the page close to paper.",
+            "source": "industry:tea"
+          }
+        ]
+      }
+    }
+  ],
+  "mirror": [
+    {
+      "result": {
+        "lines": [
+          "Here is what I heard.",
+          "Towel and Tea is your shop, with a soft note on the old site.",
+          "The neighbor orders tea, and the motion can stay calm."
+        ]
+      }
+    }
+  ],
+  "brief-draft": [
+    {
+      "result": {
+        "goal": "The site exists so a neighbor can order tea without calling.",
+        "visitor": "The visitor is a neighbor who wants tea.",
+        "action": "The action is to order tea.",
+        "offer": "The offer is tea from the shop.",
+        "vibe": "The shop should feel like warm paper and a quiet counter.",
+        "references": "The references are a method for looking, not a costume.",
+        "exists": "A menu page already exists from a site builder.",
+        "protected": "The protected items are not named yet.",
+        "motion": "The motion stays calm, enough to feel considered.",
+        "limits": "The limits are a small shop and a quiet page.",
+        "hosting": "The hosting choice is not named yet.",
+        "coverage": "The coverage is the answers on the desk."
+      }
+    }
+  ],
+  "brief-revise": [
+    {
+      "result": {
+        "vibe": "The shop should feel like warm paper, quieter than before."
+      }
+    }
+  ]
+}

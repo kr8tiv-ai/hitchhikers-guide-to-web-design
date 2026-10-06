@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Paper Steam",
+    "url": "https://example.com/godly/paper-steam",
+    "source": "godly",
+    "industry": "tea",
+    "style_world": "editorial",
+    "motion_level": 2,
+    "award": "none",
+    "noted": "Look at the quiet margin around the product."
+  },
+  {
+    "name": "Tin Counter",
+    "url": "https://example.com/godly/tin-counter",
+    "source": "godly",
+    "industry": "tea",
+    "style_world": "editorial",
+    "motion_level": 2,
+    "award": "none",
+    "noted": "Look at the tin sitting in a wide quiet frame."
+  },
+  {
+    "name": "Slow Tin",
+    "url": "https://example.com/awwwards/slow-tin",
+    "source": "awwwards",
+    "industry": "tea",
+    "style_world": "minimal-luxury",
+    "motion_level": 2,
+    "award": "none",
+    "noted": "Look at the slow reveal of one object."
+  },
+  {
+    "name": "Shop Hours",
+    "url": "https://example.com/awwwards/shop-hours",
+    "source": "awwwards",
+    "industry": "tea",
+    "style_world": "minimal-luxury",
+    "motion_level": 2,
+    "award": "none",
+    "noted": "Look at the type doing the work of a photograph."
+  },
+  {
+    "name": "Other Shelf",
+    "url": "https://example.com/other/shelf",
+    "source": "other",
+    "industry": "tea",
+    "style_world": "editorial",
+    "motion_level": 2,
+    "award": "none",
+    "noted": "Look at a shelf that must not be offered as a gallery card."
+  }
+]

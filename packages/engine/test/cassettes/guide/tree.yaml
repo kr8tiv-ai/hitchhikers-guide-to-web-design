@@ -1,0 +1,83 @@
+# Hand-written fixture for the Towel and Tea cassette. Not the product tree.
+questions:
+  - id: DP-0.1
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Is this shop yours?"
+    why: "The desk needs the name on the door."
+    input: [text]
+    skip_default: "The shop is theirs."
+    writes:
+      - "PROJECT.md#owner"
+
+  - id: DP-0.2
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "What came before this shop site?"
+    why: "A prior page tells us what to keep."
+    input: [text]
+    skip_default: "No prior site."
+    pushback_if:
+      - "it's fine"
+    writes:
+      - "PROJECT.md#history"
+
+  - id: DP-0.3
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "How new is the web work?"
+    why: "The level changes how much we explain."
+    input: [text]
+    skip_default: "New to it."
+    writes:
+      - "PROJECT.md#level"
+
+  - id: DP-0.4
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Which assets are already in the room?"
+    why: "Uploads beat invented pictures."
+    input: [text, upload]
+    skip_default: "No brand assets yet."
+    writes:
+      - "ASSETS.md#brand-assets"
+
+  - id: DP-2.1
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Why does the site exist?"
+    why: "One sentence keeps the later pages honest."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md#goal"
+
+  - id: DP-5.2
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Which sites should we walk?"
+    why: "Taste questions use references as a method for looking."
+    input: [text]
+    skip_default: "No gallery walk."
+    writes:
+      - "REFERENCES.md#walk"
+
+  - id: DP-5.3
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "Which three words fit the shop?"
+    why: "Vibe and the words it refuses."
+    input: [text]
+    skip_default: "Vibe not stated."
+    writes:
+      - "SITE-BRIEF.md#vibe"
+
+  - id: DP-6.2
+    module: towel-check
+    depth: [express, standard, deep]
+    ask: "What motion level fits?"
+    why: "Motion is a weight, not a library ban."
+    input: [text]
+    skip_default: "Calm."
+    writes:
+      - "MOTION.md#level"

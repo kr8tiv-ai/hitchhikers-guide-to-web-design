@@ -4,16 +4,24 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import {
+  GrokUnavailableError,
   InterviewError,
+  guideThinkFromScript,
   loadConfig,
   loadState,
   loadTree,
   openInterview,
   questionsForDepth,
+  runTurn,
+  seedExpressAssumptions,
+  think,
   type AnswerRecord,
+  type GuideSession,
   type GuideState,
+  type GuideTurn,
   type InterviewSession,
   type Question,
+  type ThinkRequest,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardState } from "../card.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
@@ -30,11 +38,21 @@ import {
   readCapped,
 } from "./uploads.ts";
 
+interface LiveOverlay {
+  forId: string | null;
+  message: string | null;
+  quote: string | null;
+  calm: boolean;
+  status: "asked" | "pushed" | "soft" | "done" | null;
+  cards: Array<{ name: string; url: string; source: string }>;
+  options: Array<{ label: string; why: string; source: string }>;
+}
+
 export type TurnHandler = (input: {
   kind: "answer" | "suggest" | "skip";
   questionId: string;
   text?: string;
-}) => Promise<{ next: unknown; events: unknown[] }>;
+}) => Promise<{ next: unknown; events: unknown[]; live?: LiveOverlay }>;
 
 export interface DeskProgress {
   answered: number;
@@ -97,9 +115,9 @@ type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard";
 const moduleCache = new Map<string, string>();
 
 /**
- * Interview session for one desk process. `turnHandler` defaults to the
- * engine from 018. A later prompt replaces that function; this file keeps
- * the HTTP shape.
+ * Interview session for one desk process. The default turn is the live Guide.
+ * A caller can still pass `turnHandler` to drive the desk without a model.
+ * When Grok is quiet, runTurn keeps the tree ask and the session on disk.
  */
 export async function createDeskApp(opts: {
   projectDir: string;
@@ -107,9 +125,22 @@ export async function createDeskApp(opts: {
 }): Promise<DeskApp> {
   const projectDir = path.resolve(opts.projectDir);
   const depth = loadConfig(projectDir).interviewDepth;
+  if (opts.turnHandler === undefined && depth === "express") {
+    await seedExpressAssumptions(projectDir);
+  }
   const questions = questionsForDepth(loadTree(treeFile(projectDir)), depth);
-  const session = await openInterview(projectDir, depth);
-  const turn = opts.turnHandler ?? createEngineTurn(session);
+  let interview = await openInterview(projectDir, depth);
+  let overlay: LiveOverlay = emptyOverlay();
+  const rawTurn =
+    opts.turnHandler ??
+    createLiveTurn(projectDir, depth, () => interview, (next) => {
+      interview = next;
+    }, selectGuideThink());
+  const turn: TurnHandler = async (input) => {
+    const output = await rawTurn(input);
+    if (output.live !== undefined) overlay = output.live;
+    return output;
+  };
   const token = issueToken();
   const hub = createSseHub();
   let tail: Promise<void> = Promise.resolve();
@@ -123,7 +154,7 @@ export async function createDeskApp(opts: {
     return run;
   };
 
-  const view = (): DeskSession => buildSession(projectDir, session, questions);
+  const view = (): DeskSession => buildSession(projectDir, interview, questions, overlay);
 
   return {
     token,
@@ -148,6 +179,122 @@ export async function createDeskApp(opts: {
       await handleGet(req, res, pathname, token, view, hub);
     },
   };
+}
+
+function emptyOverlay(): LiveOverlay {
+  return { forId: null, message: null, quote: null, calm: false, status: null, cards: [], options: [] };
+}
+
+function createLiveTurn(
+  projectDir: string,
+  depth: "express" | "standard" | "deep",
+  getInterview: () => InterviewSession,
+  setInterview: (session: InterviewSession) => void,
+  model: typeof think,
+): TurnHandler {
+  return async (input) => {
+    const current = getInterview().next();
+    if (current === null) {
+      throw new InterviewError("finished", "The interview is finished.");
+    }
+    if (current.id !== input.questionId) {
+      throw new InterviewError("command", "That question is no longer on the desk.");
+    }
+    const session: GuideSession = {
+      projectDir,
+      depth,
+      language: "en",
+      pushes: {},
+    };
+    const result = await runTurn(
+      session,
+      input.text === undefined ? { kind: input.kind } : { kind: input.kind, text: input.text },
+      { think: model },
+    );
+    setInterview(await openInterview(projectDir, depth));
+    const next = getInterview().next();
+    return {
+      next,
+      events: [
+        { type: "turn", kind: input.kind, questionId: input.questionId },
+        { type: "session", questionId: result.questionId },
+      ],
+      live: overlayFrom(result),
+    };
+  };
+}
+
+function overlayFrom(result: GuideTurn): LiveOverlay {
+  const cards: LiveOverlay["cards"] = [];
+  for (const card of result.cards ?? []) {
+    cards.push({ name: card.name, url: card.url, source: card.source });
+  }
+  return {
+    forId: result.questionId,
+    message: result.message,
+    quote: result.quote ?? null,
+    calm: result.calm === true,
+    status: result.status,
+    cards,
+    options: [...(result.options ?? [])],
+  };
+}
+
+/**
+ * Replay uses the ordered cassette. HH_LIVE=1 calls Grok.
+ * Node's test runner and the older answer-one e2e stay on the tree ask,
+ * because a live call would change that ask and could hang the suite.
+ * The product process, with none of those flags, calls Grok.
+ */
+function selectGuideThink(): typeof think {
+  if (process.env.HH_GUIDE_REPLAY === "1") {
+    const override = process.env.HH_GUIDE_CASSETTE;
+    const file =
+      override !== undefined && override.trim() !== ""
+        ? override
+        : path.resolve(import.meta.dirname, "..", "..", "..", "engine", "test", "cassettes", "guide", "turns.json");
+    return guideThinkFromScript(readFileSync(file, "utf8"));
+  }
+  if (process.env.HH_LIVE === "1") return think;
+  const testing = process.env.NODE_TEST_CONTEXT !== undefined || process.execArgv.includes("--test");
+  if (testing || process.env.HH_E2E_PROJECT !== undefined) return unavailableGuideThink();
+  return think;
+}
+
+function unavailableGuideThink(): typeof think {
+  return async function unavailable<T>(_req: ThinkRequest<T>) {
+    throw new GrokUnavailableError("The Guide is quiet for a moment.");
+  };
+}
+
+function renderLiveExtras(overlay: LiveOverlay, done: boolean): string {
+  const parts: string[] = [];
+  if (overlay.calm && overlay.message !== null) {
+    parts.push(
+      `<p class="hh-turn" data-calm="true"><span class="hh-turn__who">Guide</span> ${escapeHtml(overlay.message)}</p>`,
+    );
+  } else if (done && overlay.message !== null) {
+    parts.push(turnLine("Guide", overlay.message, false));
+  }
+  for (const card of overlay.cards) {
+    if (!isHttpUrl(card.url)) continue;
+    parts.push(
+      `<a class="hh-btn hh-btn--secondary" data-gallery="${escapeHtml(card.source)}" href="${escapeHtml(card.url)}">${escapeHtml(card.name)}</a>`,
+    );
+  }
+  for (const option of overlay.options) {
+    parts.push(
+      `<p class="hh-turn" data-suggest-option="${escapeHtml(option.source)}"><span class="hh-turn__who">Suggest</span> ${escapeHtml(option.label)}. ${escapeHtml(option.why)}</p>`,
+    );
+  }
+  if (parts.length === 0) return "";
+  return `\n${parts.join("\n")}`;
+}
+
+function isHttpUrl(value: string): boolean {
+  if (value.indexOf("http://") !== 0 && value.indexOf("https://") !== 0) return false;
+  if (value.indexOf(" ") !== -1 || value.indexOf('"') !== -1) return false;
+  return true;
 }
 
 function createEngineTurn(session: InterviewSession): TurnHandler {
@@ -457,8 +604,9 @@ function buildSession(
   projectDir: string,
   session: InterviewSession,
   questions: readonly Question[],
+  overlay: LiveOverlay,
 ): DeskSession {
-  const question = session.next();
+  let question = session.next();
   const saved = loadState(projectDir);
   const promptId = question === null ? "interview:done" : `interview:${question.id}`;
   const nextAction = question === null ? "Approve the Site Brief." : `Answer ${question.id}.`;
@@ -473,7 +621,22 @@ function buildSession(
   };
   const coverage = session.coverage();
   const answers = readAnswers(projectDir);
-  const pushback = session.lastPushback;
+  let pushback = session.lastPushback;
+  const message = overlay.message;
+  if (overlay.calm) {
+    pushback = null;
+  } else if (question !== null && message !== null && overlay.forId === question.id && overlay.status === "pushed") {
+    question = { ...question, ask: message };
+    pushback = overlay.quote;
+  } else if (
+    question !== null &&
+    message !== null &&
+    overlay.forId === question.id &&
+    (overlay.status === "asked" || overlay.status === "soft")
+  ) {
+    question = { ...question, ask: message };
+    pushback = null;
+  }
   const done = question === null;
   const card: CardState = {
     question,
@@ -490,8 +653,12 @@ function buildSession(
     const message = error instanceof Error ? error.message : "The map could not be drawn.";
     mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
   }
-  const status =
-    state.nextAction.trim().length > 0 ? state.nextAction : "Ready.";
+  const statusText = overlay.calm && overlay.message !== null
+    ? overlay.message
+    : state.nextAction.trim().length > 0
+      ? state.nextAction
+      : "Ready.";
+  const transcript = `${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
   return {
     question,
     pushback,
@@ -508,8 +675,8 @@ function buildSession(
     },
     mapHtml,
     guideHtml: renderGuideMap(answers, [...questions]),
-    transcriptHtml: renderTranscript(questions, answers, question),
-    statusHtml: `<span>${escapeHtml(status)}</span>`,
+    transcriptHtml: transcript,
+    statusHtml: `<span${overlay.calm ? ' data-calm="true"' : ""}>${escapeHtml(statusText)}</span>`,
     cardHtml: renderCard(card),
   };
 }
