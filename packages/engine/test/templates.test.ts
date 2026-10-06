@@ -112,9 +112,13 @@ test("a template with no tokens still renders", () => {
   );
   const record = parsed as Record<string, unknown>;
   assert.equal(record.sessionIdMode, "unknown");
-  assert.equal(record.model, null);
-  assert.deepEqual(record.budgets, {});
-  assert.deepEqual(record.gates, {});
+  assert.equal(record.model, "grok-4.7");
+  assert.equal(record.effort, "medium");
+  assert.equal(record.worktrees, false);
+  assert.equal(record.voiceEngine, "local");
+  assert.equal("budgets" in record, false);
+  const gates = record.gates as Record<string, unknown>;
+  assert.equal(gates.phonePerfMin, 90);
 });
 
 test("a missing variable throws and does not return the token", () => {
