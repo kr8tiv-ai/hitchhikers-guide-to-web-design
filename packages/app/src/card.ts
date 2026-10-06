@@ -1,0 +1,268 @@
+import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
+
+/**
+ * One question. The interview session stores the answer.
+ * Suggest does not call a model from this card.
+ */
+
+export interface CardState {
+  question: Question | null;
+  draft: string;
+  pushback: string | null;
+  error: string | null;
+  done: boolean;
+  /** True while a command is in flight. A second submit returns this same state. */
+  pending: boolean;
+}
+
+export type CardEvent =
+  | { type: "type"; text: string }
+  | { type: "submit" }
+  | { type: "suggest" }
+  | { type: "skip" };
+
+/** Engine session, plus lastPushback so a hold can be shown on the same card. */
+export type CardSession = Pick<InterviewSession, "command" | "next" | "lastPushback">;
+
+const EMPTY_ANSWER = "Write an answer or skip.";
+const DONE_TITLE = "Guide Entry is next.";
+const DONE_WHY = "The questions on this desk are finished.";
+const EMPTY_TITLE = "No question yet.";
+const EMPTY_WHY = "One card will sit here when the interview starts.";
+const SAVE_FAILED = "The answer did not save. Try again, or skip.";
+
+interface CardQuery {
+  getAttribute(name: string): string | null;
+  parentElement: CardQuery | null;
+  textContent: string | null;
+  disabled?: boolean;
+  value?: string;
+}
+
+interface CardDomEvent {
+  target: CardQuery | null;
+  preventDefault(): void;
+}
+
+export interface CardRoot {
+  innerHTML: string;
+  querySelector(selector: string): CardQuery | null;
+  addEventListener(type: string, listener: (event: CardDomEvent) => void): void;
+  removeEventListener(type: string, listener: (event: CardDomEvent) => void): void;
+}
+
+/** Replaces &, <, and >, plus quotes so attribute values cannot break out of the tag. */
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function messageFrom(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") return error.message;
+  return SAVE_FAILED;
+}
+
+function isFlight(event: CardEvent): boolean {
+  return event.type === "submit" || event.type === "suggest" || event.type === "skip";
+}
+
+export async function reduceCard(
+  state: CardState,
+  event: CardEvent,
+  session: CardSession,
+): Promise<CardState> {
+  if (event.type === "type") {
+    return {
+      question: state.question,
+      draft: event.text,
+      pushback: state.pushback,
+      error: null,
+      done: state.done,
+      pending: state.pending,
+    };
+  }
+
+  // Submit, suggest, and skip share one in-flight command. A second one waits.
+  if (state.pending || state.done || state.question === null) {
+    return state;
+  }
+
+  if (event.type === "submit" && state.draft.trim() === "") {
+    return {
+      question: state.question,
+      draft: state.draft,
+      pushback: state.pushback,
+      error: EMPTY_ANSWER,
+      done: false,
+      pending: false,
+    };
+  }
+
+  const command: InterviewCommand =
+    event.type === "submit"
+      ? { type: "answer", text: state.draft }
+      : event.type === "suggest"
+        ? { type: "suggest" }
+        : { type: "skip" };
+
+  try {
+    await session.command(command);
+  } catch (error) {
+    return {
+      question: state.question,
+      draft: state.draft,
+      pushback: state.pushback,
+      error: messageFrom(error),
+      done: state.done,
+      pending: false,
+    };
+  }
+
+  const question = await session.next();
+  return {
+    question,
+    draft: "",
+    pushback: session.lastPushback ?? null,
+    error: null,
+    done: question === null,
+    pending: false,
+  };
+}
+
+function attr(name: string, value: string): string {
+  return ` ${name}="${escapeHtml(value)}"`;
+}
+
+function button(
+  action: "answer" | "suggest" | "skip",
+  label: string,
+  variant: "primary" | "secondary" | "ghost",
+  disabled: boolean,
+): string {
+  const flag = disabled ? " disabled" : "";
+  return `<button class="hh-btn hh-btn--${variant}" type="button" data-action="${action}"${flag}>${escapeHtml(label)}</button>`;
+}
+
+function heading(title: string, why: string, done: boolean): string {
+  const marker = done ? ' data-done="true"' : "";
+  return `<article class="hh-qcard"${marker} aria-labelledby="hh-card-ask">
+  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(title)}</h2>
+  <p class="hh-qcard__why">${escapeHtml(why)}</p>
+</article>`;
+}
+
+/** HTML for the current question only. Mounts inside data-region="question". */
+export function renderCard(state: CardState): string {
+  if (state.done) return heading(DONE_TITLE, DONE_WHY, true);
+  const question = state.question;
+  if (question === null) return heading(EMPTY_TITLE, EMPTY_WHY, false);
+
+  // A hold shows the pushback and an empty field, so the soft line is not sent again.
+  const field = state.pushback === null ? state.draft : "";
+  const described =
+    state.error === null ? "" : ' aria-invalid="true" aria-describedby="hh-card-error"';
+  const alert = state.error === null ? "" : ' role="alert"';
+  const busy = state.pending ? ' aria-busy="true"' : "";
+  const pushAttr = state.pushback === null ? "" : attr("data-pushback", state.pushback);
+  const pushLine =
+    state.pushback === null || state.pushback === ""
+      ? ""
+      : `  <p class="hh-qcard__push">${escapeHtml(state.pushback)}</p>\n`;
+
+  return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
+  <p class="hh-kicker">${escapeHtml(question.id)}</p>
+  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
+  <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
+${pushLine}  <label class="hh-qcard__field">
+    <span class="hh-qcard__label">Your answer</span>
+    <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${described}>${escapeHtml(field)}</textarea>
+  </label>
+  <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
+  <div class="hh-qcard__actions">
+    ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}
+    ${button("suggest", "Suggest for me", "secondary", state.pending)}
+    ${button("skip", "Skip", "ghost", state.pending)}
+  </div>
+</article>`;
+}
+
+function readAction(start: CardQuery | null): "answer" | "suggest" | "skip" | null {
+  let node = start;
+  const seen = new Set<CardQuery>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    const action = node.getAttribute("data-action");
+    if (action === "answer" || action === "suggest" || action === "skip") return action;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Wires a minimal question-region root to the session.
+ * Typing updates the draft in place. Commands re-render the one card.
+ */
+export function bindCard(root: CardRoot, session: CardSession): () => void {
+  const question = session.next();
+  let state: CardState = {
+    question,
+    draft: "",
+    pushback: session.lastPushback ?? null,
+    error: null,
+    done: question === null,
+    pending: false,
+  };
+
+  const onClick = (event: CardDomEvent): void => {
+    event.preventDefault();
+    const action = readAction(event.target);
+    if (action === "answer") void run({ type: "submit" });
+    else if (action === "suggest") void run({ type: "suggest" });
+    else if (action === "skip") void run({ type: "skip" });
+  };
+
+  const onInput = (event: CardDomEvent): void => {
+    const text = event.target?.value;
+    if (typeof text !== "string") return;
+    void run({ type: "type", text });
+  };
+
+  root.addEventListener("click", onClick);
+  root.addEventListener("input", onInput);
+  root.innerHTML = renderCard(state);
+
+  return () => {
+    root.removeEventListener("click", onClick);
+    root.removeEventListener("input", onInput);
+  };
+
+  async function run(event: CardEvent): Promise<void> {
+    if (isFlight(event) && state.pending) {
+      state = await reduceCard(state, event, session);
+      return;
+    }
+
+    const snapshot = state;
+    if (isFlight(event)) {
+      state = { ...snapshot, pending: true };
+      root.innerHTML = renderCard(state);
+    }
+
+    const result = await reduceCard(isFlight(event) ? snapshot : state, event, session);
+    if (event.type === "type") {
+      state = result;
+      const answer = root.querySelector('[data-action="answer"]');
+      if (answer !== null) answer.disabled = result.pending || result.draft.trim() === "";
+      const errorNode = root.querySelector("[data-card-error]");
+      if (errorNode !== null) errorNode.textContent = result.error ?? "";
+      return;
+    }
+
+    state = result;
+    root.innerHTML = renderCard(state);
+  }
+}
