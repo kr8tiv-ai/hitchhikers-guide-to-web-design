@@ -81,3 +81,5 @@ export { TreeError, loadTree, questionsForDepth } from "./tree.ts";
 export type { Question } from "./tree.ts";
 export { SITE_TYPES } from "./site-types.ts";
 export type { SiteTypeHint } from "./site-types.ts";
+export { missingRequired, renderBrief } from "./required.ts";
+export type { AnswerRecord } from "./required.ts";

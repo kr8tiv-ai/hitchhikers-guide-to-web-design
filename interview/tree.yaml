@@ -1,6 +1,7 @@
 # Interview tree. Questions are data. The loader rejects a duplicate id or a missing field.
-# Modules 2 through 9 arrive in the next prompts. Do not renumber modules 0 and 1.
+# Modules 0 through 9 live in this file. Do not renumber them.
 # Express, Standard, and Deep filter this file. They are not separate trees.
+# Guide Entry is not a question. It is renderBrief() in the engine.
 
 questions:
   - id: DP-0.1
@@ -634,3 +635,231 @@ questions:
     suggest: "Photography, illustration, 3D, or type-only. Name one primary."
     writes:
       - "VISUAL-DIRECTION.md#imagery"
+
+  - id: DP-6.1
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "Which motion families belong here? Weighted scroll and reveals, headlines that rise line by line, a page that holds while a story plays, sideways scroll, parallax, a film or frame sequence that scrubs with the scroll, a 3D camera path, pages that melt into each other, menus and intro handoffs, pointer reactions, drawn lines and moving illustration, shader grain and glow, particles, a product or a world, physics, ambient video, and optional sound that stays off until asked."
+    why: "Families cover research ids A1 through H3, each with a short loop from the pack and a real link. Magnetic buttons are banned, not offered. The walk names one tool in a clause and does not lecture."
+    input: [choice, text, voice]
+    skip_default: "Reveals and a calm headline. No world, no film, no custom cursor."
+    suggest: "The picker would use CSS, GSAP, Three, OGL, Theatre, Motion, anime.js, or vanilla. Magnetic buttons are banned."
+    pushback_if:
+      - "magnetic buttons"
+      - "all of it"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "MOTION.md#families"
+
+  - id: DP-6.2
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "Motion appetite from 1 to 10. 1 is a calm brochure. 10 is a world you move through. Pick a whole number in that range."
+    why: "The number caps weight and does not remove libraries from the Guide. A calm brand at the top of the scale gets pushback against the deadline and the visitor device."
+    input: [choice, text, voice]
+    skip_default: "3. ASSUMED. Polished, not a spectacle."
+    suggest: "1 calm brochure, 2 gentle, 3 polished, 4 editorial, 5 expressive, 6 cinematic lite, 7 cinematic, 8 a 3D accent, 9 3D-led, 10 a world."
+    pushback_if:
+      - "11"
+      - "0"
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "MOTION.md#appetite"
+      - "SITE-BRIEF.md#motion"
+
+  - id: DP-6.3
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "Do you want the whole site to be one continuous film you scroll through, or a branching story where visitors pick paths?"
+    why: "Either shape costs build length, weight, a phone fallback, and a crawlable text layer. The words stay in the page so a crawler can read them."
+    input: [choice, text, voice]
+    skip_default: "Neither. Ordinary pages, not a film and not a branching story."
+    suggest: "A scroll film, a branching story, both, or neither."
+    writes:
+      - "MOTION.md#narrative"
+      - "SITE-BRIEF.md#motion-shape"
+
+  - id: DP-6.4
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "Where does 3D come from: none, pre-rendered, CC0, Tripo, Meshy, an upload, or a brief for a human?"
+    why: "None stays flat. Pre-rendered keeps the picture and drops the runtime. CC0 models are license-checked and credited. Tripo or Meshy means generated geometry plus cleanup. An upload is your file. A human brief is the slow careful path."
+    input: [choice, upload, text, voice]
+    skip_default: "None."
+    suggest: "None, pre-rendered stills or video, a CC0 library, Tripo, Meshy, upload, or a brief for a human."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "ASSETS.md#3d"
+      - "MOTION.md#3d-source"
+
+  - id: DP-6.5
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "For phone visitors, should heavy motion run lighter, or stay calm?"
+    why: "A heavy effect needs a phone path. Calm is the default so the small screen does not carry the desktop scene."
+    input: [choice, text, voice]
+    skip_default: "Calm."
+    suggest: "Lighter keeps the idea and sheds weight. Calm swaps the effect for a still."
+    writes:
+      - "MOTION.md#phone"
+
+  - id: DP-6.6
+    module: pan-galactic
+    depth: [express, standard, deep]
+    ask: "Is anyone in the audience sensitive to motion?"
+    why: "Reduced motion is always implemented. This only tunes intensity for everyone else."
+    input: [choice, text, voice]
+    skip_default: "Reduced motion stays on. Intensity left as designed."
+    suggest: "Say yes if large shifts, flashing, or autoplay would be a problem. Reduced motion is implemented either way."
+    writes:
+      - "MOTION.md#sensitivity"
+
+  - id: DP-7.1
+    module: bistromathics
+    depth: [express, standard, deep]
+    ask: "What is your comfort spend for generated stills and clips on your account?"
+    why: "Show the model and the resolution on every line. Do not promise 1080p inside a small cap. Prices live on the cost meter, not in this question. Stop at the cap."
+    input: [choice, text, voice]
+    skip_default: "$0 DIY. Prompts only."
+    suggest: "DIY with prompts you run yourself, a small cap, a middle cap, a large cap, or a custom cap. The meter recomputes when the model or the resolution changes."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#imagine-spend"
+
+  - id: DP-7.2
+    module: bistromathics
+    depth: [standard, deep]
+    ask: "What is the budget for custom 3D generation, if you chose Tripo or Meshy?"
+    why: "Only when Tripo or Meshy is the 3D source. Express does not ask this and writes the assumed default. Credits and cleanup still apply."
+    input: [text, voice]
+    skip_default: "No custom 3D generation budget."
+    suggest: "A credit cap, or none."
+    writes:
+      - "SITE-BRIEF.md#3d-budget"
+
+  - id: DP-7.3
+    module: bistromathics
+    depth: [express, standard, deep]
+    ask: "Pictures: stock, your own, or AI?"
+    why: "Stock, pictures you own, or AI. A real person, product, or place is never swapped for a generated stand-in."
+    input: [choice, text, voice]
+    skip_default: "Own and AI. No stock."
+    suggest: "Stock, your own, AI, or a mix you name."
+    writes:
+      - "ASSETS.md#picture-source"
+
+  - id: DP-8.1
+    module: content
+    depth: [express, standard, deep]
+    ask: "Do you have the copy, or should the Guide write it in your voice for you to approve or reject?"
+    why: "Drafts come from the voice file. You approve or reject them. Unseen copy does not ship."
+    input: [choice, text, voice]
+    skip_default: "Write it in the voice file. Approve or reject."
+    suggest: "You bring the copy, or the Guide drafts it for an approve or reject pass."
+    writes:
+      - "VOICE.md#copy"
+      - "SITE-BRIEF.md#copy"
+
+  - id: DP-8.2
+    module: content
+    depth: [express, standard, deep]
+    ask: "What real proof can the site show: testimonials, reviews, numbers, client names, or press?"
+    why: "Real proof only. A placeholder is marked TODO and is never invented."
+    input: [text, voice, upload]
+    skip_default: "No proof yet. Placeholders stay TODO and are never invented."
+    suggest: "Only facts you can point at. Leave out anything that is not real."
+    pushback_if:
+      - "make some up"
+      - "placeholder testimonial"
+    writes:
+      - "SITE-BRIEF.md#proof"
+
+  - id: DP-8.3
+    module: content
+    depth: [express, standard, deep]
+    ask: "If there is a blog, what cadence and which topics?"
+    why: "Cadence and topics are yours. A keyword list needs your approval. Do not invent search volumes."
+    input: [text, voice]
+    skip_default: "No blog cadence."
+    suggest: "A rhythm and a short topic list, or none."
+    writes:
+      - "SITE-BRIEF.md#blog-cadence"
+
+  - id: DP-8.4
+    module: content
+    depth: [express, standard, deep]
+    ask: "Which legal pages do you need, and which claims can you not make?"
+    why: "Privacy, terms, and cookies are named here. Health, finance, real estate, and any other regulated claim stay inside what you can say."
+    input: [text, voice]
+    skip_default: "Privacy and terms. No extra claims named."
+    suggest: "Privacy, terms, cookies, and any sentence the business is not allowed to publish."
+    writes:
+      - "SITE-BRIEF.md#legal"
+
+  - id: DP-9.1
+    module: limits
+    depth: [express, standard, deep]
+    ask: "What is the deadline?"
+    why: "The date is checked against motion appetite. A short date and a world-sized site get pushback."
+    input: [text, voice]
+    skip_default: "No deadline named."
+    suggest: "A date, a season, or none."
+    writes:
+      - "SITE-BRIEF.md#deadline"
+      - "PROJECT.md#deadline"
+
+  - id: DP-9.2
+    module: limits
+    depth: [express, standard, deep]
+    ask: "Where should it live? Hostinger is recommended. The other choices are Vercel, Netlify, or Cloudflare, or no idea. Do you own the domain, who is the registrar, and is email on that domain?"
+    why: "Hostinger is the recommended word, not a forced value. Vercel, Netlify, and Cloudflare are equal choices. No idea is a complete answer."
+    input: [choice, text, voice]
+    skip_default: "no idea"
+    suggest: "Hostinger, Vercel, Netlify, Cloudflare, or no idea. Add domain and email if you know them."
+    levels:
+      beginner: explain
+      pro: terse
+    writes:
+      - "SITE-BRIEF.md#hosting"
+      - "PROJECT.md#hosting"
+
+  - id: DP-9.3
+    module: limits
+    depth: [express, standard, deep]
+    ask: "Who maintains the site after launch?"
+    why: "Someone publishes, renews the name, and answers the form. Name that person."
+    input: [text, voice]
+    skip_default: "The owner maintains it."
+    suggest: "You, a named teammate, or a handoff with no one else assumed."
+    writes:
+      - "SITE-BRIEF.md#maintainer"
+
+  - id: DP-9.4
+    module: limits
+    depth: [express, standard, deep]
+    ask: "Anything beyond WCAG 2.2 AA?"
+    why: "WCAG 2.2 AA is the floor. Extra needs, such as captions or a higher contrast target, are written here."
+    input: [text, voice]
+    skip_default: "WCAG 2.2 AA. Nothing beyond that named."
+    suggest: "Name the extra requirement, or say AA is enough."
+    writes:
+      - "SITE-BRIEF.md#accessibility"
+
+  - id: DP-9.5
+    module: limits
+    depth: [express, standard, deep]
+    ask: "Anything else the Guide should know?"
+    why: "A last open field for a constraint that did not fit another question."
+    input: [text, voice]
+    skip_default: "Nothing else."
+    suggest: "A constraint, a fear, or a fact that would change the brief."
+    writes:
+      - "SITE-BRIEF.md#notes"
