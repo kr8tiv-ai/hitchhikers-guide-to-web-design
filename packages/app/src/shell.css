@@ -1,0 +1,44 @@
+/* Desk shell. Colour, type, and chrome come from the 010 sheets. No new palette. */
+
+body {
+  font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.1875rem);
+}
+
+button,
+.hh-skip {
+  min-height: 44px;
+}
+
+.hh-skip {
+  position: absolute;
+  left: var(--space-4);
+  top: 0;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  transform: translateY(-120%);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: var(--color-surface);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-small);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.hh-skip:focus,
+.hh-skip:focus-visible {
+  transform: translateY(var(--space-4));
+}
+
+[data-region="transcript"],
+[data-region="question"] {
+  min-width: 0;
+}
+
+[data-region="question"] {
+  display: grid;
+}
