@@ -13,6 +13,7 @@ export {
   defaultConfig,
   loadConfig,
   parseConfig,
+  saveConfig,
 } from "./config.ts";
 export type {
   DeployTarget,

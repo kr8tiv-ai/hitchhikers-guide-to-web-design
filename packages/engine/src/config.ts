@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { replaceViaTemp, withStateLock } from "./lock.ts";
 
 export type Effort = "medium" | "high" | "xhigh";
 export type InterviewDepth = "express" | "standard" | "deep";
@@ -329,4 +331,24 @@ export function loadConfig(dir: string): GuideConfig {
     fail("config.json", detail);
   }
   return parseConfig(raw);
+}
+
+/**
+ * Write `.hitchhiker/config.json` under the state lock.
+ * parseConfig runs first and rejects a key it would not load, before any mkdir.
+ * The directory is created before the lock is acquired. The bytes land via a temp rename.
+ */
+export async function saveConfig(
+  projectDir: string,
+  config: GuideConfig,
+): Promise<void> {
+  const checked = parseConfig(config);
+  const dir = path.join(projectDir, ".hitchhiker");
+  await mkdir(dir, { recursive: true });
+  await withStateLock(projectDir, async () => {
+    await replaceViaTemp(
+      path.join(dir, "config.json"),
+      `${JSON.stringify(checked, null, 2)}\n`,
+    );
+  });
 }
