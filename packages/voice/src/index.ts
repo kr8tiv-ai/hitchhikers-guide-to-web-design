@@ -17,3 +17,16 @@ export type {
   WhisperPaths,
   WhisperRunner,
 } from "./whisper.ts";
+
+export {
+  XAI_STT_ENDPOINT,
+  assertLocalDoesNotUseXai,
+  createXaiTranscriber,
+  quoteStt,
+} from "./xai-stt.ts";
+export type {
+  SttQuote,
+  XaiTranscribeRequest,
+  XaiTranscriber,
+  XaiTranscript,
+} from "./xai-stt.ts";
