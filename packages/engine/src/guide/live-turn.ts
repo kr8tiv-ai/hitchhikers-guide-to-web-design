@@ -40,7 +40,8 @@ import { detectLanguage, validateGuideMessage } from "./validators.ts";
  * Answers are stored by the 018 engine so resume stays deterministic.
  * The model may phrase the next ask. It may not choose the next id.
  * 018 writes SOFT only when the phrase floor matches. A model-only third
- * accept is still returned as soft, and the stored status may be ANSWERED.
+ * accept is stored by that engine as ANSWERED, then marked SOFT here so the
+ * record matches the turn.
  */
 
 export interface GuideSession {
@@ -204,6 +205,7 @@ async function answerText(
   }
   if (judgement.action === "soft" && judgement.floor) await storeSoftFloor(s, text);
   else await storePlain(s, text);
+  if (judgement.action === "soft" && !judgement.floor) await markLatestSoft(s.projectDir, current.id);
   if (judgement.action === "soft") s.pushes[current.id] = judgement.count;
   return advance(s, current, judgement.action === "soft", deps);
 }
@@ -395,6 +397,33 @@ function galleryEntries(s: GuideSession, deps: GuideTurnDeps): GalleryEntry[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * The 018 command stores a non-floor answer as ANSWERED. The judge has already
+ * held the line twice, so the saved record has to say SOFT.
+ */
+async function markLatestSoft(projectDir: string, id: string): Promise<void> {
+  await withStateLock(projectDir, async () => {
+    const saved = readInterviewFile(projectDir);
+    let index = -1;
+    for (let cursor = 0; cursor < saved.answers.length; cursor += 1) {
+      if (saved.answers[cursor]?.id === id) index = cursor;
+    }
+    const record = index >= 0 ? saved.answers[index] : undefined;
+    if (record === undefined || (record.status !== "ANSWERED" && record.status !== "SOFT")) {
+      throw new InterviewError("command", "The soft answer could not be stored.");
+    }
+    if (record.status === "SOFT") return;
+    const answers = saved.answers.map((answer, cursor) =>
+      cursor === index ? { id: answer.id, status: "SOFT" as const, value: answer.value } : answer,
+    );
+    await writeFile(
+      path.join(projectDir, ".hitchhiker", "interview.json"),
+      `${JSON.stringify({ version: 1, answers, cursor: saved.cursor, pushedIds: saved.pushedIds }, null, 2)}\n`,
+      "utf8",
+    );
+  });
 }
 
 async function storePlain(s: GuideSession, text: string): Promise<void> {

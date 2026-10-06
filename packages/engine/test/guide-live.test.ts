@@ -28,6 +28,7 @@ import {
 } from "../src/guide/suggest.ts";
 import { validateGuideMessage } from "../src/guide/validators.ts";
 import { openInterview } from "../src/interview.ts";
+import { pushbackFor } from "../src/pushback.ts";
 import type { Question } from "../src/tree.ts";
 
 const cassetteDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "cassettes", "guide");
@@ -116,6 +117,60 @@ test("soft, soft, soft gives two pushes and then SOFT", async () => {
   }
   assert.deepEqual(actions, ["push", "push", "soft"]);
   assert.equal(count, 2);
+});
+
+test("a model-only vague answer is stored as SOFT after two pushes", async () => {
+  const projectDir = tempProject();
+  const text = "The pages can wait until the audience is clearer.";
+  const question: Question = {
+    id: "DP-0.1",
+    module: "towel-check",
+    depth: ["express", "standard", "deep"],
+    ask: "Is this shop yours?",
+    why: "The desk needs the name on the door.",
+    input: ["text"],
+    skipDefault: "The shop is theirs.",
+    writes: ["PROJECT.md#owner"],
+  };
+  try {
+    writePair(projectDir);
+    assert.equal(pushbackFor(question, text), null);
+    const model = asThink(async (req) => {
+      if (req.task === "pushback-judge") {
+        return hit({
+          vague: true,
+          quote: "The pages can wait",
+          sharperChoice: "What is the one page this shop site should publish first?",
+        });
+      }
+      if (req.task === "guide-message") {
+        return hit({
+          message: "What came before this shop site?",
+          explanationLevel: "beginner",
+          joke: false,
+        });
+      }
+      throw new Error(`unexpected ${req.task}`);
+    });
+    const statuses: string[] = [];
+    const ids: Array<string | null> = [];
+    for (let index = 0; index < 3; index += 1) {
+      const result = await runTurn(sessionFor(projectDir), { kind: "answer", text }, { think: model });
+      statuses.push(result.status);
+      ids.push(result.questionId);
+    }
+    assert.deepEqual(statuses, ["pushed", "pushed", "soft"]);
+    assert.deepEqual(ids, ["DP-0.1", "DP-0.1", "DP-0.2"]);
+    const saved = JSON.parse(readFileSync(path.join(projectDir, ".hitchhiker", "interview.json"), "utf8")) as {
+      answers: Array<{ id: string; status: string; value: string }>;
+    };
+    const stored = saved.answers.filter((answer) => answer.id === "DP-0.1");
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.status, "SOFT");
+    assert.equal(stored[0]?.value, text);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
 });
 
 test("suggest drops an option that cites an upload which does not exist", async () => {

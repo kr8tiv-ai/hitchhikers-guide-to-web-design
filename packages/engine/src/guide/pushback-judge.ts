@@ -7,8 +7,8 @@ import { validateGuideMessage } from "./validators.ts";
 /**
  * Model verdict OR the 019 phrase floor. At most two pushes, then SOFT.
  * A model failure counts as not vague, so the phrase floor still applies.
- * The engine stores SOFT only when the phrase floor matches. A model-only
- * third accept is still reported as soft by the caller.
+ * The engine stores SOFT only when the phrase floor matches. The caller marks
+ * a model-only third accept as SOFT after that store.
  */
 
 export const PUSH_CAP = 2;
@@ -21,7 +21,7 @@ export interface PushJudgement {
   count: number;
   quote: string;
   message: string;
-  /** True when 019's phrase list matched. The engine can store SOFT only then. */
+  /** True when 019's phrase list matched. The engine stores SOFT itself only then. */
   floor: boolean;
 }
 
