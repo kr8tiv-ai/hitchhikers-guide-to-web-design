@@ -1,0 +1,728 @@
+ANTIHERO GUIDE · EMAIL MARKETING
+
+
+
+
+EMAIL.
+THE CHANNEL
+NOBODY CAN
+TAKE FROM YOU
+ Capture emails, send great information once or twice a
+ week, soft sell at the bottom, and let your AI do the heavy
+ lifting in your own voice.
+
+
+
+
+BLOG POSTS · SIGNUP FORMS · PLATFORMS · BRAND VOICE · AI
+
+
+
+
+                                       BE YOUR OWN HERO        01
+ANTIHERO · EMAIL MARKETING
+
+
+
+
+  CONTENTS
+01       Own your audience
+         Why a list beats followers.
+
+02       Give first
+         Jab, jab, jab, right hook.
+
+03       Turn blog posts into emails
+         Research, write once, and leak it out slowly.
+
+04       Stay out of spam
+         Deliverability basics that protect your domain.
+
+05       How often and what goes in
+         Frequency, structure, and format.
+
+06       Pick a platform
+         7 options and which one fits you.
+
+07       Let your AI write them
+         Brand kit, brand voice, then you edit.
+
+08       Put a crew on it
+         Specialist bots for articles, emails, and design.
+
+09       Learn from the best
+         Brands doing email well, and where to steal ideas.
+
+10       Add a signup form
+         Capture emails legally, with a reason to join.
+
+KT       Key takeaways
+TL       Tools
+LR       Links and resources
+AS       Action steps
+
+
+
+                                               BE YOUR OWN HERO   02
+BEFORE YOU START
+
+
+
+
+  THE LEAST GLAMOROUS
+  CHANNEL THAT SELLS
+Email is the one marketing channel you own. Platforms change their rules, reach drops, and
+accounts get flagged. Your list stays with you.
+
+This guide shows you how to build a list, what to send, how often, which platform to pick,
+and how to get your AI to write emails that sound like you.
+
+You do not need to be a writer or a developer. You need to know your customers, care about
+them, and supervise what your AI sends.
+
+WHAT YOU NEED
+
+
+A WEBSITE                 Where your signup form lives. Any site works.
+
+A BLOG                    Your articles become your email content.
+
+AN EMAIL PLATFORM         Most have a free plan to start.
+
+NOTEBOOKLM                Free research on what your customers care about.
+
+AN AI ASSISTANT           AntiGravity, Claude, Grok Bot, or whatever you use.
+
+A BRAND KIT               Logo, colors, fonts, and your voice.
+
+
+
+
+                                         BE YOUR OWN HERO                                    03
+                                                                                                     01
+    STEP 01
+
+
+
+
+ OWN YOUR
+ AUDIENCE
+Every platform you post on is rented land. You do not own your followers. You
+borrow them. An email list is people who raised their hand and said yes, talk to me.
+
+
+1        Know the risk. A content policy changes, a legal rule shifts, or your account gets flagged, sometimes
+         through no fault of yours. Your page, profile, or community can disappear overnight.
+
+2        Know the fix. With a list, you can always tell people where you went. No platform can shut it down, and it
+         moves with you if you switch email services.
+
+3        Blogs find people. Email keeps them. Blog posts help your SEO and get you recommended by AI
+         search. After that, one of the most important things your website can do is capture emails.
+
+4        Aim for 90/10. About 90% useful content people want, 10% sales. That is what keeps people opening.
+
+
+5        Remember who buys. People buy your product, but they are also interested in the person behind it.
+         Email is where they get to know you.
+
+
+
+
+     “You don't own your followers on another platform. You're borrowing.”
+     THINK OF IT THIS WAY      Followers are a crowd walking past your shop. An email list is the people who gave
+     you their address.
+
+
+     TOOLS    EMAIL PLATFORM     WEBSITE
+
+
+
+
+                                               BE YOUR OWN HERO                                                     04
+                                                                                                       02
+    STEP 02
+
+
+
+
+ GIVE
+ FIRST
+Gary Vaynerchuk's Jab, Jab, Jab, Right Hook is about social media, and the same
+thinking works for email. Jabs are the value you give. The right hook is the ask.
+
+
+1        Give 3, ask 1. For every email with a hard sell for one product, send 3 packed with information.
+
+
+2        Send what they want to read. Not what you want to sell. For a fitness brand that meant the latest
+         trends, exercises, superfoods, recipes, and new studies.
+
+3        Make yourself interesting. Be yourself. Tell your story. Make it funny when you can. Nobody wants a list
+         of things you sell.
+
+4        Earn the ask. Giving great stuff does not mean you are owed the sale. It gives you the right to ask every
+         once in a while. Good emails also buy you more leeway when you do ask.
+
+5        Run the test. Would you open this if a stranger sent it? If not, do not send it.
+
+
+
+
+     “Would you open it? That's really the test.”
+     SUBJECT LINES    Nobody has opened an email titled "Newsletter Issue 14" and felt joy. Make titles interesting,
+     not clickbait.
+
+
+     TOOLS     JAB, JAB, JAB, RIGHT HOOK
+
+
+
+
+                                               BE YOUR OWN HERO                                                        05
+                                                                                                         03
+    STEP 03
+
+
+
+
+ BLOGS ARE
+ YOUR EMAILS
+Every blog article should be good enough to drop into an email. If it is not good
+enough to email, it is not good enough to publish.
+
+
+1       Research your customers. Use NotebookLM to find what they care about:
+         Research the customers of my [type of business] in [area]. What problems do they have?
+         What are the most important problems I can solve for them? Suggest article and email
+         topics.
+
+
+
+2       Let AI draft, and you edit. Your AI can write the articles and the emails. You read every one and only
+        publish what you would read yourself.
+
+3       Leak it out slowly. Do not blast your whole archive in week one. Send 1 article at a time, plus a few
+        extras around it.
+
+4       Go local if your business is generic. Local events, food festivals, seasonal tips. Even a driveway-
+        shoveling business can find reasons to stay remembered in summer.
+
+
+
+
+     “Make sure that you care about them.”
+     SHORTCUT   The email is the blog post in a nicer shirt. You already did the hard part when you wrote the article.
+
+
+     TOOLS    NOTEBOOKLM      YOUR BLOG
+
+
+
+
+                                                BE YOUR OWN HERO                                                         06
+                                                                                                    04
+    STEP 04
+
+
+
+
+ STAY OUT
+ OF SPAM
+Boring email gets reported as spam, and spam reports hurt your sender reputation.
+Good content keeps you in the inbox.
+
+
+1       Watch your spam rate. Google's sender guidelines: when your messages get reported as spam a lot,
+        future messages are more likely to land in spam. Keep your spam rate under 0.1% and never let it hit
+        0.3%.
+
+2       Only send to people who asked. And make unsubscribing easy. A clean unsubscribe beats a spam
+        report every time.
+
+3       Ask for a reply. Ask people to add you to their contacts or hit reply. Mail from a contact is less likely to
+        be marked as spam, and you learn what they want.
+
+4       Set up SPF, DKIM, and DMARC. These prove the email really came from your domain. Your email
+        platform walks you through it, or ask your AI to do it with you.
+
+5       Do not overload inboxes. Too many emails in a row gets you unsubscribes or spam reports.
+
+
+
+
+     “Good content means fewer spam complaints”
+     READ    Google's email sender guidelines are on the Links and Resources page.
+
+
+     TOOLS      SPF    DKIM    DMARC     GOOGLE SENDER GUIDELINES
+
+
+
+
+                                                BE YOUR OWN HERO                                                       07
+                                                                                                  05
+    STEP 05
+
+
+
+
+ HOW OFTEN.
+ WHAT GOES IN.
+Once or twice a week, great information at the top, and a soft sell at the bottom, if
+at all.
+
+
+1       Pick your frequency. Selling products, twice a week can work. Service business or just starting, once is
+        plenty. Pick a day and keep it.
+
+2       Put the gift at the top. Lead with really good information: the article, a tip, a tool.
+
+
+3       Sell softly at the bottom. If at all. No countdown timers shouting at people.
+
+
+4       Add a few extras. A recipe, a tip, a tool you found, a photo from the job site. Whatever your audience
+        cares about.
+
+5       Keep it short and scannable. Mostly point form. People love numbered lists.
+
+
+6       Add images. Generate them with Grok or any image tool, in your brand style.
+
+
+
+
+     “The top of the email is the gift”
+     FORMAT   If an email needs scrolling to find the point, cut it in half.
+
+
+     TOOLS    GROK      IMAGE GENERATOR
+
+
+
+
+                                                   BE YOUR OWN HERO                                              08
+                                                                                                   06
+    STEP 06
+
+
+
+
+ PICK A
+ PLATFORM
+The best platform is the one you will actually send from. The worst is the one you
+spend 6 weeks comparing.
+
+
+1       Know the options. Mailchimp, the one everybody has heard of, with lots of integrations. Kit (formerly
+        ConvertKit), for creators, coaches, and course sellers. Klaviyo, for ecommerce, email plus SMS. Beehiiv,
+        newsletter-first. MailerLite, a simple all-rounder. Brevo, email, SMS, and WhatsApp. All 6 have free
+        plans. Hostinger Reach is built into Hostinger, and its AI writes and designs an email from 1 prompt.
+
+2       Match it to your business. Sell products online: Klaviyo or Mailchimp. Creator or course seller: Kit.
+        Newsletter is the business: Beehiiv. Small business that wants simple: MailerLite, Brevo, or Mailchimp.
+        Already on Hostinger: try Reach.
+
+3       Let your AI connect it. Make an account, then ask your AI to connect the platform to your website and
+        your store. Mailchimp integrates with Shopify, WordPress, and Wix.
+
+4       Start free. Build your first list on a free plan and upgrade when the list earns it.
+
+
+
+
+     “You can start off your list for free”
+     PRICING   Plans change. Check the pricing links on the Links and Resources page before you commit.
+
+
+     TOOLS     MAILCHIMP    KIT    KLAVIYO     BEEHIIV     MAILERLITE     BREVO     HOSTINGER REACH
+
+
+
+
+                                               BE YOUR OWN HERO                                                   09
+                                                                                                         07
+    STEP 07
+
+
+
+
+ LET YOUR AI
+ WRITE THEM
+Make a brand kit first, then connect your AI to it. Now it writes like you, not like a
+robot that is thrilled to announce things.
+
+
+1        Build the brand kit. Logo, colors, fonts, your voice, what you would never say, and a few things you
+         wrote that sound like you.
+
+2        Teach it your voice.
+             Go through my posts on [Facebook / X / my blog] and learn my brand voice. Write it up as
+             a brand voice guide. Then write a sample email in that voice.
+
+         If you like how another brand talks, point it at them instead.
+
+3        Tell it about your customers. Who they are, what they want to learn, and what they are sick of hearing.
+
+
+4        Get subject lines. Ask for a batch, pick the most human one, and write the preview text. Keep it honest.
+         Clickbait gets you opens once and the spam button forever.
+
+5        Reinforce what works.
+             This is a really good one. I love the way this is done. Take the qualities of this email
+             and keep replicating them.
+
+
+
+6        Stay the editor. Supervise every email. If it sounds like a LinkedIn post from 2019, send it back.
+
+
+
+
+     “Your brand voice is really important.”
+     DESIGN    Your AI can design the email too. Show it one that looks good and say: make it look like this, use my
+     logo.
+
+
+     TOOLS      BRAND KIT     ANTIGRAVITY      CLAUDE     GROK
+
+
+
+
+                                                 BE YOUR OWN HERO                                                      10
+                                                                                                      08
+    STEP 08
+
+
+
+
+ PUT A
+ CREW ON IT
+Grok Bot gives you a team of specialist bots on one subscription. You talk to one
+chief of staff bot, and it runs the rest.
+
+
+1          Talk to one bot. Your chief of staff takes your request and hands it to the right specialists: research,
+           design, SEO, web, email, video, accounting, sales.
+
+2          Hire specialists by asking. Need an accountant or a researcher? Ask your chief of staff to set up a new
+           specialist bot. You do not need to know how.
+
+3          Create a group for a project. Ask it to pick the top specialists for a task. The bots discuss it with each
+           other, and you can read along and interrupt.
+
+4          Give it the email jobs. A specialist that writes articles, one that builds emails, one that designs
+           graphics. Hand them your brand kit and brand voice.
+
+5          Ignore the jargon. Orchestrators and agentic loops will not matter soon. Describe what you want in plain
+           words.
+
+
+
+
+     “Each bot does its own job.”
+     WHY    One place for the whole team, not 9 tabs and a sticky note.
+
+
+     TOOLS      GROK BOT
+
+
+
+
+                                                  BE YOUR OWN HERO                                                      11
+                                                                                               09
+    STEP 09
+
+
+
+
+ LEARN FROM
+ THE BEST
+Marketing is telling great stories. Study brands that do email well, then show your
+AI the ones you like.
+
+
+1       Wealthsimple. Makes scary money topics simple and fun, and answers the question inside the email.
+
+
+2       Huckberry. The content never gets cut from the email: a journal article, photos, a music pick. Some
+        people open just for that, and it builds trust.
+
+3       Morning Brew. A clear promise, smarter in 5 minutes, delivered every time.
+
+
+4       The Hustle. Short, clear, and full of personality.
+
+
+5       Duolingo. Not email, but its owl reminders prove a character and a sense of humor can beat a discount
+        code.
+
+6       Really Good Emails. A huge gallery of real emails. Pick a few and tell your AI:
+         Make me something like this, in my brand kit.
+
+
+
+
+     “That's really what marketing is. It's telling great stories.”
+     REMEMBER   The most creative people in the world are the best at hiding their sources.
+
+
+     TOOLS    REALLY GOOD EMAILS       MORNING BREW      THE HUSTLE
+
+
+
+
+                                                BE YOUR OWN HERO                                                12
+                                                                                                    10
+    STEP 10
+
+
+
+
+ ADD A
+ SIGNUP FORM
+Put an email signup on your website, even if you run a service company. A roofer's
+customers want to know when to check their roof before winter. That is an email.
+
+
+1       Ask your AI to build it. No developer needed:
+            Please add an email signup form to my website that collects names and emails into a
+            database I can send from. Make sure it gets permission and follows the email marketing
+            rules.
+
+
+
+2       Give people a reason. A useful guide or PDF (your AI can build it), a checklist, a discount, special pricing,
+        access to a community, or simply one good email a week, nothing else.
+
+3       Be clear. Say exactly what they are signing up for. No pre-checked boxes. Every email gets an easy
+        unsubscribe link.
+
+4       Follow the law. US (CAN-SPAM): no misleading subject lines, include your mailing address, honor opt-
+        outs within 10 business days. Canada (CASL): get consent first, identify yourself, include an unsubscribe,
+        act on it within 10 business days.
+
+
+
+
+     “Give them a little something for signing up for that list.”
+     NOTE    This is not legal advice. Read the CAN-SPAM and CASL guides on the Links and Resources page.
+
+
+     TOOLS      WEBSITE    CAN-SPAM     CASL
+
+
+
+
+                                                BE YOUR OWN HERO                                                    13
+IF YOU REMEMBER NOTHING ELSE
+
+
+
+
+  KEY TAKEAWAYS
+1        Own the channel. Followers are borrowed. Your list is yours.
+
+
+
+2        Give first. 3 emails of real value for every 1 ask.
+
+
+
+3        Would you open it? If not, do not send it.
+
+
+
+4        Blog posts are email content. Write once, send slowly.
+
+
+
+5        Protect your inbox placement. Spam rate under 0.1%, easy unsubscribe, and SPF, DKIM, and
+         DMARC set up.
+
+
+6        Once or twice a week. The gift at the top, a soft sell at the bottom, if at all.
+
+
+
+7        Pick a platform and send. The one you will use beats the one you compare for 6 weeks.
+
+
+
+8        Brand kit first. Then let your AI write in your voice, and edit everything.
+
+
+
+9        Capture emails. A signup form with a real reason to join, done legally.
+
+
+
+
+                                          BE YOUR OWN HERO                                          14
+EVERYTHING IN THIS GUIDE
+
+
+
+
+  TOOLS
+MAILCHIMP                  Well-known all-rounder with lots of integrations. Free plan.
+
+KIT                        For creators, coaches, and course sellers. Free plan.
+
+KLAVIYO                    Ecommerce email plus SMS. Free plan.
+
+BEEHIIV                    Newsletter-first. Free plan.
+
+MAILERLITE                 Simple all-rounder for small businesses. Free plan.
+
+BREVO                      Email, SMS, and WhatsApp in one. Free plan.
+
+HOSTINGER REACH            Email inside Hostinger. AI writes and designs from 1 prompt.
+
+NOTEBOOKLM                 Research what your customers care about.
+
+GROK BOT                   A team of specialist bots run by one chief of staff.
+
+GROK                       Images for your emails.
+
+REALLY GOOD EMAILS         Gallery of real emails to learn from.
+
+SPF / DKIM / DMARC         Domain settings that prove your email is really from you.
+
+PIXABAY MUSIC              Copyright-free music for videos and lives.
+
+
+
+
+                                       BE YOUR OWN HERO                                   15
+EVERY LINK IN THIS GUIDE · ROOM FOR MORE
+
+
+
+
+  LINKS AND RESOURCES
+ANTIHERO AI GROUP           facebook.com/groups/antiheroai
+
+JAB, JAB, JAB, RIGHT HOOK   harpercollins.com/products/jab-jab-jab-right-hook-gary-vaynerchuk
+
+GARY ON JABS AND HOOKS      garyvaynerchuk.com/the-one-thing-i-didnt-clarify-enough-in-jab-jab-
+                            jab-right-hook
+
+GOOGLE SENDER GUIDELINES    support.google.com/a/answer/81126
+
+CAN-SPAM GUIDE (FTC)        ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-
+                            business
+
+CASL                        ised-isde.canada.ca/site/canada-anti-spam-legislation/en
+
+CASL CONSENT                ised-isde.canada.ca/site/canada-anti-spam-legislation/en/getting-
+                            consent-send-email
+
+MAILCHIMP                   mailchimp.com/pricing/marketing
+
+KIT                         kit.com/pricing
+
+KLAVIYO                     klaviyo.com/pricing
+
+BEEHIIV                     beehiiv.com/pricing
+
+MAILERLITE                  mailerlite.com/pricing
+
+BREVO                       brevo.com/pricing
+
+HOSTINGER REACH             hostinger.com/email-marketing
+
+WEALTHSIMPLE TLDR           reallygoodemails.com/emails/wealthsimple-tldr-newsletter-welcome-email
+
+WEALTHSIMPLE, EMAIL LOVE    emaillove.com/wealthsimples-mortgage-rates-coming-down
+
+HUCKBERRY ON EMAILS         glossy.co/fashion/huckberrys-head-of-marketing-ben-omeara-on-writing-
+                            product-emails-people-actually-want-to-read
+
+MORNING BREW                morningbrew.com
+
+THE HUSTLE                  thehustle.co
+
+DUOLINGO CEO TED TALK       ted.com/talks/
+                            luis_von_ahn_how_to_make_learning_as_addictive_as_social_media
+
+REALLY GOOD EMAILS          reallygoodemails.com
+
+NOTEBOOKLM                  notebooklm.google.com
+
+PIXABAY MUSIC               pixabay.com/music
+
+
+
+MORE LINKS · FILL IN
+
+
+
+
+                                      BE YOUR OWN HERO                                              16
+DO THESE IN ORDER
+
+
+
+
+  ACTION STEPS
+     01
+           Pick a platform today
+           Use the match list in Step 6 and open a free account.
+
+     02
+           Add a signup form
+           Ask your AI to build it with permission, a clear promise, and no pre-checked boxes.
+
+     03
+           Make a reason to join
+           A guide, checklist, discount, or one good email a week.
+
+     04
+           Set up SPF, DKIM, and DMARC
+           Follow your platform's steps or ask your AI to walk you through them.
+
+     05
+           Build your brand kit and voice
+           Logo, colors, fonts, and a voice guide your AI writes from your own posts.
+
+     06
+           Research your customers
+           Run the NotebookLM prompt and list 10 email topics.
+
+     07
+           Turn 1 blog post into an email
+           Gift at the top, 1 or 2 extras, and a soft ask at the bottom, if any.
+
+     08
+           Write honest subject lines
+           Ask for a batch, pick the most human one, and add preview text.
+
+     09
+           Pick a send day
+           Once a week to start. Keep it.
+
+     10
+           Post it in the group
+           Share your first email or your signup form for real feedback.
+
+
+
+
+                                            BE YOUR OWN HERO                                     17
+POST YOUR
+FIRST EMAIL
+IN THE GROUP
+BE YOUR OWN HERO
+ Share your first email or your signup form in the group.
+ You will get real feedback. Nice, but real.
+
+
+FACEBOOK.COM/GROUPS/ANTIHEROAI
+
+
+
+
+                                       BE YOUR OWN HERO     18
+

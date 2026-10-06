@@ -1,0 +1,4160 @@
+import contextlib
+import hashlib
+import io
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from scripts import install
+from tests._platform import posix_permissions_only, requires_symlink
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ORIGINAL_GIT_HOOKS_RESOLVER = install._resolve_git_hooks_path
+
+
+class InstallerTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        isolated_home = self.root / "home"
+        isolated_home.mkdir()
+        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home), "USERPROFILE": str(isolated_home)})
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
+        self.source = self.root / "source"
+        (self.source / "skills").mkdir(parents=True)
+        shutil.copy2(PROJECT_ROOT / "AGENTS.md", self.source / "AGENTS.md")
+        shutil.copy2(PROJECT_ROOT / "WORKFLOW.md", self.source / "WORKFLOW.md")
+        (self.source / "package.json").write_bytes(
+            '{"version": "9.9.9"}\n'.encode("utf-8")
+        )
+        for name in install.SKILL_NAMES:
+            skill = self.source / "skills" / name
+            (skill / "references").mkdir(parents=True)
+            (skill / "agents").mkdir()
+            canonical = install.SKILL_ALIASES.get(name)
+            body = (
+                f"# Deprecated alias\n\nInvoke ${name}, then read "
+                "[the canonical skill](CANONICAL.md).\n"
+                if canonical
+                else (
+                    "Run $gsd-path, $gsd-path-build, and $gsd-path-discuss.\n"
+                    + ("Run $gsd-path status.\n" if name == "gsd-path" else "")
+                )
+            )
+            (skill / "SKILL.md").write_bytes(
+                f"---\nname: {name}\ndescription: test\n---\n{body}".encode("utf-8"),
+            )
+            if canonical:
+                (skill / "CANONICAL.md").write_bytes(
+                    f"---\nname: {canonical}\ndescription: test\n---\nUse ${canonical}.\n".encode("utf-8"),
+                )
+            (skill / "guide.md").write_bytes("Use $gsd-path.\n".encode("utf-8"))
+            (skill / "agents" / "openai.yaml").write_bytes(
+                'default_prompt: "Use $gsd-path."\n'.encode("utf-8")
+            )
+            (skill / "references" / "dispatch.md").write_bytes(
+                "old dispatch\n".encode("utf-8")
+            )
+            if name == "gsd-path" or name in install.ROUTER_ALIASES:
+                (skill / "scripts").mkdir()
+                shutil.copy2(
+                    PROJECT_ROOT / "scripts" / "pipeline_state.py",
+                    skill / "scripts" / "pipeline_state.py",
+                )
+        for target in install.TARGETS:
+            adapter = self.source / "platforms" / target / "dispatch.md"
+            adapter.parent.mkdir(parents=True)
+            adapter.write_bytes(f"{target} dispatch for $gsd-path\n".encode("utf-8"))
+        shared_adapter = (
+            self.source
+            / "platforms"
+            / install.SHARED_AGENT_PROFILE
+            / "dispatch.md"
+        )
+        shared_adapter.parent.mkdir(parents=True)
+        shared_adapter.write_bytes(
+            "shared dispatch for $gsd-path with invoke_subagent\n".encode("utf-8")
+        )
+        (self.source / "platforms" / "cursor" / "agent.md").write_bytes(
+            "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n".encode("utf-8"),
+        )
+        scripts = self.source / "scripts"
+        scripts.mkdir(exist_ok=True)
+        for name in install.GUARD_SCRIPTS:
+            (scripts / name).write_bytes(
+                f"# {name}\n{install.GUARD_MARKER}\n".encode("utf-8")
+            )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            (scripts / name).write_bytes(
+                f"# {name}\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+            )
+        shutil.copy2(
+            PROJECT_ROOT / "scripts" / install.PROJECT_STATUS_LAUNCHER,
+            scripts / install.PROJECT_STATUS_LAUNCHER,
+        )
+        self.sync_patch = mock.patch.object(
+            install.sync_skill_resources, "mismatches", return_value=[]
+        )
+        self.sync_patch.start()
+        self.git_hooks_patch = mock.patch.object(
+            install, "_resolve_git_hooks_path", side_effect=self.resolve_test_hooks_path
+        )
+        self.git_hooks_patch.start()
+
+    def runtime_root(self, project):
+        pin = project / install.HOOKS_DIRECTORY / "runtime.json"
+        if pin.exists():
+            return install.status_runtime.runtime_home() / json.loads(pin.read_text(encoding="utf-8"))["digest"]
+        return project / install.HOOKS_DIRECTORY / "runtime"
+
+    def test_project_runtime_version_install_update_refresh(self):
+        project = self.root / "version-project"
+        plans = [install.TargetPlan("claude", self.root / "version-skills")]
+        install.install(self.source, plans, project)
+        stamp = project / ".gsd-path/runtime.json"
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
+        (self.source / "package.json").write_bytes('{"version":"10.0.0"}'.encode("utf-8"))
+        install.install(self.source, plans, project, update=True, dry_run=True)
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
+        install.install(self.source, plans, project, update=True)
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
+        install.runtime_store.operate(self.source, project, "upgrade")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.0.0")
+        (self.source / "package.json").write_bytes('{"version":"10.1.0"}'.encode("utf-8"))
+        install.refresh_hooks(self.source, project, full=False)
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.0.0")
+        install.runtime_store.operate(self.source, project, "upgrade")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.1.0")
+
+    def tearDown(self):
+        self.git_hooks_patch.stop()
+        self.sync_patch.stop()
+        self.temporary.cleanup()
+
+    def resolve_test_hooks_path(self, project):
+        resolved = ORIGINAL_GIT_HOOKS_RESOLVER(project)
+        dot_git = project / ".git"
+        if resolved is not None:
+            return resolved
+        return dot_git / "hooks" if dot_git.is_dir() else None
+
+    def run_main(self, arguments, environment=None):
+        output = io.StringIO()
+        error = io.StringIO()
+        env = {"CODEX_HOME": str(self.root / "legacy")}
+        if environment:
+            env.update(environment)
+        with mock.patch.dict(os.environ, env, clear=False):
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                status = install.main(arguments)
+        return status, output.getvalue(), error.getvalue()
+
+    def test_default_path_resolution(self):
+        claude = install.default_root("claude", {"CLAUDE_CONFIG_DIR": "/tmp/c"})
+        grok = install.default_root("grok", {"GROK_HOME": "/tmp/g"})
+        xdg = install.default_root("opencode", {"XDG_CONFIG_HOME": "/tmp/x"})
+        # Roots are made absolute, which adds the current drive on Windows.
+        self.assertEqual(Path(os.path.abspath("/tmp/c/skills")), claude)
+        self.assertEqual(Path(os.path.abspath("/tmp/g/skills")), grok)
+        self.assertEqual(Path(os.path.abspath("/tmp/x/opencode/skills")), xdg)
+        config = self.root / "opencode.json"
+        config.write_bytes("{}".encode("utf-8"))
+        self.assertEqual(
+            self.root / "skills",
+            install.default_root("opencode", {"OPENCODE_CONFIG": str(config)}),
+        )
+
+        self.assertEqual(
+            self.root / "future" / "skills",
+            install.default_root(
+                "opencode", {"OPENCODE_CONFIG": str(self.root / "future" / "opencode.json")}
+            ),
+        )
+        self.assertEqual(
+            Path.home() / ".agents" / "skills", install.default_root("codex", {})
+        )
+        self.assertEqual(
+            Path.home() / ".agents" / "skills", install.default_root("zed", {})
+        )
+        self.assertEqual(
+            Path.home() / ".agents" / "skills", install.default_root("muse", {})
+        )
+        self.assertEqual(
+            Path(os.path.abspath("/tmp/copilot/skills")),
+            install.default_root("copilot", {"COPILOT_HOME": "/tmp/copilot"}),
+        )
+        self.assertEqual(
+            Path(os.path.abspath("/tmp/qwen/skills")),
+            install.default_root("qwen", {"QWEN_HOME": "/tmp/qwen"}),
+        )
+        self.assertEqual(
+            Path(os.path.abspath("/tmp/kiro/skills")),
+            install.default_root("kiro", {"KIRO_HOME": "/tmp/kiro"}),
+        )
+        self.assertEqual(
+            Path(os.path.abspath("/tmp/kimi-code/skills")),
+            install.default_root("kimi", {"KIMI_CODE_HOME": "/tmp/kimi-code"}),
+        )
+        self.assertEqual(
+            Path.home() / ".kimi-code" / "skills",
+            install.default_root("kimi", {}),
+        )
+        self.assertEqual(
+            Path.home() / ".gemini" / "antigravity-cli" / "skills",
+            install.default_root("antigravity", {}),
+        )
+        self.assertEqual(
+            Path.home() / ".cursor" / "skills", install.default_root("cursor", {})
+        )
+        empty_variables = {
+            "claude": "CLAUDE_CONFIG_DIR",
+            "grok": "GROK_HOME",
+            "copilot": "COPILOT_HOME",
+            "qwen": "QWEN_HOME",
+            "kiro": "KIRO_HOME",
+            "kimi": "KIMI_CODE_HOME",
+        }
+        for target, variable in empty_variables.items():
+            with self.subTest(target=target, variable=variable):
+                self.assertEqual(
+                    install.default_root(target, {}),
+                    install.default_root(target, {variable: ""}),
+                )
+        self.assertEqual(
+            install.default_root("opencode", {}),
+            install.default_root("opencode", {"XDG_CONFIG_HOME": ""}),
+        )
+        self.assertEqual(
+            Path.home() / ".codex" / "skills",
+            install.legacy_codex_root({"CODEX_HOME": ""}),
+        )
+
+    def test_interpreter_probe_rejects_unsupported_python(self):
+        def probe(arguments, **_kwargs):
+            return subprocess.CompletedProcess(
+                arguments,
+                0 if "--version" in arguments else 1,
+            )
+
+        with mock.patch.object(install.subprocess, "run", side_effect=probe):
+            self.assertIsNone(install._detect_python_interpreter())
+
+    def test_packaged_approval_validates_new_paths(self):
+        from tests.test_pipeline_state import PipelineStateTests
+        fixture = PipelineStateTests()
+        repo, head = fixture._approval_repo(str(self.root), "plan")
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+        result = subprocess.run(
+            [sys.executable, "-B", str(runtime / "pipeline_state.py"), "approve",
+             "--repo", str(repo), "--kind", "plan", "--expected-head", head],
+            cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "approved")
+
+    def test_project_runtime_dependency_set_imports(self):
+        project = self.root / "runtime-project"
+        runtime = self.runtime_root(project)
+        runtime.mkdir(parents=True)
+        manifest = json.loads((PROJECT_ROOT / "scripts/skill-resources.json").read_text(encoding="utf-8"))
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            if f"scripts/{name}" in manifest["package_files"]:
+                shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
+        subprocess.run(
+            ["git", "init", "-b", "main", str(project)],
+            encoding="utf-8", errors="replace",
+            capture_output=True,
+            check=True,
+        )
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_bytes(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: ship\n"
+            "status: blocked\n"
+            "branch: gsd-path/M001\n"
+            "archive: null\n"
+            "---\n\n"
+            "# Project State\n\n"
+            "## Log\n\n"
+            "- 2026-08-29 — ship — fixture\n".encode("utf-8"),
+        )
+        findings = project / ".project" / "review" / "PATCH-FINDINGS.md"
+        findings.parent.mkdir()
+        findings.write_bytes("invalid\n".encode("utf-8"))
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                str(runtime / "pipeline_state.py"),
+                "status",
+                "--repo",
+                str(project),
+            ],
+            encoding="utf-8", errors="replace",
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual("gsd-path/status/v1", payload["schema"])
+        self.assertEqual("block", payload["route"]["action"])
+        self.assertFalse((runtime / "__pycache__").exists())
+
+    def test_skill_names_are_derived_from_resource_manifest(self):
+        manifest = {
+            "skills": ["gsd-path", "gsd-path-alpha", "gsd-path-zeta"],
+        }
+
+        self.assertEqual(
+            install.skill_names_for_manifest(manifest),
+            ("gsd-path", "gsd-path-alpha", "gsd-path-zeta"),
+        )
+
+    def test_targets_and_local_roots_are_derived_from_resource_manifest(self):
+        manifest = {
+            "hosts": {
+                "alpha": {"local_root": ".alpha/skills"},
+                "beta": {"local_root": ".beta/skills"},
+            }
+        }
+
+        self.assertEqual(install.targets_for_manifest(manifest), ("alpha", "beta"))
+        self.assertEqual(
+            install.local_roots_for_manifest(manifest),
+            {"alpha": ".alpha/skills", "beta": ".beta/skills"},
+        )
+
+    def test_local_root_resolution_matches_manifest(self):
+        project = self.root / "project"
+
+        for target, relative in install.LOCAL_ROOTS.items():
+            with self.subTest(target=target):
+                self.assertEqual(project / relative, install.local_root(target, project))
+
+        with self.assertRaisesRegex(ValueError, "unsupported target"):
+            install.local_root("unknown", project)
+
+    def test_local_install_and_update_match_node_behavior(self):
+        project = self.root / "project"
+        project.mkdir()
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            status, _, error = self.run_main(
+                ["--claude", "--local", "--source-root", str(self.source)]
+            )
+            self.assertEqual(0, status, error)
+            installed = project / ".claude" / "skills" / "gsd-path" / "SKILL.md"
+            self.assertTrue(installed.is_file())
+
+            source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
+            source_skill.write_bytes(
+                "---\nname: gsd-path\ndescription: updated\n---\nupdated\n".encode("utf-8"),
+            )
+            status, output, error = self.run_main(
+                ["--update", "--local", "--source-root", str(self.source)]
+            )
+            self.assertEqual(0, status, error)
+            self.assertIn("description: updated", installed.read_text(encoding="utf-8"))
+            self.assertIn("updated", output)
+            self.assertTrue((project / ".claude" / "disabled-gsd-skills").is_dir())
+        finally:
+            os.chdir(previous)
+
+    def test_update_without_an_existing_install_fails_cleanly(self):
+        project = self.root / "project"
+        project.mkdir()
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            status, _, error = self.run_main(
+                ["--update", "--local", "--source-root", str(self.source)]
+            )
+        finally:
+            os.chdir(previous)
+
+        self.assertEqual(1, status)
+        self.assertIn("no existing GSD Path skills found to update", error)
+
+    def test_all_local_install_and_update_share_agent_bundle(self):
+        project = self.root / "project"
+        project.mkdir()
+        previous = Path.cwd()
+        try:
+            os.chdir(project)
+            status, output, error = self.run_main(
+                ["--all", "--local", "--source-root", str(self.source)]
+            )
+            self.assertEqual(0, status, error)
+            self.assertIn("codex+antigravity+zed+muse: installed", output)
+
+            source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
+            source_skill.write_bytes(
+                "---\nname: gsd-path\ndescription: shared update\n---\nupdated\n".encode("utf-8"),
+            )
+            status, output, error = self.run_main(
+                ["--update", "--local", "--source-root", str(self.source)]
+            )
+        finally:
+            os.chdir(previous)
+
+        self.assertEqual(0, status, error)
+        self.assertIn("codex+antigravity+zed+muse: updated", output)
+        installed = project / ".agents" / "skills" / "gsd-path" / "SKILL.md"
+        self.assertIn(
+            "description: shared update", installed.read_text(encoding="utf-8")
+        )
+        dispatch = installed.parent / "references" / "dispatch.md"
+        self.assertIn("invoke_subagent", dispatch.read_text(encoding="utf-8"))
+
+    def test_discussion_skill_is_installed_and_invocable(self):
+        self.assertIn("gsd-path-discuss", install.SKILL_NAMES)
+        target = self.root / "discussion" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        discussion = target / "gsd-path-discuss" / "SKILL.md"
+        self.assertTrue(discussion.is_file())
+        self.assertIn("/gsd-path-discuss", discussion.read_text(encoding="utf-8"))
+
+    def test_staging_stamps_router_alias_version(self):
+        staged = self.root / "staged-version"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertEqual(
+            "9.9.9\n",
+            (staged / "gsd-path" / "VERSION").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "9.9.9\n",
+            (staged / "path" / "VERSION").read_text(encoding="utf-8"),
+        )
+
+    def test_install_refuses_to_replace_an_unrelated_path_skill(self):
+        target = self.root / "foreign-path" / "skills"
+        foreign = target / "path"
+        (foreign / "scripts").mkdir(parents=True)
+        (foreign / "scripts" / "pipeline_state.py").touch()
+        (foreign / "SKILL.md").write_bytes(
+            "---\nname: path\n---\nforeign\n".encode("utf-8")
+        )
+        with self.assertRaises(install.InstallerError) as raised:
+            install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertIn("unrelated skill", str(raised.exception))
+        self.assertEqual(
+            "---\nname: path\n---\nforeign\n",
+            (foreign / "SKILL.md").read_text(encoding="utf-8"),
+        )
+
+    def test_install_refuses_path_alias_with_invalid_version(self):
+        target = self.root / "invalid-path-version" / "skills"
+        foreign = target / "path"
+        (foreign / "scripts").mkdir(parents=True)
+        (foreign / "scripts" / "pipeline_state.py").touch()
+        for version in (
+            "",
+            "release",
+            "v1.0.0",
+            "1..0",
+            "1.0.beta",
+            "1.0\nforeign",
+            "1.0.0-",
+            "1.0.0-rc..1",
+            "1.0.0+",
+            "1.0.0++build",
+            "1.0.0-rc+build+again",
+        ):
+            with self.subTest(version=version):
+                (foreign / "VERSION").write_bytes(version.encode("utf-8"))
+                with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
+                    install.install(self.source, [install.TargetPlan("grok", target)])
+                self.assertEqual(version, (foreign / "VERSION").read_text(encoding="utf-8"))
+
+    def test_cli_update_recognizes_prerelease_and_build_stamped_router_aliases(self):
+        previous = Path.cwd()
+        cases = (
+            "1.5.0-rc.1",
+            "1.4.0-local.1",
+            "1.4.0+build.5",
+            "1.4.0-rc.1+build.5",
+        )
+        try:
+            for version in cases:
+                with self.subTest(version=version):
+                    project = self.root / version.replace("+", "-").replace(".", "_")
+                    project.mkdir()
+                    os.chdir(project)
+                    (self.source / "package.json").write_text(
+                        json.dumps({"version": version}) + "\n", encoding="utf-8"
+                    )
+                    status, _, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+
+                    installed = project / "skills" / "path"
+                    canonical = project / "skills" / "gsd-path"
+                    stamp = installed / "VERSION"
+                    self.assertEqual(version, stamp.read_text(encoding="utf-8").strip())
+
+                    source_alias_guide = self.source / "skills" / "path" / "guide.md"
+                    installed_alias_guide = installed / "guide.md"
+                    same_version_content = f"alias refresh for {version}\n"
+                    source_alias_guide.write_text(
+                        same_version_content, encoding="utf-8"
+                    )
+                    source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
+                    source_skill.write_text(
+                        f"---\nname: gsd-path\ndescription: updated {version}\n---\nupdated\n",
+                        encoding="utf-8",
+                    )
+                    status, output, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                            "--update",
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+                    self.assertIn("updated", output)
+                    self.assertEqual(version, stamp.read_text(encoding="utf-8").strip())
+                    self.assertIn(
+                        "description: updated",
+                        (canonical / "SKILL.md").read_text(encoding="utf-8"),
+                    )
+                    self.assertEqual(
+                        same_version_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
+                    )
+
+                    release = version.split("-", 1)[0].split("+", 1)[0]
+                    release_content = f"release refresh from {version} to {release}\n"
+                    source_alias_guide.write_text(release_content, encoding="utf-8")
+                    (self.source / "package.json").write_text(
+                        json.dumps({"version": release}) + "\n", encoding="utf-8"
+                    )
+                    source_skill.write_text(
+                        f"---\nname: gsd-path\ndescription: release {release}\n---\nrelease\n",
+                        encoding="utf-8",
+                    )
+                    status, output, error = self.run_main(
+                        [
+                            "--grok",
+                            "--grok-root",
+                            str(project / "skills"),
+                            "--source-root",
+                            str(self.source),
+                            "--update",
+                        ]
+                    )
+                    self.assertEqual(0, status, error)
+                    self.assertIn("updated", output)
+                    self.assertEqual(release, stamp.read_text(encoding="utf-8").strip())
+                    self.assertIn(
+                        "description: release",
+                        (canonical / "SKILL.md").read_text(encoding="utf-8"),
+                    )
+                    self.assertEqual(
+                        release_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
+                    )
+        finally:
+            os.chdir(previous)
+
+    def test_install_refuses_version_stamped_path_alias_without_runtime(self):
+        target = self.root / "missing-runtime-path" / "skills"
+        foreign = target / "path"
+        foreign.mkdir(parents=True)
+        original = "foreign skill content\n"
+        (foreign / "SKILL.md").write_text(original, encoding="utf-8")
+        (foreign / "VERSION").write_text("1.5.0-rc.1\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
+            install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertEqual(original, (foreign / "SKILL.md").read_text(encoding="utf-8"))
+
+    def test_install_replaces_a_pre_stamp_path_alias_with_the_managed_runtime(self):
+        target = self.root / "pre-stamp-path" / "skills"
+        scripts = target / "path" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "pipeline_state.py").write_bytes(
+            f"#!/usr/bin/env python3\n# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+        install.install(self.source, [install.TargetPlan("grok", target)])
+        skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+
+    def test_install_replaces_an_owned_path_router_alias(self):
+        target = self.root / "owned-path" / "skills"
+        owned = target / "path" / "scripts"
+        owned.mkdir(parents=True)
+        (owned / "pipeline_state.py").write_bytes("# previous alias\n".encode("utf-8"))
+        (owned.parent / "VERSION").write_bytes("1.0.0\n".encode("utf-8"))
+        results = install.install(self.source, [install.TargetPlan("grok", target)])
+        self.assertTrue(any("backed up" in line for line in results))
+        skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+        backup = (
+            target.parent
+            / "disabled-gsd-skills"
+            / "path"
+            / "scripts"
+            / "pipeline_state.py"
+        )
+        self.assertEqual("# previous alias\n", backup.read_text(encoding="utf-8"))
+
+    def test_path_is_a_short_slash_name_for_the_router(self):
+        self.assertEqual({"path": "gsd-path"}, install.ROUTER_ALIASES)
+        staged = self.root / "staged-router-alias"
+        staged.mkdir()
+        install.stage_target(PROJECT_ROOT, "grok", staged)
+        skill = (staged / "path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertRegex(skill, r"(?m)^name: path$")
+        self.assertNotRegex(skill, r"(?m)^name: gsd-path$")
+        self.assertIn("invokes /path or /gsd-path", skill)
+        self.assertIn("/gsd-path-undo", skill)
+
+    def test_v2_canonical_skills_are_installed_without_aliases(self):
+        self.assertEqual({}, install.SKILL_ALIASES)
+        self.assertEqual({"path": "gsd-path"}, install.ROUTER_ALIASES)
+
+        target = self.root / "terminology" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        for canonical in (
+            "gsd-path-inspect",
+            "gsd-path-define",
+            "gsd-path-decide",
+            "gsd-path-roadmap",
+            "gsd-path-ship",
+        ):
+            skill = target / canonical / "SKILL.md"
+            self.assertTrue(skill.is_file())
+            self.assertIn(f"name: {canonical}", skill.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def staged_skill_directories(staged):
+        return sorted(entry.name for entry in staged.iterdir() if entry.is_dir())
+
+    def test_all_platform_transforms(self):
+        for target in (*install.TARGETS, install.SHARED_AGENT_PROFILE):
+            with self.subTest(target=target):
+                staged = self.root / f"staged-{target}"
+                staged.mkdir()
+                install.stage_target(self.source, target, staged)
+                staged_skills = self.staged_skill_directories(staged)
+                self.assertEqual(sorted(install.SKILL_NAMES), staged_skills)
+                for name in staged_skills:
+                    skill = staged / name / "SKILL.md"
+                    content = skill.read_text(encoding="utf-8")
+                    dispatch_path = staged / name / "references" / "dispatch.md"
+                    self.assertTrue(dispatch_path.is_file(), name)
+                    dispatch = dispatch_path.read_text(encoding="utf-8")
+                    if target == "codex":
+                        self.assertIn("$gsd-path", content, name)
+                        self.assertNotIn("disable-model-invocation", content, name)
+                        self.assertIn("codex dispatch for $gsd-path", dispatch, name)
+                        self.assertTrue(
+                            (staged / name / "agents" / "openai.yaml").is_file(), name
+                        )
+                    elif target == "opencode":
+                        self.assertIn(
+                            "Run gsd-path, gsd-path-build, and gsd-path-discuss",
+                            content,
+                            name,
+                        )
+                        self.assertNotIn("$gsd-path", content, name)
+                        self.assertNotIn("/gsd-path", content, name)
+                        self.assertIn("opencode dispatch for gsd-path", dispatch, name)
+                        self.assertFalse((staged / name / "agents").exists(), name)
+                    elif target == install.SHARED_AGENT_PROFILE:
+                        self.assertIn("$gsd-path (Codex)", content, name)
+                        self.assertIn("/gsd-path (Antigravity/Zed/Muse)", content, name)
+                        if name == "gsd-path":
+                            self.assertIn(
+                                "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed/Muse)",
+                                content,
+                            )
+                        self.assertIn(
+                            "shared dispatch for $gsd-path (Codex)", dispatch, name
+                        )
+                        self.assertIn("/gsd-path (Antigravity/Zed/Muse)", dispatch, name)
+                        self.assertTrue(
+                            (staged / name / "agents" / "openai.yaml").is_file(), name
+                        )
+                    else:
+                        self.assertIn("/gsd-path", content, name)
+                        self.assertNotIn("$gsd-path", content, name)
+                        self.assertIn(f"{target} dispatch for /gsd-path", dispatch, name)
+                        self.assertFalse((staged / name / "agents").exists(), name)
+                    if target in install.EXPLICIT_ONLY_TARGETS:
+                        self.assertIn("disable-model-invocation: true", content, name)
+                    if target in ("opencode", install.SHARED_AGENT_PROFILE):
+                        self.assertIn('opencode/autoinvoke: "false"', content, name)
+                        self.assertIn('opencode/slash: "true"', content, name)
+
+    def test_real_repo_staging_applies_real_adapter_to_every_skill(self):
+        repo = Path(install.__file__).resolve().parents[1]
+        cases = (
+            ("claude", "claude", "/gsd-path"),
+            (install.SHARED_AGENT_PROFILE, install.SHARED_AGENT_PROFILE, "gsd-path"),
+        )
+        for target, adapter_directory, invocation in cases:
+            with self.subTest(target=target):
+                staged = self.root / f"staged-real-{target}"
+                staged.mkdir()
+                install.stage_target(repo, target, staged)
+                expected = (
+                    (repo / "platforms" / adapter_directory / "dispatch.md")
+                    .read_text(encoding="utf-8")
+                    .replace("$gsd-path", invocation)
+                )
+                checked = 0
+                for name in self.staged_skill_directories(staged):
+                    dispatch = staged / name / "references" / "dispatch.md"
+                    if not dispatch.exists():
+                        continue
+                    checked += 1
+                    self.assertEqual(
+                        expected, dispatch.read_text(encoding="utf-8"), name
+                    )
+                self.assertGreaterEqual(
+                    checked, 2, "expected multiple dispatch-bearing skills"
+                )
+                if target == install.SHARED_AGENT_PROFILE:
+                    router = (staged / "gsd-path" / "SKILL.md").read_text(
+                        encoding="utf-8"
+                    )
+                    invocation = (
+                        "`$gsd-path status` (Codex) or "
+                        "`/gsd-path status` (Antigravity/Zed/Muse)"
+                    )
+                    self.assertEqual(router.count(invocation), 1)
+                    self.assertNotIn("(other hosts)", router)
+
+    def test_stage_target_stamps_version_from_package_manifest(self):
+        (self.source / "package.json").unlink()
+        staged = self.root / "staged-unstamped"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertFalse((staged / "gsd-path" / "VERSION").exists())
+
+        (self.source / "package.json").write_bytes('{"version": "9.9.9"}'.encode("utf-8"))
+        staged = self.root / "staged-version"
+        staged.mkdir()
+        install.stage_target(self.source, "claude", staged)
+        self.assertEqual(
+            "9.9.9\n", (staged / "gsd-path" / "VERSION").read_text(encoding="utf-8")
+        )
+
+    def test_all_installs_each_target(self):
+        roots = {target: self.root / target / "skills" for target in install.TARGETS}
+        roots["zed"] = roots["codex"]
+        roots["muse"] = roots["codex"]
+        arguments = ["--all", "--source-root", str(self.source)]
+        for target, root in roots.items():
+            arguments.extend([f"--{target}-root", str(root)])
+        status, output, error = self.run_main(arguments)
+        self.assertEqual(0, status, error)
+        self.assertEqual(10, len(set(roots.values())))
+        for root in set(roots.values()):
+            self.assertEqual(set(install.SKILL_NAMES), {entry.name for entry in root.iterdir()})
+        cursor_agent = roots["cursor"].parent / "agents" / install.CURSOR_AGENT_FILENAME
+        self.assertTrue(
+            cursor_agent.read_text(encoding="utf-8").endswith("cursor agent\n")
+        )
+        self.assertIn(
+            f"codex+zed+muse: installed {len(install.SKILL_NAMES)} shared skills",
+            output,
+        )
+        self.assertIn("custom subagent", output)
+        self.assertIn("OpenCode stable discovers", output)
+        self.assertIn("Antigravity discovers", output)
+        self.assertIn("Kiro discovers", output)
+
+    def test_codex_dry_run_validates_resolved_shared_profile_from_real_repository(self):
+        target = self.root / "real-codex" / "skills"
+
+        status, output, error = self.run_main(
+            [
+                "--codex",
+                "--codex-root",
+                str(target),
+                "--dry-run",
+                "--source-root",
+                str(PROJECT_ROOT),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertIn("codex: would install", output)
+        self.assertFalse(target.exists())
+
+    def test_shared_agent_hosts_use_one_deployment_at_the_same_root(self):
+        root = self.root / "shared" / "skills"
+        plans = [
+            install.TargetPlan("codex", root),
+            install.TargetPlan("antigravity", root),
+            install.TargetPlan("zed", root),
+            install.TargetPlan("muse", root),
+        ]
+        deployments = install._deployment_plans(plans)
+        self.assertEqual(
+            [
+                install.DeploymentPlan(
+                    install.SHARED_AGENT_PROFILE,
+                    root,
+                    ("codex", "antigravity", "zed", "muse"),
+                )
+            ],
+            deployments,
+        )
+        root.mkdir(parents=True)
+        (root / "gsd-path-old").mkdir()
+
+        status, output, error = self.run_main(
+            [
+                "--codex",
+                "--antigravity",
+                "--zed",
+                "--muse",
+                "--codex-root",
+                str(root),
+                "--antigravity-root",
+                str(root),
+                "--zed-root",
+                str(root),
+                "--muse-root",
+                str(root),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            1,
+            output.count(f"installed {len(install.SKILL_NAMES)} shared skills"),
+        )
+        self.assertEqual(1, output.count("backed up 1 entries"))
+        self.assertTrue(
+            (root.parent / "disabled-gsd-skills" / "gsd-path-old").is_dir()
+        )
+        content = (root / "gsd-path" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("disable-model-invocation: true", content)
+        self.assertIn(
+            "$gsd-path (Codex) or /gsd-path (Antigravity/Zed/Muse)", content
+        )
+        self.assertIn(
+            "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed/Muse)",
+            content,
+        )
+        self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())
+
+    def test_distinct_codex_and_zed_roots_each_use_the_shared_profile(self):
+        codex = self.root / "codex-distinct" / "skills"
+        zed = self.root / "zed-distinct" / "skills"
+        deployments = install._deployment_plans(
+            [install.TargetPlan("codex", codex), install.TargetPlan("zed", zed)]
+        )
+        self.assertEqual(
+            [install.SHARED_AGENT_PROFILE, install.SHARED_AGENT_PROFILE],
+            [deployment.profile for deployment in deployments],
+        )
+
+    def test_unrelated_targets_cannot_share_or_overlap_roots(self):
+        root = self.root / "collision"
+        cases = (
+            [install.TargetPlan("copilot", root), install.TargetPlan("qwen", root)],
+            [
+                install.TargetPlan("claude", root),
+                install.TargetPlan("grok", root / "nested"),
+            ],
+        )
+        for plans in cases:
+            with self.subTest(plans=plans):
+                with self.assertRaisesRegex(install.InstallerError, "share|overlap"):
+                    install.install(self.source, plans)
+                self.assertFalse(root.exists())
+
+    def test_case_only_aliases_cannot_bypass_path_guards(self):
+        source_alias = self.source.with_name(self.source.name.upper()) / "skills"
+        case_root = self.root / "CaseRoots"
+        plans = [
+            install.TargetPlan("claude", case_root / "Skills"),
+            install.TargetPlan("grok", case_root.with_name("caseroots") / "skills"),
+        ]
+        with mock.patch.object(install.sys, "platform", "darwin"):
+            with self.assertRaisesRegex(
+                install.InstallerError, "overlaps source repository"
+            ):
+                install.install(
+                    self.source, [install.TargetPlan("claude", source_alias)]
+                )
+            with self.assertRaisesRegex(install.InstallerError, "share|overlap"):
+                install.install(self.source, plans)
+        self.assertTrue(
+            (self.source / "skills" / "gsd-path" / "agents" / "openai.yaml").is_file()
+        )
+        self.assertFalse(case_root.exists())
+
+    def test_non_shared_host_cannot_write_the_standard_shared_root(self):
+        with self.assertRaisesRegex(install.InstallerError, "shared ~/.agents/skills"):
+            install._deployment_plans(
+                [install.TargetPlan("copilot", install.default_root("codex", {}))]
+            )
+
+    def test_cursor_subagent_is_installed_and_existing_copy_is_backed_up(self):
+        root = self.root / "cursor-install" / "skills"
+        agent = root.parent / "agents" / install.CURSOR_AGENT_FILENAME
+        agent.parent.mkdir(parents=True)
+        agent.write_bytes("old agent\n".encode("utf-8"))
+
+        status, output, error = self.run_main(
+            [
+                "--cursor",
+                "--cursor-root",
+                str(root),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertIn("custom subagent", output)
+        self.assertIn("cursor agent", agent.read_text(encoding="utf-8"))
+        backup = root.parent / "disabled-gsd-skills"
+        self.assertEqual(
+            "old agent\n",
+            (backup / install.CURSOR_AGENT_BACKUP_NAME).read_text(encoding="utf-8"),
+        )
+
+    def test_parser_exposes_every_target_flag(self):
+        parsed = install.parser().parse_args(["--all"])
+        self.assertTrue(parsed.all_targets)
+        for target in install.TARGETS:
+            self.assertTrue(hasattr(parsed, target))
+            self.assertTrue(hasattr(parsed, f"{target}_root"))
+
+    @requires_symlink
+    def test_existing_managed_entries_are_backed_up_and_unrelated_preserved(self):
+        target = self.root / "codex" / "skills"
+        target.mkdir(parents=True)
+        for name in ("ogsd", "ogsd-old", "gsd-path", "gsd-path-old"):
+            (target / name).mkdir()
+            (target / name / "old.txt").write_bytes(name.encode("utf-8"))
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "marker").write_bytes("preserve".encode("utf-8"))
+        (target / "ogsd-link").symlink_to(outside, target_is_directory=True)
+        unrelated = target / "other-skill"
+        unrelated.mkdir()
+        status, output, error = self.run_main(
+            ["--codex", "--codex-root", str(target), "--source-root", str(self.source)]
+        )
+        self.assertEqual(0, status, error)
+        backup = target.parent / "disabled-gsd-skills"
+        self.assertEqual(
+            {"ogsd", "ogsd-old", "ogsd-link", "gsd-path", "gsd-path-old"},
+            {entry.name for entry in backup.iterdir()},
+        )
+        self.assertTrue((backup / "ogsd-link").is_symlink())
+        self.assertEqual("preserve", (outside / "marker").read_text(encoding="utf-8"))
+        self.assertTrue(unrelated.is_dir())
+        self.assertIn("backed up 5 entries", output)
+        self.assertIn("local edits inside these skills are not carried forward", output)
+
+    def test_case_variant_managed_entry_is_backed_up_before_install(self):
+        target = self.root / "case-entry" / "skills"
+        old = target / "GSD-PATH"
+        old.mkdir(parents=True)
+        (old / "marker").write_bytes("old".encode("utf-8"))
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        backup = target.parent / "disabled-gsd-skills" / "GSD-PATH"
+        self.assertEqual("old", (backup / "marker").read_text(encoding="utf-8"))
+        self.assertTrue((target / "gsd-path" / "SKILL.md").is_file())
+
+    def test_codex_migrates_legacy_root_and_preserves_unrelated_entries(self):
+        legacy = self.root / "legacy" / "skills"
+        legacy.mkdir(parents=True)
+        (legacy / "gsd-path-old").mkdir()
+        (legacy / "unrelated").mkdir()
+        target = self.root / "new" / "skills"
+        status, output, error = self.run_main(
+            ["--codex", "--codex-root", str(target), "--source-root", str(self.source)]
+        )
+        self.assertEqual(0, status, error)
+        self.assertTrue(
+            (legacy.parent / "disabled-gsd-skills" / "gsd-path-old").is_dir()
+        )
+        self.assertTrue((legacy / "unrelated").is_dir())
+        self.assertNotIn("gsd-path", {entry.name for entry in legacy.iterdir()})
+        self.assertIn("codex-legacy: backed up 1 entries", output)
+        legacy_backup_line = next(
+            line
+            for line in output.splitlines()
+            if line.startswith("codex-legacy: backed up 1 entries")
+        )
+        self.assertIn(
+            "local edits inside these skills are not carried forward "
+            "(see UPDATE.md#local-additions)",
+            legacy_backup_line,
+        )
+
+    def test_dry_run_makes_no_destination_changes(self):
+        target = self.root / "dry" / "skills"
+        project = self.root / "project"
+        status, output, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+                "--dry-run",
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertFalse(target.exists())
+        self.assertFalse(project.exists())
+        self.assertIn(f"would install {len(install.SKILL_NAMES)} skills", output)
+        self.assertIn(".claude/CLAUDE.md", output)
+
+    def test_dry_run_rejects_a_missing_project_nested_in_git(self):
+        repository = self.root / "dry-repository"
+        repository.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+        project = repository / "missing" / "project"
+        target = self.root / "dry-nested-target" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+                "--dry-run",
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("not the Git worktree root", error)
+        self.assertFalse(project.exists())
+        self.assertFalse(target.exists())
+
+    def test_dry_run_reports_the_registered_skill_count(self):
+        extra_name = "gsd-path-extra"
+        shutil.copytree(
+            self.source / "skills" / "gsd-path",
+            self.source / "skills" / extra_name,
+        )
+        skill_names = (*install.SKILL_NAMES, extra_name)
+        with mock.patch.object(install, "SKILL_NAMES", skill_names):
+            status, output, error = self.run_main(
+                [
+                    "--claude",
+                    "--claude-root",
+                    str(self.root / "dynamic" / "skills"),
+                    "--source-root",
+                    str(self.source),
+                    "--dry-run",
+                ]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertIn(f"would install {len(skill_names)} skills", output)
+
+    def test_project_collision_fails_before_install_mutation(self):
+        project = self.root / "my project"
+        project.mkdir()
+        (project / "WORKFLOW.md").write_bytes("existing".encode("utf-8"))
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertFalse(target.exists())
+        self.assertIn("already exists", error)
+        move = (
+            f"mv {shlex.quote(str(project / 'WORKFLOW.md'))} "
+            f"{shlex.quote(str(project / 'WORKFLOW.pre-path.md'))}"
+        )
+        self.assertIn(move, error)
+        self.assertIn("merge its rules into the new WORKFLOW.md", error)
+
+        # The printed command is the way through for an untracked contract.
+        subprocess.run(move, shell=True, check=True)
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            "existing",
+            (project / "WORKFLOW.pre-path.md").read_text(encoding="utf-8"),
+        )
+
+    def test_project_collision_with_occupied_backup_has_no_move_command(self):
+        project = self.root / "project"
+        project.mkdir()
+        (project / "WORKFLOW.md").write_bytes("existing".encode("utf-8"))
+        aside = project / "WORKFLOW.pre-path.md"
+        aside.write_bytes("earlier backup".encode("utf-8"))
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertNotIn("mv ", error)
+        self.assertIn(f"{aside} already exists", error)
+        self.assertIn("move the contract to an unused name", error)
+        self.assertIn("merge its rules into the new WORKFLOW.md", error)
+        self.assertIn("--update --project PATH", error)
+        self.assertEqual("existing", (project / "WORKFLOW.md").read_text(encoding="utf-8"))
+        self.assertEqual("earlier backup", aside.read_text(encoding="utf-8"))
+
+    def install_agents(self, project, update=False):
+        return install.install(
+            self.source,
+            [install.TargetPlan("grok", self.root / "grok" / "skills")],
+            project,
+            update=update,
+        )
+
+    def test_project_inserts_block_into_foreign_agents_and_keeps_owner_text(self):
+        project = self.root / "foreign-agents"
+        project.mkdir()
+        owner = "# Team rules\r\n\nUse tabs.\n"
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
+
+        self.install_agents(project)
+
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        merged = (project / "AGENTS.md").read_bytes().decode("utf-8")
+        self.assertEqual(block + "\n" + owner, merged)
+
+        # Update replaces only the block; text on both sides stays byte-for-byte.
+        (project / "AGENTS.md").write_bytes(("above\n" + merged).encode("utf-8"))
+        (self.source / "AGENTS.md").write_bytes("# New contract\n".encode("utf-8"))
+        self.install_agents(project, update=True)
+        self.assertEqual(
+            "above\n" + install._agents_block("# New contract\n") + "\n" + owner,
+            (project / "AGENTS.md").read_bytes().decode("utf-8"),
+        )
+
+    def test_project_refuses_unmatched_or_duplicate_agents_markers(self):
+        begin, end = install.AGENTS_BEGIN, install.AGENTS_END
+        for index, text in enumerate(
+            (
+                f"{begin}\nrules\n",
+                f"{end}\nrules\n",
+                f"{end}\nx\n{begin}\n",
+                f"{begin}\na\n{end}\n{begin}\nb\n{end}\n",
+            )
+        ):
+            project = self.root / f"markers-{index}"
+            project.mkdir()
+            (project / "AGENTS.md").write_bytes(text.encode("utf-8"))
+            with self.assertRaisesRegex(install.InstallerError, "exactly one"):
+                self.install_agents(project)
+            self.assertEqual(text, (project / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertFalse((project / "WORKFLOW.md").exists())
+
+    def test_update_preserves_owner_bytes_after_crlf_agents_marker(self):
+        project = self.root / "crlf-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        owner_before = b"before\r\n"
+        owner_after = b"after\r\nowner\n"
+        block = install._agents_block("# Old contract\n").replace("\n", "\r\n")
+        agents.write_bytes(owner_before + block.encode("utf-8") + owner_after)
+        (self.source / "AGENTS.md").write_bytes("# New contract\n".encode("utf-8"))
+
+        self.install_agents(project, update=True)
+
+        self.assertEqual(
+            owner_before + install._agents_block("# New contract\n").encode("utf-8")
+            + owner_after,
+            agents.read_bytes(),
+        )
+
+    def test_project_refuses_merged_agents_over_codex_limit_with_sizes(self):
+        project = self.root / "large-agents"
+        project.mkdir()
+        owner = "x" * install.CODEX_DOC_LIMIT
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        merged_size = len(block.encode("utf-8")) + 1 + len(owner)
+
+        with self.assertRaises(install.InstallerError) as raised:
+            self.install_agents(project)
+
+        message = str(raised.exception)
+        self.assertIn(f"would be {merged_size} bytes", message)
+        self.assertIn(f"existing file {len(owner)} bytes", message)
+        self.assertIn(f"block {len(block.encode('utf-8'))} bytes", message)
+        self.assertIn(str(project / "AGENTS.pre-path.md"), message)
+        self.assertEqual(owner, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_update_migrates_released_whole_file_agents_to_block(self):
+        project = self.root / "released-agents"
+        project.mkdir()
+        released = install.LEGACY_AGENTS_TITLE + "\n\nold rules\n"
+        (project / "AGENTS.md").write_bytes(released.encode("utf-8"))
+        digest = hashlib.sha256(released.encode("utf-8")).hexdigest()
+
+        with mock.patch.object(install, "RELEASED_AGENTS", frozenset({digest})):
+            self.install_agents(project)
+
+        self.assertEqual(
+            install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8")),
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
+        )
+
+    def test_update_refuses_edited_whole_file_agents_with_diff(self):
+        project = self.root / "edited-agents"
+        project.mkdir()
+        edited = install.LEGACY_AGENTS_TITLE + "\n\nmy own edit\n"
+        (project / "AGENTS.md").write_bytes(edited.encode("utf-8"))
+
+        with self.assertRaises(install.InstallerError) as raised:
+            self.install_agents(project)
+
+        message = str(raised.exception)
+        self.assertIn("edited whole-file GSD Path contract", message)
+        self.assertIn("+my own edit", message)
+        self.assertIn(install.AGENTS_END, message)
+        self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_project_refuses_edited_whole_file_agents_without_title(self):
+        project = self.root / "retitled-agents"
+        project.mkdir()
+        edited = "# Our rules\n\n" + install.LEGACY_AGENTS_MARKER + "\n- mine\n"
+        (project / "AGENTS.md").write_bytes(edited.encode("utf-8"))
+
+        with self.assertRaisesRegex(install.InstallerError, "edited whole-file"):
+            self.install_agents(project)
+        self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_project_treats_inline_legacy_marker_as_owner_text(self):
+        project = self.root / "inline-legacy-marker"
+        project.mkdir()
+        owner = f"Old Path files used `{install.LEGACY_AGENTS_MARKER}`.\n"
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
+
+        self.install_agents(project)
+
+        self.assertTrue((project / "AGENTS.md").read_text(encoding="utf-8").endswith("\n" + owner))
+
+    def test_update_refuses_agents_changed_during_install(self):
+        project = self.root / "changing-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        agents.write_bytes("owner\n".encode("utf-8"))
+        reads = iter((b"owner\n", b"owner edit\n"))
+
+        with mock.patch.object(install, "_read_agents", side_effect=lambda _: next(reads)):
+            transaction = install.ProjectTransaction()
+            with self.assertRaisesRegex(install.InstallerError, "changed during install"):
+                install._apply_agents(self.source, agents, transaction)
+
+        self.assertEqual("owner\n", agents.read_text(encoding="utf-8"))
+        self.assertEqual([], transaction.replaced)
+
+    def test_project_treats_inline_markers_as_owner_text(self):
+        project = self.root / "inline-markers"
+        project.mkdir()
+        owner = (
+            f"Path writes `{install.AGENTS_BEGIN}` and\n"
+            f"`{install.AGENTS_END}` around its rules.\n"
+        )
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
+
+        self.install_agents(project)
+
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertEqual(block + "\n" + owner, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_doctor_checks_agents_block(self):
+        project = self.root / "doctor-agents"
+        project.mkdir()
+        shutil.copy2(self.source / "WORKFLOW.md", project / "WORKFLOW.md")
+        template = (self.source / "AGENTS.md").read_text(encoding="utf-8")
+        cases = (
+            ("owner\n" + install._agents_block(template) + "owner\n", "ok", "block present"),
+            (install._agents_block("# old\n"), "fail", "block is stale"),
+            (template, "fail", "no GSD Path block"),
+            (f"{install.AGENTS_BEGIN}\n", "fail", "exactly one"),
+            ("x" * install.CODEX_DOC_LIMIT + "\n" + install._agents_block(template),
+             "fail", "Codex reads only the first"),
+            (install._agents_block(template) + "x" * install.CODEX_DOC_LIMIT,
+             "fail", "Codex reads only the first"),
+        )
+        for text, level, expected in cases:
+            (project / "AGENTS.md").write_bytes(text.encode("utf-8"))
+            findings = install.doctor(self.source, [], lambda _: self.root, project)
+            agents = [f for f in findings if "AGENTS.md" in f["text"]]
+            self.assertEqual(1, len(agents), findings)
+            self.assertEqual(level, agents[0]["level"], agents)
+            self.assertIn(expected, agents[0]["text"])
+
+    def test_claude_bridge_collision_names_its_own_move(self):
+        project = self.root / "project"
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "CLAUDE.md").write_bytes("mine".encode("utf-8"))
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn(
+            shlex.quote(str(project / ".claude" / "CLAUDE.pre-path.md")), error
+        )
+        self.assertIn("merge its rules into the new CLAUDE.md", error)
+        self.assertNotIn("32 KiB", error)
+
+    def test_project_runtime_collision_has_no_contract_move_hint(self):
+        project = self.root / "project"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        (
+            project / install.HOOKS_DIRECTORY / install.PROJECT_STATUS_LAUNCHER
+        ).write_bytes("foreign".encode("utf-8"))
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("already exists", error)
+        self.assertNotIn("pre-path", error)
+
+    def test_project_install_rejects_a_nested_git_directory(self):
+        repository = self.root / "repository"
+        project = repository / "nested"
+        project.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+        target = self.root / "nested-target" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("not the Git worktree root", error)
+        self.assertFalse(target.exists())
+        self.assertEqual([], list(project.iterdir()))
+
+    def test_project_contract_created_after_validation_is_preserved(self):
+        project = self.root / "project-race"
+        project.mkdir()
+        target = self.root / "project-race-target" / "skills"
+        original = install._apply_target
+
+        def create_contract_after_target(plan, staged, transaction):
+            original(plan, staged, transaction)
+            (project / "WORKFLOW.md").write_bytes("concurrent".encode("utf-8"))
+
+        with mock.patch.object(
+            install, "_apply_target", side_effect=create_contract_after_target
+        ):
+            with self.assertRaisesRegex(install.InstallerError, "already exists"):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("grok", target)],
+                    project,
+                )
+        self.assertEqual(
+            "concurrent", (project / "WORKFLOW.md").read_text(encoding="utf-8")
+        )
+        self.assertFalse((project / "AGENTS.md").exists())
+        self.assertFalse(target.exists())
+
+    def test_project_contracts_cannot_overlap_target_or_auxiliary_roots(self):
+        project = self.root / "project-overlap"
+        cases = (
+            (
+                "claude",
+                project / "AGENTS.md",
+                "skills root",
+            ),
+            (
+                "cursor",
+                project.parent / "skills",
+                "Cursor agent root",
+            ),
+        )
+        for target, root, message in cases:
+            selected_project = project if target == "claude" else root.parent / "agents"
+            with self.subTest(target=target):
+                status, _, error = self.run_main(
+                    [
+                        f"--{target}",
+                        f"--{target}-root",
+                        str(root),
+                        "--source-root",
+                        str(self.source),
+                        "--project",
+                        str(selected_project),
+                    ]
+                )
+                self.assertEqual(1, status)
+                self.assertFalse(root.exists())
+                self.assertIn(message, error)
+
+    def test_claude_project_bridge_uses_imports_and_never_overwrites(self):
+        project = self.root / "project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            install.CLAUDE_BRIDGE,
+            (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"),
+        )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            self.assertTrue(
+                (self.runtime_root(project) / name).is_file()
+            )
+
+        second_target = self.root / "claude-2" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(second_target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertFalse(second_target.exists())
+        self.assertIn("already exists", error)
+
+    def test_stale_sync_fails_before_mutation(self):
+        install.sync_skill_resources.mismatches.return_value = [
+            "stale generated resource: skills/gsd-path-build/references/dispatch.md"
+        ]
+        target = self.root / "codex" / "skills"
+        status, _, error = self.run_main(
+            ["--codex", "--codex-root", str(target), "--source-root", str(self.source)]
+        )
+        self.assertEqual(1, status)
+        self.assertFalse(target.exists())
+        self.assertIn("source resources are stale", error)
+
+    def test_hooks_refresh_rejects_stale_resources_before_mutation(self):
+        project = self.root / "stale-refresh-project"
+        target = self.root / "stale-refresh-claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project) / "pipeline_state.py"
+        before = runtime.read_bytes()
+        install.sync_skill_resources.mismatches.return_value = [
+            "stale generated resource: skills/gsd-path-build/scripts/pipeline_state.py"
+        ]
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("source resources are stale", error)
+        self.assertEqual(before, runtime.read_bytes())
+
+    @requires_symlink
+    def test_target_root_must_not_contain_or_descend_from_source(self):
+        parent_alias = self.root / "parent-alias"
+        parent_alias.symlink_to(self.root.parent, target_is_directory=True)
+        targets = (
+            self.root,
+            self.source / "nested" / "skills",
+            parent_alias / self.root.name,
+        )
+        for target in targets:
+            with self.subTest(target=target):
+                plan = install.TargetPlan("claude", target)
+                with self.assertRaisesRegex(
+                    install.InstallerError, "overlaps source repository"
+                ):
+                    install.install(self.source, [plan])
+                self.assertTrue((self.source / "skills" / "gsd-path").is_dir())
+                self.assertFalse((self.root / "disabled-gsd-skills").exists())
+
+    def test_codex_legacy_root_cannot_overlap_source(self):
+        target = self.root / "new-codex" / "skills"
+        with mock.patch.dict(
+            os.environ, {"CODEX_HOME": str(self.source)}, clear=False
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError, "legacy root overlaps source repository"
+            ):
+                install.install(
+                    self.source, [install.TargetPlan("codex", target)]
+                )
+        self.assertTrue((self.source / "skills" / "gsd-path").is_dir())
+        self.assertFalse((self.source / "disabled-gsd-skills").exists())
+        self.assertFalse(target.exists())
+
+    def test_backup_root_cannot_overlap_another_target(self):
+        first = self.root / "backup-collision" / "skills"
+        first.mkdir(parents=True)
+        (first / "gsd-path-old").mkdir()
+        second = first.parent / "disabled-gsd-skills"
+        plans = [
+            install.TargetPlan("claude", first),
+            install.TargetPlan("grok", second),
+        ]
+        with self.assertRaisesRegex(install.InstallerError, "backup overlaps"):
+            install.install(self.source, plans)
+        self.assertTrue((first / "gsd-path-old").is_dir())
+        self.assertFalse(second.exists())
+
+    def test_multi_target_failure_rolls_back_prior_target_and_backup(self):
+        codex = self.root / "codex" / "skills"
+        codex.mkdir(parents=True)
+        old = codex / "gsd-path-old"
+        old.mkdir()
+        (old / "marker").write_bytes("old".encode("utf-8"))
+        claude = self.root / "claude" / "skills"
+        original = install._apply_target
+        calls = 0
+
+        def fail_second(plan, staged, transaction):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected failure")
+            original(plan, staged, transaction)
+
+        plans = [
+            install.TargetPlan("codex", codex),
+            install.TargetPlan("claude", claude),
+        ]
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "legacy")}, clear=False):
+            with mock.patch.object(install, "_apply_target", side_effect=fail_second):
+                with self.assertRaisesRegex(install.InstallerError, "rolled back"):
+                    install.install(self.source, plans)
+        self.assertTrue((codex / "gsd-path-old" / "marker").is_file())
+        self.assertFalse((codex / "gsd-path").exists())
+        self.assertFalse((codex.parent / "disabled-gsd-skills").exists())
+        self.assertFalse(claude.exists())
+
+    def test_keyboard_interrupt_rolls_back_prior_target_and_backup(self):
+        codex = self.root / "codex-interrupt" / "skills"
+        codex.mkdir(parents=True)
+        old = codex / "gsd-path-old"
+        old.mkdir()
+        (old / "marker").write_bytes("old".encode("utf-8"))
+        claude = self.root / "claude-interrupt" / "skills"
+        original = install._apply_target
+        calls = 0
+
+        def interrupt_second(plan, staged, transaction):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise KeyboardInterrupt
+            original(plan, staged, transaction)
+
+        plans = [
+            install.TargetPlan("codex", codex),
+            install.TargetPlan("claude", claude),
+        ]
+        with mock.patch.dict(
+            os.environ, {"CODEX_HOME": str(self.root / "legacy")}, clear=False
+        ):
+            with mock.patch.object(
+                install, "_apply_target", side_effect=interrupt_second
+            ):
+                with self.assertRaisesRegex(
+                    install.InstallerError, "rolled back: interrupted"
+                ):
+                    install.install(self.source, plans)
+        self.assertTrue((codex / "gsd-path-old" / "marker").is_file())
+        self.assertFalse((codex / "gsd-path").exists())
+        self.assertFalse((codex.parent / "disabled-gsd-skills").exists())
+        self.assertFalse(claude.exists())
+
+    def test_interrupt_after_backup_move_still_restores_original(self):
+        target = self.root / "move-interrupt" / "skills"
+        old = target / "gsd-path-old"
+        old.mkdir(parents=True)
+        (old / "marker").write_bytes("old".encode("utf-8"))
+        original_replace = install.os.replace
+        interrupted = False
+
+        def move_then_interrupt(source, destination):
+            nonlocal interrupted
+            original_replace(source, destination)
+            if not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt
+
+        with mock.patch.object(install.os, "replace", side_effect=move_then_interrupt):
+            with self.assertRaisesRegex(
+                install.InstallerError, "rolled back: interrupted"
+            ):
+                install.install(
+                    self.source, [install.TargetPlan("claude", target)]
+                )
+        self.assertEqual("old", (old / "marker").read_text(encoding="utf-8"))
+        self.assertFalse((target.parent / "disabled-gsd-skills").exists())
+
+    def test_interrupt_after_directory_creation_removes_created_directories(self):
+        target = self.root / "mkdir-interrupt" / "skills"
+        original_mkdir = Path.mkdir
+        interrupted = False
+
+        def mkdir_then_interrupt(path, *args, **kwargs):
+            nonlocal interrupted
+            original_mkdir(path, *args, **kwargs)
+            if path == target and not interrupted:
+                interrupted = True
+                raise KeyboardInterrupt
+
+        with mock.patch.object(Path, "mkdir", new=mkdir_then_interrupt):
+            with self.assertRaisesRegex(
+                install.InstallerError, "rolled back: interrupted"
+            ):
+                install.install(
+                    self.source, [install.TargetPlan("claude", target)]
+                )
+        self.assertFalse(target.parent.exists())
+
+    def test_install_collision_does_not_remove_a_concurrent_destination(self):
+        target = self.root / "concurrent-install" / "skills"
+        destination = target / install.SKILL_NAMES[0]
+        original = install._reserve_directory
+        raced = False
+
+        def concurrent_reservation(path):
+            nonlocal raced
+            if path == destination and not raced:
+                raced = True
+                path.mkdir()
+                (path / "other-installer.txt").write_bytes(
+                    "live install\n".encode("utf-8")
+                )
+            original(path)
+
+        with mock.patch.object(
+            install, "_reserve_directory", side_effect=concurrent_reservation
+        ):
+            with self.assertRaisesRegex(install.InstallerError, "rolled back"):
+                install.install(
+                    self.source, [install.TargetPlan("claude", target)]
+                )
+
+        self.assertTrue(raced)
+        self.assertEqual(
+            (destination / "other-installer.txt").read_text(encoding="utf-8"),
+            "live install\n",
+        )
+
+    def test_active_target_owner_prevents_backup_mutation(self):
+        target = self.root / "owned-install" / "skills"
+        existing = target / "gsd-path-old"
+        existing.mkdir(parents=True)
+        (existing / "marker").write_bytes("old\n".encode("utf-8"))
+        (install._install_lock_path(target)).mkdir(parents=True)
+
+        with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+            install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertEqual(
+            "old\n",
+            (existing / "marker").read_text(encoding="utf-8"),
+        )
+        self.assertFalse((target.parent / "disabled-gsd-skills").exists())
+
+    def test_install_lock_publishes_live_owner(self):
+        target = self.root / "live-owner" / "skills"
+        lock = install._install_lock_path(target)
+        original = install._apply_target
+        owner = {}
+
+        def inspect_owner(*args):
+            owner.update(
+                json.loads(
+                    (lock / install.INSTALL_LOCK_OWNER).read_text(encoding="utf-8")
+                )
+            )
+            return original(*args)
+
+        with mock.patch.object(install, "_apply_target", side_effect=inspect_owner):
+            install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertEqual(install.INSTALL_LOCK_SCHEMA, owner["schema"])
+        self.assertEqual(os.getpid(), owner["pid"])
+        self.assertTrue(owner["identity"])
+        self.assertFalse(lock.exists())
+
+    def test_install_recovers_stale_owned_lock(self):
+        target = self.root / "stale-owner" / "skills"
+        lock = install._install_lock_path(target)
+        lock.mkdir(parents=True)
+        (lock / install.INSTALL_LOCK_OWNER).write_bytes(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ).encode("utf-8"),
+        )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(lock.exists())
+
+    def test_concurrent_stale_recovery_keeps_each_quarantine_owned(self):
+        parent = self.root / "concurrent-stale-owner"
+        first_target = parent / "first-skills"
+        second_target = parent / "second-skills"
+        lock = install._install_lock_path(first_target)
+        lock.mkdir(parents=True)
+        (lock / install.INSTALL_LOCK_OWNER).write_bytes(
+            json.dumps({"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid(), "identity": "reused-pid"}).encode("utf-8"),
+        )
+        original_rename = Path.rename
+        raced = False
+
+        def install_competitor(candidate, destination):
+            nonlocal raced
+            result = original_rename(candidate, destination)
+            if candidate == lock and not raced:
+                raced = True
+                install.install(
+                    self.source,
+                    [install.TargetPlan("claude", second_target)],
+                )
+            return result
+
+        with mock.patch.object(Path, "rename", new=install_competitor):
+            install.install(
+                self.source,
+                [install.TargetPlan("claude", first_target)],
+            )
+
+        self.assertTrue(raced)
+        self.assertTrue((first_target / install.SKILL_NAMES[0]).is_dir())
+        self.assertTrue((second_target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(lock.exists())
+        self.assertEqual(
+            [], list(lock.parent.glob(f"{lock.name}.stale-*"))
+        )
+
+    def test_install_reclaims_an_orphaned_stale_quarantine(self):
+        target = self.root / "orphaned-quarantine" / "skills"
+        lock = install._install_lock_path(target)
+        quarantine = lock.with_name(f"{lock.name}.stale")
+        quarantine.mkdir(parents=True)
+        (quarantine / install.INSTALL_LOCK_OWNER).write_bytes(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ).encode("utf-8"),
+        )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(quarantine.exists())
+
+    def test_install_reclaims_a_unique_orphaned_stale_quarantine(self):
+        target = self.root / "unique-orphaned-quarantine" / "skills"
+        lock = install._install_lock_path(target)
+        staging = lock.parent / ".install-lock-stage-abandoned"
+        quarantine = lock.with_name(f"{lock.name}.stale-{staging.name}")
+        owner = json.dumps(
+            {
+                "schema": install.INSTALL_LOCK_SCHEMA,
+                "pid": os.getpid(),
+                "identity": "reused-pid",
+            }
+        )
+        for directory in (staging, quarantine):
+            directory.mkdir(parents=True)
+            (directory / install.INSTALL_LOCK_OWNER).write_bytes(
+                owner.encode("utf-8")
+            )
+
+        install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue((target / install.SKILL_NAMES[0]).is_dir())
+        self.assertFalse(staging.exists())
+        self.assertFalse(quarantine.exists())
+
+    def test_stale_lock_recovery_preserves_a_replacement_owner(self):
+        target = self.root / "raced-stale-owner" / "skills"
+        lock = install._install_lock_path(target)
+        lock.mkdir(parents=True)
+        owner_path = lock / install.INSTALL_LOCK_OWNER
+        owner_path.write_bytes(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ).encode("utf-8"),
+        )
+        displaced = lock.parent / "displaced-stale-lock"
+        original_rename = Path.rename
+        raced = False
+
+        def replace_before_takeover(candidate, destination):
+            nonlocal raced
+            if candidate == lock and not raced:
+                raced = True
+                original_rename(candidate, displaced)
+                lock.mkdir(parents=True)
+                owner_path.write_bytes(
+                    json.dumps(
+                        {
+                            "schema": install.INSTALL_LOCK_SCHEMA,
+                            "pid": os.getpid(),
+                            "identity": install._process_identity(os.getpid()),
+                        }
+                    ).encode("utf-8"),
+                )
+            return original_rename(candidate, destination)
+
+        with mock.patch.object(Path, "rename", new=replace_before_takeover):
+            with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+                install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue(raced)
+        live_owner = json.loads(owner_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            install._process_identity(os.getpid()), live_owner["identity"]
+        )
+        self.assertFalse(target.exists())
+
+    def test_lost_stale_lock_race_removes_only_the_quarantine(self):
+        target = self.root / "lost-stale-owner" / "skills"
+        lock = install._install_lock_path(target)
+        lock.mkdir(parents=True)
+        owner_path = lock / install.INSTALL_LOCK_OWNER
+        owner_path.write_bytes(
+            json.dumps(
+                {
+                    "schema": install.INSTALL_LOCK_SCHEMA,
+                    "pid": os.getpid(),
+                    "identity": "reused-pid",
+                }
+            ).encode("utf-8"),
+        )
+        original_rename = Path.rename
+        raced = False
+
+        def publish_competitor(candidate, destination):
+            nonlocal raced
+            if candidate.name.startswith(".install-lock-stage-") and not raced:
+                raced = True
+                lock.mkdir(parents=True)
+                owner_path.write_bytes(
+                    json.dumps(
+                        {
+                            "schema": install.INSTALL_LOCK_SCHEMA,
+                            "pid": os.getpid(),
+                            "identity": install._process_identity(os.getpid()),
+                        }
+                    ).encode("utf-8"),
+                )
+            return original_rename(candidate, destination)
+
+        with mock.patch.object(Path, "rename", new=publish_competitor):
+            with self.assertRaisesRegex(install.InstallerError, "already in progress"):
+                install.install(self.source, [install.TargetPlan("claude", target)])
+
+        self.assertTrue(raced)
+        self.assertTrue(lock.is_dir())
+        self.assertFalse(lock.with_name(f"{lock.name}.stale").exists())
+
+    def test_failure_restores_cursor_subagent(self):
+        cursor = self.root / "cursor-rollback" / "skills"
+        agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME
+        agent.parent.mkdir(parents=True)
+        agent.write_bytes("old cursor agent\n".encode("utf-8"))
+        claude = self.root / "claude-after-cursor" / "skills"
+        original = install._apply_target
+        calls = 0
+
+        def fail_second(plan, staged, transaction):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected failure")
+            original(plan, staged, transaction)
+
+        plans = [
+            install.TargetPlan("cursor", cursor),
+            install.TargetPlan("claude", claude),
+        ]
+        with mock.patch.object(install, "_apply_target", side_effect=fail_second):
+            with self.assertRaisesRegex(install.InstallerError, "rolled back"):
+                install.install(self.source, plans)
+        self.assertEqual("old cursor agent\n", agent.read_text(encoding="utf-8"))
+        self.assertFalse(cursor.exists())
+        self.assertFalse((cursor.parent / "disabled-gsd-skills").exists())
+        self.assertFalse(claude.exists())
+
+
+    def hooks_arguments(self, project, target):
+        return [
+            "--claude",
+            "--claude-root",
+            str(target),
+            "--source-root",
+            str(self.source),
+            "--project",
+            str(project),
+            "--hooks",
+        ]
+
+    def test_hooks_require_project(self):
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--hooks",
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("--hooks requires --project", error)
+        self.assertFalse(target.exists())
+
+    def test_hooks_init_adds_guards_without_changing_existing_contracts(self):
+        project = self.root / "existing-project"
+        (project / ".git").mkdir(parents=True)
+        (project / "AGENTS.md").write_bytes("existing agents\n".encode("utf-8"))
+        (project / "WORKFLOW.md").write_bytes(
+            "existing workflow\n".encode("utf-8")
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-init",
+                "--claude",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            "existing agents\n",
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "existing workflow\n",
+            (project / "WORKFLOW.md").read_text(encoding="utf-8"),
+        )
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            self.assertTrue(
+                (self.runtime_root(project) / name).is_file()
+            )
+        self.assertTrue((project / ".claude" / "settings.json").is_file())
+        self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
+        self.assertTrue((project / ".git" / "hooks" / "commit-msg").is_file())
+
+    def test_hooks_init_ignores_unselected_foreign_native_configs(self):
+        project = self.root / "existing-grok-project"
+        (project / ".git").mkdir(parents=True)
+        settings = project / ".claude" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        original = json.dumps({"hooks": {"custom": True}}) + "\n"
+        settings.write_bytes(original.encode("utf-8"))
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-init",
+                    "--grok",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual(original, settings.read_text(encoding="utf-8"))
+        self.assertTrue((project / ".git" / "hooks" / "pre-commit").is_file())
+
+    def test_hooks_install_guard_scripts_settings_and_git_hook(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, output, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            self.assertEqual(
+                install.runtime_store.guard_launcher(name),
+                (project / install.HOOKS_DIRECTORY / name).read_text(encoding="utf-8"),
+            )
+        settings = json.loads(
+            (project / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("PreToolUse", settings["hooks"])
+        self.assertEqual(settings["hooks"]["PreToolUse"][0]["matcher"], install.CLAUDE_MATCHER)
+        self.assertIsNotNone(
+            re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "PowerShell")
+        )
+        self.assertIsNotNone(
+            re.fullmatch(settings["hooks"]["PreToolUse"][0]["matcher"], "SaveFile")
+        )
+        self.assertIsNotNone(
+            re.fullmatch(
+                settings["hooks"]["PreToolUse"][0]["matcher"],
+                "mcp__filesystem__write_file",
+            )
+        )
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        commit_msg = project / ".git" / "hooks" / "commit-msg"
+        self.assertEqual(install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8"))
+        self.assertEqual(install.commit_msg_hook("python3"), commit_msg.read_text(encoding="utf-8"))
+        pre_push = project / ".git" / "hooks" / "pre-push"
+        self.assertEqual(install.pre_push_hook("python3"), pre_push.read_text(encoding="utf-8"))
+        self.assertTrue(os.access(commit_msg, os.X_OK))
+        self.assertTrue(os.access(pre_push, os.X_OK))
+        self.assertIn(".gsd-path/guard_hook.py", output)
+        self.assertIn(".git/hooks/pre-commit", output)
+        self.assertIn(".git/hooks/commit-msg", output)
+
+    def test_hooks_install_native_codex_and_cursor_project_configs(self):
+        project = self.root / "native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+
+        codex = json.loads(
+            (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"',
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertIn(
+            ".gsd-path\\guard_hook.py",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["commandWindows"],
+        )
+        cursor = json.loads(
+            (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(1, cursor["version"])
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            cursor["hooks"]["preToolUse"][0]["command"],
+        )
+        self.assertTrue(cursor["hooks"]["preToolUse"][0]["failClosed"])
+
+    def test_hooks_install_merges_selected_native_configs(self):
+        project = self.root / "existing-native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        codex_path = project / ".codex" / "hooks.json"
+        cursor_path = project / ".cursor" / "hooks.json"
+        codex_path.parent.mkdir()
+        cursor_path.parent.mkdir()
+        codex_path.write_bytes(
+            (json.dumps(
+                {
+                    "userSetting": True,
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Write",
+                                "hooks": [
+                                    {"type": "command", "command": "custom-codex"}
+                                ],
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n").encode("utf-8"),
+        )
+        cursor_path.write_bytes(
+            (json.dumps(
+                {
+                    "version": 1,
+                    "userSetting": True,
+                    "hooks": {"preToolUse": [{"command": "custom-cursor"}]},
+                }
+            )
+            + "\n").encode("utf-8"),
+        )
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        self.assertTrue(codex["userSetting"])
+        self.assertEqual(2, len(codex["hooks"]["PreToolUse"]))
+        self.assertEqual("Write", codex["hooks"]["PreToolUse"][0]["matcher"])
+        self.assertEqual(
+            "custom-codex",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertIn(
+            "guard_hook.py",
+            codex["hooks"]["PreToolUse"][1]["hooks"][0]["command"],
+        )
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertTrue(cursor["userSetting"])
+        self.assertEqual(2, len(cursor["hooks"]["preToolUse"]))
+        self.assertEqual(
+            "custom-cursor", cursor["hooks"]["preToolUse"][0]["command"]
+        )
+        self.assertIn(
+            "guard_hook.py", cursor["hooks"]["preToolUse"][1]["command"]
+        )
+
+    def test_native_hook_install_reports_unreadable_settings(self):
+        project = self.root / "unreadable-native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        settings = project / ".codex" / "hooks.json"
+        settings.mkdir(parents=True)
+        target = self.root / "codex" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--codex",
+                    "--codex-root",
+                    str(target),
+                    "--source-root",
+                    str(self.source),
+                    "--project",
+                    str(project),
+                    "--hooks",
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("cannot read managed hook settings file", error)
+        self.assertNotIn("Traceback", error)
+        self.assertFalse(target.exists())
+
+    def test_native_hook_commands_run_from_supported_working_directories(self):
+        project = self.root / "native hooks project"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
+        guard.write_bytes('print("guard-ran")\n'.encode("utf-8"))
+        subdirectory = project / "nested"
+        subdirectory.mkdir()
+        codex = json.loads(
+            (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
+        )
+        # Codex runs commandWindows on Windows; the POSIX command needs sh.
+        codex_key = "commandWindows" if os.name == "nt" else "command"
+        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0][codex_key]
+        cursor = json.loads(
+            (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
+        )
+        cursor_command = cursor["hooks"]["preToolUse"][0]["command"]
+
+        codex_result = subprocess.run(
+            codex_command, cwd=subdirectory, shell=True, encoding="utf-8", errors="replace", capture_output=True
+        )
+        cursor_result = subprocess.run(
+            cursor_command, cwd=project, shell=True, encoding="utf-8", errors="replace", capture_output=True
+        )
+
+        self.assertEqual(0, codex_result.returncode, codex_result.stderr)
+        self.assertEqual("guard-ran", codex_result.stdout.strip())
+        self.assertEqual(0, cursor_result.returncode, cursor_result.stderr)
+        self.assertEqual("guard-ran", cursor_result.stdout.strip())
+
+    @requires_symlink
+    def test_native_hook_install_rejects_unsafe_project_directories(self):
+        for host in ("codex", "cursor"):
+            with self.subTest(host=host):
+                project = self.root / f"unsafe-{host}-project"
+                (project / ".git").mkdir(parents=True)
+                outside = self.root / f"outside-{host}"
+                outside.mkdir()
+                (project / f".{host}").symlink_to(outside, target_is_directory=True)
+                target = self.root / host / "skills"
+                with mock.patch.object(
+                    install, "_detect_python_interpreter", return_value="python3"
+                ):
+                    with self.assertRaisesRegex(
+                        install.InstallerError,
+                        f"unsafe {host.title()} project directory",
+                    ):
+                        install.install(
+                            self.source,
+                            [install.TargetPlan(host, target)],
+                            project=project,
+                            hooks=True,
+                        )
+                self.assertFalse((outside / "hooks.json").exists())
+                self.assertFalse(target.exists())
+
+    def test_native_hooks_require_initialized_repository(self):
+        project = self.root / "project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(1, status)
+        self.assertRegex(error, "initialized Git repository.*selected hosts: claude")
+        self.assertFalse((project / ".git").exists())
+        self.assertFalse((project / ".claude" / "settings.json").exists())
+        self.assertFalse(target.exists())
+
+    def test_git_only_hooks_require_initialized_repository(self):
+        project = self.root / "plain-project"
+        target = self.root / "grok" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "initialized Git repository.*selected hosts: grok",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("grok", target)],
+                    project=project,
+                    hooks=True,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
+    def test_git_only_hooks_require_python_interpreter(self):
+        project = self.root / "grok-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "grok" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "working Python interpreter.*selected hosts: grok",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("grok", target)],
+                    project=project,
+                    hooks=True,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
+    def test_hookless_project_install_requires_python_interpreter(self):
+        project = self.root / "project"
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            with self.assertRaisesRegex(
+                install.InstallerError,
+                "--project requires a working Python interpreter.*selected hosts: claude",
+            ):
+                install.install(
+                    self.source,
+                    [install.TargetPlan("claude", target)],
+                    project=project,
+                )
+
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
+    def test_hooks_install_merges_an_existing_claude_settings_file(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        (project / ".claude").mkdir(parents=True)
+        settings_path = project / ".claude" / "settings.json"
+        settings_path.write_bytes(
+            (json.dumps(
+                {
+                    "userSetting": True,
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Write",
+                                "hooks": [{"type": "command", "command": "custom"}],
+                            }
+                        ]
+                    },
+                }
+            )
+            + "\n").encode("utf-8"),
+        )
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertTrue(settings["userSetting"])
+        self.assertEqual(2, len(settings["hooks"]["PreToolUse"]))
+        self.assertEqual(
+            "custom", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        )
+        self.assertIn(
+            "guard_hook.py", settings["hooks"]["PreToolUse"][1]["hooks"][0]["command"]
+        )
+        self.assertTrue((project / "AGENTS.md").exists())
+
+    def test_hooks_collision_rolls_back_cleanly(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "settings.json").write_bytes("not json".encode("utf-8"))
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(1, status)
+        self.assertIn("settings", error)
+        self.assertFalse(target.exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+        self.assertEqual(
+            "not json",
+            (project / ".claude" / "settings.json").read_text(encoding="utf-8"),
+        )
+
+    def test_update_keeps_project_contracts_and_selected_runtime(self):
+        project = self.root / "update-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        agents = project / "AGENTS.md"
+        owner = "\n## Owner rules\n\n- keep me\n"
+        agents.write_bytes((agents.read_text(encoding="utf-8") + owner).encode("utf-8"))
+        installed_agents = agents.read_text(encoding="utf-8")
+        template = (self.source / "AGENTS.md").read_text(encoding="utf-8")
+        (self.source / "AGENTS.md").write_bytes((template + "\n- new rule\n").encode("utf-8"))
+        (project / ".claude" / "CLAUDE.md").write_bytes("edited bridge\n".encode("utf-8"))
+        runtime_file = (
+            self.runtime_root(project)
+            / install.PROJECT_RUNTIME_SCRIPTS[0]
+        )
+        guard_file = project / install.HOOKS_DIRECTORY / install.GUARD_SCRIPTS[0]
+        stale_runtime = runtime_file.read_text(encoding="utf-8")
+        original_guard = guard_file.read_text(encoding="utf-8")
+        original_pin = (project / ".gsd-path/runtime.json").read_bytes()
+        (self.source / "scripts" / runtime_file.name).write_bytes(f"# newer\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"))
+        settings_path = project / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["userSetting"] = True
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
+
+        status, output, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--update", "--dry-run"]
+        )
+        self.assertEqual(0, status, error)
+        self.assertRegex(
+            output,
+            r"project: would refresh AGENTS\.md, .*; kept WORKFLOW\.md, .*\.claude/CLAUDE\.md",
+        )
+        self.assertEqual(stale_runtime, runtime_file.read_text(encoding="utf-8"))
+        self.assertEqual(installed_agents, agents.read_text(encoding="utf-8"))
+
+        status, output, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--update"]
+        )
+        self.assertEqual(0, status, error)
+        self.assertRegex(
+            output,
+            r"project: refreshed AGENTS\.md, .*; kept WORKFLOW\.md, .*\.claude/CLAUDE\.md.*\n",
+        )
+        self.assertEqual(
+            install._agents_block(template + "\n- new rule\n") + owner,
+            agents.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            "edited bridge\n",
+            (project / ".claude" / "CLAUDE.md").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            stale_runtime,
+            runtime_file.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            original_guard,
+            guard_file.read_text(encoding="utf-8"),
+        )
+        self.assertEqual(original_pin, (project / ".gsd-path/runtime.json").read_bytes())
+        merged = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertTrue(merged["userSetting"])
+        self.assertEqual(1, len(merged["hooks"]["PreToolUse"]))
+        self.assertEqual(
+            install.pre_commit_hook("python3"),
+            (project / ".git" / "hooks" / "pre-commit").read_text(encoding="utf-8"),
+        )
+
+    def test_update_refuses_to_replace_an_unmanaged_project_runtime_file(self):
+        project = self.root / "update-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        arguments = self.hooks_arguments(project, target)[:-1]
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(0, status, error)
+        runtime_file = (
+            self.runtime_root(project)
+            / install.PROJECT_RUNTIME_SCRIPTS[0]
+        )
+        runtime_file.write_bytes("foreign\n".encode("utf-8"))
+        status, _, error = self.run_main([*arguments, "--update"])
+        self.assertEqual(1, status)
+        self.assertIn("runtime file changed", error)
+        self.assertEqual("foreign\n", runtime_file.read_text(encoding="utf-8"))
+
+    def test_hooks_dry_run_lists_files_without_writing(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, output, error = self.run_main(
+            [*self.hooks_arguments(project, target), "--dry-run"]
+        )
+        self.assertEqual(0, status, error)
+        self.assertIn(".gsd-path/guard_hook.py", output)
+        self.assertIn(".git/hooks/commit-msg", output)
+        self.assertFalse(target.exists())
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+
+    def test_explicit_upgrade_updates_external_guard_scripts(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# guard v2\n{install.GUARD_MARKER}\n".encode("utf-8")
+        )
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+        status, output, error = self.run_main(
+            [
+                "--runtime-upgrade",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertIn(
+            "guard v2",
+            (self.runtime_root(project) / "guard_hook.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn(
+            "runtime v2",
+            (
+                self.runtime_root(project)
+                / "pipeline_state.py"
+            ).read_text(encoding="utf-8"),
+        )
+        self.assertTrue(target.exists())
+
+    def test_hooks_refresh_rejects_project_without_managed_ownership(self):
+        project = self.root / "unowned-project"
+        project.mkdir()
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("no managed GSD Path hooks or runtime", error)
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+
+    def test_hooks_refresh_initializes_runtime_for_legacy_project(self):
+        project = self.root / "legacy-project"
+        project.mkdir()
+        shutil.copy2(PROJECT_ROOT / "AGENTS.md", project / "AGENTS.md")
+        shutil.copy2(PROJECT_ROOT / "WORKFLOW.md", project / "WORKFLOW.md")
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertTrue(
+            (self.runtime_root(project) / "pipeline_state.py").is_file()
+        )
+        self.assertFalse((project / install.HOOKS_DIRECTORY / "guard_hook.py").exists())
+
+    def test_refresh_and_doctor_reject_marker_only_legacy_contracts(self):
+        project = self.root / "stale-legacy-project"
+        project.mkdir()
+        (project / "AGENTS.md").write_bytes(
+            "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
+            "## Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n".encode("utf-8"),
+        )
+        (project / "WORKFLOW.md").write_bytes(
+            "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
+            "### Plain-prompt re-entry\n\n"
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n".encode("utf-8"),
+        )
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
+
+        self.assertEqual(1, status, error)
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "lacks plain-prompt re-entry" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_hooks_refresh_honors_project_ownership_lock(self):
+        project = self.root / "locked-refresh-project"
+        target = self.root / "locked-refresh-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project) / "pipeline_state.py"
+        before = runtime.read_bytes()
+        (install._install_lock_path(project / install.HOOKS_DIRECTORY)).mkdir(parents=True)
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("already in progress", error)
+        self.assertEqual(before, runtime.read_bytes())
+
+    def test_project_install_honors_project_ownership_lock(self):
+        project = self.root / "locked-install-project"
+        target = self.root / "locked-install-claude" / "skills"
+        project.mkdir()
+        (install._install_lock_path(project / install.HOOKS_DIRECTORY)).mkdir(parents=True)
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("installation already in progress", error)
+        self.assertFalse((project / "AGENTS.md").exists())
+        self.assertFalse(target.exists())
+
+    def test_runtime_upgrade_preserves_prior_set_after_copy_failure(self):
+        project = self.root / "transactional-runtime-project"
+        target = self.root / "transactional-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project)
+        before = {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS}
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# changed\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+        original_copy = shutil.copyfile
+        copies = 0
+
+        def failing_copy(source, destination):
+            nonlocal copies
+            copies += 1
+            if copies == 2:
+                raise OSError("injected runtime copy failure")
+            return original_copy(source, destination)
+
+        with mock.patch.object(install.runtime_store.shutil, "copyfile", side_effect=failing_copy):
+            status, _, _ = self.run_main(
+                ["--runtime-upgrade", "--project", str(project), "--source-root", str(self.source)]
+            )
+
+        self.assertEqual(1, status)
+        self.assertEqual(before, {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS})
+
+    def test_hooks_refresh_rejects_unexpected_runtime_entries(self):
+        project = self.root / "runtime-extra-project"
+        target = self.root / "runtime-extra-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        extra = self.runtime_root(project) / "site_policy.py"
+        extra.write_bytes("keep\n".encode("utf-8"))
+
+        status, _, error = self.run_main(
+            ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("unexpected runtime files", error)
+        self.assertEqual("keep\n", extra.read_text(encoding="utf-8"))
+
+    def test_guard_failure_rolls_back_runtime_and_guards(self):
+        project = self.root / "guard-runtime-transaction"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "guard-runtime-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project)
+        shutil.rmtree(runtime)
+        guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
+        before = guard.read_bytes()
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# changed\n{install.GUARD_MARKER}\n".encode("utf-8")
+        )
+        original_copy = install._atomic_copy
+
+        def failing_guard_copy(source, destination):
+            if source.name == "guard_hook.py":
+                raise OSError("injected guard failure")
+            return original_copy(source, destination)
+
+        with mock.patch.object(install, "_atomic_copy", side_effect=failing_guard_copy):
+            status, _, _ = self.run_main(
+                ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
+            )
+
+        self.assertEqual(1, status)
+        self.assertEqual(before, guard.read_bytes())
+        self.assertFalse(runtime.exists())
+
+    def test_explicit_upgrade_updates_runtime_without_optional_guards(self):
+        project = self.root / "hookless-project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--runtime-upgrade",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(0, status, error)
+        self.assertIn(
+            "runtime v2",
+            (
+                self.runtime_root(project)
+                / "pipeline_state.py"
+            ).read_text(encoding="utf-8"),
+        )
+        for name in install.GUARD_SCRIPTS:
+            self.assertFalse((project / install.HOOKS_DIRECTORY / name).exists())
+
+    def test_hookless_refresh_requires_interpreter_before_writes(self):
+        project = self.root / "hookless-refresh-project"
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project) / "pipeline_state.py"
+        before = runtime.read_bytes()
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("working Python interpreter", error)
+        self.assertEqual(before, runtime.read_bytes())
+
+    def test_hooks_refresh_rejects_unmanaged_guard_scripts(self):
+        project = self.root / "project"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_bytes(
+            "custom\n".encode("utf-8")
+        )
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path guard script", error)
+
+    def test_hooks_refresh_rejects_unmanaged_project_runtime(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            self.runtime_root(project)
+            / "pipeline_state.py"
+        )
+        runtime.write_bytes("custom\n".encode("utf-8"))
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("runtime file changed", error)
+        self.assertEqual("custom\n", runtime.read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_reports_an_unreadable_project_runtime(self):
+        project = self.root / "unreadable-runtime-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "unreadable-runtime-claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            self.runtime_root(project)
+            / "pipeline_state.py"
+        )
+        original_read_text = Path.read_bytes
+
+        def unreadable(candidate, *args, **kwargs):
+            if candidate == runtime:
+                raise PermissionError("injected unreadable runtime")
+            return original_read_text(candidate, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_bytes", new=unreadable):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+
+        self.assertEqual(1, status)
+        self.assertIn("unreadable runtime", error)
+        self.assertNotIn("Traceback", error)
+
+    @requires_symlink
+    def test_hooks_refresh_rejects_symlinked_project_runtime(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        runtime = (
+            self.runtime_root(project)
+            / "pipeline_state.py"
+        )
+        outside = self.root / "outside-runtime.py"
+        runtime.replace(outside)
+        runtime.symlink_to(outside)
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("runtime file changed", error)
+        self.assertTrue(runtime.is_symlink())
+        self.assertIn(
+            install.PROJECT_RUNTIME_MARKER,
+            outside.read_text(encoding="utf-8"),
+        )
+
+    @requires_symlink
+    def test_project_install_rejects_symlinked_runtime_directory(self):
+        project = self.root / "symlinked-runtime-project"
+        outside = self.root / "outside-runtime"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        outside.mkdir()
+        (self.runtime_root(project)).symlink_to(
+            outside, target_is_directory=True
+        )
+        target = self.root / "claude" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual([], list(outside.iterdir()))
+        self.assertFalse(target.exists())
+
+    @requires_symlink
+    def test_project_install_rejects_symlinked_runtime_parent(self):
+        project = self.root / "symlinked-runtime-parent-project"
+        outside = self.root / "outside-runtime-parent"
+        project.mkdir()
+        (outside / "runtime").mkdir(parents=True)
+        (project / install.HOOKS_DIRECTORY).symlink_to(
+            outside, target_is_directory=True
+        )
+        target = self.root / "claude-parent" / "skills"
+
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual([], list((outside / "runtime").iterdir()))
+        self.assertFalse(target.exists())
+
+    @requires_symlink
+    def test_hooks_refresh_rejects_symlinked_runtime_directory(self):
+        project = self.root / "refresh-symlinked-runtime-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        runtime = self.runtime_root(project)
+        outside = self.root / "outside-refresh-runtime"
+        runtime.replace(outside)
+        runtime.symlink_to(outside, target_is_directory=True)
+        before = (outside / "pipeline_state.py").read_bytes()
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
+        )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(before, (outside / "pipeline_state.py").read_bytes())
+
+    def test_doctor_checks_install_project_runtime_and_state(self):
+        (self.source / "package.json").write_bytes(
+            '{"version": "9.9.9"}\n'.encode("utf-8")
+        )
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(
+                PROJECT_ROOT / "scripts" / name,
+                self.source / "scripts" / name,
+            )
+        project = self.root / "doctor-project"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_bytes(
+            "---\n"
+            "pipeline: gsd-path/v2\n"
+            "project: demo\n"
+            "milestone: demo\n"
+            "phase: plan\n"
+            "status: done\n"
+            "branch: null\n"
+            "archive: null\n"
+            "---\n".encode("utf-8"),
+        )
+        arguments = [
+            "--doctor",
+            "--claude",
+            "--claude-root",
+            str(target),
+            "--source-root",
+            str(self.source),
+            "--project",
+            str(project),
+        ]
+
+        status, output, error = self.run_main(arguments)
+
+        self.assertEqual(0, status, error)
+        self.assertIn("claude: ", output)
+        self.assertIn("(v9.9.9)", output)
+        self.assertIn("project: runtime pipeline_state.py current", output)
+        self.assertIn("hooks: .gsd-path/guard_hook.py current", output)
+        self.assertIn("hooks: .git/hooks/pre-commit wired", output)
+        self.assertIn("state: plan/done", output)
+        self.assertFalse((self.source / "scripts" / "__pycache__").exists())
+
+        bridge = project / ".claude" / "CLAUDE.md"
+        bridge.write_bytes(b"\xff")
+        status, output, error = self.run_main(arguments)
+        self.assertEqual(0, status, error)
+        self.assertIn("exists but is not the managed bridge", output)
+
+        runtime_script = self.runtime_root(project) / "pipeline_state.py"
+        original_runtime = runtime_script.read_bytes()
+        doctor_side_effect = project / "doctor-runtime-executed"
+        runtime_script.write_bytes(
+            "from pathlib import Path\n"
+            f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
+            f"# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"),
+        )
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(1, status)
+        self.assertIn("runtime file changed", error)
+        self.assertFalse(doctor_side_effect.exists())
+        runtime_script.write_bytes(original_runtime)
+
+        original_validator = install._validated_project_state
+
+        def replace_runtime_after_validation(source_root, candidate):
+            state = original_validator(source_root, candidate)
+            runtime_script.write_bytes(
+                "from pathlib import Path\n"
+                f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
+                f"# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"),
+            )
+            return state
+
+        with mock.patch.object(
+            install,
+            "_validated_project_state",
+            side_effect=replace_runtime_after_validation,
+        ):
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: target, project
+            )
+        self.assertFalse(doctor_side_effect.exists())
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "runtime changed during doctor validation" in finding["text"]
+                for finding in findings
+            )
+        )
+        runtime_script.write_bytes(original_runtime)
+
+        shutil.rmtree(target / "gsd-path-plan")
+        status, _, error = self.run_main(arguments)
+        self.assertEqual(1, status)
+        self.assertIn("incomplete install", error)
+
+    @requires_symlink
+    def test_doctor_rejects_symlinked_project_runtime(self):
+        project = self.root / "doctor-symlinked-runtime"
+        runtime_parent = project / install.HOOKS_DIRECTORY
+        runtime_parent.mkdir(parents=True)
+        outside = self.root / "outside-runtime"
+        outside.mkdir()
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(self.source / "scripts" / name, outside / name)
+        (runtime_parent / "runtime").symlink_to(outside, target_is_directory=True)
+
+        findings = install.doctor(self.source, [], lambda _: self.root, project)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail" and "symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertFalse(
+            any(
+                finding["level"] == "ok"
+                and finding["text"].startswith("project: runtime")
+                for finding in findings
+            )
+        )
+
+    @requires_symlink
+    def test_doctor_rejects_symlinked_project_contracts(self):
+        project = self.root / "doctor-symlinked-contracts"
+        project.mkdir()
+        for name in ("AGENTS.md", "WORKFLOW.md"):
+            (project / name).symlink_to(self.source / name)
+
+        findings = install.doctor(self.source, [], lambda _: self.root, project)
+
+        for name in ("AGENTS.md", "WORKFLOW.md"):
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and finding["text"] == f"project: contract {name} is a symlink"
+                    for finding in findings
+                )
+            )
+
+    def test_doctor_reports_deleted_guards_with_managed_wiring(self):
+        project = self.root / "doctor-dangling-guards"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-dangling-guards-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        shutil.rmtree(target)
+        for name in install.GUARD_SCRIPTS:
+            (project / install.HOOKS_DIRECTORY / name).unlink()
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and f"missing .gsd-path/{name}" in finding["text"]
+                    for finding in findings
+                )
+            )
+
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue((project / install.HOOKS_DIRECTORY / name).is_file())
+
+    def test_doctor_validates_detected_native_wiring_without_skills(self):
+        project = self.root / "doctor-stale-native-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-stale-native-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        shutil.rmtree(target)
+        settings = project / ".claude" / "settings.json"
+        parsed = json.loads(settings.read_text(encoding="utf-8"))
+        parsed["hooks"]["PreToolUse"][0]["matcher"] = "Write"
+        settings.write_bytes((json.dumps(parsed) + "\n").encode("utf-8"))
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "claude native guard wiring is stale" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    @requires_symlink
+    def test_doctor_rejects_symlinked_native_and_git_wiring(self):
+        project = self.root / "doctor-symlinked-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-symlinked-wiring-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        settings = project / ".claude" / "settings.json"
+        outside_settings = self.root / "outside-settings.json"
+        shutil.copy2(settings, outside_settings)
+        settings.unlink()
+        settings.symlink_to(outside_settings)
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        outside_hook = self.root / "outside-pre-commit"
+        shutil.copy2(pre_commit, outside_hook)
+        pre_commit.unlink()
+        pre_commit.symlink_to(outside_hook)
+
+        findings = install.doctor(
+            self.source, ["claude"], lambda _target: target, project
+        )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "claude native guard wiring is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "pre-commit is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    @posix_permissions_only
+    def test_doctor_reports_unreadable_effective_git_hooks(self):
+        project = self.root / "doctor-unreadable-git-wiring"
+        project.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        target = self.root / "doctor-unreadable-git-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        for name in install.GUARD_SCRIPTS:
+            (project / install.HOOKS_DIRECTORY / name).unlink()
+        hooks = [
+            project / ".git" / "hooks" / name
+            for name in install.GIT_HOOK_NAMES
+        ]
+        for hook in hooks:
+            hook.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, [], lambda _target: target, project
+            )
+        finally:
+            for hook in hooks:
+                hook.chmod(0o755)
+
+        for name in install.GIT_HOOK_NAMES:
+            self.assertTrue(
+                any(
+                    finding["level"] == "fail"
+                    and name in finding["text"]
+                    and "cannot be read" in finding["text"]
+                    for finding in findings
+                )
+            )
+
+    @requires_symlink
+    @posix_permissions_only
+    def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
+        project = self.root / "doctor-unsafe-scripts"
+        managed = project / install.HOOKS_DIRECTORY
+        runtime = managed / "runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(self.source / "scripts" / name, runtime / name)
+        outside_guard = self.root / "outside-guard.py"
+        shutil.copy2(self.source / "scripts" / "guard_hook.py", outside_guard)
+        (managed / "guard_hook.py").symlink_to(outside_guard)
+        shutil.copy2(
+            self.source / "scripts" / "git_guard.py", managed / "git_guard.py"
+        )
+        unreadable = runtime / "pipeline_state.py"
+        unreadable.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, [], lambda _target: self.root, project
+            )
+        finally:
+            unreadable.chmod(0o644)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "guard_hook.py is a symlink" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "runtime pipeline_state.py cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_uses_pinned_runtime_without_current_source(self):
+        project = self.root / "doctor-missing-source"
+        target = self.root / "doctor-missing-source-claude" / "skills"
+        status, _, error = self.run_main(
+            ["--claude", "--claude-root", str(target), "--source-root", str(self.source), "--project", str(project)]
+        )
+        self.assertEqual(0, status, error)
+        (self.source / "scripts" / "pipeline_state.py").unlink()
+
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
+
+        self.assertFalse(
+            any(
+                finding["level"] == "fail"
+                and "package: runtime pipeline_state.py cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_reports_missing_package_version(self):
+        (self.source / "package.json").unlink()
+
+        findings = install.doctor(self.source, [], lambda _target: Path())
+
+        self.assertIn(
+            {"level": "fail", "text": "package: version cannot be read"}, findings
+        )
+
+    @posix_permissions_only
+    def test_doctor_reports_unreadable_skills_root(self):
+        root = self.root / "unreadable-skills"
+        root.mkdir()
+        root.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: root
+            )
+        finally:
+            root.chmod(0o755)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "skills root cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    @posix_permissions_only
+    def test_doctor_reports_unreadable_bridge_and_git_hooks(self):
+        project = self.root / "doctor-unreadable-contracts"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "doctor-unreadable-claude" / "skills"
+        status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        bridge = project / ".claude" / "CLAUDE.md"
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        bridge.chmod(0)
+        pre_commit.chmod(0)
+        try:
+            findings = install.doctor(
+                self.source, ["claude"], lambda _target: target, project
+            )
+        finally:
+            bridge.chmod(0o644)
+            pre_commit.chmod(0o755)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and ".claude/CLAUDE.md cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "pre-commit cannot be read" in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_uses_canonical_state_validation(self):
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(
+                PROJECT_ROOT / "scripts" / name,
+                self.source / "scripts" / name,
+            )
+        project = self.root / "canonical-doctor-project"
+        subprocess.run(
+            ["git", "init", "-q", str(project)],
+            check=True,
+            capture_output=True,
+            encoding="utf-8", errors="replace",
+        )
+        (project / "AGENTS.md").write_bytes("agents\n".encode("utf-8"))
+        (project / "WORKFLOW.md").write_bytes("workflow\n".encode("utf-8"))
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.write_bytes(
+            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n".encode("utf-8"),
+        )
+
+        findings = install.doctor(self.source, [], lambda _target: Path(), project)
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and finding["text"].startswith("state:")
+                for finding in findings
+            )
+        )
+        self.assertFalse((self.source / "scripts" / "__pycache__").exists())
+
+    @unittest.skipIf(os.name == "nt", "Windows CreateProcess also searches the calling "
+                     "program's directory, so an empty PATH still finds python")
+    def test_doctor_uses_the_reentry_interpreter_probe(self):
+        project = self.root / "doctor-without-path-python"
+        state = project / ".project" / "STATE.md"
+        state.parent.mkdir(parents=True)
+        state.write_bytes("owned\n".encode("utf-8"))
+
+        with mock.patch.dict(os.environ, {"PATH": ""}):
+            findings = install.doctor(
+                self.source, [], lambda _target: Path(), project
+            )
+
+        self.assertTrue(
+            any(
+                finding["level"] == "fail"
+                and "--doctor requires a working Python interpreter"
+                in finding["text"]
+                for finding in findings
+            )
+        )
+
+    def test_doctor_entrypoint_does_not_write_import_bytecode(self):
+        entrypoint = self.root / "doctor-entrypoint"
+        entrypoint.mkdir()
+        for name in ("install.py", "runtime_store.py", "status_runtime.py", "sync_skill_resources.py", "skill-resources.json"):
+            shutil.copy2(PROJECT_ROOT / "scripts" / name, entrypoint / name)
+        environment = os.environ.copy()
+        environment.pop("PYTHONDONTWRITEBYTECODE", None)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(entrypoint / "install.py"),
+                "--doctor",
+                "--claude",
+                "--claude-root",
+                str(self.root / "empty-skills"),
+                "--source-root",
+                str(self.source),
+            ],
+            env=environment,
+            encoding="utf-8", errors="replace",
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse((entrypoint / "__pycache__").exists())
+
+    def refresh_full_arguments(self, project):
+        return [
+            "--hooks-refresh-full",
+            "--project",
+            str(project),
+            "--source-root",
+            str(self.source),
+        ]
+
+    def test_hooks_refresh_full_merges_settings_preserving_user_keys(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["hooks"]["PreToolUse"][0]["matcher"] = "old"
+        settings["permissions"] = {"allow": ["Bash(npm test)"]}
+        settings["model"] = "opus"
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(0, status, error)
+        refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            install.CLAUDE_MATCHER, refreshed["hooks"]["PreToolUse"][0]["matcher"]
+        )
+        self.assertEqual({"allow": ["Bash(npm test)"]}, refreshed["permissions"])
+        self.assertEqual("opus", refreshed["model"])
+
+    def test_hooks_refresh_full_updates_native_codex_and_cursor_configs(self):
+        project = self.root / "native-hooks-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [
+            install.TargetPlan("codex", self.root / "codex" / "skills"),
+            install.TargetPlan("cursor", self.root / "cursor" / "skills"),
+        ]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        codex_path = project / ".codex" / "hooks.json"
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
+            'python "C:\\repo\\.gsd-path\\guard_hook.py"'
+        )
+        codex["hooks"]["PreToolUse"][0]["matcher"] = "Write"
+        codex["hooks"]["PreToolUse"][0]["hooks"].append(
+            {"type": "command", "command": "custom-codex"}
+        )
+        codex["userSetting"] = True
+        codex_path.write_bytes((json.dumps(codex) + "\n").encode("utf-8"))
+        cursor_path = project / ".cursor" / "hooks.json"
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        cursor["hooks"]["preToolUse"][0]["command"] = (
+            'python "C:\\repo\\.gsd-path\\guard_hook.py"'
+        )
+        cursor["userSetting"] = True
+        cursor_path.write_bytes((json.dumps(cursor) + "\n").encode("utf-8"))
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(0, status, error)
+        refreshed_codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            'python3 "$(git rev-parse --show-toplevel)/.gsd-path/guard_hook.py"',
+            refreshed_codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertTrue(refreshed_codex["userSetting"])
+        self.assertEqual(2, len(refreshed_codex["hooks"]["PreToolUse"]))
+        self.assertEqual(1, len(refreshed_codex["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(
+            "Write", refreshed_codex["hooks"]["PreToolUse"][1]["matcher"]
+        )
+        self.assertEqual(
+            "custom-codex",
+            refreshed_codex["hooks"]["PreToolUse"][1]["hooks"][0]["command"],
+        )
+        refreshed_cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            'python3 ".gsd-path/guard_hook.py"',
+            refreshed_cursor["hooks"]["preToolUse"][0]["command"],
+        )
+        self.assertTrue(refreshed_cursor["hooks"]["preToolUse"][0]["failClosed"])
+        self.assertTrue(refreshed_cursor["userSetting"])
+        self.assertEqual(1, len(refreshed_cursor["hooks"]["preToolUse"]))
+
+    def test_hooks_refresh_full_creates_selected_missing_native_configs(self):
+        project = self.root / "existing-project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex", "--cursor"]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertTrue((project / ".codex" / "hooks.json").is_file())
+        self.assertTrue((project / ".cursor" / "hooks.json").is_file())
+        self.assertEqual(
+            install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8")),
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
+        )
+
+    def test_hooks_refresh_full_merges_selected_foreign_native_configs(self):
+        project = self.root / "foreign-native-project"
+        (project / ".git").mkdir(parents=True)
+        self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
+        codex_path = project / ".codex" / "hooks.json"
+        cursor_path = project / ".cursor" / "hooks.json"
+        codex_path.parent.mkdir()
+        cursor_path.parent.mkdir()
+        codex_path.write_bytes(
+            json.dumps(
+                {
+                    "custom": "codex",
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": "Custom",
+                                "hooks": [{"type": "command", "command": "custom-codex"}],
+                            }
+                        ]
+                    },
+                }
+            ).encode("utf-8"),
+        )
+        cursor_path.write_bytes(
+            json.dumps(
+                {
+                    "custom": "cursor",
+                    "hooks": {
+                        "preToolUse": [
+                            {"matcher": "Custom", "command": "custom-cursor"}
+                        ]
+                    },
+                }
+            ).encode("utf-8"),
+        )
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex", "--cursor"]
+            )
+
+        self.assertEqual(0, status, error)
+        codex = json.loads(codex_path.read_text(encoding="utf-8"))
+        cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
+        self.assertEqual("codex", codex["custom"])
+        self.assertEqual(
+            "custom-codex",
+            codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+        )
+        self.assertEqual(2, len(codex["hooks"]["PreToolUse"]))
+        self.assertEqual("cursor", cursor["custom"])
+        self.assertEqual(
+            "custom-cursor", cursor["hooks"]["preToolUse"][0]["command"]
+        )
+        self.assertEqual(2, len(cursor["hooks"]["preToolUse"]))
+
+    def test_hooks_refresh_full_rejects_unselected_foreign_native_config(self):
+        project = self.root / "unselected-foreign-project"
+        (project / ".git").mkdir(parents=True)
+        self.run_main(self.hooks_arguments(project, self.root / "claude" / "skills"))
+        settings = project / ".codex" / "hooks.json"
+        settings.parent.mkdir()
+        original = (
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "matcher": ".*",
+                                "hooks": [
+                                    {
+                                        "type": "command",
+                                        "command": "echo .gsd-path/guard_hook.py",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                }
+            )
+            + "\n"
+        )
+        settings.write_bytes(original.encode("utf-8"))
+
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path hook settings file", error)
+        self.assertEqual(original, settings.read_text(encoding="utf-8"))
+
+    @requires_symlink
+    def test_hooks_refresh_full_does_not_follow_legacy_temporary_symlink(self):
+        project = self.root / "temporary-symlink-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [install.TargetPlan("codex", self.root / "codex" / "skills")]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        outside = self.root / "outside-hooks.json"
+        outside.write_bytes("outside\n".encode("utf-8"))
+        legacy_temporary = project / ".codex" / ".hooks.json.gsd-path-tmp"
+        legacy_temporary.symlink_to(outside)
+
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--codex"]
+            )
+
+        self.assertEqual(0, status, error)
+        self.assertEqual("outside\n", outside.read_text(encoding="utf-8"))
+        self.assertTrue(legacy_temporary.is_symlink())
+
+    @requires_symlink
+    def test_hooks_refresh_full_rejects_symlinked_native_parent(self):
+        project = self.root / "symlink-parent-project"
+        (project / ".git").mkdir(parents=True)
+        plans = [install.TargetPlan("codex", self.root / "codex" / "skills")]
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            install.install(self.source, plans, project=project, hooks=True)
+        outside = self.root / "outside-codex"
+        (project / ".codex").rename(outside)
+        (project / ".codex").symlink_to(outside, target_is_directory=True)
+        before = (outside / "hooks.json").read_text(encoding="utf-8")
+
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(
+            before, (outside / "hooks.json").read_text(encoding="utf-8")
+        )
+
+    def test_hooks_refresh_full_rejects_malformed_managed_settings(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings_path.write_bytes("{ guard_hook.py .gsd-path\n".encode("utf-8"))
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(1, status)
+        self.assertIn("not valid JSON", error)
+        self.assertEqual(
+            "{ guard_hook.py .gsd-path\n", settings_path.read_text(encoding="utf-8")
+        )
+
+    @posix_permissions_only
+    def test_hooks_refresh_full_recreates_missing_git_hooks_and_modes(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        commit_msg = project / ".git" / "hooks" / "commit-msg"
+        pre_commit.unlink()
+        commit_msg.chmod(0o644)
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            install.pre_commit_hook("python3"), pre_commit.read_text(encoding="utf-8")
+        )
+        self.assertTrue(os.access(pre_commit, os.X_OK))
+        self.assertTrue(os.access(commit_msg, os.X_OK))
+
+    @requires_symlink
+    def test_hooks_refresh_full_rejects_symlinked_settings(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        outside = self.root / "outside-settings.json"
+        settings_path.rename(outside)
+        settings_path.symlink_to(outside)
+        before = outside.read_text(encoding="utf-8")
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(1, status)
+        self.assertIn("symlink", error)
+        self.assertEqual(before, outside.read_text(encoding="utf-8"))
+
+    def run_git(self, *args):
+        result = subprocess.run(
+            ["git", *args], capture_output=True, encoding="utf-8", errors="replace", check=False
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_hooks_install_into_core_hookspath_directory(self):
+        project = self.root / "hookspath-project"
+        project.mkdir()
+        self.run_git("init", "-q", str(project))
+        self.run_git("-C", str(project), "config", "core.hooksPath", ".husky")
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, output, error = self.run_main(
+                self.hooks_arguments(project, target)
+            )
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            install.pre_commit_hook("python3"),
+            (project / ".husky" / "pre-commit").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(
+            install.commit_msg_hook("python3"),
+            (project / ".husky" / "commit-msg").read_text(encoding="utf-8"),
+        )
+        self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
+        self.assertIn(".husky/pre-commit", output)
+
+    def test_hooks_reject_git_file_that_cannot_be_resolved(self):
+        project = self.root / "gitfile-project"
+        project.mkdir()
+        (project / ".git").write_bytes("gitdir: /nonexistent\n".encode("utf-8"))
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            with mock.patch.object(
+                install, "_resolve_git_hooks_path", return_value=None
+            ):
+                status, _, error = self.run_main(
+                    self.hooks_arguments(project, target)
+                )
+        self.assertEqual(1, status)
+        self.assertRegex(error, "initialized Git repository.*selected hosts: claude")
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+        self.assertFalse((project / ".claude" / "settings.json").exists())
+        self.assertFalse(target.exists())
+
+    def test_hooks_refresh_full_preserves_user_hook_events_and_entries(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["hooks"]["PreToolUse"][0]["matcher"] = "Write"
+        settings["hooks"]["PreToolUse"][0]["label"] = "user-scope"
+        settings["hooks"]["PreToolUse"][0]["hooks"].append(
+            {"type": "command", "command": "echo nested"}
+        )
+        user_entry = {
+            "matcher": "WebFetch",
+            "hooks": [{"type": "command", "command": "echo user"}],
+        }
+        settings["hooks"]["PreToolUse"].append(user_entry)
+        stop_entry = [{"hooks": [{"type": "command", "command": "echo done"}]}]
+        settings["hooks"]["Stop"] = stop_entry
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
+        status, _, error = self.run_main(self.refresh_full_arguments(project))
+        self.assertEqual(0, status, error)
+        refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(stop_entry, refreshed["hooks"]["Stop"])
+        self.assertEqual(3, len(refreshed["hooks"]["PreToolUse"]))
+        self.assertEqual(
+            install.CLAUDE_MATCHER, refreshed["hooks"]["PreToolUse"][0]["matcher"]
+        )
+        self.assertEqual(1, len(refreshed["hooks"]["PreToolUse"][0]["hooks"]))
+        self.assertEqual(
+            {
+                "matcher": "Write",
+                "label": "user-scope",
+                "hooks": [{"type": "command", "command": "echo nested"}],
+            },
+            refreshed["hooks"]["PreToolUse"][1],
+        )
+        self.assertEqual(user_entry, refreshed["hooks"]["PreToolUse"][2])
+
+    def test_emitted_hooks_use_probed_interpreter_token(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="pythonX"
+        ):
+            status, _, error = self.run_main(self.hooks_arguments(project, target))
+        self.assertEqual(0, status, error)
+        pre_commit = (project / ".git" / "hooks" / "pre-commit").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('exec pythonX "', pre_commit)
+        settings = json.loads(
+            (project / ".claude" / "settings.json").read_text(encoding="utf-8")
+        )
+        command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.assertTrue(command.startswith('pythonX "'), command)
+
+    def test_native_hook_install_requires_interpreter(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            status, _, error = self.run_main(
+                self.hooks_arguments(project, target)
+            )
+        self.assertEqual(1, status)
+        self.assertRegex(error, "working Python interpreter.*selected hosts: claude")
+        self.assertFalse((project / install.HOOKS_DIRECTORY).exists())
+        self.assertFalse((project / ".claude" / "settings.json").exists())
+        self.assertFalse((project / ".git" / "hooks" / "pre-commit").exists())
+        self.assertFalse((project / "AGENTS.md").exists())
+
+    def test_hooks_refresh_full_rejects_before_writes_without_interpreter(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        settings_path = project / ".claude" / "settings.json"
+        settings_before = settings_path.read_text(encoding="utf-8")
+        pre_commit = project / ".git" / "hooks" / "pre-commit"
+        hook_before = pre_commit.read_text(encoding="utf-8")
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# guard v2\n{install.GUARD_MARKER}\n".encode("utf-8")
+        )
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value=None
+        ):
+            status, _, error = self.run_main(
+                self.refresh_full_arguments(project)
+            )
+        self.assertEqual(1, status)
+        self.assertIn("working Python interpreter", error)
+        self.assertNotIn(
+            "guard v2",
+            (project / install.HOOKS_DIRECTORY / "guard_hook.py").read_text(encoding="utf-8"),
+        )
+        self.assertEqual(settings_before, settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(hook_before, pre_commit.read_text(encoding="utf-8"))
+
+    def test_selected_full_refresh_requires_repository_before_writes(self):
+        project = self.root / "plain-refresh-project"
+        managed = project / install.HOOKS_DIRECTORY
+        managed.mkdir(parents=True)
+        for name in install.GUARD_SCRIPTS:
+            (managed / name).write_bytes(
+                f"old\n{install.GUARD_MARKER}\n".encode("utf-8")
+            )
+        before = (managed / "guard_hook.py").read_text(encoding="utf-8")
+        with mock.patch.object(
+            install, "_detect_python_interpreter", return_value="python3"
+        ):
+            status, _, error = self.run_main(
+                [
+                    "--hooks-refresh-full",
+                    "--grok",
+                    "--project",
+                    str(project),
+                    "--source-root",
+                    str(self.source),
+                ]
+            )
+        self.assertEqual(1, status)
+        self.assertIn("initialized Git repository", error)
+        self.assertEqual(before, (managed / "guard_hook.py").read_text(encoding="utf-8"))
+
+    def test_hooks_refresh_dry_run_never_probes_interpreter(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        with mock.patch.object(
+            install,
+            "_detect_python_interpreter",
+            side_effect=AssertionError("dry-run refresh must not probe"),
+        ):
+            status, _, error = self.run_main(
+                [*self.refresh_full_arguments(project), "--dry-run"]
+            )
+        self.assertEqual(0, status, error)
+
+    def test_hooks_refresh_rejects_non_utf8_guard_script_without_traceback(self):
+        project = self.root / "project"
+        (project / ".git").mkdir(parents=True)
+        target = self.root / "claude" / "skills"
+        self.run_main(self.hooks_arguments(project, target))
+        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_bytes(
+            b"\xff\xfe binary\n"
+        )
+        status, _, error = self.run_main(
+            [
+                "--hooks-refresh",
+                "--project",
+                str(project),
+                "--source-root",
+                str(self.source),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("not a managed GSD Path guard script", error)
+        self.assertNotIn("Traceback", error)
+
+
+class InstallerParityTests(unittest.TestCase):
+    """Both installers must produce the same project tree and result lines."""
+
+    SCENARIOS = {
+        "claude": [["--claude", "--local", "--project", "."]],
+        "codex-hooks": [["--codex", "--local", "--project", ".", "--hooks"]],
+        "update": [
+            ["--claude", "--local", "--project", ".", "--hooks"],
+            ["--claude", "--update", "--local", "--project", ".", "--hooks"],
+        ],
+        "hooks-existing-settings": [["--claude", "--local", "--project", ".", "--hooks"]],
+        "existing-contract": [
+            ["--claude", "--local", "--project", "."],
+            ["--claude", "--local", "--project", "."],
+        ],
+    }
+    INSTALLERS = {
+        "node": ["node", str(PROJECT_ROOT / "scripts" / "install.mjs")],
+        "python": [sys.executable, str(PROJECT_ROOT / "scripts" / "install.py")],
+    }
+
+    def run_scenario(self, kind, name, steps):
+        project = self.root / name / kind
+        project.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+        if name == "hooks-existing-settings":
+            (project / ".claude").mkdir()
+            (project / ".claude" / "settings.json").write_bytes(
+                '{"userSetting": true, "hooks": {"PreToolUse": [{"matcher": "Bash", '
+                '"hooks": [{"type": "command", "command": "echo hi"}]}]}}\n'.encode("utf-8"),
+            )
+        outputs = []
+        for step in steps:
+            result = subprocess.run(
+                self.INSTALLERS[kind] + step,
+                cwd=project,
+                # Node always writes UTF-8; make Python match so glyphs decode
+                # identically instead of through the Windows code page.
+                encoding="utf-8",
+                capture_output=True,
+                env={**os.environ, "NO_COLOR": "1", "PYTHONIOENCODING": "utf-8"},
+            )
+            outputs.append((result.returncode, self.result_lines(result, project)))
+        return outputs, self.snapshot(project)
+
+    @staticmethod
+    def result_lines(result, project):
+        # Keep the per-target, project, and error lines; drop the Node banner
+        # and footer, decoration glyphs, and the temp directory path.
+        lines = []
+        for line in (result.stdout + result.stderr).splitlines():
+            line = line.strip().lstrip("✓✗ ")
+            if line.startswith("error: "):
+                line = line[len("error: ") :]
+            if ": " in line and not line.startswith(("✦", "project install", "project update")):
+                lines.append(line.replace(str(project), "<PROJECT>"))
+        return lines
+
+    @staticmethod
+    def snapshot(project):
+        tree = {}
+        for path in sorted(project.rglob("*")):
+            parts = path.relative_to(project).parts
+            if parts[0] == ".git" and parts[:2] != (".git", "hooks"):
+                continue
+            key = "/".join(parts)
+            if path.is_symlink():
+                tree[key] = ("symlink", os.readlink(path))
+            elif path.is_dir():
+                tree[key] = ("dir",)
+            else:
+                tree[key] = (
+                    oct(path.stat().st_mode & 0o777),
+                    path.read_bytes().replace(str(project).encode(), b"<PROJECT>"),
+                )
+        return tree
+
+    def test_node_and_python_installers_match(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.root = Path(temporary)
+            for name, steps in self.SCENARIOS.items():
+                with self.subTest(scenario=name):
+                    node_outputs, node_tree = self.run_scenario("node", name, steps)
+                    python_outputs, python_tree = self.run_scenario("python", name, steps)
+                    self.assertEqual(node_outputs, python_outputs)
+                    self.assertEqual(sorted(node_tree), sorted(python_tree))
+                    for key, entry in node_tree.items():
+                        self.assertEqual(entry, python_tree[key], key)
+
+
+if __name__ == "__main__":
+    unittest.main()

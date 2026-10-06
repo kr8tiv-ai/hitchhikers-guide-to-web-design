@@ -1,0 +1,77 @@
+---
+title: "Captures and triage"
+description: "Fire-and-forget thought capture during auto-mode with automated triage."
+---
+
+Captures let you fire-and-forget thoughts during auto-mode execution. Instead of pausing to steer, capture ideas, bugs, or scope changes and let GSD triage them at natural seams between tasks.
+
+## Quick start
+
+While auto-mode is running (or any time):
+
+```
+/gsd capture "add rate limiting to the API endpoints"
+/gsd capture "the auth flow should support OAuth, not just JWT"
+```
+
+Captures are stored in the GSD database and triaged automatically between tasks. `.gsd/CAPTURES.md` is rendered from the database; edits to it are not read.
+
+## How it works
+
+```
+capture → triage → confirm → resolve → resume
+```
+
+<Steps>
+  <Step title="Capture">
+    `/gsd capture "thought"` records the thought in the GSD database with a timestamp and unique ID, and renders `.gsd/CAPTURES.md`.
+  </Step>
+  <Step title="Triage">
+    At natural seams between tasks, GSD classifies each capture.
+  </Step>
+  <Step title="Confirm">
+    You're shown the proposed resolution. Plan-modifying resolutions require confirmation.
+  </Step>
+  <Step title="Resolve">
+    The resolution is applied (task injection, replan trigger, deferral, etc.).
+  </Step>
+  <Step title="Resume">
+    Auto-mode continues.
+  </Step>
+</Steps>
+
+## Classification types
+
+| Type | Meaning | Resolution |
+|------|---------|------------|
+| `quick-task` | Small, self-contained fix | Inline quick task executed immediately |
+| `inject` | New task needed in current slice | Task injected into the active slice plan |
+| `defer` | Important but not urgent | Deferred to roadmap reassessment |
+| `replan` | Changes the current approach | Triggers slice replan with capture context |
+| `note` | Informational, no action | Acknowledged, no plan changes |
+
+## Manual triage
+
+Trigger triage at any time:
+
+```
+/gsd triage
+```
+
+Useful when you've accumulated several captures and want to process them before the next natural seam.
+
+## Dashboard integration
+
+The progress widget shows a pending capture count badge when captures are waiting for triage. Visible in both the `Ctrl+Alt+G` dashboard and the auto-mode widget.
+
+## Context injection
+
+Capture context is automatically injected into:
+- **Replan-slice prompts** — so the replan knows what triggered it
+- **Reassess-roadmap prompts** — so deferred captures influence roadmap decisions
+
+## Worktree awareness
+
+Captures are rows of the project database, which the project root and every worktree share. A capture from a steering terminal is visible to the auto-mode session running in a worktree. The render is always the **original project root's** `.gsd/CAPTURES.md`.
+
+A `CAPTURES.md` section that the database does not hold (written by an older release, by hand, or committed by a teammate) is not read. `/gsd doctor` reports it and `/gsd doctor --fix` imports it.

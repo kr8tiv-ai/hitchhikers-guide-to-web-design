@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "claude",
+  "run_id": "ecd2e7c8-166c-4314-86e1-bc0164b54a9f",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -B -m unittest -v test_count.py",
+  "output": "{\"command\": \"python3 -B -m unittest -v test_count.py\", \"commit\": \"3f14c2146fe7585adb58a0d2cf97df5f69141bc8\", \"recorded_at\": \"2026-09-14T23:52:31+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -v -p 'test_*.py'\", \"commit\": \"07f02049da371aa42e837582f6961e6ecf71868f\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"test_invalid_input_fails_cleanly (test_count.InvalidInputTest) ... ok\\ntest_json_output (test_count.JsonOutputTest) ... ok\\ntest_no_argument_prints_zero (test_count.PlainOutputTest) ... ok\\ntest_signed_integers (test_count.PlainOutputTest) ... ok\\n\\n----------------------------------------------------------------------\\nRan 4 tests in 0.277s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/claude/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-14T23:57:27+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-count-json-cli/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

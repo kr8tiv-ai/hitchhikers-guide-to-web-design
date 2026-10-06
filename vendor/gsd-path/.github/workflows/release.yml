@@ -1,0 +1,165 @@
+name: Release
+
+# Publishes to npm and creates a GitHub Release after the trust-evidence gate.
+# Requires npm Trusted Publishing for open-gsd/gsd-path, workflow release.yml.
+# Updates CHANGELOG.md and the README release section, then syncs them to main.
+#
+# Triggers:
+#   1. Push a version tag: git tag v1.0.1 && git push origin v1.0.1
+#   2. Manual dispatch: verify and publish the prepared package version
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Prepared semver (optional; defaults to package.json)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Resolve release version
+        id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ -n "${RELEASE_VERSION:-}" ]]; then
+              version="$RELEASE_VERSION"
+            else
+              version="$(node -p "require('./package.json').version")"
+            fi
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$'; then
+            echo "invalid semver version: $version" >&2
+            exit 1
+          fi
+          package_name="$(node -p "require('./package.json').name")"
+          if [[ "$package_name" != "@opengsd/gsd-path" ]]; then
+            echo "release package must be @opengsd/gsd-path, found $package_name" >&2
+            exit 1
+          fi
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$version" != "$package_version" ]]; then
+            echo "release version $version does not match package version $package_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check prerequisites
+        run: npm run check:prereqs
+
+      - name: Verify release gate
+        run: npm run verify:release
+
+      - name: Update release documentation
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/update_release_docs.mjs --version "$VERSION"
+
+      - name: Verify npm package packs cleanly
+        run: npm pack --dry-run --json > /tmp/npm-pack.json
+
+      - name: Create release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            if [[ "$(git rev-parse "refs/tags/$TAG^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+              echo "tag $TAG points to another commit" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Publish to npm
+        # verify:release already passed; do not repeat it through prepublishOnly.
+        run: npm publish --access public --provenance --ignore-scripts
+
+      - name: Sync release documentation to main
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- CHANGELOG.md README.md; then
+            echo "No release documentation changes to sync"
+            exit 0
+          fi
+          cp CHANGELOG.md README.md /tmp/
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          cp /tmp/CHANGELOG.md /tmp/README.md .
+          git add CHANGELOG.md README.md
+          if git diff --cached --quiet; then
+            echo "Release documentation already present on main"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: update release notes for v${VERSION}"
+          git push origin main
+          git checkout "$TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes_file="$(mktemp)"
+          {
+            node scripts/update_release_docs.mjs --version "$VERSION" --notes-only
+            echo
+            echo "Trust evidence for this version is validated by \`npm run verify:release\`."
+            echo "See [HOST-MATRIX.md](docs/trust-validation/HOST-MATRIX.md) for per-host receipts."
+          } > "$notes_file"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists; skipping create"
+          else
+            gh release create "$TAG" \
+              --title "gsd-path $VERSION" \
+              --notes-file "$notes_file" \
+              --verify-tag
+          fi

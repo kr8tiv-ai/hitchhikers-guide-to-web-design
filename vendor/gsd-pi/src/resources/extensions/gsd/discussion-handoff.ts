@@ -1,0 +1,234 @@
+// Project/App: gsd-pi
+// File Purpose: Owns the guided-discuss to auto-mode handoff.
+
+import type { ExtensionAPI, ExtensionCommandContext } from "@gsd/pi-coding-agent";
+import { startAutoDetached } from "./auto.js";
+import { extractDepthVerificationMilestoneId, getPendingGate } from "./bootstrap/write-gate.js";
+import { getAllMilestones, getMilestone, getMilestoneSlices, isDbAvailable } from "./gsd-db.js";
+import { registerMilestones } from "./milestone-registration.js";
+import { getMilestoneScopedArtifacts } from "./db/queries.js";
+import {
+  classifyMilestoneReadiness,
+  formatAcceptedDiscussHandoffMessage,
+} from "./milestone-readiness.js";
+import { clearPathCache, resolveMilestoneFile } from "./paths.js";
+import { _getPendingAutoStart, deletePendingAutoStart, type PendingAutoStartEntry } from "./pending-auto-start.js";
+import { logWarning } from "./workflow-logger.js";
+import { removeProjectionFileSync } from "./atomic-write.js";
+import { isClosedStatus, isDiscardedMilestoneStatus } from "./status-guards.js";
+import { readWorkCheckpoint } from "./work-checkpoint.js";
+
+type AutoStartOptions = Parameters<typeof startAutoDetached>[4];
+type AutoStartLauncher = typeof startAutoDetached;
+
+// Cap failed in-flight DB row repair attempts before escalating to the user.
+const MAX_DB_ROW_RECOVERIES = 3;
+const PROJECT_DEPTH_GATE_IDS = new Set([
+  "depth_verification_project_confirm",
+  "depth_verification_requirements_confirm",
+]);
+
+export function scheduleAutoStartAfterIdle(
+  ctx: ExtensionCommandContext,
+  pi: ExtensionAPI,
+  basePath: string,
+  verboseMode: boolean,
+  options?: AutoStartOptions,
+  launch: AutoStartLauncher = startAutoDetached,
+): void {
+  const waitForIdle =
+    typeof (ctx as { waitForIdle?: unknown }).waitForIdle === "function"
+      ? ctx.waitForIdle.bind(ctx)
+      : async () => {};
+  void waitForIdle()
+    .then(() => {
+      setTimeout(() => launch(ctx, pi, basePath, verboseMode, options), 0);
+    })
+    .catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`Auto-start failed while waiting for the prior turn to settle: ${message}`, "error");
+      logWarning("guided", `auto-start idle wait failed: ${message}`);
+    });
+}
+
+function notifyDbRowRecoveryFailed(entry: PendingAutoStartEntry): void {
+  entry.ctx.ui.notify(
+    `Milestone ${entry.milestoneId}: DB row recovery failed ${entry.r3bRecoveryCount} times. ` +
+    `Re-run /gsd to reset the recovery counter, or run /gsd-debug to diagnose without resetting.`,
+    "error",
+  );
+}
+
+function noteDbRowRecoveryMiss(entry: PendingAutoStartEntry): void {
+  entry.r3bRecoveryCount += 1;
+  if (entry.r3bRecoveryCount >= MAX_DB_ROW_RECOVERIES) {
+    notifyDbRowRecoveryFailed(entry);
+  }
+}
+
+function ensureMilestoneRowForAcceptedHandoff(
+  entry: PendingAutoStartEntry,
+  hasDbContext: boolean,
+): boolean {
+  if (!isDbAvailable()) {
+    logWarning(
+      "guided",
+      `R3b: milestone ${entry.milestoneId} DB-row recovery skipped because DB is unavailable`,
+    );
+    return false;
+  }
+
+  const { milestoneId } = entry;
+  const milestoneRow = getMilestone(milestoneId);
+  if (milestoneRow) return true;
+
+  // Only a CONTEXT artifact row saved through gsd_summary_save proves the
+  // discussion; a CONTEXT.md file on disk never creates the milestone row.
+  if (!hasDbContext) {
+    entry.ctx.ui.notify(
+      `Milestone ${milestoneId}: discuss artifacts on disk but no DB row exists. ` +
+      `PROJECT.md may have failed to register milestones. ` +
+      `Re-save PROJECT.md with canonical "- [ ] M001: Title — One-liner" lines, ` +
+      `then re-run /gsd to recover.`,
+      "error",
+    );
+    return false;
+  }
+
+  if (entry.r3bRecoveryCount >= MAX_DB_ROW_RECOVERIES) {
+    logWarning(
+      "guided",
+      `R3b: milestone ${milestoneId} DB-row recovery limit reached ` +
+      `(${entry.r3bRecoveryCount}/${MAX_DB_ROW_RECOVERIES}); user already notified`,
+    );
+    return false;
+  }
+
+  logWarning(
+    "guided",
+    `R3b: ${milestoneId} has a CONTEXT artifact row but no milestone row — inserting placeholder "queued" row ` +
+    `(attempt ${entry.r3bRecoveryCount + 1}/${MAX_DB_ROW_RECOVERIES})`,
+  );
+
+  let inserted = false;
+  try {
+    inserted = registerMilestones([{ id: milestoneId, title: milestoneId }], "discussion-handoff-recovery").length > 0;
+  } catch (e) {
+    logWarning("guided", `R3b: milestone registration failed: ${(e as Error).message}`);
+  }
+
+  if (inserted) return true;
+  if (getMilestone(milestoneId)) return true;
+
+  noteDbRowRecoveryMiss(entry);
+  return false;
+}
+
+function hasBlockingDepthGate(entry: PendingAutoStartEntry): boolean {
+  const basePathForGate = entry.scope.workspace.projectRoot;
+  const pendingGateId = getPendingGate(basePathForGate);
+  if (!pendingGateId) return false;
+
+  const pendingMilestoneId = extractDepthVerificationMilestoneId(pendingGateId);
+  return pendingMilestoneId === entry.milestoneId || PROJECT_DEPTH_GATE_IDS.has(pendingGateId);
+}
+
+/**
+ * Milestones that this discussion registered and that have no readiness
+ * decision row: no CONTEXT or CONTEXT-DRAFT artifact, no planned slice, and no
+ * Work Checkpoint (the record of "queue it for later").
+ */
+function milestonesWithoutReadinessDecision(entry: PendingAutoStartEntry): string[] {
+  const discussionStart = new Date(entry.createdAt).toISOString();
+  return getAllMilestones()
+    .filter((milestone) =>
+      milestone.id !== entry.milestoneId &&
+      milestone.created_at >= discussionStart &&
+      !isClosedStatus(milestone.status) &&
+      !isDiscardedMilestoneStatus(milestone.status))
+    .filter((milestone) =>
+      !getMilestoneScopedArtifacts(milestone.id).some((artifact) =>
+        artifact.artifact_type === "CONTEXT" || artifact.artifact_type === "CONTEXT-DRAFT") &&
+      getMilestoneSlices(milestone.id).length === 0 &&
+      !readWorkCheckpoint({ milestoneId: milestone.id }))
+    .map((milestone) => milestone.id);
+}
+
+function cleanupAcceptedHandoffArtifacts(entry: PendingAutoStartEntry): void {
+  const { basePath, milestoneId } = entry;
+  try {
+    const draftFile = resolveMilestoneFile(basePath, milestoneId, "CONTEXT-DRAFT");
+    if (draftFile) removeProjectionFileSync(draftFile);
+  } catch (e) {
+    logWarning("guided", `CONTEXT-DRAFT.md unlink failed: ${(e as Error).message}`);
+  }
+}
+
+/** Called from agent_end to check if auto-mode should start after discuss. */
+export function checkAutoStartAfterDiscuss(lookupBasePath?: string): boolean {
+  // Clear the path cache so layout-aware resolution sees fresh directory
+  // listings — the cache may have been primed before discuss wrote its
+  // artifacts (e.g. CONTEXT.md), causing resolveMilestoneFile to miss them.
+  clearPathCache();
+  const entry = _getPendingAutoStart(lookupBasePath);
+  if (!entry) return false;
+
+  const { ctx, pi, basePath, milestoneId, step } = entry;
+  if (hasBlockingDepthGate(entry)) return false;
+
+  // Database rows decide the handoff: a CONTEXT artifact row saved through
+  // gsd_summary_save, or planned slices. State derivation reads those rows,
+  // so a file with no row would send auto-mode back into discuss on every
+  // start (#2107). A milestone with slices is already planned and never routes
+  // back to discuss, so it is accepted without a CONTEXT row.
+  const hasDbContext = isDbAvailable() &&
+    getMilestoneScopedArtifacts(milestoneId).some(a => a.artifact_type === "CONTEXT");
+  const accepted = hasDbContext || (isDbAvailable() && getMilestoneSlices(milestoneId).length > 0);
+  // The files prove nothing. They only tell a discussion that has not written
+  // yet (wait silently) from one that wrote files and no rows (say why).
+  // Layout-aware resolution finds flat-phase (phases/NN-slug/) and legacy
+  // (milestones/MID/) projects.
+  const contextFile = resolveMilestoneFile(basePath, milestoneId, "CONTEXT");
+  const roadmapFile = resolveMilestoneFile(basePath, milestoneId, "ROADMAP");
+  if (!accepted && !contextFile && !roadmapFile) return false;
+
+  if (!ensureMilestoneRowForAcceptedHandoff(entry, hasDbContext)) return false;
+  if (!accepted) {
+    ctx.ui.notify(
+      contextFile
+        ? `Milestone ${milestoneId}: CONTEXT.md is on disk but not in the database. ` +
+          `Save the context with gsd_summary_save (artifact_type "CONTEXT"); a file write does not register it.`
+        : `Milestone ${milestoneId}: ROADMAP.md is on disk but the database has no slices. ` +
+          `Plan the milestone with gsd_plan_milestone; a file write does not register it.`,
+      "error",
+    );
+    return false;
+  }
+
+  const undecided = milestonesWithoutReadinessDecision(entry);
+  if (undecided.length > 0) {
+    ctx.ui.notify(
+      `Auto-mode starts after a readiness decision is recorded for ${undecided.join(", ")}: ` +
+      `save CONTEXT or CONTEXT-DRAFT with gsd_summary_save, or record "queue it" with gsd_checkpoint_save.`,
+      "info",
+    );
+    return false;
+  }
+
+  cleanupAcceptedHandoffArtifacts(entry);
+  deletePendingAutoStart(basePath);
+
+  const readiness = classifyMilestoneReadiness({
+    status: getMilestone(milestoneId)?.status,
+    hasContext: hasDbContext,
+    sliceCount: getMilestoneSlices(milestoneId).length,
+  });
+  ctx.ui.notify(
+    formatAcceptedDiscussHandoffMessage(milestoneId, readiness),
+    "success",
+  );
+  if (entry.startAuto !== false) {
+    scheduleAutoStartAfterIdle(ctx, pi, basePath, false, { step: step ?? true });
+  }
+  return true;
+}

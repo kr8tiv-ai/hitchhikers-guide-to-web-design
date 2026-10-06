@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "795bf3f3-cbbd-4682-a8b3-14d80455cf76",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B .gsd-path/runtime/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"commit\": \"1debec7d69028659e73b32a58a177f3e96ad66ed\"}",
+  "archive_path": ".project/archive/001-count-json-cli",
+  "validation_exit_code": 0
+}

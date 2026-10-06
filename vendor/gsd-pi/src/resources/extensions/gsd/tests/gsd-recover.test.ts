@@ -1,0 +1,2350 @@
+import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
+// gsd-recover.test.ts — Public `gsd recover` Application tests plus legacy
+// Markdown-importer characterization kept below the public entrypoint boundary.
+
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import {
+  openDatabase,
+  closeDatabase,
+  transaction,
+  getAllMilestones,
+  getMilestoneSlices,
+  getSliceTasks,
+  _getAdapter,
+  insertMilestone,
+  insertSlice,
+  insertTask,
+  getMilestone,
+  getSlice,
+  getTask,
+} from '../gsd-db.ts';
+import { migrateHierarchyToDb } from './helpers/md-importer.ts';
+import { deriveStateFromDb, invalidateStateCache } from '../state.ts';
+import { handleRecover } from '../commands-maintenance.ts';
+import { generateDecisionsMd, generateRequirementsMd, saveArtifactToDb, saveDecisionToDb, saveRequirementToDb } from '../db-writer.ts';
+import { hasSavedArtifact } from '../db/queries.ts';
+import { getAllDecisionsFromMemories } from '../context-store.ts';
+import { captureKnowledgeEntry } from '../knowledge-capture.ts';
+import { renderKnowledgeProjection } from '../knowledge-projection.ts';
+import { createMemory, supersedeMemory, updateMemoryContent } from '../memory-store.ts';
+import {
+  _setLegacyImportBaseSnapshotSchemaVersionForTest,
+  captureCurrentLegacyImportBaseSnapshot,
+  legacyImportBaseSnapshotAtVersion,
+} from '../legacy-import-preview-base.ts';
+import { createLegacyImportPreview } from '../legacy-import-preview.ts';
+import { fingerprintLegacyImportCorpusTree } from './helpers/legacy-import-corpus.ts';
+import { executeDomainOperation } from '../db/domain-operation.ts';
+import {
+  _setRecoverManifestSyncForTest,
+  applyPreparedVerifiedRecoverApplication,
+  applyVerifiedRecoverApplication,
+  loadVerifiedRecoverApplication,
+  openWorkflowDatabase,
+  persistVerifiedRecoverRestoreApproval,
+  prepareVerifiedRecoverApplication,
+  resolvePreparedVerifiedRecoverApplication,
+} from '../db-workspace.ts';
+import { inspectLegacyImportApplicationEvidence } from '../legacy-import-application-evidence.ts';
+import { verifyLegacyImportApplicationTargets } from '../legacy-import-application-result.ts';
+import { executeLegacyImportRecoveryAction } from '../legacy-import-recovery-action.ts';
+import { _restoreLegacyImportLiveForTest } from '../legacy-import-live-restore.ts';
+import {
+  assessLegacyImportRestore,
+  LEGACY_IMPORT_RESTORE_ASSESSMENT_CONSENT_SCHEMA_VERSION,
+} from '../legacy-import-restore-assessment.ts';
+// ─── Fixture Helpers ───────────────────────────────────────────────────────
+
+function createFixtureBase(): string {
+  const base = mkdtempSync(join(tmpdir(), 'gsd-recover-'));
+  mkdirSync(join(base, '.gsd', 'milestones'), { recursive: true });
+  return base;
+}
+
+function writeFile(base: string, relativePath: string, content: string): void {
+  const full = join(base, '.gsd', relativePath);
+  mkdirSync(join(full, '..'), { recursive: true });
+  writeFileSync(full, content);
+}
+
+function cleanup(base: string): void {
+  rmSync(base, { recursive: true, force: true });
+}
+
+function makeCtx(confirm?: () => Promise<boolean>): {
+  ctx: any;
+  notes: Array<{ message: string; kind: string }>;
+  prompts: string[];
+} {
+  const notes: Array<{ message: string; kind: string }> = [];
+  const prompts: string[] = [];
+  return {
+    ctx: {
+      ui: {
+        notify: (message: string, kind: string) => notes.push({ message, kind }),
+        ...(confirm ? { confirm: async (_title: string, message: string) => {
+          prompts.push(message);
+          return confirm();
+        } } : {}),
+      },
+    },
+    notes,
+    prompts,
+  };
+}
+
+// ─── Fixture Content ──────────────────────────────────────────────────────
+
+const ROADMAP_M001 = `# M001: Recovery Test
+
+**Vision:** Test recovery round-trip.
+
+## Success Criteria
+
+- All recovery tests pass
+- State matches after round-trip
+
+
+## Slices
+
+- [x] **S01: Setup** \`risk:low\` \`depends:[]\`
+  > After this: Setup complete.
+
+- [ ] **S02: Core** \`risk:medium\` \`depends:[S01]\`
+  > After this: Core done.
+
+## Boundary Map
+
+| From | To | Produces | Consumes |
+|------|-----|----------|----------|
+| S01 | S02 | setup artifacts | setup artifacts |
+`;
+
+const PLAN_S01_COMPLETE = `---
+estimated_steps: 2
+estimated_files: 1
+skills_used: []
+---
+
+# S01: Setup
+
+**Goal:** Setup fixtures.
+**Demo:** Tasks done.
+
+## Tasks
+
+- [x] **T01: Init** \`est:15m\`
+  Initialize things.
+  - Files: \`init.ts\`, \`config.ts\`
+  - Verify: \`node test-init.ts\`
+
+- [x] **T02: Config** \`est:10m\`
+  Configure things.
+  - Files: \`settings.ts\`
+  - Verify: \`node test-config.ts\`
+`;
+
+const PLAN_S02_PARTIAL = `---
+estimated_steps: 1
+estimated_files: 1
+skills_used: []
+---
+
+# S02: Core
+
+**Goal:** Build core.
+**Demo:** Core works.
+
+## Tasks
+
+- [x] **T01: Build** \`est:30m\`
+  Build it.
+  - Files: \`core.ts\`
+  - Verify: \`node test-build.ts\`
+
+- [ ] **T02: Test** \`est:20m\`
+  Test it.
+  - Files: \`test-core.ts\`, \`helpers.ts\`
+  - Verify: \`npm test\`
+
+- [ ] **T03: Polish** \`est:15m\`
+  Polish it.
+  - Files: \`polish.ts\`
+  - Verify: \`node test-polish.ts\`
+`;
+
+const SUMMARY_S01 = `---
+id: S01
+parent: M001
+milestone: M001
+---
+
+# S01: Setup — Summary
+
+Setup is complete.
+`;
+
+const CORPUS_ROOT = join(import.meta.dirname, '__fixtures__', 'legacy-import-corpus', 'v1');
+const RECOVER_DURABLE_TABLES = [
+  'project_authority', 'milestones', 'slices', 'tasks', 'slice_dependencies',
+  'requirements', 'decisions', 'memories', 'artifacts', 'assessments',
+  'workflow_acceptance_criteria', 'workflow_answers', 'workflow_attempt_results',
+  'workflow_blockers', 'workflow_closeout_effects', 'workflow_closeout_plans',
+  'workflow_conversation_decisions', 'workflow_decision_impacts', 'workflow_domain_events',
+  'workflow_execution_attempts', 'workflow_failure_observations', 'workflow_human_acceptances',
+  'workflow_import_applications', 'workflow_interaction_options', 'workflow_interactions',
+  'workflow_item_lifecycles', 'workflow_kernel_checkpoints', 'workflow_milestone_contexts',
+  'workflow_open_questions', 'workflow_operations', 'workflow_outbox', 'workflow_projection_work',
+  'workflow_question_dependencies', 'workflow_recovery_actions', 'workflow_recovery_budgets',
+  'workflow_remediation_links', 'workflow_requirement_dispositions', 'workflow_settlement_receipts',
+  'workflow_technical_verdicts', 'workflow_verification_evidence', 'workflow_waivers',
+  'workflow_work_checkpoints',
+] as const;
+const RECOVER_SOURCE_ROOTS = ['phases', 'milestones'] as const;
+
+function installCorpusCase(base: string, name: 'gsd-nested' | 'assessment-matrix'): void {
+  rmSync(join(base, '.gsd'), { recursive: true, force: true });
+  cpSync(join(CORPUS_ROOT, name, 'source', '.gsd'), join(base, '.gsd'), {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+  });
+}
+
+function recoverPreview(base: string) {
+  return createLegacyImportPreview({
+    roots: [
+      {
+        id: 'project-phases',
+        kind: 'project',
+        physical_path: join(base, '.gsd', 'phases'),
+        logical_path: '.gsd/phases',
+        presence: 'optional',
+      },
+      {
+        id: 'project-milestones',
+        kind: 'project',
+        physical_path: join(base, '.gsd', 'milestones'),
+        logical_path: '.gsd/milestones',
+        presence: 'optional',
+      },
+      ...(['DECISIONS', 'REQUIREMENTS', 'KNOWLEDGE', 'PROJECT', 'QUEUE'] as const).map((stem) => ({
+        id: `project-root-${stem.toLowerCase()}`,
+        kind: 'project' as const,
+        physical_path: join(base, '.gsd', `${stem}.md`),
+        logical_path: `.gsd/${stem}.md`,
+        presence: 'optional' as const,
+      })),
+    ],
+  });
+}
+
+function previewApproval(base: string): string {
+  return `--preview=${recoverPreview(base).preview_hash}`;
+}
+
+function canonicalRecoverSnapshot(): Record<string, unknown> {
+  const db = _getAdapter()!;
+  return Object.fromEntries(RECOVER_DURABLE_TABLES.map((table) => [
+    table,
+    db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+  ]));
+}
+
+function recoverSourceSnapshot(base: string): Record<string, string | null> {
+  return Object.fromEntries(RECOVER_SOURCE_ROOTS.map((root) => {
+    const path = join(base, '.gsd', root);
+    return [root, existsSync(path) ? fingerprintLegacyImportCorpusTree(path) : null];
+  }));
+}
+
+function sha256(path: string): string {
+  return `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`;
+}
+
+// ─── Low-level Markdown importer characterization helper ──────────────────
+
+function clearHierarchyTables(): void {
+  const db = _getAdapter()!;
+  transaction(() => {
+    db.exec("DELETE FROM tasks");
+    db.exec("DELETE FROM slices");
+    db.exec("DELETE FROM milestones");
+  });
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────
+
+describe('gsd-recover', async () => {
+  test('legacy Markdown importer reproduces hierarchy after an explicit test-only clear', async () => {
+    const base = createFixtureBase();
+    try {
+      // Set up markdown fixtures
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_COMPLETE);
+      writeFile(base, 'milestones/M001/slices/S01/S01-SUMMARY.md', SUMMARY_S01);
+      writeFile(base, 'milestones/M001/slices/S02/S02-PLAN.md', PLAN_S02_PARTIAL);
+
+      // Step 1: Open DB and populate from markdown
+      openDatabase(':memory:');
+      const counts1 = migrateHierarchyToDb(base);
+      assert.deepStrictEqual(counts1.milestones, 1, 'round-trip: initial migration - 1 milestone');
+      assert.deepStrictEqual(counts1.slices, 2, 'round-trip: initial migration - 2 slices');
+      assert.ok(counts1.tasks >= 5, 'round-trip: initial migration - at least 5 tasks');
+
+      // Step 2: Capture state from DB before clearing
+      invalidateStateCache();
+      const stateBefore = await deriveStateFromDb(base);
+      assert.ok(stateBefore.activeMilestone !== null, 'round-trip: state before has active milestone');
+      const milestonesBefore = getAllMilestones();
+      const slicesBefore = getMilestoneSlices('M001');
+      const s01TasksBefore = getSliceTasks('M001', 'S01');
+      const s02TasksBefore = getSliceTasks('M001', 'S02');
+
+      // Step 3: Clear hierarchy tables
+      clearHierarchyTables();
+      const milestonesAfterClear = getAllMilestones();
+      assert.deepStrictEqual(milestonesAfterClear.length, 0, 'round-trip: milestones cleared');
+
+      // Step 4: Recover from markdown
+      const counts2 = migrateHierarchyToDb(base);
+      assert.deepStrictEqual(counts2.milestones, counts1.milestones, 'round-trip: recovery milestone count matches');
+      assert.deepStrictEqual(counts2.slices, counts1.slices, 'round-trip: recovery slice count matches');
+      assert.deepStrictEqual(counts2.tasks, counts1.tasks, 'round-trip: recovery task count matches');
+
+      // Step 5: Verify state matches
+      invalidateStateCache();
+      const stateAfter = await deriveStateFromDb(base);
+
+      assert.deepStrictEqual(stateAfter.phase, stateBefore.phase, 'round-trip: phase matches');
+      assert.deepStrictEqual(
+        stateAfter.activeMilestone?.id,
+        stateBefore.activeMilestone?.id,
+        'round-trip: active milestone ID matches',
+      );
+      assert.deepStrictEqual(
+        stateAfter.activeSlice?.id,
+        stateBefore.activeSlice?.id,
+        'round-trip: active slice ID matches',
+      );
+      assert.deepStrictEqual(
+        stateAfter.activeTask?.id,
+        stateBefore.activeTask?.id,
+        'round-trip: active task ID matches',
+      );
+
+      // Verify row-level data matches
+      const milestonesAfter = getAllMilestones();
+      assert.deepStrictEqual(milestonesAfter.length, milestonesBefore.length, 'round-trip: milestone row count');
+      assert.deepStrictEqual(milestonesAfter[0]?.id, milestonesBefore[0]?.id, 'round-trip: milestone ID');
+      assert.deepStrictEqual(milestonesAfter[0]?.title, milestonesBefore[0]?.title, 'round-trip: milestone title');
+
+      const slicesAfter = getMilestoneSlices('M001');
+      assert.deepStrictEqual(slicesAfter.length, slicesBefore.length, 'round-trip: slice row count');
+      assert.deepStrictEqual(slicesAfter[0]?.id, slicesBefore[0]?.id, 'round-trip: S01 ID');
+      assert.deepStrictEqual(slicesAfter[0]?.status, slicesBefore[0]?.status, 'round-trip: S01 status');
+      assert.deepStrictEqual(slicesAfter[1]?.id, slicesBefore[1]?.id, 'round-trip: S02 ID');
+
+      const s01TasksAfter = getSliceTasks('M001', 'S01');
+      assert.deepStrictEqual(s01TasksAfter.length, s01TasksBefore.length, 'round-trip: S01 task count');
+
+      const s02TasksAfter = getSliceTasks('M001', 'S02');
+      assert.deepStrictEqual(s02TasksAfter.length, s02TasksBefore.length, 'round-trip: S02 task count');
+
+      closeDatabase();
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('v8 planning columns populated', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_COMPLETE);
+      writeFile(base, 'milestones/M001/slices/S01/S01-SUMMARY.md', SUMMARY_S01);
+      writeFile(base, 'milestones/M001/slices/S02/S02-PLAN.md', PLAN_S02_PARTIAL);
+
+      openDatabase(':memory:');
+      migrateHierarchyToDb(base);
+
+      // Milestone planning columns
+      const milestone = getMilestone('M001');
+      assert.ok(milestone !== null, 'v8: milestone exists');
+      assert.deepStrictEqual(milestone!.vision, 'Test recovery round-trip.', 'v8: milestone vision populated');
+      assert.ok(milestone!.success_criteria.length >= 2, 'v8: milestone success_criteria has entries');
+      assert.deepStrictEqual(milestone!.success_criteria[0], 'All recovery tests pass', 'v8: first success criterion');
+      assert.ok(milestone!.boundary_map_markdown.includes('Boundary Map'), 'v8: boundary_map_markdown populated');
+      assert.ok(milestone!.boundary_map_markdown.includes('S01'), 'v8: boundary_map_markdown has S01');
+
+      // Tool-only fields left empty per D004
+      assert.deepStrictEqual(milestone!.key_risks.length, 0, 'v8: key_risks left empty (tool-only per D004)');
+      assert.deepStrictEqual(milestone!.requirement_coverage, '', 'v8: requirement_coverage left empty (tool-only per D004)');
+
+      // Slice planning columns
+      const sliceS01 = getSlice('M001', 'S01');
+      assert.ok(sliceS01 !== null, 'v8: slice S01 exists');
+      assert.deepStrictEqual(sliceS01!.goal, 'Setup fixtures.', 'v8: S01 goal populated');
+
+      const sliceS02 = getSlice('M001', 'S02');
+      assert.ok(sliceS02 !== null, 'v8: slice S02 exists');
+      assert.deepStrictEqual(sliceS02!.goal, 'Build core.', 'v8: S02 goal populated');
+
+      // Slice tool-only fields left empty per D004
+      assert.deepStrictEqual(sliceS01!.proof_level, '', 'v8: S01 proof_level left empty (tool-only per D004)');
+
+      // Task planning columns - S01/T01
+      const taskS01T01 = getTask('M001', 'S01', 'T01');
+      assert.ok(taskS01T01 !== null, 'v8: task S01/T01 exists');
+      assert.ok(taskS01T01!.files.length >= 2, 'v8: S01/T01 files populated');
+      assert.ok(taskS01T01!.files.includes('init.ts'), 'v8: S01/T01 files includes init.ts');
+      assert.ok(taskS01T01!.files.includes('config.ts'), 'v8: S01/T01 files includes config.ts');
+      assert.deepStrictEqual(taskS01T01!.verify, '`node test-init.ts`', 'v8: S01/T01 verify populated');
+
+      // Task planning columns - S02/T02
+      const taskS02T02 = getTask('M001', 'S02', 'T02');
+      assert.ok(taskS02T02 !== null, 'v8: task S02/T02 exists');
+      assert.ok(taskS02T02!.files.length >= 2, 'v8: S02/T02 files populated');
+      assert.ok(taskS02T02!.files.includes('test-core.ts'), 'v8: S02/T02 files includes test-core.ts');
+      assert.deepStrictEqual(taskS02T02!.verify, '`npm test`', 'v8: S02/T02 verify populated');
+
+      const taskS02T03 = getTask('M001', 'S02', 'T03');
+      assert.ok(taskS02T03 !== null, 'v8: task S02/T03 exists');
+      assert.ok(taskS02T03!.files.includes('polish.ts'), 'v8: S02/T03 files includes polish.ts');
+      assert.deepStrictEqual(taskS02T03!.verify, '`node test-polish.ts`', 'v8: S02/T03 verify populated');
+
+      // Diagnostic: v8 planning columns queryable via SQL
+      const db = _getAdapter()!;
+      const milestoneRow = db.prepare("SELECT vision, success_criteria, boundary_map_markdown FROM milestones WHERE id = 'M001'").get() as any;
+      assert.ok(milestoneRow.vision.length > 0, 'v8-diag: vision column queryable');
+      assert.ok(milestoneRow.boundary_map_markdown.length > 0, 'v8-diag: boundary_map_markdown column queryable');
+
+      const sliceRow = db.prepare("SELECT goal FROM slices WHERE milestone_id = 'M001' AND id = 'S01'").get() as any;
+      assert.ok(sliceRow.goal.length > 0, 'v8-diag: goal column queryable');
+
+      const taskRow = db.prepare("SELECT files, verify FROM tasks WHERE milestone_id = 'M001' AND slice_id = 'S01' AND id = 'T01'").get() as any;
+      assert.ok(taskRow.files.length > 2, 'v8-diag: files column queryable (JSON array)');
+      assert.ok(taskRow.verify.length > 0, 'v8-diag: verify column queryable');
+
+      closeDatabase();
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('legacy Markdown importer reproduces the same state after a test-only reset', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_COMPLETE);
+      writeFile(base, 'milestones/M001/slices/S01/S01-SUMMARY.md', SUMMARY_S01);
+      writeFile(base, 'milestones/M001/slices/S02/S02-PLAN.md', PLAN_S02_PARTIAL);
+
+      openDatabase(':memory:');
+
+      // First recovery
+      migrateHierarchyToDb(base);
+      invalidateStateCache();
+      const state1 = await deriveStateFromDb(base);
+
+      // Clear and recover again
+      clearHierarchyTables();
+      migrateHierarchyToDb(base);
+      invalidateStateCache();
+      const state2 = await deriveStateFromDb(base);
+
+      assert.deepStrictEqual(state2.phase, state1.phase, 'idempotent: phase matches');
+      assert.deepStrictEqual(
+        state2.activeMilestone?.id,
+        state1.activeMilestone?.id,
+        'idempotent: active milestone matches',
+      );
+      assert.deepStrictEqual(
+        state2.activeSlice?.id,
+        state1.activeSlice?.id,
+        'idempotent: active slice matches',
+      );
+      assert.deepStrictEqual(
+        state2.activeTask?.id,
+        state1.activeTask?.id,
+        'idempotent: active task matches',
+      );
+
+      closeDatabase();
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('test-only hierarchy clearing preserves decisions and requirements', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-PLAN.md', PLAN_S01_COMPLETE);
+
+      openDatabase(':memory:');
+      migrateHierarchyToDb(base);
+
+      // Insert a decision and requirement manually
+      const db = _getAdapter()!;
+      db.prepare(
+        `INSERT INTO decisions (id, when_context, scope, decision, choice, rationale, revisable)
+         VALUES (:id, :when, :scope, :decision, :choice, :rationale, :revisable)`,
+      ).run({
+        ':id': 'D001',
+        ':when': 'T03',
+        ':scope': 'architecture',
+        ':decision': 'Use shared WAL',
+        ':choice': 'Single DB',
+        ':rationale': 'Simpler',
+        ':revisable': 'Yes',
+      });
+
+      db.prepare(
+        `INSERT INTO requirements (id, class, status, description)
+         VALUES (:id, :class, :status, :desc)`,
+      ).run({
+        ':id': 'R001',
+        ':class': 'functional',
+        ':status': 'active',
+        ':desc': 'Recovery works',
+      });
+
+      // Clear hierarchy only
+      clearHierarchyTables();
+
+      // Verify decisions and requirements survived
+      const decisions = db.prepare('SELECT * FROM decisions').all();
+      assert.deepStrictEqual(decisions.length, 1, 'preserve: decision survives clear');
+      assert.deepStrictEqual((decisions[0] as any).id, 'D001', 'preserve: decision ID intact');
+
+      const requirements = db.prepare('SELECT * FROM requirements').all();
+      assert.deepStrictEqual(requirements.length, 1, 'preserve: requirement survives clear');
+      assert.deepStrictEqual((requirements[0] as any).id, 'R001', 'preserve: requirement ID intact');
+
+      // Recover hierarchy
+      migrateHierarchyToDb(base);
+      const milestones = getAllMilestones();
+      assert.ok(milestones.length > 0, 'preserve: milestones recovered after clear');
+
+      // Verify non-hierarchy data still intact after recovery
+      const decisionsAfter = db.prepare('SELECT * FROM decisions').all();
+      assert.deepStrictEqual(decisionsAfter.length, 1, 'preserve: decision still present after recovery');
+
+      closeDatabase();
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('legacy Markdown importer returns zero rows for an empty milestones directory', async () => {
+    const base = createFixtureBase();
+    try {
+      // No milestones written - just the empty dir
+      openDatabase(':memory:');
+
+      // Pre-populate to simulate existing state
+      insertMilestone({ id: 'M001', title: 'Ghost', status: 'active' });
+
+      // Clear and recover from empty
+      clearHierarchyTables();
+      const counts = migrateHierarchyToDb(base);
+      assert.deepStrictEqual(counts.milestones, 0, 'empty: zero milestones recovered');
+      assert.deepStrictEqual(counts.slices, 0, 'empty: zero slices recovered');
+      assert.deepStrictEqual(counts.tasks, 0, 'empty: zero tasks recovered');
+
+      const all = getAllMilestones();
+      assert.deepStrictEqual(all.length, 0, 'empty: no milestones in DB after recovery');
+
+      closeDatabase();
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover warns and does not import markdown without confirmation', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base);
+
+      assert.ok(getMilestone('M999'), 'existing DB row remains when recover is unconfirmed');
+      assert.equal(getMilestone('M001'), null, 'markdown milestone is not imported without confirmation');
+      assert.equal(existsSync(join(base, '.gsd', 'backups')), false, 'preview discovery does not create a backup');
+      assert.equal(notes.at(-1)?.kind, 'warning');
+      assert.match(notes.at(-1)?.message ?? '', /\/gsd recover --preview=sha256:/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover interactive cancellation leaves DB unchanged', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      const { ctx, notes } = makeCtx(async () => false);
+      await handleRecover(ctx, base);
+
+      assert.ok(getMilestone('M999'), 'existing DB row remains when recover is cancelled');
+      assert.equal(getMilestone('M001'), null, 'markdown milestone is not imported after cancellation');
+      assert.equal(existsSync(join(base, '.gsd', 'backups')), false, 'cancellation does not create a backup');
+      assert.match(notes.at(-1)?.message ?? '', /cancelled/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('prepared recover revalidates the approved Preview before creating a backup', () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+
+      const prepared = prepareVerifiedRecoverApplication(base);
+      assert.equal(existsSync(join(base, '.gsd', 'backups')), false, 'preparation is read-only');
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001.replace('Recovery Test', 'Changed Recovery Test'));
+
+      assert.throws(
+        () => applyPreparedVerifiedRecoverApplication(prepared, prepared.preview.preview_hash),
+        /preview|approval|changed/i,
+      );
+      assert.equal(existsSync(join(base, '.gsd', 'backups')), false, 'stale approval fails before backup preparation');
+      assert.equal(getMilestone('M001'), null, 'stale approval cannot import changed markdown');
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('prepared recover applies a sealed preservation resolution for mixed-content sources', () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-RESEARCH.md', '# Research\n\nRetain these notes.\n');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+
+      const pending = prepareVerifiedRecoverApplication(base);
+      const diagnosis = pending.preview.preview.diagnoses.find((entry) => (
+        entry.code === 'ambiguous-task-membership'
+      ));
+      assert.ok(diagnosis);
+      const resolved = resolvePreparedVerifiedRecoverApplication(pending, [{
+        diagnosis_id: diagnosis.diagnosis_id,
+        disposition: 'preserved',
+      }]);
+
+      assert.equal(pending.preview.preview.counts.unresolved, 1);
+      assert.equal(resolved.preview.preview.counts.unresolved, 0);
+      const result = applyPreparedVerifiedRecoverApplication(resolved, resolved.preview.preview_hash);
+      assert.equal(result.preview.preview_hash, resolved.preview.preview_hash);
+      assert.ok(getMilestone('M001'));
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover resolves a requires-user diagnosis with the --choice token it prints', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/slices/S01/S01-RESEARCH.md', '# Research\n\nRetain these notes.\n');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, previewApproval(base));
+
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /1 item\(s\) in the Preview need a decision/);
+      assert.equal(getMilestone('M001'), null, 'an unresolved Preview applies nothing');
+      const choice = /--choice=sha256:[0-9a-f]{64}\.preserved/u.exec(notes.at(-1)?.message ?? '')?.[0];
+      assert.ok(choice, 'the unresolved diagnosis is printed with its choice token');
+
+      // The choice seals a new Preview; the operator approves that hash.
+      await handleRecover(ctx, base, choice);
+      const resolvedHash = /Preview hash: (sha256:[0-9a-f]{64})/u.exec(notes.at(-1)?.message ?? '')?.[1];
+      assert.ok(resolvedHash, 'the resolved Preview is shown for approval');
+      assert.notEqual(`--preview=${resolvedHash}`, previewApproval(base));
+      assert.equal(getMilestone('M001'), null, 'a choice without hash approval applies nothing');
+
+      await handleRecover(ctx, base, `${choice} --preview=${resolvedHash}`);
+      assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+      assert.ok(getMilestone('M001'));
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover applies markdown after explicit confirmation without deleting existing authority', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      const { ctx, notes } = makeCtx();
+      // M999 is in the DB but not in the markdown, so recover would delete it:
+      // a data-loss recover now requires explicit --allow-data-loss.
+      await handleRecover(ctx, base, previewApproval(base));
+
+      assert.ok(getMilestone('M999'), 'confirmed recover preserves existing canonical rows');
+      assert.ok(getMilestone('M001'), 'confirmed recover imports markdown hierarchy');
+      assert.equal(notes.at(-1)?.kind, 'success');
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover treats the legacy data-loss flag as non-destructive compatibility input', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, `${previewApproval(base)} --allow-data-loss`);
+
+      assert.ok(getMilestone('M999'), 'legacy flag cannot authorize canonical deletion');
+      assert.ok(getMilestone('M001'), 'legacy flag still uses the non-destructive Application path');
+      assert.equal(notes.at(-1)?.kind, 'success');
+      assert.equal(existsSync(join(base, '.gsd', 'backups')), true);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover interactive success requires exactly one confirmation', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      let call = 0;
+      const { ctx, notes, prompts } = makeCtx(async () => { call += 1; return true; });
+      await handleRecover(ctx, base, '');
+
+      assert.equal(call, 1, 'non-destructive recover has no second deletion acknowledgement');
+      assert.match(prompts[0] ?? '', /Preview hash: sha256:[0-9a-f]{64}/);
+      assert.match(prompts[0] ?? '', /Source set: sha256:[0-9a-f]{64}/);
+      assert.match(prompts[0] ?? '', /Mappings:/);
+      assert.match(prompts[0] ?? '', /Raw locator:/);
+      assert.match(prompts[0] ?? '', /Raw value:/);
+      assert.match(prompts[0] ?? '', /Normalized value:/);
+      assert.match(prompts[0] ?? '', /Provenance:/);
+      assert.match(prompts[0] ?? '', /Diagnoses:/);
+      assert.match(prompts[0] ?? '', /Resolutions:/);
+      assert.ok(getMilestone('M999'), 'interactive recover preserves existing canonical rows');
+      assert.ok(getMilestone('M001'), 'interactive recover imports approved markdown');
+      assert.equal(notes.at(-1)?.kind, 'success');
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover interactive confirmation preserves pre-existing authority', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Existing DB State', status: 'active' });
+
+      const { ctx } = makeCtx(async () => true); // both confirms accepted
+      await handleRecover(ctx, base, '');
+
+      assert.ok(getMilestone('M999'), 'confirmed recover preserves pre-existing authority');
+      assert.ok(getMilestone('M001'), 'confirmed recover imports markdown');
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover aborts before destructive work when verified-backup preparation fails', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Authoritative sentinel', status: 'active' });
+      writeFileSync(join(base, '.gsd', 'backups'), 'blocks backup directory creation');
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, `${previewApproval(base)} --allow-data-loss`);
+
+      assert.ok(getMilestone('M999'), 'gate failure preserves authoritative DB rows');
+      assert.equal(getMilestone('M001'), null, 'gate failure does not import markdown rows');
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /backups|exist|directory/i);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover reports base snapshot error code and row identity', async () => {
+    const base = createFixtureBase();
+    try {
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      _getAdapter()!.exec(`
+        INSERT INTO memories (id, category, content, created_at, updated_at, structured_fields)
+        VALUES
+          ('memory-1', 'architecture', 'First', 'created', 'updated', '{"sourceDecisionId":"D001"}'),
+          ('memory-2', 'architecture', 'Second', 'created', 'updated', '{"sourceDecisionId":"D001"}')
+      `);
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base);
+
+      assert.equal(notes.at(-1)?.kind, 'error');
+      const message = notes.at(-1)?.message ?? '';
+      assert.match(message, /LEGACY_IMPORT_BASE_ROW_DUPLICATE/);
+      assert.match(message, /row_set: decision_memories/);
+      assert.match(message, /source_decision_id/);
+      assert.match(message, /D001/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover reports the drilled content-addressed backup used before recovery', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M999', title: 'Authoritative sentinel', status: 'active' });
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, `${previewApproval(base)} --allow-data-loss`);
+
+      assert.ok(getMilestone('M999'), 'recovery preserves old hierarchy after the gate');
+      assert.ok(getMilestone('M001'), 'recovery imports markdown after the gate');
+      assert.equal(notes.at(-1)?.kind, 'success');
+      const backupsDirectory = join(base, '.gsd', 'backups');
+      const backupNames = readdirSync(backupsDirectory);
+      assert.equal(backupNames.length, 1, 'successful recovery publishes one backup without sidecars');
+      assert.match(backupNames[0]!, /^pre-recover-[0-9a-f]{64}\.sqlite$/u);
+      const backupPath = join(backupsDirectory, backupNames[0]!);
+      assert.ok(
+        notes.at(-1)?.message.includes(backupPath),
+        'success reports the drilled .sqlite backup path',
+      );
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover imports generated flat PLAN and SUMMARY artifacts without parent conflicts', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'phases/09-team/09-ROADMAP.md', [
+        '# M009-rfuh2h: Team milestone',
+        '',
+        '- [ ] **S01: Recover generated artifacts** `risk:low` `depends:[]`',
+        '',
+      ].join('\n'));
+      writeFile(base, 'phases/09-team/09-01-PLAN.md', [
+        '# S01: Recover generated artifacts',
+        '',
+        '**Milestone:** M009-rfuh2h',
+        '**Slice:** S01',
+        '',
+        '<tasks>',
+        '- [ ] **T01**: Recover generated task',
+        '</tasks>',
+        '',
+      ].join('\n'));
+      writeFile(base, 'phases/09-team/S01-T01-SUMMARY.md', [
+        '---',
+        'id: T01',
+        'parent: S01',
+        'milestone: M009-rfuh2h',
+        '---',
+        '',
+        '# T01: Recover generated task',
+        '',
+      ].join('\n'));
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const approvedPreview = recoverPreview(base);
+      assert.equal(approvedPreview.preview.counts.unresolved, 0);
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, `--preview=${approvedPreview.preview_hash}`);
+
+      assert.equal(notes.at(-1)?.kind, 'success');
+      assert.equal(getMilestone('M009-rfuh2h')?.title, 'Team milestone');
+      assert.equal(getSlice('M009-rfuh2h', 'S01')?.title, 'Recover generated artifacts');
+      assert.equal(getTask('M009-rfuh2h', 'S01', 'T01')?.status, 'complete');
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover imports the milestone CONTEXT of a flat phase directory and no slice file', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'phases/09-team/09-ROADMAP.md', [
+      '# M009-rfuh2h: Team milestone',
+      '',
+      '- [ ] **S01: Recover generated artifacts** `risk:low` `depends:[]`',
+      '',
+    ].join('\n'));
+    writeFile(base, 'phases/09-team/09-CONTEXT.md', '# Team milestone context\n');
+    writeFile(base, 'phases/09-team/09-01-CONTEXT.md', '# Slice context\n');
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    const approvedPreview = recoverPreview(base);
+    assert.equal(approvedPreview.preview.counts.unresolved, 0);
+
+    const { ctx, notes } = makeCtx();
+    await handleRecover(ctx, base, `--preview=${approvedPreview.preview_hash}`);
+
+    assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+    assert.deepEqual(
+      _getAdapter()!.prepare('SELECT path, artifact_type, milestone_id, full_content FROM artifacts').all(),
+      [{
+        path: 'phases/09-team/09-CONTEXT.md',
+        artifact_type: 'CONTEXT',
+        milestone_id: 'M009-rfuh2h',
+        full_content: '# Team milestone context\n',
+      }],
+    );
+  });
+
+  test('explicit slash recover commits one retained-backup Import Application without clearing authority', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M900', title: 'Authoritative sentinel', status: 'active' });
+      const approvedBase = captureCurrentLegacyImportBaseSnapshot();
+      const approvedPreview = recoverPreview(base);
+      assert.equal(approvedPreview.preview.counts.unresolved, 0);
+      const sourceBefore = recoverSourceSnapshot(base);
+      const { ctx, notes } = makeCtx();
+
+      await handleRecover(ctx, base, previewApproval(base));
+
+      const db = _getAdapter()!;
+      const operation = db.prepare(`SELECT * FROM workflow_operations
+        WHERE operation_type = 'import.apply'`).get() as Record<string, unknown> | undefined;
+      assert.ok(operation, 'slash recover must commit through the public Import Application');
+      assert.equal(operation.idempotency_key, `legacy-import/recover/${approvedPreview.preview.preview_id}`);
+      assert.equal(operation.source_transport, 'internal');
+      assert.equal(operation.actor_type, 'system');
+      assert.equal(operation.actor_id, 'gsd-recover');
+      assert.equal(operation.trace_id, null);
+      assert.equal(operation.turn_id, null);
+      assert.equal(operation.expected_revision, approvedBase.authority.revision);
+      assert.equal(operation.resulting_revision, approvedBase.authority.revision + 1);
+      assert.equal(operation.expected_authority_epoch, approvedBase.authority.authority_epoch);
+      assert.equal(operation.resulting_authority_epoch, approvedBase.authority.authority_epoch);
+      assert.equal(operation.request_hash, approvedPreview.preview_hash);
+      assert.ok(getMilestone('M900'), 'recover must not clear canonical rows absent from the Preview');
+
+      const application = db.prepare('SELECT * FROM workflow_import_applications').get() as Record<string, unknown>;
+      assert.equal(application.operation_id, operation.operation_id);
+      assert.equal(application.preview_id, approvedPreview.preview.preview_id);
+      assert.equal(application.preview_hash, approvedPreview.preview_hash);
+      assert.equal(application.base_project_revision, approvedBase.authority.revision);
+      assert.equal(application.resulting_project_revision, approvedBase.authority.revision + 1);
+      assert.equal(application.resulting_authority_epoch, approvedBase.authority.authority_epoch);
+      assert.equal(application.backup_quick_check, 'ok');
+      assert.equal(existsSync(String(application.backup_ref)), true, 'verified backup remains retained');
+      assert.equal(statSync(String(application.backup_ref)).size, application.backup_byte_size);
+      assert.equal(sha256(String(application.backup_ref)), application.backup_sha256);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_domain_events').get()?.count, 1);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_outbox').get()?.count, 1);
+      assert.ok(Number(db.prepare('SELECT COUNT(*) AS count FROM workflow_projection_work').get()?.count) > 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_recovery_actions').get()?.count, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_recovery_budgets').get()?.count, 0);
+      assert.deepEqual(recoverSourceSnapshot(base), sourceBefore);
+      assert.equal(notes.at(-1)?.kind, 'success');
+      assert.match(notes.at(-1)?.message ?? '', /I recommend restoring the verified backup\./);
+      assert.match(notes.at(-1)?.message ?? '', /--restore --consent=/);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 0);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover can apply its evidence-bound restore recommendation', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M900', title: 'Authoritative sentinel', status: 'active' });
+      const { ctx, notes } = makeCtx();
+
+      await handleRecover(ctx, base, previewApproval(base));
+      const instruction = /--application=\S+ --restore --consent=proceed:destructive-database-restore:sha256:[0-9a-f]{64}/u
+        .exec(notes.at(-1)?.message ?? '')?.[0];
+      assert.ok(instruction, notes.at(-1)?.message);
+      await handleRecover(ctx, base, instruction);
+
+      assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+      const db = _getAdapter()!;
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 1);
+      assert.equal(getMilestone('M001'), null, 'restore returns to the verified pre-import database');
+      assert.ok(getMilestone('M900'), 'restore preserves the pre-import canonical authority');
+      assert.match(notes.at(-1)?.message ?? '', /restore.*committed|restored database/i);
+      assert.match(notes.at(-1)?.message ?? '', /Milestones:\s+1/);
+      assert.match(notes.at(-1)?.message ?? '', /Slices:\s+0/);
+      assert.match(notes.at(-1)?.message ?? '', /Tasks:\s+0/);
+      assert.doesNotMatch(notes.at(-1)?.message ?? '', /Imported fewer rows/);
+
+      await handleRecover(ctx, base, instruction);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 0);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 1);
+      assert.match(notes.at(-1)?.message ?? '', /replayed/i);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  // An Import Application that an earlier build made holds base snapshot
+  // schema 1: its Preview, backup and result hash do not count knowledge rows.
+  async function applyRecoverWithBaseSnapshotSchema1(base: string): Promise<string> {
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    captureKnowledgeEntry(base, 'rule', 'Use tabs', 'project');
+    // The earlier build did not import KNOWLEDGE.md rows.
+    rmSync(join(base, '.gsd', 'KNOWLEDGE.md'));
+    _setLegacyImportBaseSnapshotSchemaVersionForTest(1);
+    const { ctx, notes } = makeCtx();
+    await handleRecover(ctx, base, previewApproval(base));
+    _setLegacyImportBaseSnapshotSchemaVersionForTest();
+    assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+    assert.ok(
+      captureCurrentLegacyImportBaseSnapshot().rows.some((row) => row.row_set === 'knowledge_memories'),
+      'this build counts a knowledge row that schema 1 did not count',
+    );
+    return String(_getAdapter()!.prepare('SELECT operation_id FROM workflow_import_applications').get()!['operation_id']);
+  }
+
+  test('recover restores an Import Application of base snapshot schema 1 when nothing changed after it', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      _setLegacyImportBaseSnapshotSchemaVersionForTest();
+      closeDatabase();
+      cleanup(base);
+    });
+    installCorpusCase(base, 'gsd-nested');
+    const operationId = await applyRecoverWithBaseSnapshotSchema1(base);
+
+    const { ctx, notes } = makeCtx();
+    await handleRecover(ctx, base, `--application=${operationId}`);
+    const instruction = /--application=\S+ --restore --consent=proceed:destructive-database-restore:sha256:[0-9a-f]{64}/u
+      .exec(notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(instruction, notes.at(-1)?.message);
+    await handleRecover(ctx, base, instruction);
+
+    assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+    const db = _getAdapter()!;
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 0);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 1);
+    assert.equal(getMilestone('M001'), null, 'restore returns to the verified pre-import database');
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM memories').get()?.count, 1, 'the backup holds the knowledge row');
+
+    await handleRecover(ctx, base, instruction);
+    assert.match(notes.at(-1)?.message ?? '', /replayed/i);
+  });
+
+  test('recover resumes a published restore of an Import Application of base snapshot schema 1 after restart', async (t) => {
+    const base = realpathSync(createFixtureBase());
+    t.after(() => {
+      _setLegacyImportBaseSnapshotSchemaVersionForTest();
+      closeDatabase();
+      cleanup(base);
+    });
+    installCorpusCase(base, 'gsd-nested');
+    const application = loadVerifiedRecoverApplication(await applyRecoverWithBaseSnapshotSchema1(base));
+    const identity = {
+      applicationIdentityHash: application.receipt.applicationIdentityHash,
+      backup: application.backup,
+    };
+    const consent = {
+      consentSchemaVersion: LEGACY_IMPORT_RESTORE_ASSESSMENT_CONSENT_SCHEMA_VERSION,
+      decision: 'proceed' as const,
+      destructiveDatabaseRestore: true as const,
+      evidenceHash: assessLegacyImportRestore(identity).evidenceHash,
+    };
+    const assessment = assessLegacyImportRestore({ ...identity, consent });
+    assert.equal(assessment.decision, 'restore-eligible');
+    persistVerifiedRecoverRestoreApproval(application, assessment, consent);
+
+    assert.throws(() => _restoreLegacyImportLiveForTest({
+      invocation: {
+        idempotencyKey: `legacy-import/recover-restore/${application.receipt.applicationIdentityHash}`,
+        sourceTransport: 'internal',
+        actorType: 'system',
+        actorId: 'gsd-recover',
+      },
+      ...identity,
+      assessment,
+      consent,
+    }, {
+      boundary(point) {
+        if (point === 'before-receipt-commit') throw new Error('simulated restart before receipt commit');
+      },
+    }), /published restore requires exact retry convergence/);
+
+    closeDatabase();
+    assert.equal(openDatabase(join(base, '.gsd', 'gsd.db')), true);
+    const retained = loadVerifiedRecoverApplication(application.receipt.operationId);
+    const resumed = executeLegacyImportRecoveryAction(retained, 'restore', [], consent);
+    assert.equal(resumed.status, 'restored');
+    assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 1);
+  });
+
+  test('recover Forward Repairs an Import Application of base snapshot schema 1', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      _setLegacyImportBaseSnapshotSchemaVersionForTest();
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    const operationId = await applyRecoverWithBaseSnapshotSchema1(base);
+    assert.ok(getMilestone('M001'));
+    // Later accepted work closes the restore window, so the undo is a Forward Repair.
+    captureKnowledgeEntry(base, 'rule', 'Later rule', 'project');
+    const current = captureCurrentLegacyImportBaseSnapshot();
+
+    const { ctx, notes } = makeCtx();
+    await handleRecover(ctx, base, `--application=${operationId} --forward-repair`);
+    assert.match(notes.at(-1)?.message ?? '', /Forward Repair: committed/);
+    // The plan compares the rows that schema 1 counts, on each side.
+    const plan = JSON.parse(String(
+      _getAdapter()!.prepare('SELECT plan_json FROM workflow_import_forward_repairs').get()!['plan_json'],
+    ));
+    assert.equal(plan.currentRelevantRowsHash, legacyImportBaseSnapshotAtVersion(current, 1).relevant_rows_hash);
+    assert.notEqual(plan.currentRelevantRowsHash, current.relevant_rows_hash);
+  });
+
+  test('retained manifest resumes a published restore after restart', async () => {
+    const base = realpathSync(createFixtureBase());
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M900', title: 'Authoritative sentinel', status: 'active' });
+      const application = applyVerifiedRecoverApplication(base, recoverPreview(base).preview_hash);
+      const consentRequired = assessLegacyImportRestore({
+        applicationIdentityHash: application.receipt.applicationIdentityHash,
+        backup: application.backup,
+      });
+      assert.equal(consentRequired.decision, 'restore-consent-required');
+      const consent = {
+        consentSchemaVersion: LEGACY_IMPORT_RESTORE_ASSESSMENT_CONSENT_SCHEMA_VERSION,
+        decision: 'proceed' as const,
+        destructiveDatabaseRestore: true as const,
+        evidenceHash: consentRequired.evidenceHash,
+      };
+      const assessment = assessLegacyImportRestore({
+        applicationIdentityHash: application.receipt.applicationIdentityHash,
+        backup: application.backup,
+        consent,
+      });
+      assert.equal(assessment.decision, 'restore-eligible');
+      persistVerifiedRecoverRestoreApproval(application, assessment, consent);
+
+      assert.throws(() => _restoreLegacyImportLiveForTest({
+        invocation: {
+          idempotencyKey: `legacy-import/recover-restore/${application.receipt.applicationIdentityHash}`,
+          sourceTransport: 'internal',
+          actorType: 'system',
+          actorId: 'gsd-recover',
+        },
+        applicationIdentityHash: application.receipt.applicationIdentityHash,
+        backup: application.backup,
+        assessment,
+        consent,
+      }, {
+        boundary(point) {
+          if (point === 'before-receipt-commit') throw new Error('simulated restart before receipt commit');
+        },
+      }), /published restore requires exact retry convergence/);
+
+      closeDatabase();
+      assert.equal(openDatabase(join(base, '.gsd', 'gsd.db')), true);
+      const retained = loadVerifiedRecoverApplication(application.receipt.operationId);
+      const resumed = executeLegacyImportRecoveryAction(retained, 'restore', [], consent);
+      assert.equal(resumed.status, 'restored');
+      assert.equal(resumed.result.status, 'committed');
+      assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_restores').get()?.count, 1);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover repairs one retained Application and replays its receipt', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      insertMilestone({ id: 'M001', title: 'Original authority', status: 'active' });
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, previewApproval(base));
+      const db = _getAdapter()!;
+      const application = db.prepare(`SELECT operation_id, resulting_project_revision, resulting_authority_epoch
+        FROM workflow_import_applications`).get()!;
+      executeDomainOperation({
+        operationType: 'milestone.describe',
+        idempotencyKey: 'gsd-recover/later-description',
+        expectedRevision: Number(application.resulting_project_revision),
+        expectedAuthorityEpoch: Number(application.resulting_authority_epoch),
+        actorType: 'agent',
+        sourceTransport: 'internal',
+        payload: { milestoneId: 'M001' },
+      }, () => {
+        db.prepare("UPDATE milestones SET title = 'Accepted later title' WHERE id = 'M001'").run();
+        return {
+          events: [{
+            eventType: 'milestone.described',
+            entityType: 'milestone',
+            entityId: 'M001',
+            payload: { title: 'Accepted later title' },
+            destinations: ['projection'],
+          }],
+          projections: [{ projectionKey: 'milestone/m001', projectionKind: 'markdown', rendererVersion: 'v1' }],
+        };
+      });
+
+      const route = `--application=${application.operation_id} --forward-repair`;
+      const previousWrite = process.stderr.write;
+      const stderr: string[] = [];
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderr.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+      try {
+        await handleRecover(ctx, base, route);
+      } finally {
+        process.stderr.write = previousWrite;
+      }
+      const choice = /--choice=[A-Za-z0-9_-]+\.preserve-later/u
+        .exec(notes.at(-1)?.message ?? '')?.[0];
+      assert.ok(choice, notes.at(-1)?.message);
+      assert.equal(notes.at(-1)?.kind, 'warning');
+      assert.doesNotMatch(stderr.join(''), /gsd-recover: recovered/);
+      assert.match(notes.at(-1)?.message ?? '', /restore-backup/);
+      assert.match(notes.at(-1)?.message ?? '', /Current canonical value:/);
+      assert.match(notes.at(-1)?.message ?? '', /Proposed backup mutation:/);
+      assert.match(notes.at(-1)?.message ?? '', /Recommended: preserve-later/);
+      assert.match(notes.at(-1)?.message ?? '', /preserves accepted canonical work/i);
+      await handleRecover(ctx, base, `${route} ${choice}`);
+
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 1);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_forward_repairs').get()?.count, 1);
+      assert.equal(getMilestone('M001')?.title, 'Accepted later title');
+      await handleRecover(ctx, base, `${route} ${choice}`);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 1);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_forward_repairs').get()?.count, 1);
+      assert.match(notes.at(-1)?.message ?? '', /replayed/i);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover rejects conflicting recovery actions', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, '--restore --forward-repair');
+
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /mutually exclusive/);
+      assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 0);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover fails loud on a malformed --choice token', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, `${previewApproval(base)} --choice=1:milestone:M001:preserve-later`);
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /choice token is invalid/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover does not report success for a refused assessment', async () => {
+    const base = createFixtureBase();
+    const previousWrite = process.stderr.write;
+    const stderr: string[] = [];
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      assert.equal(openWorkflowDatabase(base).reason, 'authority-missing');
+      assert.equal(openWorkflowDatabase(base, { createEmptyAuthority: true }).ok, true);
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, previewApproval(base));
+      const db = _getAdapter()!;
+      const application = db.prepare('SELECT operation_id FROM workflow_import_applications').get()!;
+      db.prepare("UPDATE milestones SET title = 'tampered behind the log' WHERE id = 'M001'").run();
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderr.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+
+      await handleRecover(ctx, base, `--application=${String(application.operation_id)}`);
+
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /refused \(APPLICATION_STATE_CHANGED\)/);
+      assert.doesNotMatch(stderr.join(''), /gsd-recover: recovered/);
+    } finally {
+      process.stderr.write = previousWrite;
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover resumes an Application after a lost assessment response', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const lost = applyVerifiedRecoverApplication(base, recoverPreview(base).preview_hash);
+      const { ctx, notes } = makeCtx();
+
+      await handleRecover(ctx, base, previewApproval(base));
+
+      const db = _getAdapter()!;
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 1);
+      assert.match(notes.at(-1)?.message ?? '', /loaded retained Import Application/);
+      assert.match(notes.at(-1)?.message ?? '', new RegExp(lost.receipt.operationId));
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('a second recover makes a new Preview once later work closed the first Restore Window', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, previewApproval(base));
+      assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+
+      const db = _getAdapter()!;
+      const first = db.prepare(`SELECT operation_id, resulting_project_revision, resulting_authority_epoch
+        FROM workflow_import_applications`).get()!;
+      executeDomainOperation({
+        operationType: 'milestone.describe',
+        idempotencyKey: 'gsd-recover/later-work',
+        expectedRevision: Number(first.resulting_project_revision),
+        expectedAuthorityEpoch: Number(first.resulting_authority_epoch),
+        actorType: 'agent',
+        sourceTransport: 'internal',
+        payload: { milestoneId: 'M001' },
+      }, () => ({
+        events: [{
+          eventType: 'milestone.described',
+          entityType: 'milestone',
+          entityId: 'M001',
+          payload: {},
+          destinations: ['projection'],
+        }],
+        projections: [{ projectionKey: 'milestone/m001', projectionKind: 'markdown', rendererVersion: 'v1' }],
+      }));
+      writeFile(base, 'milestones/M002/M002-ROADMAP.md', ROADMAP_M001.replace('# M001:', '# M002:'));
+
+      // A plain recover no longer steers to a revert of the first import.
+      await handleRecover(ctx, base, '');
+      assert.doesNotMatch(notes.at(-1)?.message ?? '', /loaded retained Import Application/);
+      const secondHash = /Re-run \/gsd recover --preview=(sha256:[0-9a-f]{64})/u.exec(notes.at(-1)?.message ?? '')?.[1];
+      assert.ok(secondHash, notes.at(-1)?.message);
+      assert.equal(getMilestone('M002'), null, 'the new Preview is not applied without approval');
+
+      await handleRecover(ctx, base, `--preview=${secondHash}`);
+      assert.equal(notes.at(-1)?.kind, 'success', notes.at(-1)?.message);
+      assert.ok(getMilestone('M002'));
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 2);
+
+      // The first Application stays reachable by id.
+      await handleRecover(ctx, base, `--application=${String(first.operation_id)}`);
+      assert.match(notes.at(-1)?.message ?? '', /loaded retained Import Application/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover manifest persistence fails closed until its parent is durable', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'gsd-nested');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const { ctx, notes } = makeCtx();
+      _setRecoverManifestSyncForTest((path) => {
+        if (basename(path) === '.gsd') throw new Error('parent sync interrupted');
+      });
+
+      await handleRecover(ctx, base, previewApproval(base));
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /parent sync interrupted/);
+      assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 1);
+
+      _setRecoverManifestSyncForTest(null);
+      await handleRecover(ctx, base, previewApproval(base));
+      assert.equal(notes.at(-1)?.kind, 'success');
+      assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.count, 1);
+    } finally {
+      _setRecoverManifestSyncForTest(null);
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('explicit slash recover refuses unresolved assessment evidence with zero canonical residue', async () => {
+    const base = createFixtureBase();
+    try {
+      installCorpusCase(base, 'assessment-matrix');
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      const preview = recoverPreview(base);
+      assert.equal(preview.preview.counts.unresolved, 4);
+      const before = canonicalRecoverSnapshot();
+      const sourceBefore = recoverSourceSnapshot(base);
+      const { ctx, notes } = makeCtx();
+
+      await handleRecover(ctx, base, previewApproval(base));
+
+      assert.deepEqual(canonicalRecoverSnapshot(), before);
+      assert.deepEqual(recoverSourceSnapshot(base), sourceBefore);
+      assert.equal(notes.at(-1)?.kind, 'error');
+      assert.match(notes.at(-1)?.message ?? '', /item\(s\) in the Preview need a decision/i);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('handleRecover explains a missing PLAN behind an orphaned task SUMMARY', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'phases/09-team/09-ROADMAP.md', [
+        '# M009-rfuh2h: Team milestone',
+        '',
+        '- [ ] **S01: Recover generated artifacts** `risk:low` `depends:[]`',
+        '- [x] **S02: Orphaned slice with no PLAN** `risk:low` `depends:[]`',
+        '',
+      ].join('\n'));
+      writeFile(base, 'phases/09-team/09-01-PLAN.md', [
+        '# S01: Recover generated artifacts',
+        '',
+        '**Milestone:** M009-rfuh2h',
+        '**Slice:** S01',
+        '',
+        '<tasks>',
+        '- [ ] **T01**: Recover generated task',
+        '</tasks>',
+        '',
+      ].join('\n'));
+      writeFile(base, 'phases/09-team/S01-T01-SUMMARY.md', [
+        '---',
+        'id: T01',
+        'parent: S01',
+        'milestone: M009-rfuh2h',
+        '---',
+        '',
+        '# T01: Recover generated task',
+        '',
+      ].join('\n'));
+      // S02 has no 09-02-PLAN.md at all -- only its task SUMMARY survived.
+      writeFile(base, 'phases/09-team/S02-T01-SUMMARY.md', [
+        '---',
+        'id: T01',
+        'parent: S02',
+        'milestone: M009-rfuh2h',
+        '---',
+        '',
+        '# T01: Orphaned task',
+        '',
+      ].join('\n'));
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base);
+
+      assert.equal(notes.at(-1)?.kind, 'error');
+      const message = notes.at(-1)?.message ?? '';
+      assert.match(message, /M009-rfuh2h/);
+      assert.match(message, /S02/);
+      assert.match(message, /no PLAN establishes it as a real slice\/task/);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover on a lost database restores decisions, requirements and milestone context text and lists every source it does not import', async () => {
+    const base = createFixtureBase();
+    try {
+      // The projections a project keeps after its gsd.db is lost.
+      const context = '# M001 context\n\nWhy this milestone exists.\n';
+      const research = '# M001 research\n\nWhat the codebase does today.\n';
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'milestones/M001/M001-CONTEXT.md', context);
+      writeFile(base, 'milestones/M001/M001-RESEARCH.md', research);
+      writeFile(base, 'milestones/M001/M001-CONTEXT-DRAFT.md', '# Draft\n');
+      writeFile(base, 'DECISIONS.md', generateDecisionsMd([{
+        seq: 1,
+        id: 'D001',
+        when_context: 'M001',
+        scope: 'architecture',
+        decision: 'Storage engine',
+        choice: 'SQLite | one file',
+        rationale: 'line one\nline two',
+        revisable: 'No',
+        made_by: 'human',
+        source: 'discussion',
+        superseded_by: null,
+      }]));
+      writeFile(base, 'REQUIREMENTS.md', generateRequirementsMd([{
+        id: 'R001',
+        class: 'functional',
+        status: 'active',
+        description: 'Recover restores registries',
+        why: 'line one\n\n- Status: deferred\nline two',
+        source: 'user',
+        primary_owner: 'M001/S01',
+        supporting_slices: 'none',
+        validation: 'unmapped',
+        notes: 'a | b',
+        full_content: '',
+        superseded_by: null,
+      }]));
+      writeFile(base, 'KNOWLEDGE.md', '# Knowledge\n\n## Rules\n\n- Keep it small.\n');
+
+      const first = makeCtx();
+      await handleRecover(first.ctx, base);
+
+      const preview = first.notes.at(-1)?.message ?? '';
+      assert.equal(first.notes.at(-1)?.kind, 'warning');
+      const notImported = preview.slice(
+        preview.indexOf('Not imported'),
+        preview.indexOf('Mappings:'),
+      );
+      assert.match(notImported, /\.gsd\/KNOWLEDGE\.md \(preserved\)/);
+      assert.match(notImported, /\.gsd\/milestones\/M001\/M001-CONTEXT-DRAFT\.md \(preserved\)/);
+      assert.doesNotMatch(notImported, /DECISIONS\.md|REQUIREMENTS\.md|M001-ROADMAP\.md|M001-CONTEXT\.md|M001-RESEARCH\.md/);
+      const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+      assert.ok(approval, 'the Preview names the hash to approve');
+
+      const second = makeCtx();
+      await handleRecover(second.ctx, base, approval);
+
+      assert.equal(second.notes.at(-1)?.kind, 'success');
+      assert.deepEqual(
+        getAllDecisionsFromMemories().map(({ id, decision, choice, rationale, made_by }) => (
+          { id, decision, choice, rationale, made_by }
+        )),
+        [{ id: 'D001', decision: 'Storage engine', choice: 'SQLite | one file', rationale: 'line one\nline two', made_by: 'human' }],
+      );
+      assert.deepEqual(
+        _getAdapter()!.prepare('SELECT id, status, description, why, primary_owner, notes FROM requirements').all(),
+        [{
+          id: 'R001',
+          status: 'active',
+          description: 'Recover restores registries',
+          why: 'line one\n\n- Status: deferred\nline two',
+          primary_owner: 'M001/S01',
+          notes: 'a | b',
+        }],
+      );
+      assert.ok(getMilestone('M001'));
+      assert.deepEqual(
+        _getAdapter()!.prepare(
+          'SELECT path, artifact_type, milestone_id, slice_id, task_id, full_content FROM artifacts ORDER BY path',
+        ).all(),
+        [
+          {
+            path: 'milestones/M001/M001-CONTEXT.md',
+            artifact_type: 'CONTEXT',
+            milestone_id: 'M001',
+            slice_id: null,
+            task_id: null,
+            full_content: context,
+          },
+          {
+            path: 'milestones/M001/M001-RESEARCH.md',
+            artifact_type: 'RESEARCH',
+            milestone_id: 'M001',
+            slice_id: null,
+            task_id: null,
+            full_content: research,
+          },
+        ],
+      );
+      // The dispatch rules read this row, not the file, to see a finished discussion.
+      assert.equal(hasSavedArtifact('M001', null, 'CONTEXT'), true);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover on a database in sync with a saved milestone CONTEXT changes no artifact row', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    insertMilestone({ id: 'M001', title: 'Recovery Test', status: 'active' });
+    // The real writer saves the row and renders the file from it.
+    await saveArtifactToDb({
+      path: 'milestones/M001/M001-CONTEXT.md',
+      artifact_type: 'CONTEXT',
+      content: '# M001 context\n\nSaved by the discussion.\n',
+      milestone_id: 'M001',
+    }, base);
+    const before = _getAdapter()!.prepare('SELECT * FROM artifacts').all();
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const preview = first.notes.at(-1)?.message ?? '';
+    assert.doesNotMatch(preview, /artifact:/, 'the Preview changes no artifact row');
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+    assert.ok(approval, 'no diagnosis blocks the Preview');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+    assert.deepEqual(_getAdapter()!.prepare('SELECT * FROM artifacts').all(), before);
+  });
+
+  test('recover keeps the database row of a changed milestone CONTEXT.md and writes the file text only by explicit choice', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    insertMilestone({ id: 'M001', title: 'Recovery Test', status: 'active' });
+    await saveArtifactToDb({
+      path: 'milestones/M001/M001-CONTEXT.md',
+      artifact_type: 'CONTEXT',
+      content: '# M001 context\n\nSaved by the discussion.\n',
+      milestone_id: 'M001',
+    }, base);
+    const edited = '# M001 context\n\nEdited in the file.\n';
+    writeFile(base, 'milestones/M001/M001-CONTEXT.md', edited);
+    const content = () => _getAdapter()!.prepare(
+      "SELECT full_content FROM artifacts WHERE path = 'milestones/M001/M001-CONTEXT.md'",
+    ).get()?.['full_content'];
+
+    const saved = '# M001 context\n\nSaved by the discussion.\n';
+
+    // A plain Preview keeps the database row and names the choice.
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const preview = first.notes.at(-1)?.message ?? '';
+    assert.doesNotMatch(preview, /update artifact:/);
+    assert.match(preview, /"code":"artifact-row-conflict"/);
+    assert.match(preview, /To write the file text of M001-CONTEXT over its database row: --choice=M001-CONTEXT\.use-file/);
+
+    // A choice for a document that does not differ is refused.
+    const unused = makeCtx();
+    await handleRecover(unused.ctx, base, '--choice=M001-RESEARCH.use-file');
+    assert.equal(unused.notes.at(-1)?.kind, 'error', unused.notes.at(-1)?.message);
+    assert.match(unused.notes.at(-1)?.message ?? '', /does not differ from an active database row: M001-RESEARCH/);
+
+    // The choice seals a Preview that updates the row; the approval needs the choice again.
+    const chosen = makeCtx();
+    await handleRecover(chosen.ctx, base, '--choice=M001-CONTEXT.use-file');
+    const chosenPreview = chosen.notes.at(-1)?.message ?? '';
+    assert.match(chosenPreview, /update artifact:milestones\/M001\/M001-CONTEXT\.md/);
+    assert.equal(content(), saved, 'the Preview writes nothing');
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(chosenPreview)?.[0];
+    assert.ok(approval, 'no diagnosis blocks the Preview');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, `${approval} --choice=M001-CONTEXT.use-file`);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+    assert.equal(content(), edited);
+  });
+
+  test('recover applies a plain approval without the changed milestone CONTEXT.md text', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    insertMilestone({ id: 'M001', title: 'Recovery Test', status: 'active' });
+    const saved = '# M001 context\n\nSaved by the discussion.\n';
+    await saveArtifactToDb({
+      path: 'milestones/M001/M001-CONTEXT.md',
+      artifact_type: 'CONTEXT',
+      content: saved,
+      milestone_id: 'M001',
+    }, base);
+    writeFile(base, 'milestones/M001/M001-CONTEXT.md', '# M001 context\n\nEdited in the file.\n');
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(first.notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(approval, first.notes.at(-1)?.message);
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+    assert.deepEqual(
+      _getAdapter()!.prepare('SELECT path, full_content FROM artifacts').all(),
+      [{ path: 'milestones/M001/M001-CONTEXT.md', full_content: saved }],
+    );
+  });
+
+  test('recover on a hand-written REQUIREMENTS.md imports wrapped values and ignores unknown lines', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      writeFile(base, 'REQUIREMENTS.md', [
+        '# Requirements',
+        '',
+        '## Active',
+        '',
+        '### R001 — Unknown bullet after status',
+        '- Class: functional',
+        '- Status: active',
+        '- Priority: high',
+        '- Description: Unknown bullet after status',
+        '- Why it matters: first line',
+        'wrapped line',
+        '  indented line',
+        '',
+        '  indented paragraph',
+        '',
+        '### R002 — Rule and comment after notes',
+        '- Class: functional',
+        '- Status: active',
+        'not a status line',
+        '- Validation: by test',
+        '',
+        'A comment paragraph.',
+        '- Notes: keep this',
+        '---',
+        'A comment below the rule.',
+        '',
+      ].join('\n'));
+
+      const first = makeCtx();
+      await handleRecover(first.ctx, base);
+      const preview = first.notes.at(-1)?.message ?? '';
+      const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+      assert.ok(approval, `no diagnosis blocks the Preview: ${preview}`);
+
+      const second = makeCtx();
+      await handleRecover(second.ctx, base, approval);
+
+      assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+      assert.deepEqual(
+        _getAdapter()!.prepare('SELECT id, status, why, validation, notes FROM requirements ORDER BY id').all(),
+        [
+          {
+            id: 'R001',
+            status: 'active',
+            why: 'first line\nwrapped line\nindented line\n\nindented paragraph',
+            validation: '',
+            notes: '',
+          },
+          { id: 'R002', status: 'active', why: '', validation: 'by test', notes: 'keep this' },
+        ],
+      );
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover on a database in sync with its registries changes no decision and no requirement', async () => {
+    const base = createFixtureBase();
+    try {
+      writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      // The real writers save the rows and render DECISIONS.md and REQUIREMENTS.md.
+      await saveDecisionToDb({
+        scope: 'architecture',
+        decision: 'Separator',
+        choice: 'a | b',
+        rationale: 'line one\nline two',
+        made_by: 'human',
+      }, base);
+      await saveRequirementToDb({
+        class: 'functional',
+        description: 'Recover keeps registries',
+        why: 'line one\n\nline two',
+        source: 'user',
+        notes: 'a | b',
+      }, base);
+      const decisionsBefore = getAllDecisionsFromMemories();
+      const requirementsBefore = _getAdapter()!.prepare('SELECT * FROM requirements').all();
+
+      const first = makeCtx();
+      await handleRecover(first.ctx, base);
+      const preview = first.notes.at(-1)?.message ?? '';
+      assert.doesNotMatch(preview, /(decision|requirement):/, 'the Preview changes no registry row');
+      const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+      assert.ok(approval, 'no diagnosis blocks the Preview');
+
+      const second = makeCtx();
+      await handleRecover(second.ctx, base, approval);
+      assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+      assert.deepEqual(getAllDecisionsFromMemories(), decisionsBefore);
+      assert.deepEqual(_getAdapter()!.prepare('SELECT * FROM requirements').all(), requirementsBefore);
+    } finally {
+      closeDatabase();
+      cleanup(base);
+    }
+  });
+
+  test('recover imports every KNOWLEDGE.md Rule, Pattern and Lesson row and reports the content it does not import', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    writeFile(base, 'KNOWLEDGE.md', [
+      '# Project Knowledge',
+      '',
+      'Team note: ask before adding a rule.',
+      '',
+      '## Rules',
+      '',
+      '| # | Scope | Rule | Why | Added |',
+      '|---|-------|------|-----|-------|',
+      '| K001 | project | Use a \\| b | — | manual |',
+      '| K002 | project | Too few cells |',
+      '',
+      'Rules are reviewed each quarter.',
+      '',
+      '## Patterns',
+      '',
+      '| # | Pattern | Where | Notes |',
+      '|---|---------|-------|-------|',
+      '| P001 | Retry with backoff | src/net | — |',
+      '| MEM007 | Extracted pattern | — | — |',
+      '',
+      '## Lessons Learned',
+      '',
+      '| # | What Happened | Root Cause | Fix | Scope |',
+      '|---|--------------|------------|-----|-------|',
+      '| L001 | Cache went stale | No invalidation | Add a version key | M001 |',
+      '',
+      '## Glossary',
+      '',
+      'Projection: a file rendered from the database.',
+      '',
+    ].join('\n'));
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const preview = first.notes.at(-1)?.message ?? '';
+
+    // Every K/P/L row is a mapping. Every other part of the file is a diagnosis.
+    for (const id of ['K001', 'P001', 'L001']) {
+      assert.ok(preview.includes(`create knowledge:${id} (knowledge-row-mapped)`), id);
+    }
+    assert.doesNotMatch(preview, /knowledge:(K002|MEM007)/);
+    const diagnoses = preview
+      .slice(preview.indexOf('Diagnoses:'), preview.indexOf('Resolutions:'))
+      .split('\n')
+      .slice(1)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as { code: string; raw_value: string })
+      .filter((diagnosis) => diagnosis.code.startsWith('knowledge-'))
+      .map((diagnosis) => [diagnosis.code, diagnosis.raw_value]);
+    assert.deepEqual(diagnoses.sort(), [
+      ['knowledge-content-not-imported', '## Glossary\n\nProjection: a file rendered from the database.'],
+      ['knowledge-content-not-imported', 'Rules are reviewed each quarter.'],
+      ['knowledge-content-not-imported', 'Team note: ask before adding a rule.'],
+      ['knowledge-row-not-imported', '| K002 | project | Too few cells |'],
+      ['knowledge-row-not-imported', '| MEM007 | Extracted pattern | — | — |'],
+    ]);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+    assert.ok(approval, 'no knowledge diagnosis blocks the Preview');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+
+    const imported = _getAdapter()!
+      .prepare('SELECT category, content, scope, superseded_by, structured_fields FROM memories ORDER BY category')
+      .all()
+      .map((row) => ({ ...row, structured_fields: JSON.parse(String(row['structured_fields'])) }));
+    assert.deepEqual(imported, [
+      {
+        category: 'gotcha',
+        content: 'Cache went stale',
+        scope: 'M001',
+        superseded_by: null,
+        structured_fields: {
+          sourceKnowledgeTable: 'lessons',
+          whatHappened: 'Cache went stale',
+          rootCause: 'No invalidation',
+          fix: 'Add a version key',
+          scopeText: 'M001',
+          sourceKnowledgeId: 'L001',
+        },
+      },
+      {
+        category: 'pattern',
+        content: 'Retry with backoff',
+        scope: 'project',
+        superseded_by: null,
+        structured_fields: {
+          sourceKnowledgeTable: 'patterns',
+          pattern: 'Retry with backoff',
+          where: 'src/net',
+          notes: '',
+          sourceKnowledgeId: 'P001',
+        },
+      },
+      {
+        category: 'rule',
+        content: 'Use a | b',
+        scope: 'project',
+        superseded_by: null,
+        structured_fields: {
+          sourceKnowledgeTable: 'rules',
+          scopeText: 'project',
+          rule: 'Use a | b',
+          why: '',
+          added: 'manual',
+          sourceKnowledgeId: 'K001',
+        },
+      },
+    ]);
+
+    // The import is exact: the same file gives no further knowledge change.
+    assert.deepEqual(
+      recoverPreview(base).preview.changes.filter((change) => change.target.kind === 'knowledge'),
+      [],
+    );
+    // Content that was reported as not imported is still in the file after a render.
+    const rendered = renderKnowledgeProjection(base).content;
+    for (const kept of [
+      'Team note: ask before adding a rule.',
+      '| K001 | project | Use a \\| b | — | manual |',
+      '| K002 | project | Too few cells |',
+      'Rules are reviewed each quarter.',
+      '## Glossary',
+      'Projection: a file rendered from the database.',
+    ]) {
+      assert.ok(rendered.includes(kept), kept);
+    }
+  });
+
+  test('recover imports a KNOWLEDGE.md row with empty cells and reads the database row back as the same cells', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    writeFile(base, 'KNOWLEDGE.md', [
+      '# Project Knowledge',
+      '',
+      '## Rules',
+      '',
+      '| # | Scope | Rule | Why | Added |',
+      '|---|-------|------|-----|-------|',
+      '| K001 | project | Use tabs | | |',
+      '| K002 | | Use spaces | Team style | manual |',
+      '',
+      '## Lessons Learned',
+      '',
+      '| # | What Happened | Root Cause | Fix | Scope |',
+      '|---|--------------|------------|-----|-------|',
+      '| L001 | Cache went stale | | | |',
+      '',
+    ].join('\n'));
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(first.notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(approval, first.notes.at(-1)?.message);
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+
+    // The database rows match the content that the Application retained.
+    const application = _getAdapter()!.prepare('SELECT operation_id FROM workflow_import_applications').get()!;
+    verifyLegacyImportApplicationTargets(inspectLegacyImportApplicationEvidence(String(application['operation_id'])));
+    assert.deepEqual(
+      _getAdapter()!
+        .prepare("SELECT scope, json_extract(structured_fields, '$.sourceKnowledgeId') AS id FROM memories ORDER BY id")
+        .all()
+        .map((row) => [row['id'], row['scope']]),
+      [['K001', 'project'], ['K002', 'project'], ['L001', 'project']],
+    );
+    // The import is exact: the same file gives no further knowledge change.
+    assert.deepEqual(
+      recoverPreview(base).preview.changes.filter((change) => change.target.kind === 'knowledge'),
+      [],
+    );
+    const rendered = renderKnowledgeProjection(base).content;
+    for (const row of [
+      '| K001 | project | Use tabs | — | — |',
+      '| K002 | project | Use spaces | Team style | manual |',
+      '| L001 | Cache went stale | — | — | project |',
+    ]) {
+      assert.ok(rendered.includes(row), row);
+    }
+  });
+
+  test('recover changes no knowledge row for a rendered KNOWLEDGE.md, a forgotten row or a hand-edited row', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    writeFile(base, 'milestones/M001/M001-ROADMAP.md', ROADMAP_M001);
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    // The real capture path writes the rows and renders KNOWLEDGE.md.
+    captureKnowledgeEntry(base, 'rule', 'Line one\nline two | piped', 'project');
+    captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+    const lesson = captureKnowledgeEntry(base, 'lesson', 'Cache went stale', 'M001');
+    const knowledgeChanges = () => recoverPreview(base).preview.changes
+      .filter((change) => change.target.kind === 'knowledge')
+      .map((change) => `${change.action} ${change.target.key}`);
+    assert.deepEqual(knowledgeChanges(), [], 'a rendered file is in sync with the database');
+
+    // A forgotten row that a stale file still shows is not created again.
+    const knowledgePath = join(base, '.gsd', 'KNOWLEDGE.md');
+    const beforeForget = readFileSync(knowledgePath, 'utf-8');
+    _getAdapter()!.prepare("UPDATE memories SET superseded_by = 'CAP_EXCEEDED' WHERE id = :id")
+      .run({ ':id': lesson.memoryId });
+    renderKnowledgeProjection(base);
+    assert.ok(!readFileSync(knowledgePath, 'utf-8').includes('L001'));
+    writeFileSync(knowledgePath, beforeForget);
+    assert.deepEqual(knowledgeChanges(), [], 'a forgotten row stays forgotten');
+
+    writeFileSync(knowledgePath, beforeForget.replace('Retry with backoff', 'Retry with jitter'));
+    assert.deepEqual(knowledgeChanges(), [], 'a file row does not change its database row');
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(first.notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(approval, first.notes.at(-1)?.message);
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+
+    const patterns = _getAdapter()!
+      .prepare("SELECT content, superseded_by, structured_fields FROM memories WHERE category = 'pattern'")
+      .all();
+    assert.equal(patterns.length, 1, 'the import adds no row');
+    assert.equal(patterns[0]!['content'], 'Retry with backoff');
+    assert.equal(patterns[0]!['superseded_by'], null);
+    assert.equal(JSON.parse(String(patterns[0]!['structured_fields'])).pattern, 'Retry with backoff');
+    assert.equal(
+      _getAdapter()!.prepare('SELECT superseded_by FROM memories WHERE id = :id').get({ ':id': lesson.memoryId })?.['superseded_by'],
+      'CAP_EXCEEDED',
+    );
+    assert.deepEqual(knowledgeChanges(), []);
+  });
+
+  for (const [label, fileText] of [
+    ['the same text', 'Cache went stale'],
+    ['a different text', 'Cache went stale again'],
+  ] as const) {
+    test(`recover reports a KNOWLEDGE.md row with ${label} as not imported when its database row was forgotten`, async (t) => {
+      const base = createFixtureBase();
+      t.after(() => {
+        closeDatabase();
+        cleanup(base);
+      });
+      openDatabase(join(base, '.gsd', 'gsd.db'));
+      captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+      const lesson = captureKnowledgeEntry(base, 'lesson', 'Cache went stale', 'M001');
+      const knowledgePath = join(base, '.gsd', 'KNOWLEDGE.md');
+      const beforeForget = readFileSync(knowledgePath, 'utf-8');
+      // `/gsd memory forget` supersedes the row with this sentinel and renders.
+      assert.equal(supersedeMemory(lesson.memoryId, 'CAP_EXCEEDED'), true);
+      renderKnowledgeProjection(base);
+      assert.ok(!readFileSync(knowledgePath, 'utf-8').includes('L001'));
+      // A stale file shows the forgotten row again.
+      writeFileSync(knowledgePath, beforeForget.replace('Cache went stale', fileText));
+
+      const first = makeCtx();
+      await handleRecover(first.ctx, base);
+      const preview = first.notes.at(-1)?.message ?? '';
+      assert.doesNotMatch(preview, /knowledge:L001/, 'the Preview plans no change for the forgotten row');
+      const reported = preview
+        .slice(preview.indexOf('Diagnoses:'), preview.indexOf('Resolutions:'))
+        .split('\n')
+        .slice(1)
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line) as { code: string; severity: string; raw_value: string; message: string })
+        .filter((diagnosis) => diagnosis.code === 'knowledge-row-not-imported');
+      assert.deepEqual(
+        reported.map((diagnosis) => [diagnosis.severity, diagnosis.raw_value]),
+        [['warning', `| L001 | ${fileText} | — | — | M001 |`]],
+      );
+      assert.match(reported[0]!.message, /forgotten.*next render removes/u);
+      const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+      assert.ok(approval, 'the loss report does not block the Preview');
+
+      const second = makeCtx();
+      await handleRecover(second.ctx, base, approval);
+      assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+      assert.deepEqual(
+        { ..._getAdapter()!.prepare('SELECT content, superseded_by FROM memories WHERE id = :id').get({ ':id': lesson.memoryId }) },
+        { content: 'Cache went stale', superseded_by: 'CAP_EXCEEDED' },
+        'the forgotten row is not changed and stays forgotten',
+      );
+      // The report is true: the next render removes the row from the file.
+      assert.ok(!renderKnowledgeProjection(base).content.includes('L001'));
+      const rendered = readFileSync(knowledgePath, 'utf-8');
+      assert.ok(!rendered.includes('L001'));
+      assert.ok(rendered.includes('| P001 | Retry with backoff |'));
+    });
+  }
+
+  test('recover gives an info report for a KNOWLEDGE.md memory-id row that an active database memory renders, a conflict for other text and a warning for no active memory', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    const active = createMemory({ category: 'pattern', content: 'Extracted pattern one' })!;
+    const forgotten = createMemory({ category: 'pattern', content: 'Extracted pattern two' })!;
+    const edited = createMemory({ category: 'pattern', content: 'Use adapters' })!;
+    const knowledgePath = join(base, '.gsd', 'KNOWLEDGE.md');
+    const beforeForget = renderKnowledgeProjection(base).content;
+    assert.equal(supersedeMemory(forgotten, 'CAP_EXCEEDED'), true);
+    // A stale file shows the forgotten memory row and a row of another checkout.
+    const stale = beforeForget.replace(
+      `| ${forgotten} | Extracted pattern two | — | — |`,
+      `| ${forgotten} | Extracted pattern two | — | — |\n| MEM999 | Pattern of another checkout | — | — |`,
+    );
+    assert.notEqual(stale, beforeForget);
+    // The file row of an active memory has text that the database does not hold.
+    writeFileSync(knowledgePath, stale.replace('Use adapters', 'Use ports, not adapters'));
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const preview = first.notes.at(-1)?.message ?? '';
+    const reported = preview
+      .slice(preview.indexOf('Diagnoses:'), preview.indexOf('Resolutions:'))
+      .split('\n')
+      .slice(1)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as { code: string; severity: string; raw_value: string })
+      .filter((diagnosis) => diagnosis.code.startsWith('knowledge-'))
+      .map((diagnosis) => [diagnosis.code, diagnosis.severity, diagnosis.raw_value]);
+    assert.deepEqual(reported.sort(), [
+      ['knowledge-memory-row-not-imported', 'info', `| ${active} | Extracted pattern one | — | — |`],
+      ['knowledge-row-conflict', 'warning', `| ${edited} | Use ports, not adapters | — | — |`],
+      ['knowledge-row-not-imported', 'warning', '| MEM999 | Pattern of another checkout | — | — |'],
+      ['knowledge-row-not-imported', 'warning', `| ${forgotten} | Extracted pattern two | — | — |`],
+    ].sort());
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+    assert.ok(approval, 'the reports do not block the Preview');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+    // The reports are true: the next render shows only the active database rows.
+    const rendered = renderKnowledgeProjection(base).content;
+    assert.ok(rendered.includes(`| ${active} | Extracted pattern one |`));
+    assert.ok(rendered.includes(`| ${edited} | Use adapters |`));
+    assert.ok(!rendered.includes('Use ports, not adapters'));
+    assert.ok(!rendered.includes(forgotten));
+    assert.ok(!rendered.includes('MEM999'));
+  });
+
+  test('recover reports a KNOWLEDGE.md row that differs from its database row as a conflict and keeps the database row', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    const pattern = captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+    // A memory UPDATE changes the database row. KNOWLEDGE.md keeps the old text.
+    assert.equal(updateMemoryContent(pattern.memoryId, 'Retry with jitter'), true);
+    const patternRow = () => ({
+      ..._getAdapter()!
+        .prepare('SELECT category, content, scope, superseded_by, structured_fields FROM memories WHERE id = :id')
+        .get({ ':id': pattern.memoryId }),
+    });
+    const beforeImport = patternRow();
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const preview = first.notes.at(-1)?.message ?? '';
+    assert.doesNotMatch(preview, /knowledge:P001/, 'the Preview plans no change for the row');
+    const reported = preview
+      .slice(preview.indexOf('Diagnoses:'), preview.indexOf('Resolutions:'))
+      .split('\n')
+      .slice(1)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as { code: string; severity: string; raw_value: string; message: string })
+      .filter((diagnosis) => diagnosis.code.startsWith('knowledge-row-'));
+    assert.deepEqual(
+      reported.map((diagnosis) => [diagnosis.code, diagnosis.severity, diagnosis.raw_value]),
+      [['knowledge-row-conflict', 'warning', '| P001 | Retry with backoff | — | — |']],
+    );
+    assert.match(reported[0]!.message, /database row is kept.*next render replaces/u);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+    assert.ok(approval, 'the conflict report does not block the Preview');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, approval);
+    assert.equal(second.notes.at(-1)?.kind, 'success', second.notes.at(-1)?.message);
+    assert.deepEqual(patternRow(), beforeImport, 'the import does not write the file text over the database row');
+    assert.equal(beforeImport['content'], 'Retry with jitter');
+    // The report is true: the next render replaces the row in the file.
+    const rendered = renderKnowledgeProjection(base).content;
+    assert.ok(rendered.includes('| P001 | Retry with jitter |'));
+    assert.ok(!rendered.includes('Retry with backoff'));
+  });
+
+  test('recover writes a conflicting KNOWLEDGE.md row over its database row only by explicit choice, and Forward Repair restores the database row', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    const pattern = captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+    // A memory UPDATE changes the database row. KNOWLEDGE.md keeps the old text.
+    assert.equal(updateMemoryContent(pattern.memoryId, 'Retry with jitter'), true);
+    const databaseText = () => _getAdapter()!
+      .prepare('SELECT content FROM memories WHERE id = :id')
+      .get({ ':id': pattern.memoryId })?.['content'];
+
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const choice = /--choice=P001\.use-file/u.exec(first.notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(choice, 'the conflict report names the explicit choice');
+
+    const second = makeCtx();
+    await handleRecover(second.ctx, base, choice);
+    const preview = second.notes.at(-1)?.message ?? '';
+    assert.match(preview, /update knowledge:P001 \(knowledge-row-mapped\)/u);
+    assert.doesNotMatch(preview, /knowledge-row-conflict/u);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(preview)?.[0];
+    assert.ok(approval);
+    assert.equal(databaseText(), 'Retry with jitter', 'a Preview changes nothing');
+
+    // The approved hash is the hash of the choice Preview: without the choice it applies nothing.
+    await handleRecover(makeCtx().ctx, base, approval);
+    assert.equal(databaseText(), 'Retry with jitter');
+
+    const third = makeCtx();
+    await handleRecover(third.ctx, base, `${choice} ${approval}`);
+    assert.equal(third.notes.at(-1)?.kind, 'success', third.notes.at(-1)?.message);
+    assert.equal(databaseText(), 'Retry with backoff', 'the chosen file text replaces the database row');
+
+    // Later accepted work closes the restore window, so the undo is a Forward Repair.
+    captureKnowledgeEntry(base, 'rule', 'Later rule', 'project');
+    const application = _getAdapter()!.prepare('SELECT operation_id FROM workflow_import_applications').get()!;
+    const repair = makeCtx();
+    await handleRecover(repair.ctx, base, `--application=${String(application['operation_id'])} --forward-repair`);
+    assert.match(repair.notes.at(-1)?.message ?? '', /Forward Repair: committed/u);
+    assert.equal(databaseText(), 'Retry with jitter', 'Forward Repair restores the database row of the backup');
+  });
+
+  test('recover refuses a knowledge row choice for a row that does not differ from its database row', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+
+    const { ctx, notes } = makeCtx();
+    await handleRecover(ctx, base, '--choice=P001.use-file');
+
+    assert.equal(notes.at(-1)?.kind, 'error');
+    assert.match(notes.at(-1)?.message ?? '', /does not differ from an active database row: P001/u);
+    assert.equal(_getAdapter()!.prepare('SELECT COUNT(*) AS count FROM workflow_import_applications').get()?.['count'], 0);
+  });
+
+  test('recover refuses a knowledge row choice when it loads a retained Import Application', async (t) => {
+    const base = createFixtureBase();
+    t.after(() => {
+      closeDatabase();
+      cleanup(base);
+    });
+    openDatabase(join(base, '.gsd', 'gsd.db'));
+    const pattern = captureKnowledgeEntry(base, 'pattern', 'Retry with backoff', 'project');
+    assert.equal(updateMemoryContent(pattern.memoryId, 'Retry with jitter'), true);
+    const databaseText = () => _getAdapter()!
+      .prepare('SELECT content FROM memories WHERE id = :id')
+      .get({ ':id': pattern.memoryId })?.['content'];
+
+    // The operator approves the plain conflict Preview first: the database row is kept.
+    const first = makeCtx();
+    await handleRecover(first.ctx, base);
+    const approval = /--preview=(sha256:[0-9a-f]{64})/u.exec(first.notes.at(-1)?.message ?? '')?.[0];
+    assert.ok(approval);
+    const applied = makeCtx();
+    await handleRecover(applied.ctx, base, approval);
+    assert.equal(applied.notes.at(-1)?.kind, 'success', applied.notes.at(-1)?.message);
+
+    for (const args of [
+      '--choice=P001.use-file',
+      `--application=${String(_getAdapter()!.prepare('SELECT operation_id FROM workflow_import_applications').get()!['operation_id'])} --choice=P001.use-file`,
+    ]) {
+      const { ctx, notes } = makeCtx();
+      await handleRecover(ctx, base, args);
+      assert.equal(notes.at(-1)?.kind, 'error', notes.at(-1)?.message);
+      assert.match(notes.at(-1)?.message ?? '', /row choice for P001 was not applied/u);
+      assert.equal(databaseText(), 'Retry with jitter');
+    }
+  });
+});

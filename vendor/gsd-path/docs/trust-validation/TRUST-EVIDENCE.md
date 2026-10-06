@@ -1,0 +1,307 @@
+# GSD Path — Trust Evidence Log
+
+Current release evidence: [1.4.0 candidate](#release-evidence-2026-09-30--140).
+Earlier sections remain historical observations.
+
+**Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
+**Executor:** Cursor agent session (automated + CLI where noted)  
+**Test repo:** `/tmp/gsd-trust-evidence-25642`  
+**Source repo:** `/Users/jeremymcspadden/github/open-gsd/gsd-path`
+
+---
+
+## 1. Install (Codex, Claude, Cursor)
+
+**Command** (from test repo cwd):
+
+```bash
+cd /tmp/gsd-trust-evidence-25642
+node /Users/jeremymcspadden/github/open-gsd/gsd-path/scripts/install.mjs \
+  --codex --claude --cursor --local --project "$(pwd)" --hooks
+```
+
+**Result:** PASS
+
+- codex → `.agents/skills` (9 skills at the time of this run)
+- claude → `.claude/skills` (9 skills at the time of this run)
+- cursor → `.cursor/skills` + `.cursor/agents/gsd-path.md`
+- project → `AGENTS.md`, `WORKFLOW.md`, `.claude/CLAUDE.md`, `.gsd-path/*`, Claude settings, git hooks
+
+**Note:** `--local` requires cwd = project root; `--project` path alone does not relocate local skill roots.
+
+---
+
+## 2. Claude guards (deny / allow)
+
+**Files present:** `.gsd-path/guard_hook.py`, `.gsd-path/git_guard.py`, `.claude/settings.json`, `.git/hooks/pre-commit`, `.git/hooks/commit-msg`
+
+The current installer also registers `.git/hooks/pre-push`; it was not part
+of this historical run. See [HOOKS.md](../../HOOKS.md) for current guard rules.
+
+### Deny — `guard_hook.py` (stdin)
+
+```bash
+echo '{"tool_name":"Edit","tool_input":{"file_path":".project/archive/001-test/MANIFEST.md","content":"bad"}}' \
+  | python3 .gsd-path/guard_hook.py
+```
+
+**Result:** PASS — exit code 2, JSON `permissionDecision: deny`
+
+### Deny — pre-commit archive tamper
+
+Staged modification to committed `.project/archive/001-test/MANIFEST.md`
+
+**Result:** PASS — `gsd-path guard blocked the commit: committed archives are read-only`
+
+### Allow — commit outside archive
+
+```bash
+git commit -m "chore: outside archive"  # notes.txt only
+```
+
+**Result:** PASS — commit `d126508` succeeded
+
+---
+
+## 3. Codex — implicit invocation
+
+```bash
+cd /Users/jeremymcspadden/github/open-gsd/gsd-path
+python3 -m unittest tests.test_implicit_invocation.ImplicitInvocationTests.test_router_is_absent_from_ordinary_codex_skill_catalog -v
+```
+
+**Result:** PASS — ok in 2.6s
+
+---
+
+## 4. Dispatch smoke — Codex
+
+```bash
+cd /tmp/gsd-trust-evidence-25642
+codex exec --skip-git-repo-check \
+  "Write .../DOCS-AUDIT-codex.md minimal audit of README.md ..."
+```
+
+**Result:** UNVERIFIABLE (downgraded 2026-08-11; originally recorded PASS) —
+the command exercised the top-level `codex exec` CLI, not a child-agent spawn
+through the dispatch contract, so it does not evidence child dispatch.  
+**Artifact:** `.project/research/DOCS-AUDIT-codex.md` (verdict table, aspirational claim on missing install.mjs)  
+**Spawn API:** Codex `exec` non-interactive (top-level CLI, no child spawn)
+
+---
+
+## 5. Dispatch smoke — Claude Code
+
+```bash
+cd /tmp/gsd-trust-evidence-25642
+claude -p --dangerously-skip-permissions \
+  "Write .../DOCS-AUDIT-claude.md ..."
+```
+
+**Result:** UNVERIFIABLE (downgraded 2026-08-11; originally recorded PASS) —
+the command exercised the top-level `claude -p` CLI, not the `Agent` tool
+child spawn the dispatch contract requires, so it does not evidence child
+dispatch.  
+**Artifact:** `.project/research/DOCS-AUDIT-claude.md` (verdict summary, unverifiable under README-only scope)  
+**Spawn API:** Claude Code `-p` (print mode; top-level CLI, no child spawn)
+
+---
+
+## 6. Cursor — pipeline slice
+
+### 6a Router read (STATE → next action)
+
+**STATE:** `phase: grill`, `status: done`, `pipeline: gsd-path/v1` (pipeline id at the time of this run; current pipeline is `gsd-path/v2` and the `grill` phase no longer exists)  
+**Router table** (`skills/gsd-path/SKILL.md`): → bundled **research** contract (standard lane default)
+
+**Result:** PASS — routing logic applied from installed router skill; no mutation errors on STATE
+
+### 6b Child spawn (docs audit)
+
+**Method:** Cursor `Task` subagent (`generalPurpose`) — native `subagent_type: gsd-path` **not available** in Cursor Task API enum (2026-08-05).
+
+**Result:** PARTIAL (reconciled 2026-08-11; originally "PASS with caveat") —
+a child wrote the audit artifact, but via the generic `generalPurpose`
+subagent, not the contract's `gsd-path` subagent type, which the same run
+recorded as unavailable. The dispatch contract itself remains unverified on
+Cursor.  
+**Artifact:** `.project/research/DOCS-AUDIT.md` (full template: summary counts, claim row, remediation queue)  
+**Spawn API:** Cursor Task → `generalPurpose` (project `.cursor/agents/gsd-path.md` exists but not used via Task enum)
+
+### 6c Handoff on disk
+
+**Result:** PASS — `DOCS-AUDIT.md` valid structure at canonical path
+
+---
+
+## 7. Automated suite (re-run)
+
+```bash
+cd /Users/jeremymcspadden/github/open-gsd/gsd-path
+npm test && python3 -m unittest discover -s tests -q
+```
+
+**Result:** PASS — 36 Node + 107 Python (2026-08-05 run; see
+`automated-test-inventory.md` for the current suite inventory)
+
+---
+
+## Summary vs manual bar
+
+| Bar item | Host | Status | Evidence |
+|--------|------|--------|----------|
+| Install + hooks | All 3 | **PASS** | §1 |
+| Guard deny/allow | Claude (+ git hooks all) | **PASS** | §2 |
+| Dispatch smoke | Codex | **UNVERIFIABLE** | §4 (top-level CLI run; no child spawn — downgraded 2026-08-11) |
+| Dispatch smoke | Claude | **UNVERIFIABLE** | §5 (top-level CLI run; no child spawn — downgraded 2026-08-11) |
+| Pipeline slice | Cursor | **PARTIAL** | §6 (Task API lacks `gsd-path` subagent type; child ran as `generalPurpose`) |
+| Codex implicit catalog | Codex | **PASS** | §3 |
+| Build orchestration | All 11 | **PASS** | §Release evidence — every receipt carries a native child spawn and an isolated Task Verify |
+| Full milestone ship | All 11 | **PASS** | §Release evidence — eleven passing receipts on candidate 091d279 |
+
+---
+
+## Posture updates (after evidence)
+
+| Dimension | Prior | After manual runs |
+|-----------|-------|-------------------|
+| Host dispatch (all eleven hosts) | Prove first | **Met** (2026-09-09) — each receipt binds a real child spawned through that host's declared child API; the 2026-08-11 reconciliation applied to the earlier top-level CLI runs, which these receipts supersede |
+| Live dogfood (Cursor slice) | Prove first | **Partial met** — router read + a `generalPurpose` child; contract's `gsd-path` subagent unavailable; not full UI `/gsd-path` session |
+| Guards (Claude) | Use with checks | **OK to use** — deny/allow reproduced in test repo |
+| Guards (Codex/Cursor pre-tool-use) | Use with checks | See [Release evidence](#release-evidence-2026-09-09) for the current guard tiers and native probes |
+| Build orchestration | Prove first | **Met** — every one of the eleven receipts binds a completed native child to the landed task commit |
+| CI | Prove first | **Automated** — `.github/workflows/ci.yml` now runs Node, Python, and resource-sync checks; this was not part of the 2026-08-05 manual run |
+
+---
+
+## Release evidence (2026-09-09)
+
+Every one of the eleven supported hosts holds a passing full-milestone receipt
+on the frozen candidate `091d27927a2c0c2ecc55ce386fb2232556da6336`. Each receipt
+records a real run on a fresh fixture: the router reaching `shipped`, a native
+child spawned through that host's own child API and bound to the landed task
+commit, an isolated Task Verify, a full-wave review, the archive transaction,
+the single `.project`-only ship commit, integration to a local origin, and the
+Git-hook guard result. `scripts/check_trust_evidence.py` validates all eleven
+against that candidate, and the accompanying `fixture.bundle` carries the
+history each claim is checked against.
+
+Guard tiers: Claude Code and Cursor install a fail-closed project hook, and both
+receipts include a native guard probe in which the host's own tooling refused an
+edit to a committed archive file while an ordinary shell command was allowed.
+The other nine hosts are declared git-only, so the Git hooks carry enforcement
+and `native_guard` reads `not-applicable`.
+
+Owner gates were answered by the session evaluator and are recorded verbatim in
+each evaluation directory. Seven hosts honored every gate unaided; Cursor, GitHub
+Copilot CLI, Qwen Code, and Kimi Code required a hard-stop prompt addendum after
+self-approving a gate, which is recorded in their receipts. Host-specific
+setup and behaviour notes live in [HOST-MATRIX.md](HOST-MATRIX.md).
+
+Publication remains a separate owner decision. These receipts establish that
+the pipeline runs end to end on every supported host; they do not by themselves
+authorize a version tag, a registry publish, or a visibility change.
+
+---
+
+## Release evidence (2026-09-13)
+
+Candidate frozen at `bd7516713dd33ba483129ac9ba5cc16f5a3b7e18` on the release
+branch after merging PR #101 and adding `scripts/prepare_release_evidence.sh`.
+All eleven host receipts from the 2026-09-09 freeze remain in the tree for
+comparison but no longer pass `scripts/check_trust_evidence.py` because
+non-evidence files changed after `091d279`.
+
+Superseded: live receipt runs found defects that behave wrongly under correct
+use, so the candidate moved several times before all eleven hosts passed. See
+the 2026-09-15 section.
+
+---
+
+## Release evidence (2026-09-15)
+
+Every one of the eleven supported hosts holds a passing full-milestone receipt
+on the frozen candidate `052475792bbe211f104d34a524c22db056bdee71`, and
+`scripts/check_trust_evidence.py` validates all eleven. Each receipt records the
+same run shape as the 2026-09-09 set: a native child bound to the landed task
+commit, an isolated Task Verify, a full-wave review, the archive transaction,
+the `.project`-only ship commit, integration to a local origin, and the Git-hook
+guard result. Claude Code and Cursor also include a native guard probe.
+
+Before this freeze, live runs moved the candidate. Each of the following
+defects occurs when a host follows the documented contract, so each was fixed
+first:
+
+- PR #104: the closed-milestone guard blocked read-only git inspection.
+- PR #106: an empty hook `cwd` made every `git -C` command fail closed.
+- PR #107: the commit guard accepted ship bodies that `validate` rejects.
+- PR #108: checkpoints accepted `.project` junk that prepare-final rejects, and
+  archive prepare accepted a stale final review.
+- PR #110: an approval refused for `.project` junk could not resume after the
+  junk was removed.
+
+Owner release bar for 1.0.0: only defects under correct use block. Hardening
+against host misuse, and documentation that is stricter or looser than a gate
+that fails safe, are tracked for 1.0.1 in issues #105, #109, #111 and #112.
+
+Owner gates were answered by the session evaluator and are recorded in each
+evaluation directory. Codex, Claude Code, Grok and OpenCode honored every gate
+unaided. The other seven hosts ran with the hard-stop prompt addendum. Invalid
+attempts are kept beside each harness with the reason in the directory name.
+
+Publication remains a separate owner decision. These receipts do not by
+themselves authorize a version tag, a registry publish, or a visibility change.
+
+---
+
+## Release evidence (2026-09-18 — 1.1.0)
+
+Candidate: `af0b082964510c471798826d7e2e05617d8d6dc3`, frozen from main after
+PRs #124 and #125. All eleven hosts have validated current-candidate receipts
+under `evidence/releases/1.1.0/` and pass the external counter CLI oracle.
+See [HOST-MATRIX.md](HOST-MATRIX.md) for each receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+review, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed their installed native guard probes.
+Qwen used its native CLI with the authorized OpenRouter Claude Sonnet backend;
+credit failures were resolved before continuing the same fixture. Antigravity
+used an independent final reviewer after review reuse was rejected.
+
+[Run notes](evidence/releases/1.1.0/notes/RUNS.md) preserve failed attempts and
+separate them from passing proof. No product or host contract changed after
+the candidate. The complete `verify:release` gate is required before publication.
+The owner authorized completing and publishing 1.1.0; receipts themselves do
+not grant publication authority.
+
+---
+
+## Release evidence (2026-09-30 — 1.4.0)
+
+Candidate: `6d3e38ed525831217cf7d4790674feebd8afc75f`, frozen from main after
+PRs #240 (native member-task retry) and #241 (version 1.4.0). Codex, Claude
+Code, Grok, OpenCode, Antigravity, Cursor, and Kimi have validated
+current-candidate receipts under `evidence/releases/1.4.0/` and pass the
+external counter CLI oracle 6/6. See [HOST-MATRIX.md](HOST-MATRIX.md) for each
+receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+review, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed fresh native guard probes. No attempt was
+invalid and no candidate defect was found.
+
+Muse Code was not evaluated: the Muse delegation adapter was added from live
+tool schemas; no recorded live release evidence yet. It is excluded from the
+live-check scope via `EXCLUDED_EVALUATION_HOSTS` until evidence is recorded.
+Exclusion is not a live-test pass.
+
+GitHub Copilot CLI was not evaluated: its account quota was exhausted on every
+model, including zero-premium models. The maintainer excluded it from the
+live-check scope, first for 1.4.0; it stays excluded until the maintainer
+restores it by removing it from `EXCLUDED_EVALUATION_HOSTS` before the next
+release's evaluation. Exclusion is not a live-test pass. Output-token usage per
+session was recorded; sessions over 30,000 tokens are findings, not failures,
+by owner ruling. [Run notes](evidence/releases/1.4.0/notes/RUNS.md) list gate
+corrections, token usage, and hardening gaps. The complete `verify:release`
+gate is required before publication; receipts do not grant publication
+authority.

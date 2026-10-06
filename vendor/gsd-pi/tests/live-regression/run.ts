@@ -1,0 +1,694 @@
+/**
+ * Live Regression Test Harness — Post-Build Pipeline Validation
+ *
+ * These tests run AFTER `npm publish` against the installed `gsd` binary.
+ * They exercise the dispatch loop state machine end-to-end by:
+ *
+ * 1. Creating real `.gsd/` directory structures with milestone artifacts
+ * 2. Calling `gsd headless query` to verify state derivation
+ * 3. Verifying phase transitions match expected outcomes
+ * 4. Testing crash recovery (lock file lifecycle) with a real captured PID
+ * 5. Testing TTY / version-skew gating on startup
+ *
+ * These tests DO NOT require LLM API keys — they test the state machine
+ * and infrastructure, not the LLM execution.
+ *
+ * Run from CI pipeline after `npm install -g @opengsd/gsd-pi@<version>`:
+ *   node --experimental-strip-types tests/live-regression/run.ts
+ *
+ * Or locally:
+ *   GSD_SMOKE_BINARY=dist/loader.js node --experimental-strip-types tests/live-regression/run.ts
+ */
+
+import { execFileSync, spawn, spawnSync } from "child_process";
+import { DatabaseSync } from "node:sqlite";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+} from "fs";
+import { join, resolve } from "path";
+import { tmpdir } from "os";
+
+// ─── Config ───────────────────────────────────────────────────────────────
+
+// GSD_SMOKE_BINARY may name either a filesystem path to a JS entrypoint
+// (like the `dist/loader.js` in the header) or a bare executable on PATH
+// (like `gsd`, the default). A path is run via `node`, and because every
+// test runs from a temp project dir it must be pinned to the invoking cwd
+// before we chdir away from it. A bare name is run directly through PATH and
+// must NOT be resolved: resolve("gsd") would become `<cwd>/gsd` and get run
+// as `node <cwd>/gsd`, which fails. Only values containing a path separator
+// are treated as paths. An unset OR empty value falls back to "gsd" (matching
+// the prior `env || "gsd"` truthiness), so a shell that exports the variable
+// empty does not spawn "".
+const rawBinary = process.env.GSD_SMOKE_BINARY || undefined;
+const binaryIsScriptPath =
+  rawBinary !== undefined && /[\\/]/.test(rawBinary);
+const binary =
+  rawBinary === undefined
+    ? "gsd"
+    : binaryIsScriptPath
+      ? resolve(rawBinary)
+      : rawBinary;
+let passed = 0;
+let failed = 0;
+
+function run(label: string, fn: () => void): void {
+  try {
+    fn();
+    console.log(`  PASS  ${label}`);
+    passed++;
+  } catch (err: any) {
+    console.error(`  FAIL  ${label}`);
+    console.error(`     ${err.message || err}`);
+    failed++;
+  }
+}
+
+const asyncTests: Array<{ label: string; fn: () => Promise<void> }> = [];
+function runAsync(label: string, fn: () => Promise<void>): void {
+  asyncTests.push({ label, fn });
+}
+
+function assert(condition: boolean, message: string): void {
+  if (!condition) throw new Error(message);
+}
+
+function gitInitRepo(dir: string): void {
+  // Use execFileSync with a single argv per command — no shell
+  // interpolation, no injection risk.
+  const runGit = (args: string[]) => {
+    try {
+      execFileSync("git", args, { cwd: dir, stdio: "pipe" });
+    } catch {
+      // Best-effort — if git is unavailable the test is still
+      // meaningful (most paths don't require a real repo).
+    }
+  };
+  runGit(["init"]);
+  runGit(["config", "user.email", "test@test.com"]);
+  runGit(["config", "user.name", "Test"]);
+  runGit(["commit", "--allow-empty", "-m", "init"]);
+}
+
+function gsd(
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): { stdout: string; stderr: string; code: number } {
+  const result = spawnSync(
+    binaryIsScriptPath ? "node" : binary,
+    binaryIsScriptPath ? [binary, ...args] : args,
+    {
+      cwd,
+      encoding: "utf-8",
+      timeout: 30_000,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...env, GSD_NON_INTERACTIVE: "1" },
+    },
+  );
+  return {
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    code: result.status ?? 1,
+  };
+}
+
+function createTempProject(name: string): string {
+  const dir = mkdtempSync(join(tmpdir(), `gsd-live-${name}-`));
+  gitInitRepo(dir);
+  return dir;
+}
+
+function seedStaleCrashLock(
+  projectDir: string,
+  pid: number,
+  unitType: string,
+  unitId: string,
+): void {
+  const gsdDir = join(projectDir, ".gsd");
+  mkdirSync(gsdDir, { recursive: true });
+  const db = new DatabaseSync(join(gsdDir, "gsd.db"));
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workers (
+      worker_id TEXT PRIMARY KEY,
+      host TEXT NOT NULL,
+      pid INTEGER NOT NULL,
+      started_at TEXT NOT NULL,
+      version TEXT NOT NULL,
+      last_heartbeat_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      project_root_realpath TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS unit_dispatches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trace_id TEXT NOT NULL,
+      turn_id TEXT,
+      worker_id TEXT NOT NULL,
+      milestone_lease_token INTEGER NOT NULL,
+      milestone_id TEXT NOT NULL,
+      slice_id TEXT,
+      task_id TEXT,
+      unit_type TEXT NOT NULL,
+      unit_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempt_n INTEGER NOT NULL DEFAULT 1,
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      exit_reason TEXT,
+      error_summary TEXT,
+      verification_evidence_id INTEGER,
+      next_run_at TEXT,
+      retry_after_ms INTEGER,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      last_error_code TEXT,
+      last_error_at TEXT
+    );
+  `);
+  const workerId = `live-regression-worker-${Date.now()}`;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO workers (
+      worker_id, host, pid, started_at, version, last_heartbeat_at, status, project_root_realpath
+    ) VALUES (?, 'test-host', ?, ?, '1', '1970-01-01T00:00:00.000Z', 'active', ?)
+  `).run(workerId, pid, now, projectDir);
+  db.prepare(`
+    INSERT INTO unit_dispatches (
+      trace_id, worker_id, milestone_lease_token, milestone_id, slice_id, task_id,
+      unit_type, unit_id, status, attempt_n, started_at, max_attempts
+    ) VALUES (?, ?, 1, 'M001', ?, ?, ?, ?, 'claimed', 1, ?, 3)
+  `).run(
+    `live-regression-${Date.now()}`,
+    workerId,
+    unitId.split("/")[1] ?? null,
+    unitId.split("/")[2] ?? null,
+    unitType,
+    unitId,
+    now,
+  );
+  db.close();
+}
+
+function buildMinimalRoadmap(
+  slices: Array<{ id: string; title: string; done: boolean }>,
+): string {
+  const lines = ["# M001: Test Milestone", "", "## Slices", ""];
+  for (const s of slices) {
+    const cb = s.done ? "x" : " ";
+    lines.push(`- [${cb}] **${s.id}: ${s.title}** \`risk:low\` \`depends:[]\``);
+    lines.push(`  > Demo for ${s.id}`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+function buildMinimalPlan(
+  tasks: Array<{ id: string; title: string; done: boolean }>,
+): string {
+  const lines = ["# S01: Test Slice", "", "**Goal:** test", "", "## Tasks", ""];
+  for (const t of tasks) {
+    const cb = t.done ? "x" : " ";
+    lines.push(`- [${cb}] **${t.id}: ${t.title}** \`est:5m\``);
+  }
+  return lines.join("\n");
+}
+
+// Recover DB hierarchy from on-disk markdown projections. DB is authoritative
+// at runtime, so live-regression fixtures that exist only as markdown must be
+// imported via `gsd headless recover` before `headless query` can derive
+// their state. The interactive `gsd recover` command requires a TTY; the
+// headless subcommand is the non-interactive parallel.
+// Since the import-application gate landed, recover is two-step: the first
+// invocation prints the import preview and exits 1, and only a re-run carrying
+// that exact `--preview=<hash>` applies it.
+function recover(dir: string): void {
+  const preview = gsd(["headless", "recover"], dir);
+  assert(
+    preview.code === 1,
+    `gsd headless recover preview should exit 1, got ${preview.code}: ${preview.stderr}`,
+  );
+  const previewHash = /^Preview hash: (sha256:[0-9a-f]{64})$/mu.exec(
+    preview.stderr,
+  )?.[1];
+  assert(
+    previewHash !== undefined,
+    `gsd headless recover should print a preview hash, got ${preview.code}: ${preview.stderr}`,
+  );
+  const result = gsd(["headless", "recover", `--preview=${previewHash}`], dir);
+  assert(
+    result.code === 0,
+    `gsd headless recover should succeed for fixture, got ${result.code}: ${result.stderr}`,
+  );
+  assert(
+    result.stderr.includes("gsd-recover: recovered"),
+    `gsd headless recover should reach success path, got stderr: ${result.stderr}`,
+  );
+}
+
+// ─── Test: headless query returns valid JSON ──────────────────────────────
+
+run("headless query returns valid JSON on initialized project", () => {
+  const dir = createTempProject("query");
+  try {
+    const gsdDir = join(dir, ".gsd");
+    mkdirSync(join(gsdDir, "milestones"), { recursive: true });
+
+    const result = gsd(["headless", "query"], dir);
+    assert(
+      result.code === 0,
+      `expected exit 0, got ${result.code}: ${result.stderr}`,
+    );
+
+    const json = JSON.parse(result.stdout);
+    assert(
+      typeof (json.state?.phase ?? json.phase) === "string",
+      "response should have phase field",
+    );
+    assert(
+      Array.isArray(json.milestones) || json.milestones === undefined,
+      "milestones should be array or undefined",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: state derivation — empty project ──────────────────────────────
+
+run("headless query: empty project reports pre-planning or idle", () => {
+  const dir = createTempProject("empty");
+  try {
+    mkdirSync(join(dir, ".gsd", "milestones"), { recursive: true });
+
+    const result = gsd(["headless", "query"], dir);
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+
+    const json = JSON.parse(result.stdout);
+    const phase = json.state?.phase ?? json.phase;
+    // Empty project: no milestones, no roadmap, no slices.  The derived
+    // phase is either "pre-planning" (no M001 yet) or "idle" (nothing
+    // scheduled) — both are valid representations of the same state.
+    assert(
+      phase === "pre-planning" || phase === "idle",
+      `expected pre-planning or idle, got: ${phase}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: state derivation — milestone with roadmap ─────────────────────
+
+run("headless query: milestone with roadmap reports planning phase", () => {
+  const dir = createTempProject("planning");
+  try {
+    const mDir = join(dir, ".gsd", "milestones", "M001");
+    mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
+    writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+    writeFileSync(
+      join(mDir, "M001-ROADMAP.md"),
+      buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
+    );
+
+    recover(dir);
+    const result = gsd(["headless", "query"], dir);
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+
+    const json = JSON.parse(result.stdout);
+    assert(
+      (json.state?.phase ?? json.phase) === "planning",
+      `expected planning, got: ${json.state?.phase ?? json.phase}`,
+    );
+    assert(
+      (json.state?.activeMilestone ?? json.activeMilestone) === "M001" ||
+        (json.state?.activeMilestone ?? json.activeMilestone)?.id === "M001",
+      `expected active milestone M001`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: state derivation — all tasks done ─────────────────────────────
+
+run("headless query: all tasks done reports summarizing phase", () => {
+  const dir = createTempProject("summarizing");
+  try {
+    const mDir = join(dir, ".gsd", "milestones", "M001");
+    const sDir = join(mDir, "slices", "S01");
+    mkdirSync(sDir, { recursive: true });
+    writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+    writeFileSync(
+      join(mDir, "M001-ROADMAP.md"),
+      buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
+    );
+    writeFileSync(
+      join(sDir, "S01-PLAN.md"),
+      buildMinimalPlan([{ id: "T01", title: "Task One", done: true }]),
+    );
+    // This fixture deliberately uses the legacy nested layout
+    // (milestones/M001/slices/S01), matching src/tests/headless-recover.test.ts.
+    // "summarizing" is derived purely from the checked plan task: all planned
+    // tasks done, no milestone summary yet. We intentionally do NOT add a task
+    // summary here and do NOT exercise the flat <phase>/S01-T01-SUMMARY.md path:
+    // in the legacy layout targetTaskFile() writes slices/S01/tasks/T01-SUMMARY.md,
+    // and pairing that with the checked plan checkbox makes the summary and the
+    // checkbox conflicting claims on M001/S01/T01, which the importer rejects with
+    // a 'conflicting-legacy-import-target' blocker. This fixture covers the recover
+    // two-step gate and legacy import; flat task-summary import is out of scope.
+
+    recover(dir);
+    const result = gsd(["headless", "query"], dir);
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+
+    const json = JSON.parse(result.stdout);
+    assert(
+      (json.state?.phase ?? json.phase) === "summarizing",
+      `expected summarizing, got: ${json.state?.phase ?? json.phase}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: state derivation — complete milestone ─────────────────────────
+//
+// Previously this accepted {complete, idle, pre-planning} — three-way
+// accept meant it could not distinguish "rolled forward correctly" from
+// "broken."  Now: the roadmap has its only slice checked and a SUMMARY
+// file exists, so the milestone must roll forward to "complete" (M001
+// reported as done), "idle" (M001 archived, no successor), or
+// "validating-milestone" (import leaves M001 active with every slice done
+// and no VALIDATION.md, so state derivation routes it to validation first).
+// "pre-planning" indicates we forgot the completed milestone — a bug.
+
+run("headless query: milestone with summary reports complete or idle", () => {
+  const dir = createTempProject("complete");
+  try {
+    const mDir = join(dir, ".gsd", "milestones", "M001");
+    mkdirSync(mDir, { recursive: true });
+    writeFileSync(
+      join(mDir, "M001-ROADMAP.md"),
+      buildMinimalRoadmap([{ id: "S01", title: "Done", done: true }]),
+    );
+    writeFileSync(join(mDir, "M001-SUMMARY.md"), "# M001 Summary\n\nComplete.");
+
+    recover(dir);
+    const result = gsd(["headless", "query"], dir);
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+
+    const json = JSON.parse(result.stdout);
+    const phase = json.state?.phase ?? json.phase;
+    assert(
+      phase === "complete" || phase === "idle" || phase === "validating-milestone",
+      `expected complete, idle, or validating-milestone (not pre-planning — completed milestone must not be forgotten), got: ${phase}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: lock file lifecycle — captured real PID ───────────────────────
+//
+// Previously this hardcoded PID 99999999 as "doesn't exist."  That is
+// fragile on long-lived hosts (PID wrap, slot reuse) and in containers
+// where the kernel hands out high PIDs.  Capture a real PID by
+// spawning then terminating a subprocess — guaranteed-dead PID under
+// our control.
+
+runAsync("stale auto.lock with captured dead PID does not block --version", async () => {
+  const dir = createTempProject("stale-lock");
+  try {
+    const deadPid = await captureDeadPid();
+    seedStaleCrashLock(dir, deadPid, "starting", "bootstrap");
+
+    const result = gsd(["--version"], dir);
+    assert(
+      result.code === 0,
+      `--version should succeed even with stale lock, got code ${result.code}: ${result.stderr}`,
+    );
+    assert(
+      /^\d+\.\d+\.\d+/.test(result.stdout.trim()),
+      `should output version, got: ${result.stdout}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: `gsd doctor` emits actionable guidance on stale lock ─────────
+//
+// Previously "crash recovery shows actionable guidance" called
+// `headless query` (which does not emit guidance) and asserted only
+// exit 0.  A silent no-op passed.  Now: invoke `gsd doctor` — the
+// command users are pointed at for recovery — and assert the output
+// actually mentions the stale lock with its PID.
+
+runAsync("gsd doctor surfaces actionable guidance about the stale lock", async () => {
+  const dir = createTempProject("crash-guidance");
+  try {
+    const deadPid = await captureDeadPid();
+    seedStaleCrashLock(dir, deadPid, "execute-task", "M001/S01/T02");
+
+    const candidates: string[][] = [
+      ["doctor"],
+      ["doctor", "--json"],
+      ["headless", "doctor"],
+    ];
+    let emitted = "";
+    let exitCode = 1;
+    let ran = false;
+    for (const argv of candidates) {
+      const r = gsd(argv, dir);
+      const combined = `${r.stdout}\n${r.stderr}`;
+      if (r.code === 0 || r.code === 1) {
+        emitted = combined;
+        exitCode = r.code;
+        ran = true;
+        if (combined.toLowerCase().includes("lock")) break;
+      }
+    }
+    if (!ran) {
+      throw new Error("gsd doctor command is not available on this binary");
+    }
+
+    const lower = emitted.toLowerCase();
+    assert(
+      lower.includes("lock"),
+      `output must mention "lock" (got: ${emitted.slice(0, 200)})`,
+    );
+    assert(
+      emitted.includes(String(deadPid)),
+      `output must mention the stale PID ${deadPid} (got: ${emitted.slice(0, 200)})`,
+    );
+    assert(
+      lower.includes("stale") ||
+        lower.includes("clear") ||
+        lower.includes("fix") ||
+        lower.includes("stale_crash_lock"),
+      `output should include mitigation guidance (stale/clear/fix), got: ${emitted.slice(0, 200)}`,
+    );
+    assert(
+      exitCode === 0 || exitCode === 1,
+      `doctor should exit 0 (clean) or 1 (issues detected), got ${exitCode}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: non-TTY invocation exits with clean error ─────────────────────
+//
+// Split from the old "exits quickly" assertion.  The 5s budget was
+// arbitrary and unjustified, and flaked on cold starts.  Correctness
+// (exit 1 + stderr mentions terminal) is the signal; any perf budget
+// belongs in its own percentile-based job, not here.
+
+run("non-TTY invocation exits with clean TTY error", () => {
+  const dir = createTempProject("tty-check");
+  try {
+    const result = gsd([], dir);
+    assert(
+      result.code === 1,
+      `expected exit 1 for non-TTY, got ${result.code}`,
+    );
+    assert(
+      result.stderr.includes("TTY") ||
+        result.stderr.includes("terminal") ||
+        result.stderr.includes("Interactive"),
+      `should mention TTY / terminal / Interactive in stderr, got: ${result.stderr.slice(0, 200)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── Test: version skew is detected (distinct from TTY error) ───────────
+//
+// Previously this accepted *either* a TTY error or a version-skew
+// error — identical coverage to the TTY test above it.  Now: prime a
+// fake managed-resources.json with a known-future version and assert
+// that stderr specifically names the version-skew path, not just
+// "exit 1."
+
+run("version skew is detected and named in stderr", () => {
+  const dir = createTempProject("version-skew");
+  try {
+    const fakeHome = dir;
+    mkdirSync(join(fakeHome, ".gsd", "agent"), { recursive: true });
+    writeFileSync(
+      join(fakeHome, ".gsd", "agent", "managed-resources.json"),
+      JSON.stringify({ gsdVersion: "999.0.0", packageName: "@opengsd/gsd-pi" }),
+    );
+
+    const result = gsd([], dir, { HOME: fakeHome });
+    assert(result.code === 1, `expected exit 1, got ${result.code}`);
+
+    const stderr = result.stderr;
+    const hitVersionSkew =
+      stderr.includes("999.0.0") ||
+      /version\s*mismatch/i.test(stderr);
+    assert(
+      hitVersionSkew,
+      `expected stderr to mention version skew / 999.0.0 / managed-resources; got: ${stderr.slice(0, 400)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// NB: the previous "gsd --help works" test was a duplicate of
+// tests/smoke/test-help.ts and has been removed from this harness
+// (see #4801).  Smoke coverage of `--help` now lives in one place.
+
+// ─── Test: quick commands exit 0 (not spurious "cancelled" 11) ───────────
+//
+// `/gsd status`, `history`, `help`, and `config` are "quick commands": they
+// are handled entirely in the GSD extension layer (dashboard overlay /
+// notify) and never enter the LLM agent loop, so they emit no
+// `execution_complete` and make zero tool calls.  Headless completion used
+// to be detected only via `execution_complete` / `agent_end` / a tool-call
+// gated idle timer, so these commands never resolved their completion
+// promise; the process then drained its event loop and exited with a
+// spurious code 11 ("cancelled") — indistinguishable from a real SIGINT.
+// Regression coverage: each quick command must exit 0 on a seeded project.
+
+function seedProjectWithMilestone(name: string): string {
+  const dir = createTempProject(name);
+  const mDir = join(dir, ".gsd", "milestones", "M001");
+  mkdirSync(join(mDir, "slices", "S01"), { recursive: true });
+  writeFileSync(join(mDir, "M001-CONTEXT.md"), "# M001\n\nContext.");
+  writeFileSync(
+    join(mDir, "M001-ROADMAP.md"),
+    buildMinimalRoadmap([{ id: "S01", title: "First Slice", done: false }]),
+  );
+  writeFileSync(
+    join(mDir, "slices", "S01", "S01-PLAN.md"),
+    buildMinimalPlan([{ id: "T01", title: "Task One", done: false }]),
+  );
+  recover(dir);
+  return dir;
+}
+
+run("headless status exits 0 (not spurious cancelled) on seeded project", () => {
+  const dir = seedProjectWithMilestone("quick-status");
+  try {
+    const result = gsd(["headless", "status"], dir);
+    assert(
+      result.code === 0,
+      `expected exit 0, got ${result.code}: ${result.stderr.slice(0, 300)}`,
+    );
+    // The dashboard text is rendered to stderr in text mode.
+    assert(
+      /M001/i.test(result.stderr),
+      `status should reference M001, got: ${result.stderr.slice(0, 300)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+run("headless history exits 0 (not spurious cancelled) on seeded project", () => {
+  const dir = seedProjectWithMilestone("quick-history");
+  try {
+    const result = gsd(["headless", "history"], dir);
+    assert(
+      result.code === 0,
+      `expected exit 0, got ${result.code}: ${result.stderr.slice(0, 300)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+run("headless help exits 0 (not spurious cancelled)", () => {
+  const dir = seedProjectWithMilestone("quick-help");
+  try {
+    const result = gsd(["headless", "help"], dir);
+    assert(
+      result.code === 0,
+      `expected exit 0, got ${result.code}: ${result.stderr.slice(0, 300)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+run("headless config exits 0 (not spurious cancelled)", () => {
+  const dir = seedProjectWithMilestone("quick-config");
+  try {
+    const result = gsd(["headless", "config"], dir);
+    assert(
+      result.code === 0,
+      `expected exit 0, got ${result.code}: ${result.stderr.slice(0, 300)}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ─── helpers ────────────────────────────────────────────────────────────
+
+async function captureDeadPid(): Promise<number> {
+  // Spawn then kill a subprocess; use its (now-freed) PID as a
+  // guaranteed-dead PID.  There is a narrow race where the kernel
+  // could reuse the PID before we write the lock, but on a modern
+  // Linux/macOS host with PID_MAX in the millions the odds per run
+  // are vanishingly small, and the consequence is a self-fix (the
+  // stale-lock code path would not fire — we'd get a clear failure
+  // message, not a false positive).
+  return await new Promise<number>((resolve, reject) => {
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
+      stdio: "ignore",
+      detached: false,
+    });
+    const pid = child.pid;
+    if (!pid) {
+      reject(new Error("failed to spawn dead-pid helper"));
+      return;
+    }
+    child.on("exit", () => resolve(pid));
+    child.kill("SIGKILL");
+  });
+}
+
+// ─── async driver + summary ─────────────────────────────────────────────
+
+(async () => {
+  for (const { label, fn } of asyncTests) {
+    try {
+      await fn();
+      console.log(`  PASS  ${label}`);
+      passed++;
+    } catch (err: any) {
+      console.error(`  FAIL  ${label}`);
+      console.error(`     ${err.message || err}`);
+      failed++;
+    }
+  }
+
+  console.log(`\nLive regression: ${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
+})();

@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "antigravity",
+  "run_id": "5484c6a1-894a-463e-b4fc-c072999f739a",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo/.gsd-path/runtime/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --slug count-json-cli; python3 /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo/.gsd-path/runtime/archive_milestone.py validate-integrated --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/antigravity/quick/repo --slug count-json-cli",
+  "output": "{\"archive\": \".project/archive/001-count-json-cli\", \"base\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"commit\": \"6f86344aea6ca3be5770a2a94794017574a603aa\", \"integrate\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"landing\": \"1a3bd57072bd2bd1ee7151ea6445646257fbeaac\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-json-cli\"}",
+  "fixture_bundle": "antigravity/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-json-cli/trust-run-manifest.json",
+  "ship_commit": "6f86344aea6ca3be5770a2a94794017574a603aa",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "d83f40c4703789788e5b9d7bfa3b58260463672d",
+  "integration_commit": "1a3bd57072bd2bd1ee7151ea6445646257fbeaac",
+  "milestone_tag": "milestone/001-count-json-cli"
+}

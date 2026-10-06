@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: npm ci
+      - name: Check prerequisites
+        run: npm run check:prereqs
+      - name: Verify (offline gate)
+        run: npm run verify
+      - name: Verify npm package packs cleanly
+        if: matrix.node-version == '20'
+        run: npm pack --dry-run --json > /dev/null
+
+  windows:
+    # The serial Python suite took ~70 minutes on one Windows runner; each
+    # shard runs a quarter of the test modules (tests/ci_shard.py).
+    name: windows (${{ matrix.python-version }}, shard ${{ matrix.shard }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Turn off Defender real-time scanning
+        # Scanning slows the suite's many git subprocesses and small files.
+        # The runner is disposable; a refusal only costs speed.
+        continue-on-error: true
+        shell: pwsh
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+      - name: Check out LF and allow long paths
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Provide python3 for test project Verify commands
+        # Fixture projects verify with `python3`, as POSIX projects do; the
+        # product itself probes python3, python, and py -3. Some setup-python
+        # versions already ship python3.exe.
+        run: |
+          if [ ! -e "$pythonLocation/python3.exe" ]; then
+            cp "$pythonLocation/python.exe" "$pythonLocation/python3.exe"
+          fi
+      - name: Use the long-form runner temp directory
+        # The default TEMP is an 8.3 short path that git reports in long form.
+        run: |
+          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: npm ci
+      - name: Check prerequisites
+        run: npm run check:prereqs
+      # The same suites as `npm run verify`, split so each reports even when
+      # another fails. No PYTHONUTF8: encoding defaults must not decide results.
+      # Node tests and the sync check are fast, so shard 0 alone runs them.
+      - name: Node tests
+        if: matrix.shard == 0
+        run: npm test
+      - name: Python tests
+        if: ${{ !cancelled() }}
+        run: node scripts/dev/py.mjs -m tests.ci_shard ${{ matrix.shard }} 4
+      - name: Skill resource sync
+        if: ${{ !cancelled() && matrix.shard == 0 }}
+        run: npm run test:sync
+
+  daemon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install daemon dependencies
+        run: python3 -m pip install ./daemon
+      - name: Daemon package tests
+        run: npm run test:daemon
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend type check and build
+        run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      # The shell embeds the built frontend, so this runs after the build.
+      - name: Shell tests
+        run: cargo test
+        working-directory: daemon/app/src-tauri
+
+  # The App release workflow runs only on an app-v* tag, so its upload script is
+  # proved here, on the same runner systems and shells it uses.
+  app-release-scripts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release upload script
+        shell: bash
+        run: bash daemon/app/scripts/release-upload.test.sh
+      - name: macOS signing setup script
+        shell: bash
+        run: bash daemon/app/scripts/macos-signing-setup.test.sh

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0a234-e3f6-75e3-9275-51b81a86cb57",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 -B tests/test_count.py",
+  "output": "{\"command\": \"python3 -B tests/test_count.py\", \"commit\": \"d1a59146239793ecaca7321aab51cc800afc270c\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-14T234946+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"...\\n----------------------------------------------------------------------\\nRan 3 tests in 0.962s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo\"}, \"recorded_at\": \"2026-09-14T23:49:47+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -B -m unittest discover -s tests -p 'test_*.py'\", \"commit\": \"acf2fd28a8d62534fedd80ae3a877175a18464f0\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"...\\n----------------------------------------------------------------------\\nRan 3 tests in 0.837s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/codex/quick/repo.gsd-path/verify/project-verify\"}, \"recorded_at\": \"2026-09-14T23:56:18+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-counter/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

@@ -1,0 +1,704 @@
+// Project/App: gsd-pi
+// File Purpose: Mid-execution escalation questions, answers, and state helpers for GSD tasks.
+// GSD Extension — ADR-011 Phase 2 Mid-Execution Escalation
+//
+// An escalation is an Open Question on the Task lifecycle with a presented
+// choice interaction (ADR-046). The database rows are the only record: the
+// question, options, recommendation, and the user's answer. An open question
+// is the pause, and a response with no claim event is the pending override.
+// The legacy task pause flags are not written. They are read only for a Task
+// that has no question row: an escalation from before the database stored
+// them, which still pauses. Its T##-ESCALATION.json file is read once, to
+// store the question in the database. Scoped to execute-task only.
+
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import type { EscalationArtifact, EscalationOption } from "./types.js";
+import {
+  clearTaskEscalationFlags,
+  findUnappliedEscalationOverride,
+  setTaskBlockerSource,
+  listEscalationArtifacts,
+  getTask,
+} from "./gsd-db.js";
+import type { TaskRow } from "./db-task-slice-rows.js";
+import { executeDomainOperation } from "./db/domain-operation.js";
+import {
+  getLatestLegacyResolutionPayload,
+  getTaskEscalationQuestionRow,
+  hasTaskLifecycleRow,
+  listInteractionOptions,
+} from "./db/lifecycle-queries.js";
+import {
+  TASK_ESCALATION_OPENED_EVENT,
+  TASK_ESCALATION_OVERRIDE_CLAIMED_EVENT,
+  TASK_ESCALATION_RESOLVED_EVENT,
+} from "./db/sql-constants.js";
+import { readDomainOperationFence } from "./db/writers/lifecycle-commands.js";
+import {
+  answerTaskEscalationQuestion,
+  openTaskEscalationQuestion,
+} from "./db/writers/task-escalation.js";
+import { internalExecutionInvocation, type ExecutionInvocation } from "./execution-invocation.js";
+import { emitUokAuditEvent, buildAuditEnvelope } from "./uok/audit.js";
+
+/** An escalation stored as question rows, with its question identity. */
+interface TaskEscalationQuestion extends EscalationArtifact {
+  questionId: string;
+  interactionId: string;
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────
+
+/** A choice interaction holds at most this many options. */
+const CHOICE_INTERACTION_MAX_OPTIONS = 3;
+
+/** Escalation files from before the database stored escalations hold up to this many options. */
+const LEGACY_MAX_OPTIONS = 4;
+
+/** Build an EscalationArtifact from a gsd_complete_task escalation payload. */
+export function buildEscalationArtifact(params: {
+  taskId: string;
+  sliceId: string;
+  milestoneId: string;
+  question: string;
+  options: EscalationOption[];
+  recommendation: string;
+  recommendationRationale: string;
+  continueWithDefault: boolean;
+}, maxOptions: number = CHOICE_INTERACTION_MAX_OPTIONS): EscalationArtifact {
+  // Server-side validation — the tool schemas already constrain shape, but
+  // non-tool callers must not reach the interaction contract with weaker
+  // input. A choice interaction has 2-3 options with non-blank labels and a
+  // recommendation with a non-blank rationale.
+  if (typeof params.question !== "string" || params.question.trim().length === 0) {
+    throw new Error("escalation.question must not be blank");
+  }
+  if (!Array.isArray(params.options) || params.options.length < 2 || params.options.length > maxOptions) {
+    throw new Error(`escalation.options must have between 2 and ${maxOptions} entries (got ${params.options?.length ?? 0})`);
+  }
+  const optionIds = new Set(params.options.map((o) => o.id));
+  if (optionIds.size !== params.options.length) {
+    throw new Error("escalation.options must have unique ids");
+  }
+  if (params.options.some((o) => typeof o.label !== "string" || o.label.trim().length === 0)) {
+    throw new Error("escalation.options labels must not be blank");
+  }
+  if (!optionIds.has(params.recommendation)) {
+    throw new Error(`escalation.recommendation "${params.recommendation}" is not one of the option ids: ${[...optionIds].join(", ")}`);
+  }
+  if (typeof params.recommendationRationale !== "string" || params.recommendationRationale.trim().length === 0) {
+    throw new Error("escalation.recommendationRationale must not be blank");
+  }
+  return {
+    taskId: params.taskId,
+    sliceId: params.sliceId,
+    milestoneId: params.milestoneId,
+    question: params.question,
+    options: params.options,
+    recommendation: params.recommendation,
+    recommendationRationale: params.recommendationRationale,
+    continueWithDefault: params.continueWithDefault,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ─── Open ─────────────────────────────────────────────────────────────────
+
+/** An escalation question is scoped to the Task's canonical lifecycle row. */
+export function taskHasCanonicalLifecycle(
+  milestoneId: string, sliceId: string, taskId: string,
+): boolean {
+  return hasTaskLifecycleRow(milestoneId, sliceId, taskId);
+}
+
+/**
+ * Record an escalation and the Task pause in one task.escalation.open Domain
+ * Operation. The Task must have a canonical lifecycle. A replay with the same
+ * idempotency key writes nothing.
+ */
+export function openTaskEscalation(
+  basePath: string,
+  artifact: EscalationArtifact,
+  invocation: ExecutionInvocation,
+): void {
+  const { milestoneId, sliceId, taskId } = artifact;
+  const fence = readDomainOperationFence(invocation.idempotencyKey);
+  const operation = executeDomainOperation({
+    operationType: "task.escalation.open",
+    idempotencyKey: invocation.idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: invocation.actorType,
+    ...(invocation.actorId ? { actorId: invocation.actorId } : {}),
+    sourceTransport: invocation.sourceTransport,
+    ...(invocation.traceId ? { traceId: invocation.traceId } : {}),
+    ...(invocation.turnId ? { turnId: invocation.turnId } : {}),
+    payload: {
+      milestoneId,
+      sliceId,
+      taskId,
+      question: artifact.question,
+      options: artifact.options.map((o) => ({ id: o.id, label: o.label, tradeoffs: o.tradeoffs })),
+      recommendation: artifact.recommendation,
+      recommendationRationale: artifact.recommendationRationale,
+      continueWithDefault: artifact.continueWithDefault,
+    },
+  }, (context) => {
+    const opened = openTaskEscalationQuestion(context, {
+      milestoneId,
+      sliceId,
+      taskId,
+      question: artifact.question,
+      options: artifact.options,
+      recommendation: artifact.recommendation,
+      recommendationRationale: artifact.recommendationRationale,
+    });
+    return {
+      events: [{
+        eventType: TASK_ESCALATION_OPENED_EVENT,
+        entityType: "task",
+        entityId: `${milestoneId}/${sliceId}/${taskId}`,
+        payload: {
+          lifecycleId: opened.lifecycleId,
+          questionId: opened.questionId,
+          interactionId: opened.interactionId,
+          withdrawnQuestionIds: opened.withdrawnQuestionIds,
+          continueWithDefault: artifact.continueWithDefault,
+        },
+        destinations: ["projection"],
+      }],
+      projections: [{
+        projectionKey: `escalation/${milestoneId}/${sliceId}/${taskId}`.toLowerCase(),
+        projectionKind: "state",
+        rendererVersion: "1",
+      }],
+    };
+  });
+  if (operation.status !== "committed") return;
+
+  emitUokAuditEvent(basePath, buildAuditEnvelope({
+    traceId: `escalation:${milestoneId}:${sliceId}:${taskId}`,
+    category: "gate",
+    type: "escalation-manual-attention-created",
+    payload: {
+      milestoneId,
+      sliceId,
+      taskId,
+      continueWithDefault: artifact.continueWithDefault,
+      optionCount: artifact.options.length,
+      recommendation: artifact.recommendation,
+    },
+  }));
+}
+
+// ─── Read ─────────────────────────────────────────────────────────────────
+
+/**
+ * The Task's current escalation (open or answered) from the database, or null
+ * when the Task has none. A withdrawn question is not current. A resolved
+ * legacy escalation is read from its resolve event.
+ */
+export function readTaskEscalation(
+  milestoneId: string, sliceId: string, taskId: string,
+): EscalationArtifact | null {
+  return readTaskEscalationQuestion(milestoneId, sliceId, taskId)
+    ?? readLegacyResolution(milestoneId, sliceId, taskId);
+}
+
+/**
+ * An escalation from before the database stored them that cannot be a choice
+ * interaction (more than three options, or a Task with no canonical
+ * lifecycle) is stored whole, with the user's response, in its resolve event.
+ */
+function readLegacyResolution(
+  milestoneId: string, sliceId: string, taskId: string,
+): EscalationArtifact | null {
+  const legacy = getLatestLegacyResolutionPayload(
+    `${milestoneId}/${sliceId}/${taskId}`,
+    TASK_ESCALATION_RESOLVED_EVENT,
+  );
+  return legacy ? JSON.parse(legacy) as EscalationArtifact : null;
+}
+
+function readTaskEscalationQuestion(
+  milestoneId: string, sliceId: string, taskId: string,
+): TaskEscalationQuestion | null {
+  const row = getTaskEscalationQuestionRow({
+    milestoneId,
+    sliceId,
+    taskId,
+    openedEvent: TASK_ESCALATION_OPENED_EVENT,
+    resolvedEvent: TASK_ESCALATION_RESOLVED_EVENT,
+  });
+  if (!row) return null;
+  const interactionId = String(row["interaction_id"]);
+  const options = listInteractionOptions(interactionId);
+  const responded = typeof row["verbatim_response"] === "string";
+  return {
+    questionId: String(row["question_id"]),
+    interactionId,
+    taskId,
+    sliceId,
+    milestoneId,
+    question: String(row["question_text"]),
+    options: options.map((option) => ({
+      id: String(option["option_id"]),
+      label: String(option["label"]),
+      tradeoffs: String(option["description"]),
+    })),
+    recommendation: String(row["recommended_option_id"]),
+    recommendationRationale: String(row["recommendation_rationale"]),
+    continueWithDefault: Number(row["continue_with_default"]) === 1,
+    createdAt: String(row["created_at"]),
+    ...(responded ? {
+      respondedAt: String(row["responded_at"]),
+      userChoice: String(row["verbatim_response"]),
+      userRationale: typeof row["user_rationale"] === "string" ? row["user_rationale"] : "",
+    } : {}),
+  };
+}
+
+// ─── Legacy escalations ───────────────────────────────────────────────────
+
+/**
+ * A pause flag on a Task that has no escalation question is a legacy pause: the
+ * escalation is from before the database stored them, and its question is in
+ * a T##-ESCALATION.json file.
+ */
+function hasPauseFlag(task: TaskRow): boolean {
+  return task.escalation_pending === 1 || task.escalation_awaiting_review === 1;
+}
+
+/**
+ * The escalation in a Task's T##-ESCALATION.json file from before the database
+ * stored them, with all its options. Returns null when the file is missing or
+ * malformed.
+ */
+export function readLegacyEscalation(basePath: string, task: TaskRow): EscalationArtifact | null {
+  if (!task.escalation_artifact_path) return null;
+  try {
+    const file = JSON.parse(readFileSync(resolve(basePath, task.escalation_artifact_path), "utf-8")) as EscalationArtifact;
+    if (typeof file.continueWithDefault !== "boolean") return null;
+    if (file.options.some((o) => typeof o.id !== "string" || typeof o.tradeoffs !== "string")) return null;
+    return {
+      ...buildEscalationArtifact({
+        taskId: task.id,
+        sliceId: task.slice_id,
+        milestoneId: task.milestone_id,
+        question: file.question,
+        options: file.options.map((o) => ({ id: o.id, label: o.label, tradeoffs: o.tradeoffs })),
+        recommendation: file.recommendation,
+        recommendationRationale: file.recommendationRationale,
+        continueWithDefault: file.continueWithDefault,
+      }, LEGACY_MAX_OPTIONS),
+      ...(typeof file.respondedAt === "string" && typeof file.userChoice === "string" ? {
+        respondedAt: file.respondedAt,
+        userChoice: file.userChoice,
+        userRationale: typeof file.userRationale === "string" ? file.userRationale : "",
+      } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function validChoices(escalation: EscalationArtifact): string[] {
+  return ["accept", "reject-blocker", ...escalation.options.map((o) => o.id)];
+}
+
+/** A legacy escalation can be stored as question rows when it fits a choice interaction on a canonical Task lifecycle. */
+function fitsChoiceInteraction(legacy: EscalationArtifact): boolean {
+  return legacy.options.length <= CHOICE_INTERACTION_MAX_OPTIONS
+    && taskHasCanonicalLifecycle(legacy.milestoneId, legacy.sliceId, legacy.taskId);
+}
+
+/** Store a legacy escalation as an open question, the same way a new escalation is stored. */
+function importLegacyEscalation(basePath: string, legacy: EscalationArtifact): TaskEscalationQuestion | null {
+  openTaskEscalation(basePath, legacy, internalExecutionInvocation(
+    `escalation:legacy-import:${legacy.milestoneId}/${legacy.sliceId}/${legacy.taskId}`,
+  ));
+  return readTaskEscalationQuestion(legacy.milestoneId, legacy.sliceId, legacy.taskId);
+}
+
+/**
+ * The legacy escalation of a Task that the user resolved before the database
+ * stored escalations. Returns null when the file is missing or has no valid
+ * response.
+ */
+export function readConvertibleLegacyEscalation(basePath: string, task: TaskRow): EscalationArtifact | null {
+  const legacy = readLegacyEscalation(basePath, task);
+  return legacy?.userChoice && validChoices(legacy).includes(legacy.userChoice) ? legacy : null;
+}
+
+/**
+ * Store a resolved legacy escalation in the database: as question and answer
+ * rows when it fits a choice interaction, otherwise whole in the resolve
+ * event. The next task of the slice then receives the override.
+ */
+export function convertResolvedLegacyEscalation(basePath: string, legacy: EscalationArtifact): void {
+  const result = applyEscalationResponse(
+    basePath,
+    fitsChoiceInteraction(legacy) ? importLegacyEscalation(basePath, legacy) : null,
+    legacy,
+    legacy.userChoice!,
+    legacy.userRationale ?? "",
+  );
+  if (result.status !== "resolved" && result.status !== "rejected-to-blocker") throw new Error(result.message);
+}
+
+/** What the user must know about a legacy escalation whose file cannot be read, for `/gsd escalate`. */
+export function formatLegacyEscalationNotice(task: TaskRow): string {
+  const file = task.escalation_artifact_path ? ` (${task.escalation_artifact_path})` : "";
+  if (!hasPauseFlag(task)) {
+    return [
+      `Task ${task.id} (slice ${task.slice_id}) has a resolved escalation from before escalations were stored in the database.`,
+      `Its response is not applied to the next task, and its file${file} is missing or not readable.`,
+      "Give your decision to the next task yourself.",
+    ].join("\n");
+  }
+  return [
+    `Task ${task.id} (slice ${task.slice_id}) is paused by an escalation from before escalations were stored in the database.`,
+    `Its question is not in the database, and its file${file} is missing or not readable.`,
+    `Resolve with: /gsd escalate resolve ${task.id} <accept|reject-blocker> [rationale...]`,
+    "The response is not carried into the next task. Give your decision to the next task yourself.",
+  ].join("\n");
+}
+
+// ─── Detection ────────────────────────────────────────────────────────────
+
+/**
+ * Returns the task id of the first task with an unresolved escalation: an open
+ * escalation question. `continueWithDefault=true` escalations also pause
+ * dispatch until the user explicitly responds. A legacy pause flag with no
+ * question row pauses too, so an escalation from before the upgrade is not
+ * passed silently.
+ */
+export function detectPendingEscalation(tasks: TaskRow[]): string | null {
+  for (const t of tasks) {
+    const escalation = readTaskEscalation(t.milestone_id, t.slice_id, t.id);
+    if (escalation ? !escalation.respondedAt : hasPauseFlag(t)) return t.id;
+  }
+  return null;
+}
+
+// ─── Resolution ───────────────────────────────────────────────────────────
+
+export interface ResolveEscalationResult {
+  status: "resolved" | "not-found" | "already-resolved" | "invalid-choice" | "rejected-to-blocker";
+  message: string;
+  chosenOption?: EscalationOption;
+}
+
+/**
+ * Apply a user response to a pending escalation in one
+ * task.escalation.resolve Domain Operation:
+ *  1) Store the response as the accepted Answer and close the question.
+ *  2) Clear the task escalation flags.
+ *  3) For "reject-blocker": set blocker_discovered=1 + blocker_source='reject-escalation'.
+ * Then emit audit events.
+ *
+ * A legacy pause (a pause flag with no question row) runs the same operation.
+ * Its escalation is read from the T##-ESCALATION.json file. It is stored as
+ * question rows when it fits a choice interaction, otherwise whole in the
+ * resolve event. When the file cannot be read, only "accept" and
+ * "reject-blocker" are valid, and the response is not stored.
+ *
+ * Note: this does NOT persist a decision via saveDecisionToDb — the caller
+ * (commands/handlers/escalate.ts) owns that step so it can fail gracefully
+ * and surface the decision id in the user-visible message.
+ *
+ * `invocation` is the transport and the actor of the response. Without it the
+ * response is from the user, through `/gsd escalate`.
+ */
+export function resolveEscalation(
+  basePath: string, milestoneId: string, sliceId: string, taskId: string,
+  choice: string, rationale: string, invocation?: ExecutionInvocation,
+): ResolveEscalationResult {
+  const stored = readTaskEscalation(milestoneId, sliceId, taskId);
+  if (stored?.respondedAt) {
+    return { status: "already-resolved", message: `Escalation for ${taskId} was already resolved at ${stored.respondedAt}.` };
+  }
+  const question = readTaskEscalationQuestion(milestoneId, sliceId, taskId);
+  if (question) return applyEscalationResponse(basePath, question, null, choice, rationale, undefined, invocation);
+
+  const task = getTask(milestoneId, sliceId, taskId);
+  if (!task || !hasPauseFlag(task)) {
+    return { status: "not-found", message: `No escalation found for ${milestoneId}/${sliceId}/${taskId}.` };
+  }
+  const legacy = readLegacyEscalation(basePath, task);
+  if (!legacy) {
+    const file = task.escalation_artifact_path ? ` (${task.escalation_artifact_path})` : "";
+    if (choice !== "accept" && choice !== "reject-blocker") {
+      return {
+        status: "invalid-choice",
+        message: `Unknown choice "${choice}". Valid choices: accept, reject-blocker. The option ids are not available: the escalation file${file} of ${taskId} is missing or not readable.`,
+      };
+    }
+    const result = applyEscalationResponse(
+      basePath, null, null, choice, rationale, { milestoneId, sliceId, taskId }, invocation,
+    );
+    return result.status === "resolved"
+      ? {
+        ...result,
+        message: `Escalation pause on ${taskId} cleared. Its escalation file${file} is missing or not readable, so the response is NOT carried into the next task. Give your decision to the next task yourself.`,
+      }
+      : result;
+  }
+  return applyEscalationResponse(
+    basePath, fitsChoiceInteraction(legacy) ? importLegacyEscalation(basePath, legacy) : null, legacy, choice, rationale,
+    undefined, invocation,
+  );
+}
+
+/**
+ * Validate a response and record it in one task.escalation.resolve Domain
+ * Operation. `question` is the escalation stored as question rows. `legacy` is
+ * a legacy escalation; without a `question` it is stored whole in the resolve
+ * event. With neither, only the pause is cleared. The operation is keyed by
+ * the escalation: an escalation has one response. `invocation` gives only the
+ * transport and the actor.
+ */
+function applyEscalationResponse(
+  basePath: string,
+  question: TaskEscalationQuestion | null,
+  legacy: EscalationArtifact | null,
+  choice: string,
+  rationale: string,
+  ids: Pick<EscalationArtifact, "milestoneId" | "sliceId" | "taskId"> = (question ?? legacy)!,
+  invocation?: ExecutionInvocation,
+): ResolveEscalationResult {
+  const { milestoneId, sliceId, taskId } = ids;
+  const escalation = question ?? legacy;
+
+  // Resolve `choice` into a concrete option.
+  const options = escalation?.options ?? [];
+  let chosenOption: EscalationOption | undefined;
+  if (choice === "accept") {
+    chosenOption = options.find((o) => o.id === escalation?.recommendation);
+  } else if (choice !== "reject-blocker") {
+    chosenOption = options.find((o) => o.id === choice);
+    if (!chosenOption) {
+      const valid = ["accept", "reject-blocker", ...options.map((o) => o.id)].join(", ");
+      return { status: "invalid-choice", message: `Unknown choice "${choice}". Valid choices: ${valid}.` };
+    }
+  }
+
+  const legacyResolution = !question && legacy
+    ? {
+      ...legacy,
+      options: legacy.options.map((o) => ({ id: o.id, label: o.label, tradeoffs: o.tradeoffs })),
+      respondedAt: new Date().toISOString(),
+      userChoice: choice,
+      userRationale: rationale,
+    }
+    : null;
+  const questionId = question?.questionId ?? null;
+  const idempotencyKey = `escalation:resolve:${questionId ?? `legacy:${milestoneId}/${sliceId}/${taskId}`}`;
+  const fence = readDomainOperationFence(idempotencyKey);
+  executeDomainOperation({
+    operationType: "task.escalation.resolve",
+    idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: invocation?.actorType ?? "user",
+    ...(invocation?.actorId ? { actorId: invocation.actorId } : {}),
+    sourceTransport: invocation?.sourceTransport ?? "internal",
+    ...(invocation?.traceId ? { traceId: invocation.traceId } : {}),
+    ...(invocation?.turnId ? { turnId: invocation.turnId } : {}),
+    payload: { questionId, milestoneId, sliceId, taskId, choice, rationale },
+  }, (context) => {
+    const answerId = question
+      ? answerTaskEscalationQuestion(context, {
+        questionId: question.questionId,
+        interactionId: question.interactionId,
+        choice,
+        selectedOptionId: chosenOption?.id ?? null,
+        normalizedInterpretation: chosenOption
+          ? `chose option ${chosenOption.id}: ${chosenOption.label}`
+          : "rejected the escalation; replan the slice",
+      }).answerId
+      : null;
+    clearTaskEscalationFlags(milestoneId, sliceId, taskId);
+    if (choice === "reject-blocker") {
+      // Pre-dispatch plan-gate path, NOT a closeout (#2202): this only flags the
+      // Task for replanning on the next auto pass. Closing a Task whose failed
+      // Attempt is already parked at the route stage is the separate operator
+      // disposition gsd_task_settle settleDisposition "blocker-accepted".
+      setTaskBlockerSource(milestoneId, sliceId, taskId, "reject-escalation");
+    }
+    return {
+      events: [{
+        eventType: TASK_ESCALATION_RESOLVED_EVENT,
+        entityType: "task",
+        entityId: `${milestoneId}/${sliceId}/${taskId}`,
+        payload: {
+          questionId, answerId, choice, rationale,
+          ...(legacyResolution ? { legacy: legacyResolution } : {}),
+        },
+        destinations: ["projection"],
+      }],
+      projections: [{
+        projectionKey: `escalation/${milestoneId}/${sliceId}/${taskId}`.toLowerCase(),
+        projectionKind: "state",
+        rendererVersion: "1",
+      }],
+    };
+  });
+
+  if (choice === "reject-blocker") {
+    emitUokAuditEvent(basePath, buildAuditEnvelope({
+      traceId: `escalation:${milestoneId}:${sliceId}:${taskId}`,
+      category: "gate",
+      type: "escalation-rejected-to-blocker",
+      payload: { milestoneId, sliceId, taskId, rationale },
+    }));
+    return {
+      status: "rejected-to-blocker",
+      message: `Escalation rejected. Task ${taskId} now flagged as a blocker — next /gsd auto will replan slice ${sliceId}.`,
+    };
+  }
+
+  emitUokAuditEvent(basePath, buildAuditEnvelope({
+    traceId: `escalation:${milestoneId}:${sliceId}:${taskId}`,
+    category: "gate",
+    type: "escalation-user-responded",
+    payload: {
+      milestoneId, sliceId, taskId,
+      chosenOptionId: chosenOption?.id,
+      rationale,
+    },
+  }));
+
+  return {
+    status: "resolved",
+    message: `Escalation resolved. Next task in ${sliceId} will receive the override.`,
+    chosenOption,
+  };
+}
+
+// ─── Carry-forward lookup ─────────────────────────────────────────────────
+
+/**
+ * Record, in one task.escalation.override.claim Domain Operation, that the
+ * response stored by `resolveOperationId` is delivered to a prompt. Each
+ * response is claimed once: returns false when another caller claimed it first.
+ */
+function claimEscalationOverride(
+  milestoneId: string, sliceId: string, taskId: string, resolveOperationId: string,
+): boolean {
+  const idempotencyKey = `escalation:claim:${resolveOperationId}`;
+  const fence = readDomainOperationFence(idempotencyKey);
+  if (fence.replay) return false;
+  return executeDomainOperation({
+    operationType: "task.escalation.override.claim",
+    idempotencyKey,
+    expectedRevision: fence.revision,
+    expectedAuthorityEpoch: fence.authorityEpoch,
+    actorType: "system",
+    sourceTransport: "internal",
+    payload: { milestoneId, sliceId, taskId, resolveOperationId },
+  }, () => ({
+    events: [{
+      eventType: TASK_ESCALATION_OVERRIDE_CLAIMED_EVENT,
+      entityType: "task",
+      entityId: `${milestoneId}/${sliceId}/${taskId}`,
+      payload: { resolveOperationId },
+      destinations: ["projection"],
+    }],
+    projections: [{
+      projectionKey: `escalation/${milestoneId}/${sliceId}/${taskId}`.toLowerCase(),
+      projectionKind: "state",
+      rendererVersion: "1",
+    }],
+  })).status === "committed";
+}
+
+/**
+ * If this slice has a resolved-but-unapplied escalation override, claim it
+ * and return the markdown block to prepend to the next task's prompt. Returns
+ * null when there's no unapplied override OR when another caller claimed it
+ * first (idempotent).
+ */
+export function claimOverrideForInjection(
+  milestoneId: string, sliceId: string,
+): { injectionBlock: string; sourceTaskId: string } | null {
+  const unapplied = findUnappliedEscalationOverride(milestoneId, sliceId);
+  if (!unapplied) return null;
+  const escalation = readTaskEscalation(milestoneId, sliceId, unapplied.taskId);
+  if (!escalation?.respondedAt || !escalation.userChoice) return null;
+  const claimed = claimEscalationOverride(milestoneId, sliceId, unapplied.taskId, unapplied.resolveOperationId);
+  if (!claimed) return null; // lost the race
+  return {
+    injectionBlock: formatOverrideBlock(escalation),
+    sourceTaskId: unapplied.taskId,
+  };
+}
+
+function formatOverrideBlock(art: EscalationArtifact): string {
+  const isReject = art.userChoice === "reject-blocker";
+  const isAccept = art.userChoice === "accept";
+  const isOptionChoice = !!art.userChoice && !isReject && !isAccept;
+  // Include the stable option id in the block so downstream prompts and
+  // parsers have a machine-readable token, not just the display label.
+  const choiceLabel = isReject
+    ? "rejected — blocker path"
+    : isAccept
+      ? `accepted recommendation (${art.recommendation})`
+      : isOptionChoice
+        ? `${art.options.find((o) => o.id === art.userChoice)?.label ?? art.userChoice} (id: ${art.userChoice})`
+        : (art.userChoice ?? "unknown");
+
+  const tradeoffs = isOptionChoice
+    ? art.options.find((o) => o.id === art.userChoice)?.tradeoffs ?? ""
+    : "";
+
+  const rationale = art.userRationale ? `\n\n**User rationale:** ${art.userRationale}` : "";
+
+  return [
+    `## Escalation Override (from ${art.taskId})`,
+    "",
+    `During ${art.taskId} the executor escalated: **${art.question}**`,
+    "",
+    `The user's resolution: **${choiceLabel}**.${rationale}`,
+    tradeoffs ? `\n**Tradeoffs of this choice:** ${tradeoffs}` : "",
+    "",
+    "Apply this decision as a hard constraint for the current task. If it contradicts the task plan, surface the conflict in your summary rather than silently deviating.",
+  ].filter((line) => line !== undefined).join("\n");
+}
+
+// ─── Display ──────────────────────────────────────────────────────────────
+
+/** Human-readable summary of an artifact for `/gsd escalate show`. */
+export function formatEscalationForDisplay(art: EscalationArtifact): string {
+  const resolved = art.respondedAt
+    ? `\nResolved: ${art.respondedAt} — user chose "${art.userChoice}"${art.userRationale ? ` (rationale: ${art.userRationale})` : ""}`
+    : "\nStatus: awaiting user response";
+  const optionLines = art.options.map((o) =>
+    `  [${o.id}] ${o.label}${o.id === art.recommendation ? "  (recommended)" : ""}\n      ${o.tradeoffs}`,
+  ).join("\n");
+  return [
+    `Task ${art.taskId} (slice ${art.sliceId})`,
+    `continueWithDefault: ${art.continueWithDefault}`,
+    `Question: ${art.question}`,
+    "",
+    "Options:",
+    optionLines,
+    "",
+    `Recommendation: ${art.recommendation} — ${art.recommendationRationale}`,
+    resolved,
+    "",
+    `Resolve with: /gsd escalate resolve ${art.taskId} <${art.options.map((o) => o.id).join("|")}|accept|reject-blocker> [rationale...]`,
+  ].join("\n");
+}
+
+/** List actionable (unresolved) escalations for `/gsd escalate list`. */
+export function listActionableEscalations(milestoneId: string): TaskRow[] {
+  return listEscalationArtifacts(milestoneId, /* includeResolved */ false);
+}
+
+/** List every escalation (including resolved) for `/gsd escalate list --all`. */
+export function listAllEscalations(milestoneId: string): TaskRow[] {
+  return listEscalationArtifacts(milestoneId, /* includeResolved */ true);
+}

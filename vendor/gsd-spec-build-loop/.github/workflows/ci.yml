@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh tests/*.sh tests/fixtures/bin/gh tests/fixtures/bin/npm
+      - name: behavior tests
+        run: tests/run.sh
+      - name: playbooks are intact
+        run: |
+          set -e
+          for f in loop/discover.md loop/spec.md loop/build.md loop/review.md; do
+            test -s "$f" || { echo "missing $f"; exit 1; }
+          done
+          # the contract vocabulary the four playbooks depend on
+          grep -q 'Ready for `gsd-loop-spec`.' loop/discover.md
+          grep -q 'gsd:ready'                loop/build.md
+          grep -q 'gsd-loop verdict for'     loop/review.md
+          grep -q 'gsd-loop verdict for'     loop/build.md
+          grep -q 'O-1'                      loop/spec.md
+          grep -q 'Needs #N merged'          loop/spec.md
+          grep -q 'Needs #N merged'          loop/build.md
+          # every label named anywhere must come from the canonical set
+          BAD=$(grep -rhoE 'gsd:[a-z-]+' loop/ .agents/ .claude/ scripts/ .github/ISSUE_TEMPLATE/ \
+            | sort -u | grep -vxE 'gsd:(map|ready|blocked|approved|rework|escalated)' || true)
+          [ -z "$BAD" ] || { echo "unknown labels: $BAD"; exit 1; }
+      - name: canonical skills point at playbooks
+        run: |
+          set -e
+          for s in discover spec build review; do
+            grep -q "loop/$s.md" ".agents/skills/gsd-loop-$s/SKILL.md"
+          done
+
+  npm-package:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: packed npm installation
+        run: node tests/npm_package_test.mjs
+      - name: native onboarding and runner
+        run: node tests/cli_workflow_test.mjs

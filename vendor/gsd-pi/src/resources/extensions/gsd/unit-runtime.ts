@@ -1,0 +1,396 @@
+// Project/App: gsd-pi
+// File Purpose: Unit runtime record — recovery budget, harness abort, unit-end
+// outcome and progress for one unit run.
+//
+// The database row is the only record that is read. A row belongs to one work
+// root (a worktree or the project root). The JSON file under
+// .gsd/runtime/units is a diagnostic copy written after each row change; nothing
+// reads it back. With no database open there is no record: writes return the
+// computed value without storing it and reads return null.
+
+import { existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+import { atomicWriteSync } from "./atomic-write.js";
+import { gsdRoot, normalizeRealPath } from "./paths.js";
+import { parseUnitId } from "./unit-id.js";
+import { isDbAvailable } from "./gsd-db.js";
+import { readTask } from "./db/lifecycle-read.js";
+import { refreshWorkflowDatabaseFromDisk } from "./db-workspace.js";
+import {
+  deleteUnitRuntimeRow,
+  listUnitRuntimeRows,
+  readUnitRuntimeRow,
+  updateUnitRuntimeRow,
+  type UnitRuntimeRow,
+} from "./db/writers/runtime-control.js";
+
+export type UnitRuntimePhase =
+  | "dispatched"
+  | "wrapup-warning-sent"
+  | "timeout"
+  | "finalize-timeout"
+  | "crashed"
+  | "recovered"
+  | "finalized"
+  | "paused"
+  | "skipped";
+
+export const IN_FLIGHT_RUNTIME_PHASES: ReadonlySet<UnitRuntimePhase> = new Set([
+  "dispatched",
+  "wrapup-warning-sent",
+  "timeout",
+  "finalize-timeout",
+  "crashed",
+  "paused",
+]);
+
+export function isInFlightRuntimePhase(phase: UnitRuntimePhase): boolean {
+  return IN_FLIGHT_RUNTIME_PHASES.has(phase);
+}
+
+export interface ExecuteTaskRecoveryStatus {
+  dbComplete: boolean;
+}
+
+export interface UnitHarnessAbortRecord {
+  kind: "tool-loop-guard" | "tool-error" | "turn-abort";
+  reason: string;
+  toolName?: string;
+  count?: number;
+  recordedAt: number;
+}
+
+/** How the latest run of a unit ended. Written where the unit-end journal event is emitted. */
+export interface UnitEndRecord {
+  status: string;
+  artifactVerified: boolean;
+  error?: string;
+}
+
+export interface AutoUnitRuntimeRecord {
+  version: 1;
+  unitType: string;
+  unitId: string;
+  startedAt: number;
+  updatedAt: number;
+  phase: UnitRuntimePhase;
+  wrapupWarningSent: boolean;
+  continueHereFired: boolean;
+  timeoutAt: number | null;
+  lastProgressAt: number;
+  progressCount: number;
+  lastProgressKind: string;
+  recovery?: ExecuteTaskRecoveryStatus;
+  recoveryAttempts?: number;
+  lastRecoveryReason?: "idle" | "hard";
+  harnessAbort?: UnitHarnessAbortRecord;
+  unitEnd?: UnitEndRecord;
+}
+
+/** File name of the diagnostic copy of one unit runtime record. */
+export function unitRuntimeFileName(unitType: string, unitId: string): string {
+  const sanitizedUnitType = unitType.replace(/[\/]/g, "-");
+  const sanitizedUnitId = unitId.replace(/[\/]/g, "-");
+  return `${sanitizedUnitType}-${sanitizedUnitId}.json`;
+}
+
+function diagnosticPath(basePath: string, unitType: string, unitId: string): string {
+  return join(gsdRoot(basePath), "runtime", "units", unitRuntimeFileName(unitType, unitId));
+}
+
+/** Work root of the rows for one base path: its real path. */
+function unitRuntimeWorkRoot(basePath: string): string {
+  return normalizeRealPath(basePath);
+}
+
+function recordFromRow(row: UnitRuntimeRow): AutoUnitRuntimeRecord {
+  return {
+    version: 1,
+    unitType: row.unit_type,
+    unitId: row.unit_id,
+    startedAt: row.started_at,
+    updatedAt: row.updated_at,
+    phase: row.phase as UnitRuntimePhase,
+    wrapupWarningSent: row.wrapup_warning_sent === 1,
+    continueHereFired: row.continue_here_fired === 1,
+    timeoutAt: row.timeout_at,
+    lastProgressAt: row.last_progress_at,
+    progressCount: row.progress_count,
+    lastProgressKind: row.last_progress_kind,
+    recovery: row.recovery_json ? JSON.parse(row.recovery_json) as ExecuteTaskRecoveryStatus : undefined,
+    recoveryAttempts: row.recovery_attempts,
+    lastRecoveryReason: (row.last_recovery_reason as "idle" | "hard" | null) ?? undefined,
+    harnessAbort: row.harness_abort_kind !== null && row.harness_abort_recorded_at !== null
+      ? {
+          kind: row.harness_abort_kind as UnitHarnessAbortRecord["kind"],
+          reason: row.harness_abort_reason ?? "",
+          ...(row.harness_abort_tool_name !== null ? { toolName: row.harness_abort_tool_name } : {}),
+          ...(row.harness_abort_count !== null ? { count: row.harness_abort_count } : {}),
+          recordedAt: row.harness_abort_recorded_at,
+        }
+      : undefined,
+    unitEnd: row.end_status !== null
+      ? {
+          status: row.end_status,
+          artifactVerified: row.end_artifact_verified === 1,
+          ...(row.end_error !== null ? { error: row.end_error } : {}),
+        }
+      : undefined,
+  };
+}
+
+function rowFromRecord(workRoot: string, record: AutoUnitRuntimeRecord): UnitRuntimeRow {
+  return {
+    work_root: workRoot,
+    unit_type: record.unitType,
+    unit_id: record.unitId,
+    started_at: record.startedAt,
+    updated_at: record.updatedAt,
+    phase: record.phase,
+    wrapup_warning_sent: record.wrapupWarningSent ? 1 : 0,
+    continue_here_fired: record.continueHereFired ? 1 : 0,
+    timeout_at: record.timeoutAt,
+    last_progress_at: record.lastProgressAt,
+    progress_count: record.progressCount,
+    last_progress_kind: record.lastProgressKind,
+    recovery_attempts: record.recoveryAttempts ?? 0,
+    last_recovery_reason: record.lastRecoveryReason ?? null,
+    harness_abort_kind: record.harnessAbort?.kind ?? null,
+    harness_abort_reason: record.harnessAbort?.reason ?? null,
+    harness_abort_tool_name: record.harnessAbort?.toolName ?? null,
+    harness_abort_count: record.harnessAbort?.count ?? null,
+    harness_abort_recorded_at: record.harnessAbort?.recordedAt ?? null,
+    end_status: record.unitEnd?.status ?? null,
+    end_artifact_verified: record.unitEnd ? (record.unitEnd.artifactVerified ? 1 : 0) : null,
+    end_error: record.unitEnd?.error ?? null,
+    recovery_json: record.recovery ? JSON.stringify(record.recovery) : null,
+  };
+}
+
+/**
+ * Read-modify-write one record in a single database write transaction, then
+ * write the diagnostic copy. `build` receives the stored record and returns
+ * the record to store.
+ */
+function storeRecord(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  build: (prev: AutoUnitRuntimeRecord | null) => AutoUnitRuntimeRecord,
+): AutoUnitRuntimeRecord {
+  if (!isDbAvailable()) return build(null);
+  const workRoot = unitRuntimeWorkRoot(basePath);
+  const record = recordFromRow(updateUnitRuntimeRow(
+    workRoot,
+    unitType,
+    unitId,
+    (prev) => rowFromRecord(workRoot, build(prev ? recordFromRow(prev) : null)),
+  ));
+  try {
+    atomicWriteSync(diagnosticPath(basePath, unitType, unitId), JSON.stringify(record, null, 2) + "\n", "utf-8");
+  } catch {
+    // Diagnostic copy only — the database row is already stored.
+  }
+  return record;
+}
+
+export function writeUnitRuntimeRecord(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  startedAt: number,
+  updates: Partial<AutoUnitRuntimeRecord> = {},
+): AutoUnitRuntimeRecord {
+  return storeRecord(basePath, unitType, unitId, (prev) => {
+    const sameRun = prev?.startedAt === startedAt;
+    const updatesHarnessAbort = Object.prototype.hasOwnProperty.call(updates, "harnessAbort");
+    return {
+      version: 1,
+      unitType,
+      unitId,
+      startedAt,
+      updatedAt: Date.now(),
+      phase: updates.phase ?? prev?.phase ?? "dispatched",
+      wrapupWarningSent: updates.wrapupWarningSent ?? prev?.wrapupWarningSent ?? false,
+      continueHereFired: updates.continueHereFired ?? prev?.continueHereFired ?? false,
+      timeoutAt: updates.timeoutAt ?? prev?.timeoutAt ?? null,
+      lastProgressAt: updates.lastProgressAt ?? prev?.lastProgressAt ?? Date.now(),
+      progressCount: updates.progressCount ?? prev?.progressCount ?? 0,
+      lastProgressKind: updates.lastProgressKind ?? prev?.lastProgressKind ?? "dispatch",
+      recovery: updates.recovery ?? prev?.recovery,
+      recoveryAttempts: updates.recoveryAttempts ?? prev?.recoveryAttempts ?? 0,
+      lastRecoveryReason: updates.lastRecoveryReason ?? prev?.lastRecoveryReason,
+      harnessAbort: updatesHarnessAbort
+        ? updates.harnessAbort
+        : (sameRun ? prev?.harnessAbort : undefined),
+      // A new run starts with no outcome; the outcome of the same run is kept.
+      unitEnd: updates.unitEnd ?? (sameRun ? prev?.unitEnd : undefined),
+    };
+  });
+}
+
+/**
+ * Record how the latest run of a unit ended. The post-unit hook engine reads
+ * this row to decide whether a hook unit succeeded.
+ */
+export function recordUnitEnd(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  unitEnd: UnitEndRecord,
+): AutoUnitRuntimeRecord {
+  return storeRecord(basePath, unitType, unitId, (prev) => {
+    const now = Date.now();
+    return {
+      version: 1,
+      unitType,
+      unitId,
+      startedAt: prev?.startedAt ?? now,
+      updatedAt: now,
+      // A unit that ended before it was dispatched was never in flight.
+      phase: prev?.phase ?? "skipped",
+      wrapupWarningSent: prev?.wrapupWarningSent ?? false,
+      continueHereFired: prev?.continueHereFired ?? false,
+      timeoutAt: prev?.timeoutAt ?? null,
+      lastProgressAt: prev?.lastProgressAt ?? now,
+      progressCount: prev?.progressCount ?? 0,
+      lastProgressKind: prev?.lastProgressKind ?? "unit-end",
+      recovery: prev?.recovery,
+      recoveryAttempts: prev?.recoveryAttempts ?? 0,
+      lastRecoveryReason: prev?.lastRecoveryReason,
+      harnessAbort: prev?.harnessAbort,
+      unitEnd,
+    };
+  });
+}
+
+export function recordUnitHarnessAbort(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  startedAt: number,
+  abort: Omit<UnitHarnessAbortRecord, "recordedAt"> & { recordedAt?: number },
+): AutoUnitRuntimeRecord {
+  return storeRecord(basePath, unitType, unitId, (prev) => {
+    const sameRun = prev?.startedAt === startedAt;
+    if (sameRun && prev?.harnessAbort?.kind === "turn-abort" && abort.kind === "tool-error") {
+      return prev;
+    }
+    return {
+      version: 1,
+      unitType,
+      unitId,
+      startedAt,
+      updatedAt: Date.now(),
+      phase: prev?.phase ?? "dispatched",
+      wrapupWarningSent: prev?.wrapupWarningSent ?? false,
+      continueHereFired: prev?.continueHereFired ?? false,
+      timeoutAt: prev?.timeoutAt ?? null,
+      lastProgressAt: Date.now(),
+      progressCount: prev?.progressCount ?? 0,
+      lastProgressKind: `harness-abort:${abort.kind}`,
+      recovery: prev?.recovery,
+      recoveryAttempts: prev?.recoveryAttempts ?? 0,
+      lastRecoveryReason: prev?.lastRecoveryReason,
+      harnessAbort: {
+        ...abort,
+        recordedAt: abort.recordedAt ?? Date.now(),
+      },
+      unitEnd: sameRun ? prev?.unitEnd : undefined,
+    };
+  });
+}
+
+export function clearUnitHarnessAbort(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  startedAt: number,
+  expectedKind?: UnitHarnessAbortRecord["kind"],
+): AutoUnitRuntimeRecord {
+  return storeRecord(basePath, unitType, unitId, (prev) => {
+    if (!prev) {
+      return {
+        version: 1,
+        unitType,
+        unitId,
+        startedAt,
+        updatedAt: Date.now(),
+        phase: "dispatched",
+        wrapupWarningSent: false,
+        continueHereFired: false,
+        timeoutAt: null,
+        lastProgressAt: Date.now(),
+        progressCount: 0,
+        lastProgressKind: "dispatch",
+        recoveryAttempts: 0,
+      };
+    }
+    if (prev.startedAt !== startedAt) return prev;
+    if (expectedKind && prev.harnessAbort?.kind !== expectedKind) return prev;
+    return {
+      ...prev,
+      updatedAt: Date.now(),
+      lastProgressAt: Date.now(),
+      lastProgressKind: "harness-abort-cleared",
+      harnessAbort: undefined,
+    };
+  });
+}
+
+export function readUnitRuntimeRecord(basePath: string, unitType: string, unitId: string): AutoUnitRuntimeRecord | null {
+  const row = readUnitRuntimeRow(unitRuntimeWorkRoot(basePath), unitType, unitId);
+  return row ? recordFromRow(row) : null;
+}
+
+export function readUnitHarnessAbort(
+  basePath: string,
+  unitType: string,
+  unitId: string,
+  startedAt: number,
+): UnitHarnessAbortRecord | null {
+  const record = readUnitRuntimeRecord(basePath, unitType, unitId);
+  if (!record || record.startedAt !== startedAt) return null;
+  return record.harnessAbort ?? null;
+}
+
+export function clearUnitRuntimeRecord(basePath: string, unitType: string, unitId: string): void {
+  deleteUnitRuntimeRow(unitRuntimeWorkRoot(basePath), unitType, unitId);
+  const path = diagnosticPath(basePath, unitType, unitId);
+  if (existsSync(path)) unlinkSync(path);
+}
+
+/** Return the unit runtime records of one work root. */
+export function listUnitRuntimeRecords(basePath: string): AutoUnitRuntimeRecord[] {
+  const workRoot = unitRuntimeWorkRoot(basePath);
+  return listUnitRuntimeRows().filter((row) => row.work_root === workRoot).map(recordFromRow);
+}
+
+/** Work roots that hold a record for the unit. */
+export function listUnitRuntimeWorkRoots(unitType: string, unitId: string): string[] {
+  return listUnitRuntimeRows()
+    .filter((row) => row.unit_type === unitType && row.unit_id === unitId)
+    .map((row) => row.work_root);
+}
+
+/**
+ * Durable state of one execute-task unit, read from the task row only. The
+ * task PLAN and SUMMARY files, the PLAN checkbox and the STATE.md next action
+ * are projections that can lag the row, so they are not read.
+ */
+export function inspectExecuteTaskDurability(unitId: string): ExecuteTaskRecoveryStatus | null {
+  const { milestone: mid, slice: sid, task: tid } = parseUnitId(unitId);
+  if (!mid || !sid || !tid) return null;
+
+  let dbComplete = false;
+  if (isDbAvailable()) {
+    refreshWorkflowDatabaseFromDisk();
+    dbComplete = readTask(mid, sid, tid)?.done === true;
+  }
+
+  return { dbComplete };
+}
+
+export function formatExecuteTaskRecoveryStatus(status: ExecuteTaskRecoveryStatus): string {
+  return status.dbComplete ? "DB task status is closed" : "DB task status is not closed";
+}

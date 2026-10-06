@@ -1,0 +1,1197 @@
+// Project/App: gsd-pi
+// File Purpose: /gsd copilot-models — explicit GitHub Copilot model catalog
+// sync, diff, diagnostics, pricing, promotions, and local-only why analysis.
+
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+
+import type { Api, Model } from "@gsd/pi-ai";
+import { getGitHubCopilotBaseUrl } from "@gsd/pi-ai/oauth";
+import type { ExtensionCommandContext, ExtensionContext } from "@gsd/pi-coding-agent";
+
+import {
+  CopilotCatalogFetchError,
+  type CopilotModelRecord,
+  type CopilotModelSnapshot,
+  dedupeShellNotifications,
+  diffCatalogSnapshots,
+  fetchGitHubCopilotModels,
+  findStaticCopilotModel,
+  isSuspiciousCatalogShrink,
+} from "../../copilot-model-catalog.js";
+import {
+  type CatalogRegistrationCandidate,
+  computeCatalogRegistrationCandidates,
+  registerCopilotModelsInOverlay,
+  resolveGsdModelsCatalogPath,
+} from "../../copilot-overlay-writer.js";
+import { lookupModelCost, resolveModelEconomics, type RuntimeModelEconomics } from "../../model-cost-table.js";
+import {
+  canonicalizeModelId,
+  compareCapabilityDominance,
+  getModelProfileConfidence,
+  MODEL_CAPABILITY_TIER,
+  PROFILE_CONFIDENCE_ORDINAL,
+  resolveCapabilityProfile,
+} from "../../model-router.js";
+
+interface CopilotCatalogDiffState {
+  firstAccepted: boolean;
+  generatedAt: string;
+  added: CopilotModelRecord[];
+  removed: CopilotModelRecord[];
+  changed: CopilotModelRecord[];
+  candidates: CatalogRegistrationCandidate[];
+  registeredIds: string[];
+}
+
+interface CopilotRefreshState {
+  attemptedAt: string;
+  status: "success" | "failed" | "suspicious";
+  failureKind?: string;
+  failureMessage?: string;
+}
+
+interface CopilotSessionState {
+  lastKnownGoodSnapshot: CopilotModelSnapshot | null;
+  lastAcceptedDiff: CopilotCatalogDiffState | null;
+  lastRefresh: CopilotRefreshState | null;
+}
+
+export interface HandleCopilotModelsOptions {
+  fetchImpl?: typeof fetch;
+  /** Test-only override for the models-catalog.json overlay path used by `--register`. */
+  overlayPath?: string;
+}
+
+let sessionStates = new Map<string, CopilotSessionState>();
+let lastNotifiedContentByAccount = new Map<string, string>();
+
+/** Test-only hook to reset module-level session state between test cases. */
+export function _resetCopilotModelsSessionStateForTests(): void {
+  sessionStates = new Map();
+  lastNotifiedContentByAccount = new Map();
+}
+
+function normalizeBareModelId(modelId: string): string {
+  const trimmed = (modelId ?? "").trim();
+  if (!trimmed) return "";
+  return trimmed.includes("/") ? trimmed.split("/").pop() ?? trimmed : trimmed;
+}
+
+function hasRegisterFlag(args: string): boolean {
+  return (args ?? "").split(/\s+/).includes("--register");
+}
+
+type CopilotModelsCommand = "sync" | "changes" | "pricing" | "promos" | "doctor" | "why" | "help" | "unknown";
+
+function parseCommand(args: string): CopilotModelsCommand {
+  const trimmed = (args ?? "").trim();
+  if (!trimmed) return "sync";
+  const firstToken = trimmed.split(/\s+/)[0] ?? "";
+  if (firstToken === "help" || firstToken === "-h" || firstToken === "--help") return "help";
+  // A flags-only invocation (e.g. bare "--register") is the documented sync
+  // shorthand, not a subcommand of its own.
+  if (firstToken.startsWith("--")) return "sync";
+  if (firstToken === "sync") return "sync";
+  if (firstToken === "changes") return "changes";
+  if (firstToken === "pricing") return "pricing";
+  if (firstToken === "promos") return "promos";
+  if (firstToken === "doctor") return "doctor";
+  if (firstToken === "why") return "why";
+  return "unknown";
+}
+
+const COPILOT_MODELS_USAGE = [
+  "GitHub Copilot model catalog — usage:",
+  "  /gsd copilot-models sync              Refresh the accepted live catalog snapshot",
+  "  /gsd copilot-models sync --register   Register complete remote-only models into the local overlay",
+  "  /gsd copilot-models changes           Show the last accepted catalog diff",
+  "  /gsd copilot-models pricing           Show provider-aware pricing for one model or the accepted snapshot",
+  "  /gsd copilot-models promos            Show active, future, and expired promotions",
+  "  /gsd copilot-models doctor           Local-only auth/cache/policy/quarantine diagnostics",
+  "  /gsd copilot-models why <model>       Explain a model's local status/routing/economics",
+  "  /gsd copilot-models help              Show this usage message",
+].join("\n");
+
+interface ParsedModelArgument {
+  target?: string;
+  valid: boolean;
+  error?: string;
+}
+
+function parseProviderModelArgument(prefix: string, args: string, required: boolean): ParsedModelArgument {
+  const trimmed = (args ?? "").trim();
+  const rest = trimmed.slice(prefix.length).trim();
+  if (!rest) {
+    return required
+      ? { valid: false, error: `Usage: /gsd copilot-models ${prefix} <model>` }
+      : { valid: true };
+  }
+  const rawTarget = rest.split(/\s+/)[0] ?? "";
+  if (/^(?:\[model\]|<model>)$/i.test(rawTarget)) {
+    return { valid: false, error: `Usage: /gsd copilot-models ${prefix} <model>` };
+  }
+  const provider = rawTarget.includes("/") ? rawTarget.split("/")[0]?.toLowerCase() : "";
+  if (provider && provider !== "github-copilot") {
+    return {
+      valid: false,
+      error: `GitHub Copilot only accepts GitHub Copilot model IDs for ${prefix}; '${rawTarget}' is not a GitHub Copilot model.`,
+    };
+  }
+  return { valid: true, target: normalizeBareModelId(rawTarget) };
+}
+
+function hashAccountKey(baseUrl: string, token: string): string {
+  return createHash("sha256").update(`${baseUrl}\n${token}`).digest("hex");
+}
+
+/**
+ * Derive a per-account key from the STABLE part of the stored credential (the
+ * OAuth refresh token, or a plain API key) instead of the short-lived Copilot
+ * access token. GitHub Copilot OAuth refresh replaces `access` on every
+ * renewal, so hashing it would silently drop this account's cached
+ * snapshot/diff/notification state each time the token rotates.
+ * Always returns a key: auth configured via a runtime override, environment
+ * variable, or models.json fallback resolver has no entry in authStorage at
+ * all. For that case, fingerprint the credential's stable *source* (env var
+ * name, or a fixed marker for a models.json key/command) rather than its
+ * resolved value — a models.json `apiKey` command can legitimately emit a
+ * new short-lived token on every invocation, and hashing that value would
+ * produce a different fingerprint each time and strand this account's
+ * already-cached snapshot/diff/notification state. The source marker alone
+ * doesn't distinguish two different projects that each configure a
+ * models.json command/literal key for this same provider — module-level
+ * state here is shared by every session in the process, so also fold in
+ * modelsJsonPath (stable per project, never resolved/executed) to keep
+ * those from colliding onto the same cached account state.
+ */
+async function resolveCopilotAccountKey(ctx: ExtensionCommandContext, copilotModel: Model<Api>): Promise<string> {
+  const cred = ctx.modelRegistry.authStorage.get(copilotModel.provider) as
+    | { type: "oauth"; refresh: string; enterpriseUrl?: string }
+    | { type: "api_key"; key: string }
+    | undefined;
+  if (cred?.type === "oauth") {
+    return hashAccountKey(cred.enterpriseUrl ?? "github.com", cred.refresh);
+  }
+  if (cred?.type === "api_key") {
+    return hashAccountKey("github.com", cred.key);
+  }
+  const status = ctx.modelRegistry.getProviderAuthStatus(copilotModel.provider);
+  const stableSource =
+    status.source === "environment" && status.label ? `env:${status.label}` : (status.source ?? "unknown");
+  const projectScope = ctx.modelRegistry.modelsJsonPath ?? "no-models-json";
+  return hashAccountKey("github.com", `unstored-credential:${stableSource}:${projectScope}`);
+}
+
+function redactSensitive(message: string): string {
+  return message
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .replace(/gh[opusr]_[A-Za-z0-9_]+/g, "[redacted-token]")
+    .replace(/[A-Za-z0-9+/=_-]{30,}/g, "[redacted]");
+}
+
+function getSessionState(accountKey: string): CopilotSessionState {
+  const current = sessionStates.get(accountKey);
+  if (current) return current;
+  const created: CopilotSessionState = {
+    lastKnownGoodSnapshot: null,
+    lastAcceptedDiff: null,
+    lastRefresh: null,
+  };
+  sessionStates.set(accountKey, created);
+  return created;
+}
+
+function getLastNotifiedContent(accountKey: string): string | undefined {
+  return lastNotifiedContentByAccount.get(accountKey);
+}
+
+function setLastNotifiedContent(accountKey: string, content: string): void {
+  lastNotifiedContentByAccount.set(accountKey, content);
+}
+
+/**
+ * Resolve the CURRENT account's cached session state without resolving or
+ * refreshing the bearer token — `changes`, `pricing`, `promos`, `doctor`, and
+ * `why` are documented as local-only/no-network, but the OAuth token resolver
+ * this used to call through can itself issue a network refresh request when
+ * the access token is expired. `hasConfiguredAuth`/`resolveCopilotAccountKey`
+ * read stored credential state directly instead.
+ */
+async function resolveCurrentAccountView(ctx: ExtensionCommandContext): Promise<{
+  auth: { configured: boolean; tokenAvailable: boolean };
+  accountKey: string | null;
+  state: CopilotSessionState | null;
+}> {
+  const available = ctx.modelRegistry.getAvailable();
+  const copilotModel = available.find((model) => model.provider === "github-copilot");
+  if (!copilotModel) {
+    return { auth: { configured: false, tokenAvailable: false }, accountKey: null, state: null };
+  }
+
+  const accountKey = await resolveCopilotAccountKey(ctx, copilotModel);
+  return {
+    auth: { configured: true, tokenAvailable: ctx.modelRegistry.hasConfiguredAuth(copilotModel) },
+    accountKey,
+    state: sessionStates.get(accountKey) ?? null,
+  };
+}
+
+function localCopilotModels(ctx: ExtensionContext): Model<Api>[] {
+  return ctx.modelRegistry.getAll().filter((model) => model.provider === "github-copilot");
+}
+
+async function resolveCopilotAuth(ctx: ExtensionCommandContext): Promise<{
+  configured: boolean;
+  tokenAvailable: boolean;
+  copilotModel?: Model<Api>;
+  token?: string;
+  baseUrl?: string;
+  accountKey?: string;
+  error?: string;
+}> {
+  const available = ctx.modelRegistry.getAvailable();
+  const copilotModel = available.find((model) => model.provider === "github-copilot");
+  if (!copilotModel) {
+    return { configured: false, tokenAvailable: false };
+  }
+
+  const stableAccountKey = await resolveCopilotAccountKey(ctx, copilotModel);
+
+  try {
+    const token = await ctx.modelRegistry.getApiKey(copilotModel);
+    if (!token) {
+      return {
+        configured: true,
+        tokenAvailable: false,
+        copilotModel,
+        accountKey: stableAccountKey,
+      };
+    }
+
+    const baseUrl = getGitHubCopilotBaseUrl(token);
+    return {
+      configured: true,
+      tokenAvailable: true,
+      copilotModel,
+      token,
+      baseUrl,
+      accountKey: stableAccountKey,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      tokenAvailable: false,
+      copilotModel,
+      accountKey: stableAccountKey,
+      error: redactSensitive(error instanceof Error ? error.message : String(error)),
+    };
+  }
+}
+
+function describeCapabilityTier(modelId: string): string {
+  const tier = MODEL_CAPABILITY_TIER[canonicalizeModelId(modelId)];
+  return tier
+    ? `known capability tier: ${tier}`
+    : "no GSD capability profile yet — manual selection only, not auto-routed";
+}
+
+function buildLiveEconomics(record: CopilotModelRecord): Partial<RuntimeModelEconomics> | undefined {
+  // normalizeRemoteCopilotModel can fill billing.tokenPrices from the
+  // provider-static fallback model when the live response omitted pricing.
+  // Only genuinely provider-live pricing may be reported as fresh/live here
+  // -- a static-filled value must fall through to staticEconomics instead,
+  // or `pricing`/`why` would claim a bundled price is fresh live data.
+  const tokenPricesAreLive = record.provenance.tokenPrices.source === "provider-live";
+
+  const longContextTiers = record.billing.longContextTiers
+    ?.filter(
+      (tier): tier is typeof tier & { inputPer1k: number; outputPer1k: number } =>
+        typeof tier.inputPer1k === "number" && typeof tier.outputPer1k === "number",
+    )
+    .map((tier) => ({
+      inputTokensAbove: tier.inputTokensAbove,
+      inputPer1k: tier.inputPer1k,
+      outputPer1k: tier.outputPer1k,
+      ...(tier.cacheReadPer1k !== undefined ? { cachedInputPer1k: tier.cacheReadPer1k } : {}),
+      ...(tier.cacheWritePer1k !== undefined ? { cachedOutputPer1k: tier.cacheWritePer1k } : {}),
+    }));
+
+  const hasLiveTokenPrices = tokenPricesAreLive
+    && record.billing.inputPer1k !== undefined
+    && record.billing.outputPer1k !== undefined;
+
+  if (
+    !hasLiveTokenPrices
+    && record.billing.requestMultiplier === undefined
+    && !record.billing.promotion
+  ) {
+    return undefined;
+  }
+
+  return {
+    billingUnit: record.billing.billingUnit,
+    stale: false,
+    tokenPrices: hasLiveTokenPrices
+      ? {
+          default: {
+            inputPer1k: record.billing.inputPer1k as number,
+            outputPer1k: record.billing.outputPer1k as number,
+            ...(record.billing.cacheReadPer1k !== undefined ? { cachedInputPer1k: record.billing.cacheReadPer1k } : {}),
+            ...(record.billing.cacheWritePer1k !== undefined ? { cachedOutputPer1k: record.billing.cacheWritePer1k } : {}),
+          },
+          ...(longContextTiers?.length ? { longContextTiers } : {}),
+        }
+      : undefined,
+    ...(record.billing.requestMultiplier !== undefined ? { requestMultiplier: record.billing.requestMultiplier } : {}),
+    ...(record.billing.promotion ? { promotion: record.billing.promotion } : {}),
+  };
+}
+
+function hasMeaningfulCost(cost: Model<Api>["cost"] | undefined): boolean {
+  return !!cost && (
+    cost.input > 0
+    || cost.output > 0
+    || cost.cacheRead > 0
+    || cost.cacheWrite > 0
+    || (cost.tiers?.length ?? 0) > 0
+  );
+}
+
+function tokenPricesFromCost(cost: Model<Api>["cost"]): RuntimeModelEconomics["tokenPrices"] {
+  return {
+    default: {
+      inputPer1k: cost.input / 1000,
+      outputPer1k: cost.output / 1000,
+      cachedInputPer1k: cost.cacheRead / 1000,
+      cachedOutputPer1k: cost.cacheWrite / 1000,
+    },
+    ...(cost.tiers?.length
+      ? {
+          longContextTiers: cost.tiers
+            .filter((tier): tier is typeof tier & { input: number; output: number } =>
+              typeof tier.input === "number" && typeof tier.output === "number",
+            )
+            .map((tier) => ({
+              inputTokensAbove: tier.inputTokensAbove,
+              inputPer1k: tier.input / 1000,
+              outputPer1k: tier.output / 1000,
+              ...(typeof tier.cacheRead === "number" ? { cachedInputPer1k: tier.cacheRead / 1000 } : {}),
+              ...(typeof tier.cacheWrite === "number" ? { cachedOutputPer1k: tier.cacheWrite / 1000 } : {}),
+            })),
+        }
+      : {}),
+  };
+}
+
+/**
+ * The effective local model can come from bundled data, the models-catalog.json
+ * overlay, or a genuine models.json cost override — ModelRegistry itself already
+ * applies bundled < overlay < models.json precedence when building it, so its
+ * cost is at least as authoritative as this module's own separate hardcoded
+ * static reference list. It is NOT necessarily user-authored, though, so it
+ * stays in the same (stale, provider-static) precedence tier as staticModel —
+ * just preferred over it when present, rather than always losing to it.
+ */
+function buildStaticEconomics(modelId: string, localModel?: Model<Api>): Partial<RuntimeModelEconomics> | undefined {
+  const staticModel = findStaticCopilotModel(modelId);
+  const cost = hasMeaningfulCost(localModel?.cost) ? localModel?.cost : staticModel?.cost;
+  if (!cost) return undefined;
+  return {
+    billingUnit: "tokens",
+    stale: true,
+    tokenPrices: tokenPricesFromCost(cost),
+  };
+}
+
+/** Strip `//` line comments and trailing commas, mirroring ModelRegistry's own models.json parsing (model-registry.ts's stripJsonComments), so a genuinely user-authored override can be told apart from bundled/overlay data without depending on private registry state. */
+function stripJsonComments(input: string): string {
+  return input
+    .replace(/"(?:\\.|[^"\\])*"|\/\/[^\n]*/g, (m) => (m[0] === '"' ? m : ""))
+    .replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (m, tail) => tail ?? (m[0] === '"' ? m : ""));
+}
+
+/**
+ * Read a genuine user-authored cost override for a github-copilot model
+ * directly from models.json — either a full custom model definition or a
+ * modelOverrides entry. Returns undefined for any read/parse error (a
+ * malformed models.json is already surfaced elsewhere by ModelRegistry
+ * itself) so pricing/why never fail because of this best-effort lookup.
+ */
+function readGithubCopilotModelsJsonCost(
+  ctx: ExtensionContext,
+  modelId: string,
+): { input: number; output: number; cacheRead: number; cacheWrite: number } | undefined {
+  try {
+    const modelsJsonPath = ctx.modelRegistry.modelsJsonPath;
+    if (!modelsJsonPath || !existsSync(modelsJsonPath)) return undefined;
+
+    const parsed = JSON.parse(stripJsonComments(readFileSync(modelsJsonPath, "utf-8")));
+    const providerConfig = parsed?.providers?.["github-copilot"];
+    if (!providerConfig || typeof providerConfig !== "object") return undefined;
+
+    const modelDef = Array.isArray(providerConfig.models)
+      ? providerConfig.models.find((model: { id?: unknown }) => model?.id === modelId)
+      : undefined;
+    const rawCost = modelDef?.cost ?? providerConfig.modelOverrides?.[modelId]?.cost;
+    if (!rawCost || typeof rawCost.input !== "number" || typeof rawCost.output !== "number") return undefined;
+
+    return {
+      input: rawCost.input,
+      output: rawCost.output,
+      cacheRead: typeof rawCost.cacheRead === "number" ? rawCost.cacheRead : 0,
+      cacheWrite: typeof rawCost.cacheWrite === "number" ? rawCost.cacheWrite : 0,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function buildUserOverrideEconomics(ctx: ExtensionContext, modelId: string): Partial<RuntimeModelEconomics> | undefined {
+  const cost = readGithubCopilotModelsJsonCost(ctx, modelId);
+  if (!cost || !hasMeaningfulCost(cost)) return undefined;
+  return {
+    billingUnit: "tokens",
+    stale: false,
+    tokenPrices: tokenPricesFromCost(cost),
+  };
+}
+
+function resolveEconomicsForModel(
+  ctx: ExtensionContext,
+  bareId: string,
+  liveRecord: CopilotModelRecord | undefined,
+  localModel: Model<Api> | undefined,
+): RuntimeModelEconomics {
+  return resolveModelEconomics({
+    provider: "github-copilot",
+    modelId: bareId,
+    userOverride: buildUserOverrideEconomics(ctx, bareId),
+    liveEconomics: liveRecord ? buildLiveEconomics(liveRecord) : undefined,
+    staticEconomics: buildStaticEconomics(bareId, localModel),
+    // BUNDLED_COST_TABLE's bare-ID lookup isn't provider-qualified; without this,
+    // an unmatched github-copilot model can silently report another provider's
+    // price for the same bare ID instead of unknown pricing.
+    disableImplicitFallback: true,
+  });
+}
+
+function economicsSummary(economics: RuntimeModelEconomics): string {
+  const prices = economics.tokenPrices?.default;
+  if (!prices) return "unknown";
+  return `$${Number(prices.inputPer1k).toFixed(4)} per 1K input / $${Number(prices.outputPer1k).toFixed(4)} per 1K output`;
+}
+
+function economicsSourceSummary(economics: RuntimeModelEconomics): string {
+  return `${economics.provenance.defaultTokenPrices?.source ?? economics.source}`;
+}
+
+function economicsFreshnessSummary(economics: RuntimeModelEconomics): string {
+  return economics.provenance.defaultTokenPrices?.freshness ?? "unknown";
+}
+
+function toolCallsSummary(value: boolean | undefined): "yes" | "no" | "unknown" {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return "unknown";
+}
+
+export interface CheaperSameTierSuggestion {
+  modelId: string;
+  tier: string;
+  confidence: ReturnType<typeof getModelProfileConfidence>;
+  economics: RuntimeModelEconomics & {
+    tokenPrices: { default: { inputPer1k: number; outputPer1k: number } };
+  };
+  inputSavings: number;
+  outputSavings: number;
+}
+
+function hasKnownDefaultPricing(
+  economics: RuntimeModelEconomics,
+): economics is RuntimeModelEconomics & {
+  tokenPrices: { default: { inputPer1k: number; outputPer1k: number } };
+} {
+  return !!(
+    economics.tokenPrices?.default
+    && Number.isFinite(economics.tokenPrices.default.inputPer1k)
+    && Number.isFinite(economics.tokenPrices.default.outputPer1k)
+  );
+}
+
+function isBlockedForAutomaticRouting(record: CopilotModelRecord | undefined): boolean {
+  return (
+    record?.availability.policyState === "disabled"
+    || record?.availability.policyState === "restricted"
+    || record?.availability.preview === true
+  );
+}
+
+function formatCheaperSameTierOption(
+  suggestion: CheaperSameTierSuggestion,
+): string {
+  const prices = suggestion.economics.tokenPrices.default;
+  return `- cheaper same-tier option: github-copilot/${suggestion.modelId} (${suggestion.tier}, ${suggestion.confidence}, $${prices.inputPer1k.toFixed(4)} / $${prices.outputPer1k.toFixed(4)} per 1K) — saves $${suggestion.inputSavings.toFixed(4)} input / $${suggestion.outputSavings.toFixed(4)} output per 1K`;
+}
+
+export function findCheaperSameTierOption(
+  bareId: string,
+  ctx: ExtensionContext,
+  snapshot: CopilotModelSnapshot | null,
+): CheaperSameTierSuggestion | null {
+  const targetTier = MODEL_CAPABILITY_TIER[canonicalizeModelId(bareId)];
+  if (!targetTier) return null;
+
+  const targetLiveRecord = findLiveRecord(snapshot, bareId);
+  if (isBlockedForAutomaticRouting(targetLiveRecord)) return null;
+
+  const sessionModels = ctx.modelRegistry
+    .getAvailable()
+    .filter((model) => model.provider === "github-copilot");
+  if (!sessionModels.some((model) => normalizeBareModelId(model.id) === bareId)) {
+    return null;
+  }
+
+  const targetEconomics = resolveEconomicsForModel(
+    ctx,
+    bareId,
+    targetLiveRecord,
+    findLocalModel(ctx, bareId),
+  );
+  if (!hasKnownDefaultPricing(targetEconomics)) return null;
+
+  let bestSuggestion: CheaperSameTierSuggestion | null = null;
+  for (const candidateModel of sessionModels) {
+    const candidateBareId = normalizeBareModelId(candidateModel.id);
+    if (!candidateBareId || candidateBareId === bareId) continue;
+    if (MODEL_CAPABILITY_TIER[canonicalizeModelId(candidateBareId)] !== targetTier) continue;
+
+    const candidateConfidence = getModelProfileConfidence(candidateBareId);
+    if (candidateConfidence === "unknown") continue;
+    if (
+      compareCapabilityDominance(
+        resolveCapabilityProfile(bareId).profile,
+        resolveCapabilityProfile(candidateBareId).profile,
+      ) === "incomparable"
+    ) continue;
+
+    const candidateLiveRecord = findLiveRecord(snapshot, candidateBareId);
+    if (isBlockedForAutomaticRouting(candidateLiveRecord)) continue;
+
+    const candidateEconomics = resolveEconomicsForModel(
+      ctx,
+      candidateBareId,
+      candidateLiveRecord,
+      findLocalModel(ctx, candidateBareId) ?? candidateModel,
+    );
+    if (!hasKnownDefaultPricing(candidateEconomics)) continue;
+
+    const inputSavings =
+      targetEconomics.tokenPrices.default.inputPer1k
+      - candidateEconomics.tokenPrices.default.inputPer1k;
+    const outputSavings =
+      targetEconomics.tokenPrices.default.outputPer1k
+      - candidateEconomics.tokenPrices.default.outputPer1k;
+
+    const candidateIsStrictlyCheaper =
+      inputSavings >= 0
+      && outputSavings >= 0
+      && (inputSavings > 0 || outputSavings > 0);
+    if (!candidateIsStrictlyCheaper) continue;
+
+    const nextSuggestion: CheaperSameTierSuggestion = {
+      modelId: candidateBareId,
+      tier: targetTier,
+      confidence: candidateConfidence,
+      economics: candidateEconomics,
+      inputSavings,
+      outputSavings,
+    };
+
+    if (!bestSuggestion) {
+      bestSuggestion = nextSuggestion;
+      continue;
+    }
+
+    const currentPrices = bestSuggestion.economics.tokenPrices.default;
+    const nextPrices = candidateEconomics.tokenPrices.default;
+    const isBetterChoice =
+      nextPrices.inputPer1k < currentPrices.inputPer1k
+      || (
+        nextPrices.inputPer1k === currentPrices.inputPer1k
+        && nextPrices.outputPer1k < currentPrices.outputPer1k
+      )
+      || (
+        nextPrices.inputPer1k === currentPrices.inputPer1k
+        && nextPrices.outputPer1k === currentPrices.outputPer1k
+        && PROFILE_CONFIDENCE_ORDINAL[candidateConfidence]
+          > PROFILE_CONFIDENCE_ORDINAL[bestSuggestion.confidence]
+      )
+      || (
+        nextPrices.inputPer1k === currentPrices.inputPer1k
+        && nextPrices.outputPer1k === currentPrices.outputPer1k
+        && PROFILE_CONFIDENCE_ORDINAL[candidateConfidence]
+          === PROFILE_CONFIDENCE_ORDINAL[bestSuggestion.confidence]
+        && candidateBareId.localeCompare(bestSuggestion.modelId) < 0
+      );
+
+    if (isBetterChoice) {
+      bestSuggestion = nextSuggestion;
+    }
+  }
+
+  return bestSuggestion;
+}
+
+function formatPromotion(
+  promotion?: {
+    discountPercent?: number;
+    startsAt?: string;
+    endsAt?: string;
+    message?: string;
+    status?: "active" | "future" | "expired" | "unknown";
+  },
+): string {
+  if (!promotion) return "none";
+  const details: string[] = [promotion.status ?? "unknown"];
+  if (promotion.discountPercent !== undefined) details.push(`${promotion.discountPercent}%`);
+  if (promotion.endsAt) details.push(`ends ${promotion.endsAt}`);
+  if (promotion.startsAt) details.push(`starts ${promotion.startsAt}`);
+  if (promotion.message) details.push(promotion.message);
+  return details.join(" — ");
+}
+
+function formatCacheAge(generatedAt?: string): string {
+  if (!generatedAt) return "never";
+  const ageMs = Date.now() - Date.parse(generatedAt);
+  if (!Number.isFinite(ageMs) || ageMs < 0) return generatedAt;
+  const seconds = Math.floor(ageMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+}
+
+function buildDiffState(
+  previousSnapshot: CopilotModelSnapshot | null,
+  nextSnapshot: CopilotModelSnapshot,
+  candidates: CatalogRegistrationCandidate[],
+  registeredIds: string[],
+): CopilotCatalogDiffState {
+  if (!previousSnapshot) {
+    return {
+      firstAccepted: true,
+      generatedAt: nextSnapshot.generatedAt,
+      added: nextSnapshot.models,
+      removed: [],
+      changed: [],
+      candidates,
+      registeredIds,
+    };
+  }
+
+  const diff = diffCatalogSnapshots(previousSnapshot, nextSnapshot);
+  return {
+    firstAccepted: false,
+    generatedAt: nextSnapshot.generatedAt,
+    added: diff.added,
+    removed: diff.removed,
+    changed: diff.changed,
+    candidates,
+    registeredIds,
+  };
+}
+
+function formatChanges(diff: CopilotCatalogDiffState | null): string {
+  if (!diff) {
+    return "GitHub Copilot model catalog changes: no accepted sync has been recorded yet.";
+  }
+
+  const lines = [
+    "GitHub Copilot model catalog changes:",
+    `- snapshot accepted at: ${diff.generatedAt}`,
+    `- mode: ${diff.firstAccepted ? "first accepted snapshot" : "delta since last accepted snapshot"}`,
+  ];
+
+  for (const model of diff.added) {
+    lines.push(`+ ${model.registryId} added (${describeCapabilityTier(model.id)})`);
+  }
+  for (const model of diff.removed) {
+    lines.push(`- ${model.registryId} removed`);
+  }
+  for (const model of diff.changed) {
+    lines.push(`~ ${model.registryId} changed`);
+  }
+  for (const model of diff.candidates.filter((candidate) => !candidate.complete)) {
+    lines.push(`! ${model.registryId} quarantined — ${model.blockers.join("; ")}`);
+  }
+  for (const modelId of diff.registeredIds) {
+    lines.push(`= github-copilot/${modelId} registered into the effective local catalog overlay`);
+  }
+
+  if (lines.length === 3) {
+    lines.push("- no additions, removals, changes, quarantines, or registrations recorded");
+  }
+
+  return lines.join("\n");
+}
+
+function findLiveRecord(snapshot: CopilotModelSnapshot | null, bareId: string): CopilotModelRecord | undefined {
+  return snapshot?.models.find((model) => normalizeBareModelId(model.id) === bareId);
+}
+
+function findLocalModel(ctx: ExtensionContext, bareId: string): Model<Api> | undefined {
+  return localCopilotModels(ctx).find((model) => normalizeBareModelId(model.id) === bareId);
+}
+
+function buildWhyExplanation(
+  bareId: string,
+  ctx: ExtensionCommandContext,
+  snapshot: CopilotModelSnapshot | null,
+): string {
+  const localModel = findLocalModel(ctx, bareId);
+  const liveRecord = findLiveRecord(snapshot, bareId);
+  const effectiveLocal = !!localModel;
+  const sessionAvailable = ctx.modelRegistry.getAvailable().some(
+    (model) => model.provider === "github-copilot" && normalizeBareModelId(model.id) === bareId,
+  );
+  const candidate = liveRecord
+    ? computeCatalogRegistrationCandidates([liveRecord], localCopilotModels(ctx))[0]
+    : undefined;
+  const tier = MODEL_CAPABILITY_TIER[canonicalizeModelId(bareId)] ?? "unknown";
+  const confidence = getModelProfileConfidence(bareId);
+  const economics = resolveEconomicsForModel(ctx, bareId, liveRecord, localModel);
+  const cheaperSameTierOption = findCheaperSameTierOption(bareId, ctx, snapshot);
+
+  let routingEligible = false;
+  let routingReason = "no live/task routing context available";
+  let guidance = "No active task classification context is available here — this is a local model-state explanation only.";
+  // Policy/preview state is reported as an advisory caveat, not folded into
+  // eligibility: resolveModelForComplexity() never receives live availability
+  // metadata and only gates on capability-profile confidence, so a policy-
+  // restricted or preview model with a known profile CAN still be
+  // auto-selected — showing "eligible: no" here for either would be a false
+  // routing result the actual router doesn't agree with.
+  const routingCaveats: string[] = [];
+  if (liveRecord?.availability.policyState === "disabled" || liveRecord?.availability.policyState === "restricted") {
+    routingCaveats.push(`provider policy is ${liveRecord.availability.policyState} — automatic routing does not enforce this today`);
+  }
+  if (liveRecord?.availability.preview === true) {
+    routingCaveats.push("preview models are intended to stay manual-only, but automatic routing does not enforce this today");
+  }
+
+  if (!effectiveLocal) {
+    if (candidate?.complete) {
+      routingReason = "remote-only complete candidate";
+      guidance = "Live catalog metadata is complete enough to register safely — run /gsd copilot-models sync --register to make it selectable locally.";
+    } else if (candidate) {
+      routingReason = "remote-only and quarantined";
+      guidance = `Live catalog metadata is incomplete for safe registration: ${candidate.blockers.join("; ")}`;
+    } else {
+      routingReason = "not in effective local catalog";
+      guidance = "Not present in the effective local catalog — add it explicitly or register it from a live sync when authoritative metadata is available.";
+    }
+  } else if (!sessionAvailable) {
+    routingReason = "unavailable in this session";
+    guidance = "The model exists in the effective local catalog but is not available from the configured Copilot session/provider right now.";
+  } else if (confidence === "unknown") {
+    routingReason = "capability profile unknown";
+    guidance = "Manual selection is allowed, but automatic routing stays fail-closed until a curated, inherited, or complete provisional capability profile exists.";
+  } else {
+    routingEligible = true;
+    routingReason = "policy, capabilities, registration, and profile checks passed";
+    guidance = "This explanation has no active task-routing context; if selected for a task, normal routing still evaluates tier/capability/cost at dispatch time.";
+  }
+
+  return [
+    `GitHub Copilot: why github-copilot/${bareId}`,
+    `- identity: github-copilot/${bareId}`,
+    `- effective local: ${effectiveLocal ? "yes" : "no"}`,
+    `- session available: ${sessionAvailable ? "yes" : "no"}`,
+    `- last known live catalog: ${liveRecord ? "yes" : snapshot ? "no" : "unknown"}`,
+    `- registration state: ${candidate ? (candidate.complete ? "complete remote-only candidate" : "quarantined remote-only candidate") : effectiveLocal ? "effective local catalog" : "unknown"}`,
+    `- capability tier: ${tier}`,
+    `- profile confidence: ${confidence}`,
+    `- policy state: ${liveRecord?.availability.policyState ?? "unknown"}`,
+    `- preview: ${liveRecord?.availability.preview === true ? "yes" : liveRecord?.availability.preview === false ? "no" : "unknown"}`,
+    `- runtime API: ${liveRecord?.execution.api ?? localModel?.api ?? "unknown"}`,
+    `- supported endpoints: ${(liveRecord?.execution.supportedEndpoints ?? []).join(", ") || "unknown"}`,
+    `- tool calls: ${toolCallsSummary(liveRecord?.execution.toolCalls)}`,
+    `- context/output: ${liveRecord?.execution.contextWindow ?? localModel?.contextWindow ?? "unknown"} / ${liveRecord?.execution.maxTokens ?? localModel?.maxTokens ?? "unknown"}`,
+    `- economics: ${economicsSummary(economics)}`,
+    `- source: ${economicsSourceSummary(economics)}`,
+    `- freshness: ${economicsFreshnessSummary(economics)}`,
+    `- request billing: ${economics.requestMultiplier !== undefined ? `${economics.requestMultiplier}x (${economics.provenance.requestMultiplier?.source ?? economics.source}/${economics.provenance.requestMultiplier?.freshness ?? "unknown"})` : "unknown"}`,
+    `- promotion: ${formatPromotion(liveRecord?.billing.promotion ?? economics.promotion)}`,
+    ...(cheaperSameTierOption
+      ? [formatCheaperSameTierOption(cheaperSameTierOption)]
+      : []),
+    `- automatic routing eligible: ${routingEligible ? "yes" : "no"}`,
+    `- reason: ${routingReason}`,    ...(routingCaveats.length > 0 ? [`- routing caveats: ${routingCaveats.join("; ")}`] : []),    `- task routing context: unavailable (no active classification context)` ,
+    `- guidance: ${guidance}`,
+  ].join("\n");
+}
+
+function formatPricingRecord(
+  ctx: ExtensionCommandContext,
+  record: CopilotModelRecord | undefined,
+  localModel: Model<Api> | undefined,
+  bareId: string,
+  snapshot: CopilotModelSnapshot | null,
+): string[] {
+  const economics = resolveEconomicsForModel(ctx, bareId, record, localModel);
+  const lines = [
+    `GitHub Copilot pricing: github-copilot/${bareId}`,
+    `- economics: ${economicsSummary(economics)}`,
+    `- source: ${economicsSourceSummary(economics)}`,
+    `- freshness: ${economicsFreshnessSummary(economics)}`,
+  ];
+  const cheaperSameTierOption = findCheaperSameTierOption(bareId, ctx, snapshot);
+  if (cheaperSameTierOption) {
+    lines.push(formatCheaperSameTierOption(cheaperSameTierOption));
+  }
+
+  if (economics.tokenPrices?.default) {
+    lines.push(
+      `- cache: read ${economics.tokenPrices.default.cachedInputPer1k !== undefined ? `$${economics.tokenPrices.default.cachedInputPer1k.toFixed(4)}` : "unknown"} / write ${economics.tokenPrices.default.cachedOutputPer1k !== undefined ? `$${economics.tokenPrices.default.cachedOutputPer1k.toFixed(4)}` : "unknown"} per 1K`,
+    );
+  }
+  if (economics.tokenPrices?.longContextTiers?.length) {
+    lines.push(`- long-context tiers: ${economics.tokenPrices.longContextTiers.map((tier) => `>${tier.inputTokensAbove}: $${tier.inputPer1k?.toFixed(4) ?? "unknown"}/$${tier.outputPer1k?.toFixed(4) ?? "unknown"}`).join(", ")}`);
+  }
+  if (economics.requestMultiplier !== undefined) {
+    lines.push(
+      `- request multiplier: ${economics.requestMultiplier}x (${economics.provenance.requestMultiplier?.source ?? economics.source}/${economics.provenance.requestMultiplier?.freshness ?? "unknown"})`,
+    );
+  }
+  if (economics.promotion) {
+    lines.push(
+      `- promotion: ${formatPromotion(economics.promotion)} (${economics.provenance.promotion?.source ?? economics.source}/${economics.provenance.promotion?.freshness ?? "unknown"})`,
+    );
+  }
+  return lines;
+}
+
+function formatPromotions(snapshot: CopilotModelSnapshot | null): string {
+  const records = snapshot?.models.filter((model) => model.billing.promotion) ?? [];
+  const active = records.filter((model) => model.billing.promotion?.status === "active");
+  const future = records.filter((model) => model.billing.promotion?.status === "future");
+  const expired = records.filter((model) => model.billing.promotion?.status === "expired");
+
+  const lines = ["GitHub Copilot promos:"];
+  const sections: Array<[string, CopilotModelRecord[]]> = [
+    ["active", active],
+    ["future", future],
+    ["expired", expired],
+  ];
+
+  for (const [label, models] of sections) {
+    lines.push(`- ${label}: ${models.length}`);
+    for (const model of models) {
+      lines.push(`  - ${model.registryId}: ${formatPromotion(model.billing.promotion)}`);
+    }
+  }
+
+  if (records.length === 0) {
+    lines.push("- no live promotions are tracked in the accepted Copilot snapshot");
+  }
+
+  return lines.join("\n");
+}
+
+async function runSync(
+  args: string,
+  ctx: ExtensionCommandContext,
+  options: HandleCopilotModelsOptions,
+): Promise<void> {
+  const auth = await resolveCopilotAuth(ctx);
+  if (!auth.configured || !auth.copilotModel) {
+    ctx.ui.notify(
+      "GitHub Copilot is not configured for this session — run /login to sign in. No network request was made.",
+      "info",
+    );
+    return;
+  }
+  if (!auth.tokenAvailable || !auth.token || !auth.baseUrl || !auth.accountKey) {
+    ctx.ui.notify(
+      `GitHub Copilot is configured but no access token could be resolved${auth.error ? ` (${auth.error})` : ""} — try /login again.`,
+      "warning",
+    );
+    return;
+  }
+
+  const state = getSessionState(auth.accountKey);
+  const attemptedAt = new Date().toISOString();
+
+  try {
+    const result = await fetchGitHubCopilotModels({
+      provider: "github-copilot",
+      authToken: auth.token,
+      baseUrl: auth.baseUrl,
+      fetchImpl: options.fetchImpl,
+    });
+    if (result.skipped || !result.snapshot) {
+      throw new CopilotCatalogFetchError("network", result.reason ?? "Copilot model fetch was skipped unexpectedly.");
+    }
+
+    if (isSuspiciousCatalogShrink(state.lastKnownGoodSnapshot, result.snapshot)) {
+      state.lastRefresh = {
+        attemptedAt,
+        status: "suspicious",
+        failureKind: "suspicious-shrink",
+        failureMessage: `suspicious shrink rejected (${state.lastKnownGoodSnapshot?.modelCount ?? 0} → ${result.snapshot.modelCount})`,
+      };
+      ctx.ui.notify(
+        `GitHub Copilot model catalog refresh rejected as suspicious (${state.lastKnownGoodSnapshot?.modelCount ?? 0} → ${result.snapshot.modelCount}) — keeping the last known good snapshot.`,
+        "warning",
+      );
+      return;
+    }
+
+    const previousSnapshot = state.lastKnownGoodSnapshot;
+
+    const effectiveLocalModels = localCopilotModels(ctx);
+    const overlayPath = options.overlayPath ?? resolveGsdModelsCatalogPath();
+    const registerResult = hasRegisterFlag(args)
+      ? registerCopilotModelsInOverlay(overlayPath, result.snapshot.models, effectiveLocalModels)
+      : (() => {
+          const candidates = computeCatalogRegistrationCandidates(result.snapshot.models, effectiveLocalModels);
+          return {
+            registeredIds: [] as string[],
+            candidates,
+            quarantined: candidates.filter((candidate) => !candidate.complete),
+            overlayPath,
+            overlayError: undefined as string | undefined,
+          };
+        })();
+
+    // Registering into the overlay only writes models-catalog.json; ModelRegistry
+    // only re-reads that file on refresh(), so without this the newly-registered
+    // model stays unavailable to selection/`why` for the rest of this session.
+    if (registerResult.registeredIds.length > 0) {
+      ctx.modelRegistry.refresh();
+    }
+
+    // Only commit the new snapshot once registration and the registry refresh
+    // above have both succeeded — committing earlier would let a mid-sync
+    // failure (permission denied, disk full) land in the catch block below
+    // while state.lastKnownGoodSnapshot already holds the very snapshot that
+    // failed, so "keeping the last known good snapshot" would be a lie and
+    // the next sync's diff would silently absorb the change instead of
+    // surfacing it again.
+    state.lastKnownGoodSnapshot = result.snapshot;
+    state.lastAcceptedDiff = buildDiffState(
+      previousSnapshot,
+      result.snapshot,
+      registerResult.candidates,
+      registerResult.registeredIds,
+    );
+    state.lastRefresh = { attemptedAt, status: "success" };
+
+    const messages: string[] = [];
+    if (!previousSnapshot) {
+      messages.push(`GitHub Copilot model catalog: ${result.snapshot.modelCount} model(s) available.`);
+    } else {
+      for (const model of state.lastAcceptedDiff.added) {
+        messages.push(`+ ${model.registryId} added (${describeCapabilityTier(model.id)})`);
+      }
+      for (const model of state.lastAcceptedDiff.removed) {
+        messages.push(`- ${model.registryId} removed`);
+      }
+      for (const model of state.lastAcceptedDiff.changed) {
+        messages.push(`~ ${model.registryId} changed`);
+      }
+    }
+
+    if (hasRegisterFlag(args)) {
+      if (registerResult.overlayError) {
+        messages.push(`! registration skipped: ${registerResult.overlayError}`);
+      } else if (registerResult.registeredIds.length > 0) {
+        for (const modelId of registerResult.registeredIds) {
+          messages.push(`= github-copilot/${modelId} registered into ${registerResult.overlayPath}`);
+        }
+      }
+      for (const candidate of registerResult.quarantined) {
+        messages.push(`! ${candidate.registryId} quarantined — ${candidate.blockers.join("; ")}`);
+      }
+      if (!registerResult.overlayError && registerResult.registeredIds.length === 0 && registerResult.quarantined.length === 0) {
+        messages.push("GitHub Copilot registration: no remote-only models were found; the effective local catalog already covers the accepted live snapshot.");
+      }
+    }
+
+    const deduped = dedupeShellNotifications(messages);
+    // Suppress only an exact repeat of the LAST notification shown for this
+    // account (e.g. two concurrent syncs racing on the same diff) — not a
+    // permanent set of every message/transition ever seen. A permanent
+    // transition-hash set would wrongly re-suppress a transition that
+    // recurs after a cycle (A->B->A->B), and would wrongly suppress a later
+    // `--register` run's own registration output just because an earlier,
+    // unrelated no-diff check happened to share the same snapshot-hash pair.
+    const contentFingerprint = deduped.join("\n");
+    const isRepeatOfLastNotification = deduped.length > 0 && contentFingerprint === getLastNotifiedContent(auth.accountKey);
+    if (deduped.length > 0) {
+      setLastNotifiedContent(auth.accountKey, contentFingerprint);
+    }
+
+    if (previousSnapshot && (deduped.length === 0 || isRepeatOfLastNotification)) {
+      ctx.ui.notify("GitHub Copilot model catalog: no new changes since the last accepted check.", "info");
+      return;
+    }
+
+    ctx.ui.notify(deduped.join("\n"), "info");
+  } catch (error) {
+    const fetchError = error instanceof CopilotCatalogFetchError
+      ? error
+      : new CopilotCatalogFetchError("network", redactSensitive(error instanceof Error ? error.message : String(error)));
+    state.lastRefresh = {
+      attemptedAt,
+      status: "failed",
+      failureKind: fetchError.kind,
+      failureMessage: redactSensitive(fetchError.message),
+    };
+
+    if (!state.lastKnownGoodSnapshot) {
+      ctx.ui.notify(
+        `GitHub Copilot model catalog unavailable (${fetchError.kind}: ${redactSensitive(fetchError.message)}) — no cached catalog yet, nothing was changed.`,
+        "warning",
+      );
+      return;
+    }
+
+    ctx.ui.notify(
+      `GitHub Copilot model catalog refresh failed (${fetchError.kind}: ${redactSensitive(fetchError.message)}) — keeping the last known good snapshot.`,
+      "warning",
+    );
+  }
+}
+
+export async function handleCopilotModels(
+  args: string,
+  ctx: ExtensionCommandContext,
+  options: HandleCopilotModelsOptions = {},
+): Promise<void> {
+  const command = parseCommand(args);
+
+  if (command === "help") {
+    ctx.ui.notify(COPILOT_MODELS_USAGE, "info");
+    return;
+  }
+
+  if (command === "unknown") {
+    const firstToken = (args ?? "").trim().split(/\s+/)[0] ?? "";
+    ctx.ui.notify(
+      `Unknown /gsd copilot-models subcommand "${firstToken}".\n\n${COPILOT_MODELS_USAGE}`,
+      "warning",
+    );
+    return;
+  }
+
+  if (command === "why") {
+    const parsed = parseProviderModelArgument("why", args, true);
+    if (!parsed.valid || !parsed.target) {
+      ctx.ui.notify(parsed.error ?? "Usage: /gsd copilot-models why <model>", "warning");
+      return;
+    }
+    // Resolve the CURRENT account's snapshot, not whichever account last
+    // completed a sync — otherwise `why` can report a different account's
+    // availability/pricing/policy after switching accounts without re-syncing.
+    const current = await resolveCurrentAccountView(ctx);
+    ctx.ui.notify(buildWhyExplanation(parsed.target, ctx, current.state?.lastKnownGoodSnapshot ?? null), "info");
+    return;
+  }
+
+  if (command === "changes") {
+    const current = await resolveCurrentAccountView(ctx);
+    if (!current.auth.configured) {
+      ctx.ui.notify(
+        "GitHub Copilot is not configured for this session — no account-scoped catalog diff is available.",
+        "info",
+      );
+      return;
+    }
+    ctx.ui.notify(formatChanges(current.state?.lastAcceptedDiff ?? null), "info");
+    return;
+  }
+
+  if (command === "pricing") {
+    const parsed = parseProviderModelArgument("pricing", args, false);
+    if (!parsed.valid) {
+      ctx.ui.notify(parsed.error ?? "Usage: /gsd copilot-models pricing <model>", "warning");
+      return;
+    }
+
+    const current = await resolveCurrentAccountView(ctx);
+    const currentSnapshot = current.state?.lastKnownGoodSnapshot ?? null;
+
+    if (parsed.target) {
+      const bareId = parsed.target;
+      ctx.ui.notify(
+        formatPricingRecord(
+          ctx,
+          findLiveRecord(currentSnapshot, bareId),
+          findLocalModel(ctx, bareId),
+          bareId,
+          currentSnapshot,
+        ).join("\n"),
+        "info",
+      );
+      return;
+    }
+
+    const snapshot = currentSnapshot;
+    const records = snapshot?.models ?? localCopilotModels(ctx).map((model) => ({ id: model.id, registryId: `github-copilot/${model.id}` } as CopilotModelRecord));
+    if (records.length === 0) {
+      ctx.ui.notify("GitHub Copilot pricing unavailable — no accepted live snapshot or effective local Copilot models are present.", "warning");
+      return;
+    }
+    const blocks = records.map((record) => {
+      const bareId = normalizeBareModelId(record.id);
+      return formatPricingRecord(
+        ctx,
+        findLiveRecord(snapshot, bareId),
+        findLocalModel(ctx, bareId),
+        bareId,
+        snapshot,
+      ).join("\n");
+    });
+    ctx.ui.notify(blocks.join("\n\n"), "info");
+    return;
+  }
+
+  if (command === "promos") {
+    const current = await resolveCurrentAccountView(ctx);
+    ctx.ui.notify(formatPromotions(current.state?.lastKnownGoodSnapshot ?? null), "info");
+    return;
+  }
+
+  if (command === "doctor") {
+    const current = await resolveCurrentAccountView(ctx);
+    const auth = current.auth;
+    const snapshot = current.state?.lastKnownGoodSnapshot ?? null;
+    const refresh = current.state?.lastRefresh ?? null;
+    const blockedByPolicy = snapshot?.models.filter((model) => model.availability.policyState === "disabled" || model.availability.policyState === "restricted") ?? [];
+    const previewDisabled = snapshot?.models.filter((model) => model.availability.preview === true && model.availability.pickerEnabled === false) ?? [];
+    const quarantined = current.state?.lastAcceptedDiff?.candidates.filter((candidate) => !candidate.complete) ?? [];
+    const activeAccountKey = current.accountKey;
+    const lines = [
+      "GitHub Copilot doctor:",
+      `- configured: ${auth.configured ? "yes" : "no"}`,
+      `- token available: ${auth.tokenAvailable ? "yes" : "no"}`,
+      `- account isolation: ${activeAccountKey ? `active fingerprint ${activeAccountKey.slice(0, 12)}…, ${sessionStates.size} cached account state(s)` : "no active account state cached yet"}`,
+      `- last known good snapshot: ${snapshot ? `cached (${snapshot.modelCount} models)` : "none"}`,
+      `- cache age: ${formatCacheAge(snapshot?.generatedAt)}`,
+      `- last refresh: ${refresh ? refresh.status : "never"}`,
+      `- network state: ${refresh?.status === "failed" ? `${refresh.failureKind ?? "error"} — ${refresh.failureMessage ?? "unknown failure"}` : refresh?.status === "suspicious" ? refresh.failureMessage ?? "suspicious shrink rejected" : "idle (doctor is local-only)"}`,
+      `- policy-blocked models: ${blockedByPolicy.length}`,
+      `- preview-disabled models: ${previewDisabled.length}`,
+      `- quarantined registration candidates: ${quarantined.length}`,
+      `- registration blockers: ${quarantined.slice(0, 3).map((candidate) => `${candidate.id}: ${candidate.blockers.join("; ")}`).join(" | ") || "none recorded"}`,
+    ];
+    ctx.ui.notify(lines.join("\n"), auth.tokenAvailable ? "info" : "warning");
+    return;
+  }
+
+  await runSync(args, ctx, options);
+}

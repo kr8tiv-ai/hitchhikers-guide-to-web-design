@@ -1,0 +1,701 @@
+ANTIHERO GUIDE · ZERO TO $20K
+
+
+
+
+THE ULTIMATE
+ANTIHERO WEBSITE
+MASTERCLASS
+ Build a premium, animated website by talking to your AI.
+ Research it, collect references, speak the stack, build it
+ one section at a time, and put it online. You do not need to
+ code.
+
+
+
+
+GOOGLE ANTIGRAVITY · GEMINI · GROK · NOTEBOOKLM · HOSTINGER
+
+
+
+
+                                       BE YOUR OWN HERO         01
+ANTIHERO · WEBSITE MASTERCLASS
+
+
+
+
+  CONTENTS
+01       Give your AI apps
+         MCP servers and skills, and the safety check before any install.
+
+02       Research and AI SEO
+         NotebookLM builds your plan, your stack, and your prompts.
+
+03       Collect references and fonts
+         Context engineering: sites, screenshots, fonts, and one folder.
+
+04       Speak the stack
+         The keywords that make the result look expensive.
+
+05       Build the hero first
+         One section at a time, starting with a video splash page.
+
+06       See it, fix it, make it mobile
+         Preview locally, fix with screenshots, then make it work on phones.
+
+07       The polish layer
+         White space, fades, scroll motion, glow, and sound.
+
+08       Blog and Schema
+         Get found by Google and by AI search.
+
+09       Go live with Hostinger
+         Domain, hosting, API token, deploy.
+
+KT       Key takeaways
+TL       Tools
+LR       Links and resources
+AS       Action steps
+
+
+
+
+                                               BE YOUR OWN HERO                02
+BEFORE YOU START
+
+
+
+
+  IF YOU CAN TALK,
+  YOU CAN BUILD
+This guide takes you from nothing to a live, premium website. You will not write code. You
+will describe what you want, show your AI examples, and correct it until the site looks right.
+
+Work through the steps in order. Each one ends with something done. The copy-paste
+prompts are in the grey boxes. Swap in your own business, fonts, and files.
+
+It costs nothing to start. You do not need a domain or hosting until the last step, and an old
+computer is fine, because most of the work happens in the cloud.
+
+WHAT YOU NEED
+
+
+ANY COMPUTER               A 2017 machine works. Speed does not matter much.
+
+GOOGLE ANTIGRAVITY         Your AI coding workspace. It has a free version.
+
+GEMINI                     The model you build with inside AntiGravity.
+
+NOTEBOOKLM                 Free research tool from Google.
+
+GROK                       For the hero video. Runway or Midjourney also work.
+
+HOSTINGER                  Domain and hosting, only when you are ready to go live.
+
+
+
+
+                                         BE YOUR OWN HERO                                        03
+                                                                                                             01
+    STEP 01
+
+
+
+
+ GIVE YOUR
+ AI APPS
+Your phone has apps that make it more useful. MCP (Model Context Protocol) does
+the same for your AI. Think of your AI as a brilliant brain in a glass jar. MCP gives it
+hands.
+
+
+1       Start with the official list. Browse the MCP servers repository and the Figma MCP (links on the Links
+        and Resources page). Pick only what helps you build a website.
+
+2       Find skills. Search X for "AntiGravity Skills". Skills are add-ons that make AntiGravity better at specific
+        jobs.
+
+3       Let your AI install them. Paste the link or list into AntiGravity and ask it to install everything for you.
+        Talk to it out loud if typing slows you down.
+
+4       Run the safety check first, every time. Some packages hide bad instructions. Paste this before any
+        install:
+            I want to install the MCP repository from this link. Before I do, please read through the
+            code, check it for security vulnerabilities, verify its reputation score, and tell me if
+            it is completely safe to install.
+
+
+
+5       Treat it like a teammate. Say please and thank you, and talk to it like a friend. The answers get better
+        when the conversation is clear and calm.
+
+
+
+
+     “MCP just connects it to stuff.”
+     RULE    Never install random scripts blindly. If you did not run the safety check, do not install it.
+
+
+     TOOLS      MCP SERVERS       FIGMA MCP      ANTIGRAVITY SKILLS
+
+
+
+
+                                                    BE YOUR OWN HERO                                                  04
+                                                                                                   02
+    STEP 02
+
+
+
+
+ RESEARCH
+ FIRST
+Every AI likes to be talked to differently. Before you build, have NotebookLM
+research your niche and write the exact prompts for your coding AI.
+
+
+1          Open NotebookLM and choose deep research. Not fast research. Deep research pulls from many
+           sources at once and costs nothing.
+
+2          Paste the research prompt. Change the business to yours:
+            I am building a website for a high-end physical construction company. Research the best,
+            fastest, and most modern programming stack to build this today. Create a comprehensive,
+            step-by-step website architecture plan. Then, write out the exact, highly-detailed
+            prompts I need to copy and paste into my coding AI (Google AntiGravity) to execute it.
+            Ensure the entire structure is fully optimized for both traditional Google SEO and modern
+            AI Search Engines (Siri, ChatGPT, Perplexity, etc.).
+
+
+
+3          Ask for a prompting report. Create a report on how to prompt your model for your landing page, for
+           example: how to prompt Gemini to build a stunning landing page for your project, with a video on the
+           splash page.
+
+4          Keep the report. You will paste it into AntiGravity as context in Step 5. You do not need to understand
+           every line of it.
+
+5          Use it for anything else you need to learn. NotebookLM also makes slide decks, mind maps,
+           flashcards, and video overviews.
+
+
+
+
+     “So they like to be talked to differently.”
+     WHY  Plan for AI search from day one. The research prompt asks for Google SEO and AI search engines
+     together.
+
+
+     TOOLS      NOTEBOOKLM     DEEP RESEARCH
+
+
+
+
+                                                BE YOUR OWN HERO                                                     05
+                                                                                                         03
+    STEP 03
+
+
+
+
+ FIND WHAT
+ YOU LOVE
+You do not need to be a designer. You need to be good at finding sources and
+showing your AI exactly what you like. That is context engineering.
+
+
+1        Browse the galleries. Aura Build, Awwwards (strong on GSAP motion), Behance, Godly, Lapa Ninja, and
+         Siteinspire.
+
+2        Pick 3 to 5 sites. Not 20. Too much context confuses the model, the same way 30 instructions would
+         confuse a person.
+
+3        Screenshot the sections you like. Put every screenshot in one folder, with a note on each: what you
+         like and why. Links help too, because your AI can read a site's code.
+
+4        Choose 2 fonts. One for headers from Fontshare, one for body text from Google Fonts. Font Squirrel and
+         Typewolf are good for browsing.
+
+5        Drag the folder into AntiGravity and paste:
+          I have attached visual references of websites I absolutely love. I want you to build me a
+          site with a similar premium vibe, structure, and aesthetic, but make it completely unique
+          to my brand. Use [Insert Fontshare Font Name] for all the big headers and [Insert Google
+          Font Name] for the body text.
+
+
+
+
+     “You just need to find websites that you really love.”
+     CREDIT   If you build off someone's design, credit them at the bottom of your site with a link. You do not need to
+     steal anything.
+
+
+     TOOLS    AURA BUILD      AWWWARDS      GODLY     LAPA NINJA      SITEINSPIRE      FONTSHARE      GOOGLE FONTS
+
+
+
+
+                                                 BE YOUR OWN HERO                                                         06
+                                                                                                             04
+    STEP 04
+
+
+
+
+ SPEAK THE
+ STACK
+You do not need to know what these tools do. Naming them in your prompt gets you
+a more polished, faster site.
+
+
+1       Learn the words. Astro is the framework. Vanilla JS handles logic. Node.js runs it. GSAP animates.
+        Lenis smooths scrolling. Framer Motion brings elements in nicely. Three.js renders 3D, often with GLB
+        model files.
+
+2       Load the stack in your first build prompt.
+            Build this website using Astro for the framework and Vanilla JS for the logic. I want the
+            site to feel incredibly premium and expensive, so you MUST use GSAP for all entrance
+            animations and Lenis for buttery-smooth scrolling.
+
+
+
+3       Add 3D only if it fits your brand. Attach a GLB model, or ask your AI to find open-source GLB models
+        online, then paste:
+            Embed the attached GLB model on the page using Three.js. Make the 3D object float gently
+            and rotate slowly based on the user's mouse movement across the screen.
+
+
+
+
+     “You're gonna get a more polished project”
+     NOTE    3D is heavier to run. Start without it if you want the first build to go smoothly.
+
+
+     TOOLS      ASTRO     VANILLA JS       NODE.JS      GSAP     LENIS     FRAMER MOTION          THREE.JS   GLB
+
+
+
+
+                                                     BE YOUR OWN HERO                                              07
+                                                                                                      05
+    STEP 05
+
+
+
+
+ BUILD THE
+ HERO FIRST
+Do not build the whole site in one prompt. Build the hero section, get it right, then
+move to the next section.
+
+
+1          Make a background video. Take a photo of your work. Ask AntiGravity to write a Grok prompt that turns
+           it into a dramatic, realistic video loop, and say what it is for and why. Generate it in Grok (Runway or
+           Midjourney also work) and download it.
+
+2          Open a fresh chat. Attach your research report, reference folder, fonts, and the video. If a file will not
+           attach, right-click it, choose Copy as path, and paste the path.
+
+3          Say the emotion. Tell it what visitors should feel: quality, trust, calm. Tell it the business name and
+           location too, or it will make one up.
+
+4          Ask for the hero only, plus navigation.
+            Use this video file as the looping background for the hero section.
+
+           Add: build a menu, no AI slop, keep it contemporary and elegant, and make it good enough for
+           Awwwards.
+
+5          Perfect it before moving on. Then ask for the next section, and the next. Remind it to keep using the
+           earlier context.
+
+
+
+
+     “You just wanna do it in small sections.”
+     WHY    Overloading the AI is the most common mistake. Small asks get better results.
+
+
+     TOOLS      GROK    RUNWAY     MIDJOURNEY     GOOGLE ANTIGRAVITY
+
+
+
+
+                                                 BE YOUR OWN HERO                                                       08
+                                                                                                  06
+    STEP 06
+
+
+
+
+ SEE IT.
+ FIX IT.
+The first pass will be close and a little wrong. Show your AI what is wrong, ask
+plainly, and reload.
+
+
+1       Preview it. Ask AntiGravity to start the development server and open the page, and to double-check
+        that it is its best work first.
+
+2       Know what localhost means. The site is running only on your computer. Anyone you send that link to
+        will not be able to open it.
+
+3       Fix with screenshots. Screenshot the problem, drag it into the chat, and describe it: overlapping
+        words, wrong name, a photo you do not like. Ask for 1 or 2 changes at a time.
+
+4       Reload properly. Hold Shift and reload to see the latest version.
+
+
+5       Make it mobile. Mobile is not optional. Paste:
+          Review the code you just wrote. Make sure this entire website is perfectly responsive and
+          optimized for mobile devices (iOS and Android). Ensure all GSAP animations and Lenis
+          scrolling effects perform flawlessly on a phone screen without causing lag or breaking
+          the layout.
+
+
+
+
+     “It doesn't have to be perfect.”
+     IF IT GETS CONFUSED    Too much context can make it repeat itself. Remove some, start a new chat with the
+     same prompt, and go one item at a time.
+
+
+     TOOLS    LOCALHOST    SCREENSHOTS
+
+
+
+
+                                              BE YOUR OWN HERO                                                   09
+                                                                                                      07
+    STEP 07
+
+
+
+
+ THE POLISH
+ LAYER
+Small effects make a site feel premium. Ask for them, look at the result, then ask
+for less.
+
+
+1       Add white space. Ask for substantially more white space. It is the fastest upgrade there is.
+
+
+2       Blend the video. Ask for a smooth fade from the hero video into the next section with no visible line. If
+        the fade covers your text, make it shorter.
+
+3       Add motion. A marquee scroller, a video driven by scrolling, headlines that come in from different
+        angles as you scroll, and a horizontal GSAP scroll.
+
+4       Add hover glow and texture. A warm, slow WebGL glow on titles when the mouse passes over them.
+        Subtle background tracers. A light noise overlay, then tone it down or remove it if it is too much.
+
+5       Steal an effect, politely. Paste the page link and say: on this website, I like this section, I want mine to
+        move like this.
+
+6       Add optional sound. Download a track from Pixabay Music, then paste:
+         Add an elegant, minimal play button in the bottom corner of the site that triggers this
+         ambient audio track. It MUST start paused by default so it doesn't annoy the user, but it
+         should fade in smoothly when they click play.
+
+
+
+
+     “These are small effects.”
+     DIAL BACK   If an effect draws attention to itself, it is too strong. Ask your AI to halve it.
+
+
+     TOOLS    GSAP    WEBGL      THREE.JS       PIXABAY MUSIC
+
+
+
+
+                                                  BE YOUR OWN HERO                                                     10
+                                                                                                           08
+    STEP 08
+
+
+
+
+ BLOG AND
+ SCHEMA
+A beautiful website is nothing if nobody sees it. A blog brings people in, and
+Schema markup helps search engines and AI bots understand every page.
+
+
+1       Add the blog.
+         Add a highly SEO-optimized blog directory to the site so I can drive organic traffic.
+         Ensure every single article page uses standard Schema.org markup so Google's web crawlers
+         and modern AI bots understand the content perfectly and rank it higher.
+
+
+
+2       Use your research. Your NotebookLM report from Step 2 already covers Google SEO and AI search.
+        Paste the relevant part in with the prompt.
+
+3       Say it upfront next time. If you forgot to ask for SEO in the first build, add it now. On your next site, put
+        "SEO optimized" in the first prompt.
+
+4       Check the markup. Schema.org is the standard vocabulary your AI uses. Ask it to confirm every article
+        page has it.
+
+
+
+
+     “A beautiful website is nothing if nobody sees it.”
+     THINK OF IT THIS WAY     A site with no traffic is a digital billboard in the middle of the desert.
+
+
+     TOOLS    SCHEMA.ORG    NOTEBOOKLM
+
+
+
+
+                                               BE YOUR OWN HERO                                                         11
+                                                                                                 09
+    STEP 09
+
+
+
+
+ GO
+ LIVE
+Build locally until you are happy. Then get a domain and hosting and let your AI
+deploy the site for you.
+
+
+1       Set up Hostinger. Create an account (you can sign in with Google), choose a hosting plan, then go to
+        Domains and get a new domain.
+
+2       Create an API token. In hPanel, open Dev Tools, then API, then Generate Token. Give it a name and an
+        expiry, click Generate, and copy it immediately.
+
+3       Store the token safely. Hostinger shows it only once. Treat it like a password and never post it
+        anywhere.
+
+4       Deploy.
+         I am ready to deploy this website to the internet. Here is my Hostinger API Token: [Paste
+         Your Token Here]. Please use the Hostinger API to package up this local website and
+         deploy it directly to my live server.
+
+
+
+5       Check the live site on your phone. Then share the real link, not localhost.
+
+
+
+
+     “You can literally just get a domain.”
+     SECURITY   If a token leaks, delete it in hPanel and generate a new one.
+
+
+     TOOLS    HOSTINGER     HPANEL API      GOOGLE ANTIGRAVITY
+
+
+
+
+                                                BE YOUR OWN HERO                                               12
+IF YOU REMEMBER NOTHING ELSE
+
+
+
+
+  KEY TAKEAWAYS
+1        If you can talk, you can build. No code, no domain, and no new computer to start.
+
+
+
+2        Research first. Let NotebookLM write your plan and your prompts, with SEO and AI search
+         built in.
+
+
+3        Context beats guessing. 3 to 5 reference sites, screenshots in one folder, and 2 fonts.
+
+
+
+4        Speak the stack. Astro, Vanilla JS, GSAP, and Lenis in the prompt get you a more polished
+         site.
+
+
+5        One section at a time. Hero first. Perfect it, then move on.
+
+
+
+6        Fix with screenshots. Show it what is wrong, ask for 1 or 2 changes, and reload.
+
+
+
+7        Mobile is not optional. Run the mobile prompt before you go live.
+
+
+
+8        Check before you install. Every MCP and skill gets the safety prompt first.
+
+
+
+9        Get seen. A blog with Schema markup, then deploy through the Hostinger API.
+
+
+
+
+                                         BE YOUR OWN HERO                                            13
+EVERYTHING IN THIS GUIDE
+
+
+
+
+  TOOLS
+GOOGLE ANTIGRAVITY             AI coding workspace where you build the site. Free version available.
+
+GEMINI                         The model you build with.
+
+NOTEBOOKLM                     Deep research, architecture plan, and the prompts for AntiGravity.
+
+GROK / RUNWAY / MIDJOURNEY     Turn a photo into a looping hero video.
+
+MCP SERVERS / FIGMA MCP        Apps that connect your AI to other tools.
+
+AURA BUILD / AWWWARDS /        Galleries of premium sites to reference.
+GODLY
+
+
+BEHANCE / LAPA NINJA /         More design references.
+SITEINSPIRE
+
+
+FONTSHARE / GOOGLE FONTS       Header and body fonts.
+
+FONT SQUIRREL / TYPEWOLF       More places to browse fonts.
+
+ASTRO / VANILLA JS / NODE.JS Framework, logic, and runtime keywords for the build prompt.
+
+
+GSAP / LENIS / FRAMER MOTION Animation, smooth scrolling, and entrance effects.
+
+
+THREE.JS / GLB                 3D objects and effects.
+
+PIXABAY MUSIC                  Ambient audio for an optional play button.
+
+SCHEMA.ORG                     Markup that helps Google and AI bots understand your pages.
+
+HOSTINGER                      Domain, hosting, and API deploy.
+
+
+
+
+                                          BE YOUR OWN HERO                                             14
+EVERY LINK IN THIS GUIDE · ROOM FOR MORE
+
+
+
+
+  LINKS AND RESOURCES
+ANTIHERO AI GROUP          facebook.com/groups/antiheroai
+
+MCP SERVERS                github.com/modelcontextprotocol/servers
+
+FIGMA MCP                  github.com/figma/mcp
+
+NOTEBOOKLM                 notebooklm.google.com
+
+AURA BUILD                 aura.build
+
+AWWWARDS                   awwwards.com
+
+BEHANCE                    behance.net
+
+GODLY                      godly.website
+
+LAPA NINJA                 lapa.ninja
+
+SITEINSPIRE                siteinspire.com
+
+FONTSHARE                  fontshare.com
+
+GOOGLE FONTS               fonts.google.com
+
+FONT SQUIRREL              fontsquirrel.com
+
+TYPEWOLF                   typewolf.com
+
+PIXABAY MUSIC              pixabay.com/music
+
+SCHEMA.ORG                 schema.org
+
+HOSTINGER                  hostinger.com
+
+
+
+MORE LINKS · FILL IN
+
+
+
+
+                                        BE YOUR OWN HERO             15
+DO THESE IN ORDER
+
+
+
+
+  ACTION STEPS
+     01
+           Install your AI apps, safely
+           Browse MCP servers and AntiGravity Skills. Run the safety prompt before each install.
+
+     02
+           Run NotebookLM deep research
+           Paste the research prompt with your business. Save the plan, the prompts, and a prompting
+           report.
+
+     03
+           Build your reference folder
+           3 to 5 sites, screenshots of the sections you like, a note on each, and 2 fonts.
+
+     04
+           Make your hero video
+           Have your AI write the Grok prompt from one of your photos. Generate it and download it.
+
+     05
+           Prompt the hero section only
+           Fresh chat. Stack loader, references, video, emotion, name, and location.
+
+     06
+           Fix with screenshots
+           Preview on localhost. 1 or 2 changes at a time. Shift and reload.
+
+     07
+           Polish, then dial back
+           White space, fades, scroll motion, and glow. Halve anything that shouts.
+
+     08
+           Make it mobile
+           Run the mobile prompt and check it on your phone.
+
+     09
+           Add the blog and Schema
+           Run the blog prompt so search engines and AI bots can read every article.
+
+     10
+           Go live
+           Domain, hosting, API token copied once, deploy prompt. Share the real link.
+
+
+
+
+                                           BE YOUR OWN HERO                                            16
+POST WHAT
+YOU BUILD
+IN THE GROUP
+BE YOUR OWN HERO
+ Share your site, your fixes, and your questions, even
+ months from now. The crew learns faster when you build
+ in public.
+
+
+FACEBOOK.COM/GROUPS/ANTIHEROAI
+
+
+
+
+                                    BE YOUR OWN HERO      17
+

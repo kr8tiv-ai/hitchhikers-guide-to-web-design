@@ -1,0 +1,9 @@
+.DS_Store
+.scratch/
+.memdb/
+.worktrees/
+.project/loop/
+__pycache__/
+node_modules/
+.env
+!.env.example

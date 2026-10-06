@@ -1,0 +1,219 @@
+/**
+ * Regression test for #2694: parkMilestone and unparkMilestone must
+ * update the DB milestone status alongside the filesystem marker.
+ *
+ * Without this, deriveStateFromDb skips unparked milestones because
+ * the DB still has status='parked', causing "All milestones complete".
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+import { discardMilestone, parkMilestone, unparkMilestone } from "../milestone-actions.ts";
+import {
+  openDatabase,
+  closeDatabase,
+  insertMilestone,
+  getMilestone,
+  _getAdapter,
+} from "../gsd-db.ts";
+
+function createBase(): string {
+  const base = mkdtempSync(join(tmpdir(), "gsd-park-db-"));
+  mkdirSync(join(base, ".gsd", "milestones", "M001"), { recursive: true });
+  writeFileSync(
+    join(base, ".gsd", "milestones", "M001", "M001-CONTEXT.md"),
+    "# M001\n\nContext.",
+  );
+  return base;
+}
+
+test("parkMilestone updates DB status to 'parked' (#2694)", async () => {
+  const base = createBase();
+  try {
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "active" });
+
+    assert.equal(getMilestone("M001")!.status, "active", "starts active");
+
+    await parkMilestone(base, "M001", "deprioritized");
+
+    assert.equal(getMilestone("M001")!.status, "parked", "DB status should be parked");
+
+    closeDatabase();
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("parkMilestone ignores blocked SUMMARY.md when DB milestone is active (#5828)", async () => {
+  const base = createBase();
+  try {
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "active" });
+    writeFileSync(
+      join(base, ".gsd", "milestones", "M001", "M001-SUMMARY.md"),
+      [
+        "---",
+        "status: closeout_blocked",
+        "---",
+        "",
+        "# M001 Summary",
+        "",
+        "Completion was not persisted.",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const parked = await parkMilestone(base, "M001", "test");
+
+    assert.ok(parked, "active DB row should allow parking despite a blocked SUMMARY.md");
+    assert.ok(
+      existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+      "PARKED.md should be written",
+    );
+    assert.equal(getMilestone("M001")!.status, "parked", "DB status should be parked");
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("parkMilestone refuses DB-complete milestones (#5828)", async () => {
+  const base = createBase();
+  try {
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "complete" });
+
+    const parked = await parkMilestone(base, "M001", "test");
+
+    assert.equal(parked, false, "complete DB row should not be parkable");
+    assert.equal(
+      existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+      false,
+      "PARKED.md should not be written",
+    );
+    assert.equal(getMilestone("M001")!.status, "complete", "DB status should remain complete");
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("unparkMilestone updates DB status to 'active' (#2694)", async () => {
+  const base = createBase();
+  try {
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "active" });
+
+    // Park first
+    await parkMilestone(base, "M001", "deprioritized");
+    assert.equal(getMilestone("M001")!.status, "parked");
+
+    // Unpark
+    await unparkMilestone(base, "M001");
+    assert.equal(getMilestone("M001")!.status, "active", "DB status should be active after unpark");
+
+    closeDatabase();
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("unparkMilestone repairs parked DB state when PARKED.md is missing (#3707)", async () => {
+  const base = createBase();
+  try {
+    openDatabase(":memory:");
+    insertMilestone({ id: "M001", title: "Test", status: "parked" });
+
+    const unparked = await unparkMilestone(base, "M001");
+
+    assert.ok(unparked, "unparkMilestone should recover DB-only parked state");
+    assert.equal(getMilestone("M001")!.status, "active", "DB status should be repaired to active");
+
+    closeDatabase();
+  } finally {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("park/unpark/discard throw and change no file when DB is not available", async (t) => {
+  const base = createBase();
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  closeDatabase();
+  const mDir = join(base, ".gsd", "milestones", "M001");
+  const parkedPath = join(mDir, "M001-PARKED.md");
+
+  await assert.rejects(() => parkMilestone(base, "M001", "test"), /parkMilestone M001 refused: database unavailable/);
+  assert.equal(existsSync(parkedPath), false, "park must not write the PARKED marker");
+
+  writeFileSync(parkedPath, "---\nreason: \"kept\"\n---\n");
+  await assert.rejects(() => unparkMilestone(base, "M001"), /unparkMilestone M001 refused: database unavailable/);
+  assert.equal(existsSync(parkedPath), true, "unpark must not remove the PARKED marker");
+
+  await assert.rejects(() => discardMilestone(base, "M001"), /discardMilestone M001 refused: database unavailable/);
+  assert.equal(existsSync(join(mDir, "M001-CONTEXT.md")), true, "discard must not remove the milestone directory");
+});
+
+test("parkMilestone throws when DB sync fails and does not claim success (#2255)", async (t) => {
+  const base = createBase();
+  t.after(() => {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  });
+  openDatabase(":memory:");
+  insertMilestone({ id: "M001", title: "Test", status: "active" });
+
+  // Make every UPDATE on milestones fail (SELECTs keep working, so the
+  // pre-park closed-status guard still runs).
+  _getAdapter()!.exec(
+    "CREATE TRIGGER fail_milestone_update BEFORE UPDATE ON milestones BEGIN SELECT RAISE(ABORT, 'simulated park DB failure'); END;",
+  );
+
+  await assert.rejects(
+    () => parkMilestone(base, "M001", "test"),
+    /parkMilestone DB sync failed for M001/,
+    "DB sync failure must propagate, not return true",
+  );
+  assert.equal(
+    existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+    false,
+    "PARKED.md must not be written when the DB sync fails",
+  );
+  assert.equal(getMilestone("M001")!.status, "active", "DB status must stay unchanged");
+});
+
+test("park completes on retry after a DB sync failure (#2256)", async (t) => {
+  const base = createBase();
+  t.after(() => {
+    closeDatabase();
+    rmSync(base, { recursive: true, force: true });
+  });
+  openDatabase(":memory:");
+  insertMilestone({ id: "M001", title: "Test", status: "active" });
+
+  _getAdapter()!.exec(
+    "CREATE TRIGGER fail_milestone_update BEFORE UPDATE ON milestones BEGIN SELECT RAISE(ABORT, 'simulated park DB failure'); END;",
+  );
+  await assert.rejects(() => parkMilestone(base, "M001", "test"));
+  assert.equal(
+    existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+    false,
+    "failed attempt must not leave the marker behind (retry would short-circuit)",
+  );
+
+  // DB recovers — the retry must complete the park instead of failing.
+  _getAdapter()!.exec("DROP TRIGGER fail_milestone_update;");
+  const parked = await parkMilestone(base, "M001", "test");
+  assert.ok(parked, "retried parkMilestone succeeds");
+  assert.equal(getMilestone("M001")!.status, "parked", "DB update completes on retry");
+  assert.ok(
+    existsSync(join(base, ".gsd", "milestones", "M001", "M001-PARKED.md")),
+    "PARKED.md written on retry",
+  );
+});

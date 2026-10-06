@@ -1,0 +1,129 @@
+#!/usr/bin/env node
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { formatDoctor, inspectDoctor } from "../lib/doctor.mjs";
+import { parseDiscoveryArguments, validateDiscoveryMap } from "../lib/discovery-map.mjs";
+import { CliError, UsageError } from "../lib/errors.mjs";
+import { initialize, parseInitArguments } from "../lib/init.mjs";
+import { install, parseInstallArguments } from "../lib/install.mjs";
+import { parseOutcomeArguments, syncIssueOutcomes } from "../lib/outcomes.mjs";
+
+const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const metadata = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8"));
+const argumentsList = process.argv.slice(2);
+
+function usage() {
+  return `Usage:
+  gsd-loop install [options]
+  gsd-loop init [options]
+  gsd-loop doctor [--review-ready] [--json] [--repo OWNER/NAME]
+  gsd-loop discovery-map [--allow-not-ready] MAP_BODY_FILE
+  gsd-loop outcomes ISSUE complete|pending --repo OWNER/NAME --pr NUMBER --head SHA
+  gsd-loop policy work|idle|blocked IDLE_COUNT
+
+Install skills and prepare a repository. Run work inside your agent harness:
+  Codex:       $gsd-loop-discover, $gsd-loop-spec, $gsd-loop-build, $gsd-loop-review, or $gsd-loop-schedule
+  Claude Code: /gsd-loop-discover, /gsd-loop-spec, /gsd-loop-build, /gsd-loop-review, or /gsd-loop-schedule
+  Cursor:      /gsd-loop-discover, /gsd-loop-spec, /gsd-loop-build, /gsd-loop-review, or /gsd-loop-schedule
+  Gemini CLI:  Use the gsd-loop-discover skill, Use the gsd-loop-spec skill, Use the gsd-loop-build skill, Use the gsd-loop-review skill, or Use the gsd-loop-schedule skill
+  Grok Build:  /gsd-loop-discover, /gsd-loop-spec, /gsd-loop-build, /gsd-loop-review, or /gsd-loop-schedule
+  Kimi Code:   /skill:gsd-loop-discover, /skill:gsd-loop-spec, /skill:gsd-loop-build, /skill:gsd-loop-review, or /skill:gsd-loop-schedule
+
+Install options:
+  --home PATH                       install beneath an alternate home directory
+  --agents LIST                     codex,claude,cursor,gemini,grok,kimi (default: all)
+  --adapter-mode auto|symlink|copy  native adapter behavior (default: auto)
+  --dry-run                         show destinations without writing
+
+Init options:
+  --repo OWNER/NAME                 target GitHub repository
+  --create-repo                     allow creation in an empty directory
+  --visibility private|public       visibility for a created repository
+  --required-check NAME             successful CI check to require
+  --yes                             apply an unambiguous preview without prompting
+
+General options:
+  -h, --help                        show help
+  -v, --version                     show version`;
+}
+
+function parseDoctorArguments(values) {
+  const options = { reviewReady: false, json: false, repo: null };
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (value === "--review-ready") options.reviewReady = true;
+    else if (value === "--json") options.json = true;
+    else if (value === "--repo") {
+      options.repo = values[index + 1];
+      if (!options.repo || options.repo.startsWith("--")) throw new UsageError("--repo requires OWNER/NAME");
+      index += 1;
+    } else throw new UsageError(`unknown option: ${value}`);
+  }
+  return options;
+}
+
+function schedulerDecision(event, idleCount) {
+  if (event === "work") {
+    return { action: "continue", intervalMinutes: 15, idleCount: 0 };
+  }
+  if (event === "idle") {
+    const nextIdleCount = Math.min(idleCount + 1, 3);
+    if (nextIdleCount >= 3) {
+      return { action: "pause", intervalMinutes: 0, idleCount: nextIdleCount };
+    }
+    return { action: "continue", intervalMinutes: 60, idleCount: nextIdleCount };
+  }
+  if (event === "blocked") {
+    return { action: "pause", intervalMinutes: 0, idleCount };
+  }
+  throw new UsageError("event must be work, idle, or blocked");
+}
+
+try {
+  if (argumentsList.includes("--version") || argumentsList.includes("-v")) {
+    console.log(metadata.version);
+    process.exit(0);
+  }
+  if (argumentsList.includes("--help") || argumentsList.includes("-h")) {
+    console.log(usage());
+    process.exit(0);
+  }
+
+  const command = argumentsList[0] && !argumentsList[0].startsWith("-")
+    ? argumentsList.shift()
+    : "install";
+  if (command === "install") {
+    const options = parseInstallArguments(argumentsList);
+    install({ ...options, sourceRoot: packageRoot });
+  } else if (command === "init") {
+    const options = parseInitArguments(argumentsList);
+    process.exitCode = await initialize({ sourceRoot: packageRoot, cwd: process.cwd(), options });
+  } else if (command === "doctor") {
+    const options = parseDoctorArguments(argumentsList);
+    const report = inspectDoctor({ cwd: process.cwd(), repo: options.repo });
+    console.log(options.json ? JSON.stringify(report) : formatDoctor(report));
+    if (options.reviewReady && !report.reviewReady) process.exitCode = 3;
+  } else if (command === "discovery-map") {
+    const options = parseDiscoveryArguments(argumentsList);
+    const result = validateDiscoveryMap(readFileSync(options.path, "utf8"), options);
+    console.log(JSON.stringify(result));
+  } else if (command === "outcomes") {
+    const options = parseOutcomeArguments(argumentsList);
+    const changed = syncIssueOutcomes({ cwd: process.cwd(), ...options });
+    const state = changed ? options.state : `already ${options.state}`;
+    console.log(`issue #${options.issue} outcomes: ${state}`);
+  } else if (command === "policy") {
+    if (argumentsList.length !== 2 || !/^\d+$/.test(argumentsList[1])) {
+      throw new UsageError("policy requires work|idle|blocked and a non-negative idle count");
+    }
+    const decision = schedulerDecision(argumentsList[0], Number(argumentsList[1]));
+    console.log(`action=${decision.action} interval_minutes=${decision.intervalMinutes} idle_count=${decision.idleCount}`);
+  } else {
+    throw new UsageError(`unknown command: ${command}`);
+  }
+} catch (error) {
+  console.error(`gsd-loop: ${error.message}`);
+  process.exit(error instanceof CliError ? error.exitCode : 1);
+}

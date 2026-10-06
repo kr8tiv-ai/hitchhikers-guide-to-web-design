@@ -1,0 +1,174 @@
+name: App release
+
+# Builds the OpenGSD Path desktop app (daemon/app) and attaches the installers
+# to a GitHub pre-release; see docs/adr/0005-native-dashboard-app.md.
+#
+# macOS builds are signed with a Developer ID certificate and notarized when the
+# Apple secrets are set (docs/app-macos-signing-guide.md): APPLE_CERTIFICATE,
+# APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_API_KEY,
+# APPLE_API_ISSUER, and APPLE_API_KEY_P8. With none of them set, macOS builds
+# keep an ad-hoc signature, as forks and local builds do. Windows and Linux
+# builds have no OS code signature.
+#
+# It also signs the update files with the updater key (repository secrets
+# TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and, when
+# every platform built, replaces latest.json on the fixed app-latest
+# pre-release. Installed apps read that file to find the update.
+#
+# Trigger: push a tag app-v<version>, where <version> is the version in
+# daemon/app/src-tauri/tauri.conf.json:
+#   git tag app-v0.1.0 && git push origin app-v0.1.0
+# The npm release workflow runs on v* tags only, so an app-v* tag never publishes to npm.
+
+on:
+  push:
+    tags:
+      - "app-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against the app version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./daemon/app/src-tauri/tauri.conf.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "app-v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match app version $version" >&2
+            exit 1
+          fi
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MACOS_SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        run: |
+          if [[ "$MACOS_SIGNED" == "true" ]]; then
+            notes="Tester build. macOS builds are signed and notarized. Windows shows a SmartScreen warning."
+          else
+            notes="Tester build. Unsigned: macOS asks for approval in Privacy & Security, and Windows shows a SmartScreen warning."
+          fi
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
+            --prerelease --title "OpenGSD Path app ${GITHUB_REF_NAME#app-v}" --notes "$notes"
+
+  build:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `updates`: one or more `<platform>=<ext>`. The platform is the name the app's updater asks
+          # for; the ext is the file it installs.
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            updates: darwin-aarch64=app.tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            updates: darwin-x86_64=app.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi
+            updates: windows-x86_64=msi
+          # An app installed from the .deb can install only a .deb.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+            updates: linux-x86_64=AppImage linux-x86_64-deb=deb
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: daemon/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - name: Set up Apple signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        # Tested with a stand-in `security` by the `app-release-scripts` job in ci.yml.
+        run: bash scripts/macos-signing-setup.sh "$RUNNER_TEMP"
+      - name: Build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        # Update files are made only here: a local build has no signing key.
+        # With Apple signing set up, the Developer ID replaces the ad-hoc "-" from
+        # tauri.conf.json, and Tauri notarizes with the APPLE_API_* variables.
+        run: |
+          set -euo pipefail
+          config="$(node -p 'JSON.stringify({bundle: {createUpdaterArtifacts: true,
+            ...(process.env.APPLE_SIGNING_IDENTITY ? {macOS: {signingIdentity: process.env.APPLE_SIGNING_IDENTITY}} : {})}})')"
+          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$config"
+      - name: Check the Developer ID signature and notarization
+        if: runner.os == 'macOS' && env.APP_SIGNING_KEYCHAIN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -n 1)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --verbose=2 "$app" 2>&1 | grep -F "Authority=$APPLE_SIGNING_IDENTITY"
+          xcrun stapler validate "$app"
+          # Information only: Gatekeeper may be turned off on the runner.
+          spctl --assess --type execute --verbose=2 "$app" || true
+      - name: Remove the signing keychain and notarization key
+        if: always() && runner.os == 'macOS' && env.APP_SIGNING_KEYCHAIN != ''
+        shell: bash
+        run: |
+          security delete-keychain "$APP_SIGNING_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/notarization-key.p8"
+      - name: Upload the installers and the signed update files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Tested on macOS, Windows, and Linux runners by the `app-release-scripts` job in ci.yml.
+        run: bash scripts/release-upload.sh "${{ matrix.target }}" "${{ matrix.updates }}" "$GITHUB_REF_NAME"
+
+  # Runs only when every platform built, so latest.json never names a missing file.
+  publish-update:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Replace latest.json on the app-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir signatures
+          gh release download "$GITHUB_REF_NAME" --pattern 'updater-*.sig' --dir signatures
+          node daemon/app/scripts/latest-json.mjs "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" signatures > latest.json
+          cat latest.json
+          gh release view app-latest >/dev/null 2>&1 || gh release create app-latest --prerelease \
+            --title "OpenGSD Path app: update channel" \
+            --notes "Holds latest.json, the file installed apps read to find an update. Download the app from the newest app-v release."
+          gh release upload app-latest latest.json --clobber

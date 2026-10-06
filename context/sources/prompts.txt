@@ -1,0 +1,1865 @@
+
+Prompts · AntiHero AI
+Skip to content
+Guides
+Prompts
+Videos
+Blog
+About
+Join the group
+Join the group
+Menu
+Menu
+Guides
+Guides / read them, steal them
+Prompts
+Prompts / copy, paste, done
+Videos
+Videos / every live
+Blog
+Blog / notes from the trenches
+About
+About / why this exists
+Join
+Join / the good part
+Join the group
+Join the group
+Prompts that actually work.
+Tested on a live audience.
+Copy it, paste it into Grok or any decent AI, fill in the brackets.
+What are you trying to do?
+Websites, 17 prompts
+Grok Build, 23 prompts
+Grok Bot, 14 prompts
+Brand, 15 prompts
+Images and video, 6 prompts
+Content and social, 8 prompts
+Business, 6 prompts
+What are you trying to do?
+Close
+Websites
+17 prompts
+Plan a site that doesn't look like a template.
+Grok Build
+23 prompts
+Build it one prompt, one job, one commit at a time.
+Grok Bot
+14 prompts
+Hand the busywork to your Bots. Read it before it goes out.
+Brand
+15 prompts
+Find your why, your look, and your voice, in that order.
+Images and video
+6 prompts
+Stills and loops in Grok Imagine. No text in the picture.
+Content and social
+8 prompts
+Posts and emails that sound like you on a good day.
+Business
+6 prompts
+Capture emails, sell softly, and keep it honest.
+You're in: 
+, 
+Websites
+Plan a site that doesn't look like a template.
+17 prompts
+Websites
+Stage 1.
+The interview
+(Grok Bot
+or any
+chat AI)
+Use it for
+Plan the site in one chat, one question at a time, before anyone opens a file.
+You are a senior web designer and art director who has built sites that won Awwwards Site of the Day. Interview me to plan a website. Read my brand brain first: 
+[paste it or attach it]
+.
+Ask me one question at a time. Wait for my answer before the next one. Push back if an answer is vague. Cover:
+1. What the site is for, in one sentence, and the one action a visitor should take.
+2. Who the visitor is: a specific person, what they want, what they're afraid of, what device they're on.
+3. The offer: what I sell or give away, and why anyone should care.
+4. The pages and sections I think I need (you'll fix this list later).
+5. The vibe in three words, and three words it must never feel like.
+6. Three to five reference sites I love (Awwwards, Godly, anything) and exactly what I love about each.
+7. What I already have: logo, photos, video, copy, fonts, an old site.
+8. What must never change (an existing page, a video, legal wording).
+9. Motion appetite from 1 to 10: 1 is a calm brochure, 10 is a 3D scroll movie.
+10. Hard limits: deadline, budget, hosting, things I legally can't say.
+When you have enough, write a one-page Site Brief: goal, visitor, offer, vibe, references and what to steal from each (the thinking, not the look), what exists, what's protected, motion level, limits. Then ask me what you got wrong.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Stage 2.
+The section
+plan
+Use it for
+Turn the brief into pages, sections, and the pictures you still need to make.
+Using the Site Brief, write the section plan for the site.
+For each page: the URL, its one job, and its sections in order. For each section: a name, what it says (draft headline and one line of copy in my brand voice), what the visitor sees (image, video, 3D, plain), and the one effect that earns its place there (or "none"). Mark which sections are protected and must never be changed once built.
+Rules: the homepage hero gets the most attention. No more than one "wow" effect per section. Every page ends with the one action from the brief. Keep the first version small enough to ship in a weekend, and put everything else in a "Version 2" list at the bottom.
+Then list every image and video I need, with a short Grok Imagine prompt for each, the aspect ratio, and where it goes.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Stage 3.
+The meta-prompt:
+"write me
+all the
+build prompts"
+Use it for
+Have the AI write every build prompt, in order, each one ready to paste on its own.
+Now write the complete build package for Grok Build, the coding agent that will build this site in my project folder.
+Format:
+1. Start with one RULES paragraph that every prompt repeats word for word. It must include: the project type (Astro site, or tell me if something else fits better), my brand name spelled correctly, fonts and colors with hex codes, my voice rules and banned words, everything that must never be touched, "do not deploy", "do not delete files, move unused ones to /_archive", motion rules (calm or energetic, respect prefers-reduced-motion, animate only transform and opacity), and "commit to git when done with a short message".
+2. Then numbered prompts, one job each, in build order: setup and backup, site map and navigation, each page and section, imagery, then the motion and effects pass, then performance, credits page and QA.
+3. Every prompt is one copy-paste block: the full RULES paragraph, then "TASK: 
+[name]
+", then exact instructions. Name files, components and routes. Say what "done" looks like and what to report back.
+4. Each prompt must work on its own. Never write "as before" or "see above".
+5. Anything borrowed (code, models, fonts, textures) must get a credits entry in the same commit.
+6. Elevated by default: every prompt aims for an Awwwards Site of the Day result, not a regular website. Each section gets one bold idea, real copy in my voice and a specific detail nobody else would think of.
+7. Put my NO SLOP RULES inside the RULES paragraph, word for word: 
+[paste the NO SLOP RULES]
+.
+Write them all. Don't summarize. Save it as a file I can download.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+9.2 The
+Visual Interview
+Use it for
+Settle the look, the type, and the motion before anyone writes CSS.
+You're an award-winning art director. Read my brand brain and Site Brief: 
+[paste or attach]
+. Interview me about the look and feel of the site, one question at a time, and wait for each answer. Show me examples or options when I'm stuck. Cover:
+1. Five mood words, and three words it must never feel like.
+2. Three to five Awwwards sites I love (awwwards.com, Sites of the Day), and exactly which part of each: the type, the scroll, the layout, the color, the motion.
+3. Type pairing: how loud the headlines should be, and how big the contrast between headline and body.
+4. Color temperature: warm, cool or neutral, light or dark, and how often the accent color shows up.
+5. Motion personality: calm and expensive, snappy and playful, heavy and cinematic, or something else. Give me a real-world comparison for each.
+6. Texture: clean and flat, film grain, paper, glass, noise, or something physical from my world.
+7. Imagery style: photo, illustration, 3D or video, light and time of day, real people or no people, and what never shows up.
+8. The signature moment: the one thing people will screenshot and send to a friend.
+Then write a one-page Visual Direction brief: mood, references and what to steal from each, type scale with sizes, color usage with hex codes, motion rules (eases, durations, what moves and what never moves), texture, imagery rules, the signature moment, and a "never do" list. Ask me what you got wrong.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+9.3 The
+Standout Features
+Interview
+Use it for
+Pick the 3 to 5 moments worth building, and drop the tricks.
+You're the creative technologist on an agency team that wins Awwwards. Read my Site Brief and Visual Direction brief: 
+[paste or attach]
+. Propose features that would make this site memorable, then interview me about them one at a time. Consider at least: a signature hero interaction, scroll storytelling, a cursor effect, a 3D moment, micro-interactions (buttons, links, forms), an optional sound toggle (off by default), page transitions, and a playful easter egg. For each one, explain in plain English what the visitor sees and feels, why it fits my brand (or why it doesn't), how heavy it is for phones, and a version for people who turn motion off. Ask me which ones excite me. Then pick the 3 to 5 best for my brand, rank them, and for each write: the plain-English description, where on the site it lives, and a ready-to-paste Grok Build TASK with my RULES paragraph on top. Cut anything that's a trick without a reason.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Act as
+a jury
+of three
+Awwwards judges
+Use it for
+Score the site the way a jury would, and skip the pep talk.
+Act as a jury of three Awwwards judges: a designer, a developer and a brand strategist. Review my site: 
+[live URL, or attach screenshots of every page on desktop and mobile]
+. Here is my Site Brief and Visual Direction brief: 
+[attach]
+. Score it out of 10 on Design, Usability, Creativity and Content, the way Awwwards does, with two lines of honest reasoning for each score. Then tell me: the first impression in 3 seconds, the single thing holding it back the most, anything that looks like AI slop or a template, and what's already good enough to keep. Finish with a numbered fix list, most important first, each fix specific enough that a developer could do it without asking a question. No flattery. If it's a 6, say 6.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+9.5 The
+Post-launch Quality
+Upgrade Interview
+Use it for
+A week after the site is live, find what feels flat and write the upgrades.
+My site is finished and live at 
+[URL]
+. Read my Site Brief, Visual Direction brief and brand brain: 
+[attach]
+. First, review the live site yourself (open it, or use these screenshots: 
+[attach]
+) on desktop and mobile, and write down what feels flat, generic, slow or confusing, before I tell you anything. Then interview me one question at a time: which pages I avoid showing people, where visitors drop off or get confused (if I have analytics, ask for them), what people have said about it, what feels flat to me, what I'd be proudest of if it were better, and what I've been too scared to try. Then write an upgrade plan with no more than 8 upgrades, ranked by impact versus effort, each explained in one plain-English sentence. Then write every upgrade as a ready-to-paste Grok Build prompt with my full RULES paragraph on top (including the NO SLOP RULES and elevated by default). Protect everything that already works.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+The MCP
+safety check
+Use it for
+Before you install any MCP server or skill, make your AI read it first.
+I want to install the MCP repository from this link. Before I do, please read through the code, check it for security vulnerabilities, verify its reputation score, and tell me if it is completely safe to install.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+The NotebookLM
+research prompt
+Use it for
+Get a stack, a site plan, and the build prompts before you build anything. Swap in your business.
+I am building a website for a high-end physical construction company. Research the best, fastest, and most modern programming stack to build this today. Create a comprehensive, step-by-step website architecture plan. Then, write out the exact, highly-detailed prompts I need to copy and paste into my coding AI (Google AntiGravity) to execute it. Ensure the entire structure is fully optimized for both traditional Google SEO and modern AI Search Engines (Siri, ChatGPT, Perplexity, etc.).
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+Build from
+your reference
+folder
+Use it for
+Hand over the sites you love and your 2 fonts, and get something with the same feel that is still yours.
+I have attached visual references of websites I absolutely love. I want you to build me a site with a similar premium vibe, structure, and aesthetic, but make it completely unique to my brand. Use 
+[Insert Fontshare Font Name]
+ for all the big headers and 
+[Insert Google Font Name]
+ for the body text.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+The stack
+loader
+Use it for
+Name the stack in your first build prompt so the result looks expensive.
+Build this website using Astro for the framework and Vanilla JS for the logic. I want the site to feel incredibly premium and expensive, so you MUST use GSAP for all entrance animations and Lenis for buttery-smooth scrolling.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+Float a
+3D model
+on the
+page
+Use it for
+Put a GLB model on the page that drifts and turns with the mouse.
+Embed the attached GLB model on the page using Three.js. Make the 3D object float gently and rotate slowly based on the user's mouse movement across the screen.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+Hero video
+background
+Use it for
+Start with the hero only: your video as the looping background.
+Use this video file as the looping background for the hero section. Add: build a menu, no AI slop, keep it contemporary and elegant, and make it good enough for Awwwards.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+The mobile
+pass
+Use it for
+Run this before you go live so the site works on a phone.
+Review the code you just wrote. Make sure this entire website is perfectly responsive and optimized for mobile devices (iOS and Android). Ensure all GSAP animations and Lenis scrolling effects perform flawlessly on a phone screen without causing lag or breaking the layout.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+Ambient sound,
+off by
+default
+Use it for
+A small play button for ambient audio that never starts on its own.
+Add an elegant, minimal play button in the bottom corner of the site that triggers this ambient audio track. It MUST start paused by default so it doesn't annoy the user, but it should fade in smoothly when they click play.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+SEO blog
+with Schema
+Use it for
+A blog Google and AI search can read, with Schema.org on every article.
+Add a highly SEO-optimized blog directory to the site so I can drive organic traffic. Ensure every single article page uses standard Schema.org markup so Google's web crawlers and modern AI bots understand the content perfectly and rank it higher.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Websites
+Deploy to
+Hostinger
+Use it for
+Ship the local site to your live server with a Hostinger API token. Treat the token like a password.
+I am ready to deploy this website to the internet. Here is my Hostinger API Token: 
+[Paste Your Token Here]
+. Please use the Hostinger API to package up this local website and deploy it directly to my live server.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the AntiHero Website Masterclass guide
+Grok Build
+Build it one prompt, one job, one commit at a time.
+23 prompts
+Websites
+Stage 4.
+The RULES
+paragraph template
+Use it for
+Fill this in once. It sits at the top of every build prompt after that.
+RULES: This is the 
+[Brand]
+[Astro]
+ site. Do NOT change 
+[the protected page, video or section]
+ in any way. Do not deploy. Do not delete files; move unused ones to /_archive. Fonts: 
+[display font]
+ for headlines, 
+[body font]
+ for text. Colors: 
+[name #hex]
+, 
+[name #hex]
+, 
+[accent name #hex]
+ (accent used sparingly). Use the logo in /src/assets/logo wherever a logo is needed. Brand name is "
+[Brand]
+" everywhere. Never say: 
+[banned words or claims, e.g. prices, guarantees, competitor names]
+. Tone: 
+[three voice traits]
+. No em dashes, no exclamation points. Motion must feel 
+[calm, slow and expensive / quick and playful]
+: 
+[long eases, nothing bouncy]
+, respect prefers-reduced-motion, animate only transform and opacity. Elevated by default: aim for an Awwwards Site of the Day result, not a regular website; one bold idea per section, real copy, specific details. Follow the NO SLOP RULES: 
+[paste them]
+. Commit to git when done with a short message.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+AntiHero example
+Use it for
+A filled-in RULES paragraph for a demo brand, so you can see the shape.
+RULES: This is the AntiHero Astro site. Do NOT change the homepage hero video or its scroll logic once it is approved. Do not deploy. Do not delete files; move unused ones to /_archive. Fonts: 
+[Bebas Neue]
+ for headlines, 
+[Barlow]
+ for text. Colors: 
+[Anti Black #0A0A0B]
+ 60 percent, 
+[Bone #ECE8E1]
+ 30 percent, 
+[accent #hex]
+ 10 percent. Use the AntiHero logo in /src/assets/logo wherever a logo is needed. Brand name is "AntiHero" everywhere. Never say: delve, unlock, elevate, seamless, game-changer, empower, journey. Tone: direct, funny, human. No em dashes, no exclamation points. Motion must feel confident and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and opacity. Elevated by default: aim for an Awwwards Site of the Day result, not a regular website. Follow the NO SLOP RULES (Stage 9). Commit to git when done with a short message.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.1 Setup
+and backup
+Use it for
+Start the Astro project, save a first commit, and put the logo and fonts in place.
+[RULES]
+TASK: Project setup and backup
+Create a new Astro project in this folder (latest stable, TypeScript strict, no UI framework yet). Add Tailwind only if I said so in the brief. Set up git, a .gitignore for node_modules and .env, and make a first commit called "Fresh start". Create /src/assets/logo, /src/assets/img, /public/media and /_archive. Copy my logo files from 
+[path to assets folder]
+ into /src/assets/logo and my fonts into /public/fonts with @font-face rules in a global CSS file. Add CSS variables for every brand color. Tell me the command to run the site locally and the URL.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.2 Hero
+Use it for
+Build the first screen: one big headline, one line under it, one button.
+[RULES]
+TASK: Homepage hero
+Build the homepage hero as src/components/Hero.astro. Full viewport height. Background: 
+[image or looping muted video]
+ from /public/media/
+[file]
+, with a poster image so something shows instantly. Headline "
+[headline]
+" in the display font, very large, low-left, with generous empty space. One line under it: "
+[subline]
+". One button: "
+[CTA text]
+" linking to 
+[URL]
+. Text must pass contrast over the image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video. Show me a screenshot description of desktop and mobile.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.3 Navigation
+Use it for
+Add the slim top bar, and a full-screen menu for the phone.
+[RULES]
+TASK: Navigation and menu
+Build a slim top bar (about 56px): logo left, text links 
+[Page 1, Page 2, Page 3]
+, and an outlined "
+[CTA]
+" button right. Transparent over the hero, soft frosted background after 80px of scroll, hides on scroll down and comes back on scroll up. Under 1024px show only the logo and a "Menu" button that opens a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes, focus stays inside the open menu and returns to the button on close. Add the same links to the footer.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.4 Sections
+(one prompt
+per section)
+Use it for
+Add one section with real copy and layout. Motion comes later.
+[RULES]
+TASK: 
+[Section name]
+ section
+Build src/components/
+[SectionName]
+.astro and add it to 
+[page]
+ after 
+[previous section]
+. Purpose: 
+[one job of this section]
+. Content: headline "
+[headline]
+", copy "
+[copy]
+", 
+[cards / image grid / testimonial / FAQ list]
+. Layout: 
+[describe it, or "steal the structure of [reference site]'s [section], not the look"]
+. Use only brand fonts and colors. Mobile first, then desktop. No effects yet; motion comes in a later prompt.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.5 Lenis
+smooth scroll
+Use it for
+Make scrolling feel weighted, and switch it off when someone wants less motion.
+[RULES]
+TASK: Smooth scroll foundation
+Install Lenis and GSAP. Wire Lenis to GSAP ScrollTrigger site-wide (lenis.on('scroll', ScrollTrigger.update) and drive Lenis from gsap.ticker). 
+[Except the protected page; leave its scroll logic exactly as is.]
+ Create src/scripts/motion.ts with shared eases, durations and a prefers-reduced-motion check, so every later effect uses the same feel. With reduced motion on, Lenis is disabled and scrolling is native. Anchor links must still land in the right place.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.6 GSAP
+ScrollTrigger reveals
+Use it for
+Bring headings, images, and cards in as they reach the screen.
+[RULES]
+TASK: Scroll reveals
+Create a reusable reveal system using GSAP ScrollTrigger and the shared settings in src/scripts/motion.ts. (1) Headings: a <RevealHeading> component that splits text into lines (GSAP SplitText), each line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clip-path "window opening" from the center outward while the image inside scales from 1.1 to 1. (3) Cards in grids stagger by 0.1s. Each animation plays once. Use on every H1 and H2 
+[outside the protected page]
+. Reduced motion: everything is simply visible.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.7 Scroll-scrubbed
+video
+Use it for
+Play a video forward and back with the scroll.
+[RULES]
+TASK: Scroll-scrubbed hero video
+Build src/components/ScrollFilm.astro: a section about 
+[400vh]
+ tall with a sticky full-screen stage. As the visitor scrolls through it, the video /public/media/
+[file]
+.mp4 plays forward frame by frame, and backwards when they scroll up, using GSAP ScrollTrigger with scrub: true. First, re-encode the video for smooth seeking with ffmpeg: H.264, keyframe every frame (-g 1), no audio (-an), 1920px wide, -movflags +faststart, and keep the original in /_archive. If seeking still stutters, extract frames to WebP (about 120 to 180 frames) and draw them to a canvas instead. Overlay three lines of copy that fade in at 20, 50 and 80 percent progress: "
+[line 1]
+", "
+[line 2]
+", "
+[line 3]
+". Poster image first. Mobile and reduced motion get the poster and the copy, no scrubbing.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.8 Page
+transitions
+Use it for
+Move between pages without a hard cut, and keep the nav steady.
+[RULES]
+TASK: Page transitions
+Add Astro View Transitions (ClientRouter) with a custom transition: 
+[a thin line in the accent color sweeps across the screen, the old page fades and lifts 20px, the new page rises in]
+, about 700ms total. The logo and nav persist without flicker. Re-initialize GSAP, ScrollTrigger and Lenis correctly after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick fade.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.9 Three.js
+3D scene
+Use it for
+Put one 3D scene on a big screen, and a still image on a phone.
+[RULES]
+TASK: 3D scene in 
+[section]
+Install three. Build src/three/scene.ts and mount it in 
+[section]
+ on desktop only (1024px and up, fine pointer). Scene: 
+[describe it, e.g. a slow camera drift over a meadow at golden hour with a glass cube catching the light]
+. Light it with a free HDRI from Poly Haven (polyhaven.com, CC0) for real reflections, ACES or AgX tone mapping, soft shadows. The camera moves with scroll progress through the section using GSAP ScrollTrigger. One renderer only, pixel ratio capped at 2, rendering paused when the section is offscreen or the tab is hidden. Mobile, low-power devices and reduced motion get a still image rendered from the same scene. Load models through one shared GLTFLoader with Draco and Meshopt support, and leave a drop-in folder /public/models/custom/ so I can replace the model later without code changes. Add every model, texture and HDRI to the credits data.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.10 Hover
+glow titles
+Use it for
+Warm a heading up under the cursor. Phones stay still.
+[RULES]
+TASK: Title glow on hover
+On desktop, headings (H1, H2 and card titles) get a soft glow that "heats up" behind them on hover: a blurred radial gradient in 
+[accent color]
+ at low opacity, easing in over about 1.2s and cooling out over about 2.4s. Build it in CSS first (a ::before pseudo-element, animating only opacity and transform). Optionally upgrade to one shared WebGL canvas with animated noise if it stays under 1ms per frame. Keyboard focus triggers it too. Touch devices and reduced motion get a static faint glow or nothing.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.11 Performance
+and media
+compression
+Use it for
+Shrink the pictures and video so the first screen shows up fast.
+[RULES]
+TASK: Media and performance pass
+Find every image and video on the site. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and serve them through Astro's Picture component with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264, crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the poster only. Keep originals in /_archive/originals. Preload the two brand fonts. Write scripts/optimize-media.mjs so I can rerun this on new files. Report a before and after size table and a Lighthouse estimate (target: LCP under 2.5s, no layout shift).
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.12 Credits
+page
+Use it for
+Name everything you borrowed, with the person, the license, and the link.
+[RULES]
+TASK: Credits page
+Create src/data/credits.ts: a typed list of { name, author, license, link, usedFor, category }, with categories "Code and libraries", "3D models", "Textures and HDRIs", "Fonts", "Inspiration". Build /credits from it: a calm page with one intro line ("
+[Brand]
+ stands on the generosity of open-source makers. Thank you."), then each category as a clean list with the name linked to the source and the license linked. Seed it with everything that ships to the browser (read each package's license in node_modules), plus Astro, GSAP (Standard no-charge license, https://gsap.com/standard-license), Lenis, three.js and the fonts. Add a small "Credits" link in the footer. Add a comment at the top of credits.ts: anything borrowed gets an entry in the same commit.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+5.13 QA
+with Playwright
+Use it for
+Open every page in a real browser and catch what broke.
+[RULES]
+TASK: QA pass
+Install Playwright as a dev dependency. Write tests/qa.spec.ts that, for every page at 375px, 768px, 1440px and 1920px: loads the page, fails on any console error or 404, takes a full-page screenshot into /qa/screenshots, checks every internal link resolves, checks every image has alt text, and checks the menu opens and closes with the keyboard. Also run it once with reduced motion on. Run npm run build, then the tests. Fix anything you broke. Report what you fixed and anything you need me to decide. Confirm with git diff that the protected files are unchanged.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+9.1 The
+NO SLOP
+RULES (written
+for the
+AI, not
+for you)
+Use it for
+Paste this into the RULES so the site does not come out looking like every other one.
+NO SLOP RULES. Never use: purple-to-blue or rainbow gradients; a centered hero with a floating stock blob or abstract 3D shape; the generic row of 3 feature cards with icons; emoji as icons; the words unlock, elevate, seamless, revolutionize, empower, game-changer, delve, leverage, cutting-edge, journey, "in today's fast-paced world" or "it's not just X, it's Y"; lorem ipsum or placeholder copy; stock photos of smiling people pointing at laptops; the default Tailwind look (gray-50 backgrounds, rounded-xl cards, indigo buttons, everything centered); every section with the same rhythm (headline, subline, grid, repeat); invented testimonials, fake logos or made-up numbers. Instead, always: one bold idea per section, and say what it is in your report; real copy in the brand voice, specific and human; asymmetric layouts with intentional empty space; a deliberate type scale with big contrast between display and body; motion with a purpose (it guides the eye, reveals the story or gives feedback, never decoration); specific details only this brand would have; brand colors and fonts only. If you're about to do something you've seen on a thousand sites, stop and do the more interesting version. If something isn't real yet, mark it TODO instead of faking it.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Typography and
+spacing pass
+Use it for
+Give the type and the gaps one scale, and stop every section from sharing a shape.
+[RULES]
+TASK: Typography and spacing pass on 
+[section or whole site]
+Audit and upgrade the type and spacing. Define one type scale (display, h1, h2, h3, body, small, caption) with real contrast between display and body, using only the brand fonts, and use it everywhere. Tighten letter spacing on big display type, loosen it on small caps. Set body text at 16 to 18px with a line length of 45 to 75 characters and line height around 1.5. Create one spacing scale and use it for every gap. Break the identical section rhythm: vary alignment, widths and empty space so each section has its own shape. Report before and after for each section in one line.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Motion pass
+Use it for
+Keep the motion that has a job. Take out the motion that is only there to move.
+[RULES]
+TASK: Motion pass on 
+[section or whole site]
+Audit every animation. Remove anything that moves just because it can. For what's left, give each one a job (guide the eye, reveal the story, or give feedback) and say which job in your report. Use one shared set of eases and durations from src/scripts/motion.ts. Add the one motion moment from the Visual Direction brief if it's missing. Stagger related elements, never animate everything at once, animate only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you removed, what you kept and what you added.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Imagery pass
+Use it for
+Check every picture against the brand, and mark a replacement where one is off.
+[RULES]
+TASK: Imagery pass on 
+[section or whole site]
+Audit every image and video against the Visual Direction brief (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a Grok Imagine prompt for a replacement in the brand's world and leave a clearly named placeholder slot. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment (grade, grain or duotone) so the whole site feels like one world. Report the list and the prompts.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Copy pass
+Use it for
+Rewrite the lines in your voice, and mark TODO where a real fact is missing.
+[RULES]
+TASK: Copy pass on 
+[section or whole site]
+Rewrite every headline, subline, button and caption in the brand voice from the brand brain. Kill every banned word and every generic line ("Welcome to our website", "We are passionate about", "Learn more"). Headlines: short, specific, a little surprising. Buttons: say exactly what happens ("Book a call", not "Submit"). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Turn this
+fix list
+into Grok
+Build prompts
+Use it for
+Turn a fix list into prompts you can run one commit at a time.
+Turn this fix list into Grok Build prompts: 
+[paste the jury's fix list]
+. Group related fixes so each prompt is one job and one commit, and order them by impact. Every prompt is a single copy-paste block that starts with my full RULES paragraph (including the NO SLOP RULES and the elevated-by-default line), then "TASK: 
+[name]
+", then exact instructions, files to touch, what done looks like and what to report. Each prompt must work on its own. Finish with the order to run them in and what to check on localhost after each.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Investigate before
+you fix
+Use it for
+Find out why something is broken without letting the AI change a thing.
+[RULES]
+TASK: Investigate 
+[the problem]
+, read-only
+Don't change, stage or commit anything. Problem: 
+[what you see, for example "the hero is just black"]
+. Find the cause: read the files involved, list the media they load, check those files exist and aren't placeholders, and run the dev server or a build if you need to. Report the root cause in 2 sentences, the exact files and lines, and the smallest fix written as a TASK I can paste next.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+3D landing
+page from
+a Tripo3D
+model
+Use it for
+Turn a flat image into a 3D model in Tripo3D, then have Grok Build put it in your hero.
+I am building a high-end, premium website for 
+[Insert Company]
+. I have attached screenshots of the exact design aesthetic I want to achieve (inspired by Aura.build). I have also attached a 3D model file (.glb/.gltf) generated by Tripo3D.
+I need you to write the complete code to build this website landing page. Use Astro for the framework, GSAP for smooth scroll animations, and Three.js to embed this 3D model directly into the hero section of the site so the user can interact with it.
+The typography must look expensive. Use modern fonts like those found on Fontshare. Do not use generic, bloated CSS frameworks. Keep the code clean, fast, and heavily optimized for AIO (AI Search Engine Optimization). Give me the exact step-by-step instructions to deploy this.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Grok Bot
+Hand the busywork to your Bots. Read it before it goes out.
+14 prompts
+Websites
+The watcher
+prompt
+Use it for
+Hand each commit to a second AI and ask if the task is actually done.
+You're my build supervisor. Here is the full build package: 
+[attach it]
+. Grok Build is running these prompts one at a time in my project. After each one I'll paste its final report and the output of `git show --stat HEAD` (and the diff if it's small).
+For each step tell me:
+1. Done or not done, against the TASK's own definition of done.
+2. Did it touch anything the RULES protect? Name the file.
+3. Any RULES broken (banned words, em dashes, wrong colors, missing credits entry, deploys, deleted files).
+4. What to look at on localhost before moving on.
+5. If something is wrong: the exact fix prompt to paste back into Grok Build, with the RULES paragraph on top.
+Then give me the next prompt number. Keep it short.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Stage 8.
+Review and
+the fix
+list
+Use it for
+Get a numbered fix list, most important first, written so you can paste it back.
+Here are screenshots of my site on desktop and mobile: 
+[attach]
+. Here is my Site Brief and brand brain: 
+[attach]
+. Act as an Awwwards juror and my brand director. Give me a numbered fix list, most important first. Each fix must be specific ("headline is 14 words, cut to 6", not "make it pop") and written as a ready-to-paste Grok Build TASK with my RULES paragraph on top. Also tell me what to keep so I don't break the good stuff.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Prompts
+The poop
+guide prompt
+Use it for
+See what one plain prompt can do: the exact message that made a real PDF on the Grok Bot live.
+Make me a funny but genuinely useful PDF guide called "How to Take a Great Poop." 6 to 8 short sections: fibre, water, timing and routine, posture (footstool, lean forward), don't scroll on the toilet, don't strain, and a clear "see a doctor if" box. Keep it tasteful and family-friendly, with dry humour. No medical claims: use soft wording like "can help" and "for a lot of people." Plain words, short lines. Ask me up to 3 questions before you start if you need to. When it's done, send me the PDF file and a picture of the cover.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+A PDF
+guide on
+any topic
+Use it for
+Get a short, useful PDF guide on your topic from one message.
+Make me a 
+[funny / straight]
+ but genuinely useful PDF guide called "
+[title]
+." 
+[6 to 8]
+ short sections: 
+[list the sections]
+. Keep it 
+[tasteful, plain-spoken]
+, with 
+[dry humour / no jokes]
+. No claims you can't back up: use soft wording like "can help" and "for a lot of people." Plain words, short lines. Ask me up to 3 questions before you start if you need to. When it's done, send me the PDF file and a picture of the cover.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Brand it
+Use it for
+Put your logo, colors and fonts on anything your Bot just made.
+Brand this guide for my business. Here's my logo 
+[attach it]
+. Use 
+[colour 1]
+ and 
+[colour 2]
+, a bold condensed font for headlines and a clean sans-serif for body text. Put my logo on the cover and in a footer on every page. Send me previews before the final PDF.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Edits with
+previews
+Use it for
+Ask for specific changes and see them before the final file.
+Make the cover title bigger. Add a "Pro tip" box about 
+[one tip]
+. Cut any line that sounds like 
+[a doctor / a lawyer / a robot]
+ wrote it, and make the jokes a little drier. Keep everything else. Send page previews, then the final PDF.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Save it
+as a
+skill
+Use it for
+Turn something that worked once into a one-line job next time.
+That worked. Save this whole process as a skill called "
+[skill name]
+" so next time I can give you 
+[a topic]
+ and get 
+[a finished guide in my brand]
+. Ask me anything you need to know to make the skill reliable.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Make it
+a routine
+Use it for
+Have a skill run on its own after something happens, and wait for your review.
+After every 
+[Facebook Live I upload]
+, turn 
+[the transcript]
+ into 
+[a branded PDF guide]
+ using the 
+[Branded PDF guide]
+ skill. Leave it for me to review. Don't post it anywhere.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Hire a
+specialist Bot
+Use it for
+Ask your chief of staff for a new Bot with one job.
+Create a new specialist Bot called 
+[name]
+. Its job: 
+[one job, for example research, SEO, bookkeeping or social posts]
+.
+Give it a short system prompt with:
+- what it's responsible for
+- the sources it should trust: 
+[list]
+- what it must never do without asking me: post, send, buy or delete anything
+- how it reports back: short, with links
+Show me the system prompt before you save it. One Bot, one job.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Put a
+crew on
+a project
+Use it for
+Pick the right specialists for one project and let them work it out together.
+Set up a group for this project: 
+[project in one line]
+. Pick the 3 to 5 specialists who should be on it and tell me why each one is there. You run the group. Everyone reads my brand guidelines first: 
+[attach them or say where they are]
+. Keep replies short. Post the plan and the first draft in the group, then wait for me before anything goes out.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Brief it
+like a
+new hire
+Use it for
+Give a Bot a job the way you would brief a sharp new hire, so it comes back right the first time.
+Here's a job. Treat this like a brief for a sharp new hire.
+Outcome: 
+[what done looks like]
+.
+Sources: 
+[files, links or people to use]
+.
+Limits: 
+[budget, tools, things you must not touch]
+.
+Deliverable: 
+[file type, length, where to save it]
+.
+Check in with me: 
+[the point where you stop and ask before going further]
+.
+Ask me up to 3 questions before you start.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Drafts before
+sends
+Use it for
+Keep your name off anything you haven't read.
+Draft 
+[the email / the post / the reply]
+ to 
+[who]
+ about 
+[what]
+. Don't send or post anything. Leave it as a draft and show me the full text here, with the recipient and the subject line on top. Flag any fact you couldn't check.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Recap posts
+after a
+live
+Use it for
+Turn one live into a week of posts, drafted and waiting for you.
+Using 
+[the guide / the transcript]
+ from 
+[tonight's live]
+, draft:
+- a recap post for 
+[my Facebook group]
+- a personal Facebook post
+- a LinkedIn post
+- an X post
+Each one in my voice and each linking to 
+[the guide link]
+. Make 1 Grok Imagine graphic to go with them, no text in the image. Ask me before you post anything anywhere.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Prompts
+Tell it
+what to
+remember
+Use it for
+Set a rule once instead of repeating it in every chat.
+Remember this for every task from now on: 
+[the rule, for example no exclamation points, keep posts under 80 words, never call my customers "users"]
+. Read it back to me in one line so I know it's saved. For anything important, check the source before you rely on it.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Brand
+Find your why, your look, and your voice, in that order.
+15 prompts
+Brand
+Why finder
+Use it for
+Find the one-sentence reason your business exists, before you touch a logo.
+You are a brand strategist who has read Simon Sinek's "Start With Why" twice and has zero patience for corporate mush. Your job is to find the WHY behind my brand.
+About me: I'm 
+[your name]
+. I run (or I'm starting) 
+[business or project]
+ for 
+[who it's for]
+ in 
+[city, region or online]
+.
+How to run this:
+- Ask me one question at a time and wait for my answer before the next one.
+- Ask at least 12 questions. Mix the easy ones (why did you start this) with the uncomfortable ones (what makes you angry about your industry, what would you keep doing if nobody paid you, what do you say at a party when someone asks what you do and you can see their eyes glaze).
+- When I give a vague answer like "I want to help people", push back. Ask for a specific moment, a specific person, a specific day.
+- Dig for the origin story: a frustration, a turning point, someone who did it badly and made me think "I can do better".
+When you have enough, give me:
+1. My WHY in one sentence, in this format: "To 
+[contribution]
+ so that 
+[impact]
+."
+2. My HOW: 3 to 5 principles or behaviors that make me different from the others.
+3. My WHAT: a plain-English description of what I sell, no jargon.
+4. Three versions of a one-line belief I could put on my website, from safe to bold.
+5. The single best story from my answers that proves the WHY, 120 words, first person, in my words.
+Use my own words wherever you can. If anything I said sounds like it came off a motivational poster, call it out and ask me again.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Brand discovery
+interview
+Use it for
+Get interviewed like a paying agency client and walk away with a brief you can paste into every prompt after this.
+Act as a senior brand strategist running a paid discovery session with a new client. I'm the client. Interview me, then write my Brand Discovery Brief. This brief will be the foundation for my name, logo, colors, fonts and voice, so do it properly.
+My starting point: 
+[business name or "no name yet"]
+, 
+[what I sell]
+, 
+[who buys it]
+, 
+[how long I've been doing it]
+, 
+[what I charge, roughly]
+.
+Interview me in five rounds. One question at a time. Wait for each answer.
+Round 1, the business: what I sell, what problem it solves, what a customer's life looks like before and after, why someone would pick me over doing nothing.
+Round 2, the people: my best customer ever (describe them), my worst customer ever, where my customers hang out online and offline, what they're tired of hearing.
+Round 3, the competition: who else they could buy from, what those brands get right, what they all do that's boring or annoying.
+Round 4, the personality: if my brand walked into a bar, who would it be; three words I want people to use about me; three words I never want to hear; brands I love from any industry and why.
+Round 5, the practical stuff: budget, deadlines, where the brand shows up first (Facebook, website, truck wrap, packaging), anything I'm keeping (an old logo, a color I'm attached to).
+Rules: if an answer is vague, ask a follow-up. If I contradict myself, point it out. Don't move to the next round until you understand this one.
+Then write the brief with these headings: The Business in One Paragraph, The Why (draft), Ideal Customer, Competitors and the Sea of Sameness, Personality (3 traits, plus 3 anti-traits), Visual Direction Notes, Must-Haves and Never-Evers, Open Questions. End with the 3 biggest risks to this brand, stated bluntly.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Competitor teardown
+Use it for
+See what everyone in your space looks and sounds like, so you can stop looking like them.
+Act as a ruthless but fair brand analyst. I'm building a brand for 
+[your business]
+ aimed at 
+[your customer]
+. Here are 
+[3 to 5]
+ competitors or brands in my space:
+1. 
+[name]
+[website or social link]
+2. 
+[name]
+[link]
+3. 
+[name]
+[link]
+[Optional: I've attached screenshots of their homepages, logos and recent posts.]
+If you can browse, look at their websites, social pages and customer reviews. If you can't, work from the screenshots and tell me what you can't see.
+For each competitor give me:
+- Positioning in one sentence (what they want to be known for)
+- Who they're really talking to
+- Personality in 3 adjectives
+- Visual identity: colors (hex guesses), type style, logo type, photo style
+- Voice: 2 or 3 typical phrases they use
+- What they do better than anyone
+- Where they're generic, weak or forgettable
+- What customers complain about
+Then:
+1. A comparison table across all of them.
+2. The Sea of Sameness: the colors, words, photos and promises everyone uses. These are the things I should avoid.
+3. Three white-space opportunities: positions nobody owns that fit me.
+4. What I should steal (structure and ideas, never surface: no copying their logo, colors or slogans).
+5. One sentence on how I could be the obvious choice for a specific customer they're all ignoring.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Mood folder
+analyzer
+Use it for
+Turn a folder of screenshots you like into 3 clear visual directions.
+I'm attaching 
+[number]
+ images from my mood folder: fonts, logos, brands, websites, packaging and photos I like. Analyze them like a design director who doesn't flatter clients.
+1. Common threads: colors, contrast, typography, layout density, photography, textures, overall mood. Be specific.
+2. Name the aesthetic I'm drawn to in 3 words, and name 2 real brands that already live in that space.
+3. Pull a draft palette of 5 to 7 hex codes from the images, and tell me which image each came from.
+4. Typography: classify the type I keep picking (geometric sans, grotesk, humanist sans, serif, slab, condensed display, script) and suggest free equivalents from Google Fonts or Fontshare.
+5. Photo and image style: lighting, color grade, subjects, how much empty space.
+6. Outliers: which images don't fit the rest and why. Ask me whether to keep or cut them.
+7. Three distinct directions I could take. For each: a name, two sentences of description, palette, font pair, imagery style, and one brand it reminds you of.
+Then ask me which direction feels most like me, and why. Keep in mind my business is 
+[what you do]
+ for 
+[who]
+, and my personality words are 
+[3 words]
+.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Reverse-engineer a
+brand you
+love
+Use it for
+Borrow the thinking of a big brand without borrowing its look or its budget.
+Treat 
+[brand you admire, for example Liquid Death, Patagonia, Mailchimp or Duolingo]
+ as a case study for someone building a small brand with no budget.
+Break down:
+1. Their WHY, HOW and WHAT (Golden Circle), as best you can tell from the outside.
+2. Their archetype and how it shows up in copy, visuals and behavior.
+3. The 3 to 5 brand decisions that do most of the work (a color, a tone, a stunt, a rule they never break).
+4. Their voice: 5 example lines, and the rules you think their writers follow.
+5. What they refuse to do. Brands are defined by their no's.
+6. What it would look like if a 
+[your business type]
+ in 
+[your town or niche]
+ borrowed the thinking but not the look. Give me 5 specific ideas that cost under 
+[budget]
+.
+Be honest about what only works because they have millions to spend.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Archetype, positioning
+and ideal
+customer
+Use it for
+Pick who you are, who you are for, and who you are not for.
+Here's my brand brief: 
+[paste brief, or describe the business, customer and personality in a few sentences]
+.
+Step 1, archetype. From the 12 brand archetypes (Innocent, Everyman, Hero, Outlaw, Explorer, Creator, Ruler, Magician, Lover, Caregiver, Jester, Sage), recommend a primary and a secondary archetype for me. Explain why in plain English. Show how each choice would change my headline, my colors and my photos. Tell me which archetypes my competitors are already using so I don't blend in.
+Step 2, positioning. Write 3 versions of this statement:
+"For 
+[target customer]
+ who 
+[need or frustration]
+, 
+[brand]
+ is the 
+[category]
+ that 
+[key benefit]
+ because 
+[reason to believe]
+. Unlike 
+[main alternative]
+, we 
+[real difference]
+." Mark the one that's most honest and the one that's most bold.
+Step 3, ideal customer. Build a profile of one specific person: name, age range, job, a day in their life, what they've already tried, what they're sick of, the exact words they'd type into Google, where they hang out online, and what would make them trust me in 10 seconds. Then list 3 people who are NOT my customer, so I stop trying to please them.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Brand story
+writer
+Use it for
+Write your story at 25, 100 and 300 words, with your customer as the hero.
+Using my discovery brief and why statement below, write my brand story.
+[paste your discovery brief and why statement]
+Rules:
+- The customer is the hero. I'm the guide who has been where they are. (Think Luke Skywalker and Yoda, not me in a cape.)
+- Structure: the world as it is, the problem that annoyed me into action, the turning point, what I do now, what changes for the customer.
+- Use my archetype: 
+[archetype]
+.
+- Plain words. Real details. One specific moment beats ten adjectives.
+- Banned: passionate, journey, innovative, solutions, world-class, unlock, elevate, seamless, and any sentence that could appear on a competitor's site.
+Give me 3 lengths:
+1. 25 words (social bio).
+2. 100 words (About section, top of page).
+3. 300 words (full About page), with a short headline.
+Then give me a one-sentence version I can say out loud at a barbecue without sounding like a LinkedIn post.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Palette generator
+with psychology
+Use it for
+Get 3 palettes with hex codes, a 60-30-10 split and real contrast checks.
+Act as a color strategist. Build my brand palette.
+Brand: 
+[name]
+. What we do: 
+[one line]
+. Archetype: 
+[archetype]
+. Personality: 
+[3 traits]
+. Audience: 
+[who]
+. Competitors' main colors: 
+[list them, so we don't copy the category]
+. Colors I love: 
+[list]
+. Colors I can't stand: 
+[list]
+. Colors I have to keep: 
+[list or none]
+.
+Give me 3 different palette options. For each one:
+1. Primary, secondary, accent, plus a dark neutral and a light neutral, all with hex codes.
+2. The 60-30-10 split: which color is the 60, the 30 and the 10.
+3. The psychology reasoning for each color, with an honest note that color meaning depends on context, culture and shade.
+4. Contrast check: give the contrast ratio for each text-on-background pair I'd actually use, and flag anything under 4.5:1 for body text or 3:1 for large headlines.
+5. How it would look in real life: a website hero section, an Instagram post and a business card, described in two sentences each.
+Then pick the one you'd choose for me and defend it in 3 sentences. Tell me what to avoid using these colors for.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Font pairing
+Use it for
+Find 2 free fonts that work together, with sizes written down.
+Recommend 5 headline and body font pairings for 
+[brand]
+, a 
+[business type]
+ whose personality is 
+[3 traits]
+ and whose archetype is 
+[archetype]
+. Free fonts only, from Google Fonts or Fontshare, and include the link to each.
+For each pairing:
+1. Headline font and body font, with the weights to use.
+2. Why they work together (contrast, shared proportions, mood).
+3. Sizes for web: H1, H2, body and caption in px, plus line height.
+4. Where it could fail: tiny sizes, numbers, all caps, other languages, long paragraphs.
+5. A sample: write a headline in my voice, a subhead and a 40-word body paragraph, and tell me how it should be set.
+Rules: two fonts maximum per pairing. At least one pairing must be a single family using different weights. Avoid anything that screams template (no Lobster, no Papyrus, nothing that's on every coffee shop menu). Flag any license I need to check before using a font in a logo.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+10-logo concept
+sheet
+Use it for
+Get 10 genuinely different logo ideas, ranked, before you fall for the first one.
+You're a logo designer with 20 years of experience and strong opinions. Create a concept sheet of 10 genuinely different logo ideas for 
+[brand name]
+, a 
+[business type]
+ for 
+[customer]
+. Personality: 
+[3 traits]
+. Archetype: 
+[archetype]
+. Palette: 
+[hex codes]
+. Fonts: 
+[headline font]
+.
+Spread the 10 across types:
+- 2 wordmarks (the name set in type, with one custom detail)
+- 2 lettermarks (initials)
+- 2 symbols or pictorial marks
+- 2 combination marks (symbol plus name)
+- 1 emblem or badge
+- 1 wildcard that breaks a rule on purpose
+For each concept: a name, the idea and what it means, a description precise enough that a designer could draw it without asking questions, the font, how color is used, and how it holds up at 32 pixels and in one color.
+Then 
+[if your AI can make images]
+: generate the top 4 as flat vector-style images on a plain white background, centered, no mockups, no extra text. Don't worry if the lettering comes out wrong. Image models still mangle letters, and we'll set the type properly later.
+Finish by ranking all 10 on simple, memorable, scalable and right for this brand, with one line on each.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Logo refinement
+and exports
+Use it for
+Tighten the logo you picked and get every file you will actually need.
+Here's the logo concept I picked: 
+[attach the image, or describe it]
+. My palette is 
+[hex codes]
+ and my headline font is 
+[font]
+.
+1. Critique it like a design director: what's working, what's fussy, what will break at small sizes.
+2. Suggest 3 specific refinements (spacing, weight, a detail to cut, a detail to add), and show the refined version if you can make images.
+3. Run the tests: does it work at 16 and 32 px (favicon), in pure black, in pure white on dark, embroidered on a hat, as a sticker, squinting from across the room?
+4. Write the usage rules: minimum size, clear space, what never to do (stretch, recolor, add shadows, put it on a busy photo).
+If you can work with files: trace it to a clean SVG, then export full color on light, full color on dark, one-color black, one-color white, icon only, a 512 px square app icon and a 32 px favicon, as transparent PNGs at 4096, 1024 and 512 px. Name the files like 
+[brand]
+-logo-
+[version]
+-
+[size]
+.png and put them in one folder.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Brand voice
+guide writer
+Use it for
+Write down how you sound, with banned words and before and after rewrites.
+Write the brand voice guide for 
+[brand]
+. Here's what you need to know: 
+[paste brief, why statement, archetype and ideal customer]
+.
+Here are 3 to 5 real things I've written that sound like me on a good day: 
+[paste them]
+. And here's one that sounds nothing like me: 
+[paste it]
+.
+The guide must include:
+1. Three voice traits, each with "this, not that" (for example: direct, not rude). Two sentences on what each trait means in practice.
+2. A do and don't table with 8 rows.
+3. Vocabulary: words we use, words we never use. Put these on the banned list automatically: delve, unlock, elevate, seamless, game-changer, leverage, synergy, robust, cutting-edge, journey, tapestry, "in today's fast-paced world", "it's not just X, it's Y", and any sentence that starts with "In a world where".
+4. Punctuation and formatting rules (exclamation points, emojis, dashes, caps, sentence length).
+5. How the tone shifts by situation: sales page, social post, apology email, a complaint reply, an error message.
+6. Five before and after rewrites of my own samples.
+Keep it short enough that someone could read it in four minutes and sound like me by the end.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Tagline generator
+Use it for
+Get 30 short taglines in 6 styles, then test the best 5.
+Write 30 taglines for 
+[brand]
+. What we do: 
+[one line]
+. Why: 
+[why statement]
+. Customer: 
+[who]
+. Voice traits: 
+[3 traits]
+. Things competitors already say: 
+[list, so we avoid them]
+.
+Give me 5 in each of these styles:
+1. Plain and true (says exactly what we do).
+2. The belief (our why in a few words).
+3. The challenge (an imperative, like "Be your own hero").
+4. The wink (dry humor).
+5. The contrast (us versus the usual way).
+6. The weird one (might be terrible, might be genius).
+Six words maximum each. Then pick your top 5 and test each one:
+- Is it true?
+- Could a competitor put it on their site tomorrow? If yes, kill it.
+- Does it sound good said out loud?
+- Does it still work in 10 years?
+- Would my ideal customer screenshot it?
+End with your single favorite and why.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Brand brain
+compiler
+Use it for
+Put every brand decision in one doc your AI reads before it makes anything for you.
+Compile my brand brain: one document that every AI and every human reads before they make anything for my brand. Use everything we've built in this conversation.
+[If it's a new chat, paste: discovery brief, why statement, positioning, archetype, ideal customer, palette, fonts, logo rules, voice guide, imagery guide.]
+Structure:
+1. The brand in 30 seconds (5 lines a stranger could read and get it).
+2. Why, How, What.
+3. Ideal customer, and who we're not for.
+4. Positioning statement and tagline.
+5. Personality and archetype.
+6. Voice: 3 traits with "this, not that", banned words, 5 example lines, punctuation rules.
+7. Logo: versions, file names, minimum size, clear space, don'ts.
+8. Color: every color with hex and RGB, its job, and the 60-30-10 split.
+9. Typography: fonts, weights, sizes, links.
+10. Imagery: style rules and 3 example image prompts.
+11. Templates: what exists and where the files live.
+12. Instructions for AI, written to the AI: "Before you write or design anything for 
+[brand]
+, read this whole document. Follow the voice rules. Never use the banned words. If a request conflicts with this guide, say so before doing it."
+Output it in markdown first. Keep it under 
+[1,500]
+ words so it fits in custom instructions. Then 
+[make a nicely designed one-page HTML version / a PDF using my fonts and colors]
+.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Brand
+Act as
+my brand
+director
+Use it for
+Get an honest score and 3 specific fixes on a logo, post, flyer or page.
+Act as my brand director. You've run brands for 20 years and you're allergic to flattery. Here is my brand brain: 
+[paste it or attach it]
+. Here is the thing I want you to judge:
+[attach the logo, post, flyer, homepage or ad, or paste the copy]
+.
+Give me:
+1. Your first impression in 3 seconds, the way a stranger scrolling past would get it.
+2. An on-brand score from 1 to 10 for each: message and why, voice, color, typography, imagery, layout. One line of reasoning each.
+3. The single biggest problem.
+4. Three specific fixes ordered by impact. Specific means "cut the headline from 14 words to 6", not "make it pop".
+5. A rewrite of the copy in my voice.
+6. What to keep, so I don't throw out the good stuff.
+If it's off-brand in a way that's actually better, tell me, and tell me what to update in the brand brain.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Images and video
+Stills and loops in Grok Imagine. No text in the picture.
+6 prompts
+Websites
+Hero still
+Use it for
+Ask for the first picture, with calm space left for the headline.
+[Scene in one sentence]
+, shot like a premium brand campaign, 
+[time of day and light]
+, 
+[your palette]
+ color grade, calm empty space on the 
+[left]
+ third for a headline, no text, no logos, photoreal, 16:9.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Websites
+Scroll video
+Use it for
+Turn a still you already like into one slow shot you can scrub.
+Animate this image. Slow, steady camera 
+[push-in / dolly right / rise]
+, no cuts, no shake, no zoom pulses, subjects move gently, light stays constant, ends on a calm composed frame. 
+[10]
+ seconds.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Websites on Autopilot guide
+Video
+Imagery style
+guide and
+backgrounds
+Use it for
+Write the rules for your photos, then get 6 background prompts that follow them.
+Write an imagery style guide for 
+[brand]
+. Archetype: 
+[archetype]
+. Personality: 
+[3 traits]
+. Palette: 
+[hex codes]
+. Where images will be used: 
+[website hero, social posts, slides, print]
+.
+Cover:
+1. Subjects we show and subjects we never show.
+2. Lighting and time of day.
+3. Color grade, tied to my palette (for example warm golden highlights, deep shadows, no neon).
+4. Composition: always leave calm, empty space where text can sit.
+5. People: real, candid, no stock-photo handshakes, no people pointing at laptops and laughing.
+6. Textures, illustration style and icon style, if any.
+Then write 6 image prompts I can paste into any image generator for brand backgrounds: 3 landscape at 16:9 and 3 square at 1:1. Each prompt should describe the scene, the light, the mood, the color grade, the camera angle and where the empty space is. Every prompt must end with: no text, no letters, no logos, no watermarks, no faces.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Video
+Hover loop
+from your
+still
+Use it for
+Turn a still into a short loop for a card that plays when someone points at it.
+Animate this image into a 
+[5]
+-second loop. One natural motion only: 
+[water falling / fog drifting / embers rising / clouds rolling]
+. The camera holds almost still, with at most a very slow drift. The last frame must match the first frame so the loop has no visible jump.
+No cuts, no shake, no zoom pulses, no flashes. The light stays constant. No text, no logos. Photoreal, like real footage shot on a cinema camera.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Video
+Phone version
+of your
+hero still
+Use it for
+Get a 9:16 version of your hero image that matches the laptop one.
+Recompose this image for phones at 9:16. Keep the same scene, light and color grade. Move the main subject to the 
+[upper middle]
+ and leave calm, dark space in the bottom third for a headline and a button. Don't add anything new to the scene. No text, no logos, photoreal.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+Video
+Email header
+image
+Use it for
+Make a header image for an email that looks like it belongs to your brand.
+Make a header image for my email about 
+[topic]
+. Scene: 
+[one sentence]
+. 
+[Your palette]
+ color grade, 
+[time of day]
+ light. Wide 3:1 framing with calm empty space on the 
+[left]
+ side. Match the style of my brand kit: 
+[attach it or describe it]
+. No text, no letters, no logos, no faces, photoreal.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Content and social
+Posts and emails that sound like you on a good day.
+8 prompts
+Prompts
+Social template
+system
+Use it for
+Get 5 post templates in your brand, so every post looks like you before anyone reads it.
+Design a social template system for 
+[brand]
+ using my brand brain below. 
+[paste brand brain, or palette, fonts, logo rules and voice traits]
+I need 5 templates: announcement, quote, quick tip, event or live, testimonial. Sizes: 1080 x 1350 (feed) and 1080 x 1080 (square), plus a 1080 x 1920 story version of the event template.
+For each template give me:
+1. The layout: where the headline, body, logo and call to action sit, with margins in px.
+2. Type sizes and weights for each text element.
+3. Color rules: background, text, the one accent.
+4. Maximum copy length (headline words, body characters).
+5. One example post written in my voice.
+Then 
+[choose one]
+: build them as HTML files I can screenshot / give me step-by-step Canva instructions / give me a Figma frame spec. Keep the logo and footer in the same spot on every template so people recognize me before they read a word.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Prompts
+Say it
+in my
+voice
+Use it for
+Rewrite anything so it sounds like you, a third shorter.
+Read my brand brain first: 
+[paste or attach]
+. Now rewrite this so it sounds like me: 
+[paste text]
+. Keep the facts. Cut it by a third. No banned words. Give me 2 versions: one safe, one with a bit more edge. Tell me which line you're least sure about.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Prompts
+Customer research
+for topics
+Use it for
+Find out what your customers care about, then get article and email topics from it.
+Research the customers of my 
+[type of business]
+ in 
+[area]
+. What problems do they have? What are the most important problems I can solve for them? Suggest article and email topics.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Learn my
+voice from
+my posts
+Use it for
+Have your AI read what you already wrote and turn it into a voice guide.
+Go through my posts on 
+[Facebook / X / my blog]
+ and learn my brand voice. Write it up as a brand voice guide. Then write a sample email in that voice.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Blog post
+to email
+Use it for
+Turn one article into an email people actually open: the gift at the top, a soft ask at the bottom.
+Turn this blog post into an email: 
+[paste the post or the link]
+.
+- Put the gift at the top: the most useful part of the article, in plain words.
+- Add 
+[1 or 2]
+ extras my readers would like: 
+[a tip, a tool, a photo from the job, a recipe]
+.
+- Keep it short and scannable, mostly point form.
+- If there's an ask, it goes at the bottom and it's soft: one line, no countdown timers.
+Write it in my voice: 
+[paste your voice guide or 3 traits]
+. Then give me 5 subject lines and the preview text for the best one.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Honest subject
+lines
+Use it for
+Get subject lines that earn the open without sounding like spam.
+Write 15 subject lines for this email: 
+[paste the email]
+. Honest, specific and interesting. No clickbait, nothing a stranger would report as spam, under 
+[45]
+ characters each.
+Then pick the 3 most human ones, write the preview text for each, and tell me which one you would open and why. The test: would I open this if a stranger sent it?
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Keep what
+works
+Use it for
+Tell your AI exactly which email to copy the qualities of, and why.
+[Paste the email you liked.]
+This is a really good one. I love the way this is done. Take the qualities of this email and keep replicating them.
+First, write those qualities down as 5 short rules so I can see what you're copying.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Make it
+like this,
+in my
+brand
+Use it for
+Show your AI an email you admire and get your own version of it.
+Here's an email I like: 
+[link or screenshot, for example from Really Good Emails]
+. Make me something like this, in my brand kit: 
+[logo, colors, fonts, voice]
+. Copy the structure and the feel, not the words or the images. Tell me which 3 choices make the original work.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Business
+Capture emails, sell softly, and keep it honest.
+6 prompts
+Prompts
+Add an
+email signup
+form
+Use it for
+Start collecting emails on your site, with permission, done properly.
+Please add an email signup form to my website that collects names and emails into a database I can send from. Make sure it gets permission and follows the email marketing rules.
+- Say exactly what people are signing up for: 
+[one good email a week / a free guide / a checklist]
+.
+- No pre-checked boxes. Every email gets an easy unsubscribe link.
+- I'm in 
+[country]
+, so follow 
+[CAN-SPAM / CASL]
+.
+Tell me what I still need to check myself. This isn't legal advice, so flag anything a lawyer should look at.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Pick an
+email platform
+Use it for
+Choose the platform you will actually send from, without 6 weeks of comparing.
+Help me pick an email platform. My business: 
+[what I sell and how: products online / services / courses / a newsletter]
+. My website runs on 
+[Shopify / WordPress / Wix / Hostinger / other]
+. List size today: 
+[number, or zero]
+.
+Compare Mailchimp, Kit, Klaviyo, Beehiiv, MailerLite, Brevo and Hostinger Reach for my case only: what each is best at, whether the free plan covers me, and what it connects to. Check the current pricing pages, since plans change. Then pick one and defend it in 3 sentences.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Give first:
+a month
+of emails
+Use it for
+Plan 4 weeks of emails with 3 useful ones for every 1 ask.
+Plan my next 4 weeks of emails using give first: 3 emails of real value for every 1 ask.
+My business: 
+[what I sell]
+ for 
+[who]
+.
+What they care about: 
+[list it, or paste your research]
+.
+The one thing I want to sell this month: 
+[offer]
+.
+For each email give me the subject line, the gift at the top and 1 extra. For the ask email only, add a soft one-line ask at the bottom. No fake urgency, no countdown timers, no income claims.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Stay out
+of spam
+Use it for
+Set up SPF, DKIM and DMARC with your AI walking you through it.
+Walk me through setting up SPF, DKIM and DMARC for 
+[my domain]
+ with 
+[my email platform]
+ and 
+[my domain registrar or host]
+. One step at a time, and wait for me to confirm each one. Explain each record in one plain sentence. Don't ask for my passwords: I'll log in myself. At the end, tell me how to check it worked and what my spam rate needs to stay under.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Email: The Channel Nobody Can Take guide
+Prompts
+Reply to
+a complaint
+Use it for
+Answer an unhappy customer in your voice, without groveling or getting defensive.
+A customer sent me this: 
+[paste the complaint]
+. Write a reply in my voice: 
+[paste your voice guide or 3 traits]
+.
+Own what we got wrong without groveling, say exactly what happens next and when, and keep it under 
+[120]
+ words. No corporate apology phrases.
+Give me 2 versions: one warmer, one shorter. Then tell me honestly if you think I'm the one in the wrong here.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+From the Build a Brand From Scratch With AI guide
+Prompts
+One-page business
+plan
+Use it for
+Get interviewed, then get a plan on one page that uses only your real numbers.
+Interview me, then write a one-page business plan for 
+[business]
+. Ask one question at a time, at least 10 questions: what I sell, who buys it, why they'd pick me over doing nothing, how they find me, what I charge, what it costs me, and what could kill this. Push back on vague answers.
+Then write the page with these headings: What we sell, Who it's for, Why us, How people find us, The money, Biggest risks, Next 3 steps. Under The money, use only numbers I gave you and mark anything missing as TODO. No projections I didn't give you.
+Copy
+Copy
+Show the whole thing
+Show the whole thing
+The group is where
+the magic happens.
+Also the memes.
+Join the Facebook group
+ (opens in a new tab)
+Costs nothing. No catch. Just people building stuff.
+Email
+Send me the good stuff
+Send me the good stuff
+Email list opens soon. The group is already open. 
+Join the group
+ (opens in a new tab)
+Be your own hero
+Guides
+Prompts
+Videos
+Blog
+About
+Join
+Credits
+Join the group
+Join the group
+ (opens in a new tab)
+Email
+Send me the good stuff
+Send me the good stuff
+Email list opens soon. The group is already open. 
+Join the group
+ (opens in a new tab)
+Too busy to build it? kr8tiv can help.
+ (opens in a new tab)
+2026 AntiHero AI

@@ -1,0 +1,479 @@
+# GSD Path — Full Guide
+
+Complete walkthrough from install to shipped milestone.
+
+| Short path | [QUICK.md](QUICK.md) |
+| Hub (install · use · understand · update) | [DOCS.md](DOCS.md) |
+| Updating | [UPDATE.md](UPDATE.md) |
+
+**Contents:** [What it is](#what-gsd-path-is) · [Installation](#installation) ·
+[Starting a milestone](#starting-a-milestone) · [Phases](#phases-and-your-role) ·
+[Shipping](#shipping) · [Resume](#resume-and-recovery) · [Troubleshooting](#troubleshooting)
+
+**Related docs**
+
+| Doc | Role |
+| --- | --- |
+| [DOCS.md](DOCS.md) | Hub + FAQ |
+| [UPDATE.md](UPDATE.md) | Refresh skills and hooks |
+| [README.md](README.md) | Reference tables |
+| [WORKFLOW.md](WORKFLOW.md) | Agent phase SOP |
+| [AGENTS.md](AGENTS.md) | Operating rules |
+| [HOOKS.md](HOOKS.md) | Guard hooks |
+| [MIGRATE.md](MIGRATE.md) | Move from GSD Core to Path |
+
+---
+
+## What GSD Path is
+
+GSD Path turns an idea into shipped code through **gated phases**. Each phase
+writes a fixed artifact under `.project/`; the next phase reads only from disk.
+You can close your session at any point and a fresh session resumes exactly
+where you left off.
+
+You approve intent, plan, and final shipping. For an unattended quick-lane run,
+you can grant intent and plan approval when invoking the router; see
+[pre-approval in the README](README.md#start-your-first-project). Final shipping
+still needs your approval.
+
+### The pipeline
+
+```text
+gsd-path  (router: reads STATE.md, runs the next valid phase)
+  |
+  |-- 0. inspect      brownfield only — map code + audit docs
+  |-- 1. define       intent definition or milestone confirmation
+  |-- 2. research     parallel evidence researchers
+  |-- 3. decide       evidence → cited decisions
+  |-- 3.5 roadmap     program flow: charter → milestone slicing
+  |-- 4. plan         waves + task contracts
+  |-- 5. build        parallel coders, serial task landing
+  `-- 6. ship         verify + final approval → archive + integrate with main
+```
+
+### Router vs phase skills
+
+- **Router** (`gsd-path`): reports state and auto-advances through bundled phase
+  contracts in one conversation when you want the full flow.
+- **Phase skills** (`gsd-path-plan`, `/gsd-path-build`, …): run one phase and
+  stop at its handoff. Invoke the router or the next phase explicitly to continue.
+- **Discussion sidecar** (`gsd-path-discuss`, `/gsd-path-discuss`): can run at
+  any non-shipped phase to answer a question, ground it in code and artifacts,
+  use focused research when needed, and save the dialogue and answer without
+  changing phase state.
+- **Operator commands**: status, forensics, and undo do not add pipeline
+  phases. See the [canonical skill table](DOCS.md#skills-optional).
+
+All skills are **explicit-only** on most hosts — generic “continue the project”
+does not inject the pipeline. For plain prompts and their read-only handoff,
+see the [invocation and handoff rules](README.md#the-flow).
+On OpenCode stable, Antigravity CLI, and Kiro, treat explicit
+invocation as an operating rule.
+
+### Invocation by host
+
+Use the [router and phase invocation table](README.md#install-summary) for your host.
+
+---
+
+## Installation
+
+### Requirements
+
+- **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin)
+- **Windows:** runs natively (no WSL). Needs Git for Windows, whose Git Bash runs
+  git hooks and task Verify commands, and long paths enabled for deep worktrees.
+- **Python 3.9+** found as `python3`, `python`, or `py -3`; required for project
+  installs, project refresh, and project-state
+  doctor checks; optional for global-only Node installs. `scripts/install.py`
+  mirrors global and `--local` install transactions and `--update`; it does not
+  provide the interactive wizard
+
+### Global install (default)
+
+Skills land in each host’s user-level skills root:
+
+```bash
+node scripts/install.mjs --all --dry-run   # preview
+node scripts/install.mjs --all             # apply
+```
+
+Pick hosts:
+
+```bash
+node scripts/install.mjs --codex --claude --cursor
+```
+
+| Flag | Skills root |
+| --- | --- |
+| `--codex`, `--zed`, `--muse` | `~/.agents/skills` (shared bundle) |
+| `--claude` | `~/.claude/skills` |
+| `--grok` | `~/.grok/skills` |
+| `--opencode` | OpenCode config `skills/` |
+| `--copilot` | `~/.copilot/skills` |
+| `--qwen` | `~/.qwen/skills` |
+| `--antigravity` | `~/.gemini/antigravity-cli/skills` |
+| `--cursor` | `~/.cursor/skills` + `~/.cursor/agents/gsd-path.md` |
+| `--kiro` | `~/.kiro/skills` |
+| `--kimi` | `~/.kimi-code/skills` |
+
+Per-target overrides: `--cursor-root PATH`, etc.
+
+### Project-local install
+
+Install skills into the **current project’s** per-host directories:
+
+```bash
+cd /path/to/your/repo
+node scripts/install.mjs --all --local
+```
+
+### Project contracts
+
+Install shared rules into a repo (refuses if managed files already exist):
+
+```bash
+node scripts/install.mjs --all --project /path/to/project
+```
+
+Writes the [project contracts](DOCS.md#installing); with Claude, also
+`.claude/CLAUDE.md`. See [project runtime versions](DOCS.md#project-runtime-versions)
+for runtime storage, restoration, and legacy migration.
+Merge upgrades manually — the installer will not overwrite existing contracts.
+
+### Guard hooks (optional)
+
+```bash
+node scripts/install.mjs --claude --codex --cursor --project /path/to/project --hooks
+```
+
+Installs `.gsd-path/` guard scripts, git `pre-commit`, `commit-msg`, and `pre-push` hooks,
+plus native project wiring for each selected Claude, Codex, or Cursor target.
+See [HOOKS.md](HOOKS.md).
+
+After upgrading the package:
+
+```bash
+node scripts/install.mjs --hooks-refresh --project /path/to/project
+node scripts/install.mjs --hooks-refresh-full --codex --cursor --project /path/to/project  # + create/refresh selected native settings and git hooks
+```
+
+### Updating skills
+
+See [UPDATE.md](UPDATE.md) for the full updating guide. Quick reference:
+
+```bash
+node scripts/install.mjs --update              # global roots with existing install
+node scripts/install.mjs --update --local      # current project only
+npx @opengsd/gsd-path@latest --update                   # from npm
+```
+
+Previous copies move to `disabled-gsd-skills` beside each root. The router may
+also print a one-line update notice (24h cache, fail-silent).
+
+### Safety
+
+- Validates synchronized package before writing
+- Uses the [managed-skill backup and collision rules](UPDATE.md#what-auto-updates)
+- Rolls back **all** selected targets if any one fails
+- Codex, Antigravity, Zed, and Muse share one local physical root — installed once
+  with a shared host-aware bundle
+
+Restart the host session after install if skills do not appear.
+
+---
+
+## Starting a milestone
+
+Open your agent in the project directory. Invoke the router explicitly.
+
+### Initial greenfield repository (first milestone)
+
+Follow the [startup and repository setup guidance](README.md#the-flow) first.
+Once setup is complete, a `greenfield` classifier verdict routes to **define**.
+The [DOCS.md FAQ](DOCS.md#faq) owns the exact classification rules.
+
+Define interviews across: problem, users, observable success, scope in,
+scope out (vetoes), constraints, risks, and surfaces. A surface is anything a
+person opens, sees, or types into to get the result; `Surfaces: none` is only
+for work nobody touches directly. It challenges contradictions, writes a
+complete `.project/intent/INTENT.md` draft with the proposed `quick` or
+`standard` lane, and links that draft alongside its **playback summary** before
+asking for approval. For a multi-milestone program, define instead interviews
+into `.project/CHARTER.md` (program mode); each milestone's INTENT.md is then
+derived from the approved roadmap entry with `Lane: milestone` (milestone
+mode).
+
+Vetoes in INTENT.md are hard limits for every later phase.
+
+### Brownfield
+
+The router uses the [documented classifier signals](DOCS.md#faq); a
+`brownfield` verdict routes to **inspect** first:
+
+1. Codebase mapper — what actually exists (stack, architecture, surprises)
+2. Docs auditor — every `.md` claim verified, stale, aspirational, or unverifiable
+
+You get **ground truth on one screen** before any questions. Standard and
+program define interviews then ask only **deltas**. Milestone + brownfield
+define derives approved scope from the charter and roadmap, fills Current
+state, collects doc-vs-code rulings, and asks for one confirmation.
+
+Each doc-vs-code conflict gets your ruling: `fix-doc`, `fix-code`, or
+`accept-drift`. Inspect writes nothing outside `.project/`.
+
+### Quick lane
+
+If scope fits ≤2 deliverable tasks in one wave with no open questions, define
+may classify the milestone as `quick` — skipping research/decide with a
+Settled-only SYNTHESIS and a single build wave. If the plan outgrows that,
+the lane corrects to `standard` and reroutes through research.
+
+---
+
+## Phases and your role
+
+After intent approval, the router walks phases and stops at gates.
+
+| Phase | Output | Your role |
+| --- | --- | --- |
+| **Research** | `research/evidence-*.md` | Usually nothing |
+| **Decide** | `research/SYNTHESIS.md` | Resolve `NEEDS-USER` at checkpoint |
+| **Roadmap** (program) | `ROADMAP.md` | **Approve milestone slicing** |
+| **Plan** | `plan/PLAN.md`, `tasks/T###-slug.md`, optional `review/PLAN-PANEL.md` | **Approve wave summary** |
+| **Build** | code, task commits, `review/wave-*.md` | Escalations only |
+| **Ship** | `review/FINAL.md`, `review/final-gap-*.md`, optional `review/PATCH-FINDINGS.md` | Approve patch waves if blocked and final shipping when green |
+
+The discussion sidecar is available alongside every row above. It writes
+`discuss/DIALOGUE.md` and `discuss/ANSWERS.md`; a `final` answer records context
+but does not approve or advance a phase. A required follow-up blocks automatic
+advancement until its named owner appends a disposition receipt.
+
+### Research
+
+Up to five parallel researchers — the four standard dimensions (domain,
+stack, pitfalls, similar projects) plus an optional risk-driven custom
+dimension.
+Brownfield adds `evidence-codebase.md` from inspect as input. Dimensions with
+nothing to answer are skipped and recorded in STATE.
+
+### Decide
+
+Turns evidence into cited decisions with runners-up. Unresolved values choices
+surface as `NEEDS-USER` — never guessed.
+
+### Plan
+
+Reads INTENT + SYNTHESIS. Produces waves, dependency layers, and task contracts
+(clean base SHA, allowed files, acceptance). **Wave 1** often spikes risk;
+**wave 2** is the thinnest end-to-end slice. Build does not start without your
+plan approval. When INTENT names a surface, PLAN.md includes the entry, states,
+walkthrough, delivering task, and success criteria that prove it.
+
+### Build
+
+Orchestrator runs in the main task. A parallel dispatch round gives **coders**
+isolated named-branch worktrees at one clean layer base; a serial round works
+on the bound branch. Task landing is **serial**. Before
+any worktree exists, the orchestrator lints every ready brief against the
+recorded base with `check_task_briefs.py` and re-checks Intent coverage with
+`check_handoffs.py plan`; a failure is a plan defect repaired
+before the layer proceeds. Recovery, isolation, landing, and retirement go
+`isolation.py` — never a detached HEAD. Each coder reads INTENT.md and
+preflights its brief using the [build contract](skills/gsd-path-build/SKILL.md),
+including its path, intent-coverage, and shared-interface checks, and blocks
+on a mismatch. Each
+task gets one atomic commit; task frontmatter records its base and landed state,
+and `isolation.py recover` proves the exact SHA from Git.
+The orchestrator's isolated task Verify rerun is that task's evidence; wave
+review reads it plus the isolated diff and does not re-run the command.
+PLAN.md's project Verify runs once, at ship. A task Verify names a path
+from `files` unless it is that allowed Project-verify copy.
+
+Build reviews each completed wave against task criteria and the INTENT success
+criteria that wave owns. Each wave carries a review depth — `full`,
+`verify-only` for low-risk waves, or sparingly `deep`
+for irreversible or security-critical waves. The canonical
+[build contract](skills/gsd-path-build/SKILL.md) defines each depth's writer
+and evidence rules. Review findings are keyed by their failed criterion and
+carried forward across cycles, so a criterion failing again after its fix task
+means the fix failed, never a duplicate fix task. Keep waves narrow enough for
+one reviewer context (≲12 tasks); split wider work into more waves at plan time.
+
+### Ship
+
+Final review audits every success criterion (`met` / `not-met` /
+`unverifiable`) and cross-wave gaps. For every surface criterion, the reviewer
+performs PLAN.md's walkthrough and records what the surface showed; internal
+test output alone cannot mark it `met`. Failed criteria become **patch waves**
+— the same build/review loop runs until the final gate passes.
+
+---
+
+## Shipping
+
+Passing the final gate produces a final review artifact. After you explicitly
+approve **Archive and ship**, the archive transaction begins:
+
+- Milestone artifacts move to `.project/archive/<NNN>-<slug>/`; `STATE.md`,
+  `REPOSITORY.md`, `LESSONS.md`, and program artifacts (`CHARTER.md`,
+  `ROADMAP.md`, top-level `SYNTHESIS.md`) remain active project metadata
+- `MANIFEST.md` records contents and ship metadata
+- One **ship commit** (subject `ship: M00N — <slug>`) touches only `.project/`
+- Ship then either merges `gsd-path/M00N` onto `main` directly or opens a
+  GitHub PR and waits for you to merge it with a merge commit. Path-created PRs
+  include a GSD Path credit footer.
+- After the two-parent merge validates, Path tags `milestone/<NNN>-<slug>`
+- Archives are **read-only** — guard hooks enforce this if installed
+
+Direct integration is the project default. Before build, ask the router to set
+`pull-request` as the project default or as an override for the current
+milestone. The setting locks when build starts.
+
+After `validate-integrated` passes, the next milestone starts clean on a new
+`gsd-path/M00N` cut from `origin/main`. Invoke the router again; brownfield
+inspect runs against the now-shipped codebase. In program flow the router
+pulls the next pending roadmap entry and inspects first, then define
+(milestone + brownfield); when every entry is terminal (`shipped` or
+`abandoned`) it reports the program complete against the charter's success
+criteria.
+
+Two program-flow refinements:
+
+- **Lookahead** — while a milestone is in `build/active`, the router offers
+  to plan the next dependency-ready milestone in parallel under
+  `.project/next/` (inspect → define milestone + brownfield → research for
+  open questions → decide → plan, all under their normal gates). The track
+  never touches
+  active-path artifacts, never binds a branch, and advances only on your
+  direction. At the milestone boundary the router promotes `next/` to the
+  active paths in one commit (`router: promote lookahead milestone <slug>`)
+  and routes by the promoted state — a fully planned track goes straight to
+  build, after a promotion re-validation: task paths are diffed against the
+  new HEAD from the approval checkpoint commit, and drifted tasks go back
+  through plan gating and your re-approval before build starts.
+- **Milestone abandon** — on your explicit ruling (review-cycle cap,
+  invalidated decision, or direct request), the build orchestrator retires
+  the task worktrees, runs the archive helper's `abandon` command to archive
+  the partial artifacts without review gates, marks the roadmap entry
+  `abandoned` (immutable), logs the ruling to LESSONS.md, and transitions to
+  a roadmap re-slice. The abandoned code stays on the branch.
+
+During build, a coder that hits an ambiguous (not defective) contract blocks
+with `NEEDS-ORCHESTRATOR: <question>` in its task Log; the orchestrator
+answers from the approved artifacts or asks you, records the answer in the
+Log, and redispatches without consuming the task's one failure retry.
+
+---
+
+## Resume and recovery
+
+Durable project artifacts live in `.project/`:
+
+```text
+.project/
+  STATE.md                 phase, branch, archive transaction id
+  REPOSITORY.md            persistent new-GitHub checkout/worktree binding
+  CHARTER.md               program scope (program flow; persists)
+  ROADMAP.md               milestone slicing (program flow; persists)
+  SYNTHESIS.md             program decisions (program flow; persists)
+  next/                    lookahead track artifacts (program flow; during build)
+  intent/INTENT.md
+  research/RESEARCH.md     dispatch manifest
+  research/SYNTHESIS.md
+  plan/PLAN.md
+  tasks/T###-slug.md       base SHA, worktree, task branch, status
+  review/…
+  discuss/DIALOGUE.md       any-phase discussion transcript
+  discuss/ANSWERS.md        durable discussion answers and decisions
+  archive/<NNN>-slug>/     read-only shipped milestones
+```
+
+Full tree: [README.md](README.md#handoff-contract).
+
+To resume: invoke the router. It reconciles STATE and task frontmatter,
+reports position, and continues. **Do not hand-edit** task state or SHAs mid-pipeline.
+
+If STATE and artifacts disagree, the router stops and asks rather than guessing.
+
+Artifact-collection journals live under `gsd-path/collect-artifact/` in the Git
+common directory. After the primary worktree moves, status, diagnosis, and
+routing validate completed journals from the former primary as durable receipts
+and omit them from pending recoveries. The former primary need not still exist;
+its recorded path must be absolute. Incomplete journals from another primary
+still block recovery, and active `collect-artifact` operations still require
+the recorded primary to match. Journal validation and unsafe-file checks remain
+in force; see [the collection helper](scripts/isolation.py).
+
+---
+
+## Standalone docs audit
+
+`/gsd-path-docs-audit` runs between phases as a drift check. Findings get
+verdicts and a remediation queue (`planned: no` until you fold them into a plan
+or patch wave with approval). Never blocks the pipeline silently.
+
+---
+
+## Agent execution (how work is delegated)
+
+Define and build orchestrators run in the main task. Researchers, deciders,
+planners, coders, and reviewers use the host dispatch adapter installed with
+your skills:
+
+| Host | Child API | Notes |
+| --- | --- | --- |
+| Codex | collaboration | `default` / `worker` |
+| Claude Code | `Agent` | `general-purpose` |
+| Grok | `spawn_subagent` | |
+| OpenCode | `Task` / v2 `subagent` | |
+| Copilot CLI | `task` | |
+| Qwen Code | `agent` | |
+| Antigravity | `invoke_subagent` | |
+| Cursor | `Task` | installed `gsd-path` subagent |
+| Zed | `spawn_agent` | |
+| Muse Code | `muse.subagent_spawn` | trusted workspace required |
+| Kiro | subagent facility | |
+| Kimi | `Agent` | `coder` child type |
+
+Independent briefs run in parallel up to child capacity; dependencies run in
+layers. Every child brief names absolute input/output paths and bounded scope.
+
+---
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| Skills missing after install | Restart host session; [UPDATE.md](UPDATE.md) |
+| Router blocked on branch | Check out `STATE.branch` or follow router instructions |
+| Phase says precondition missing | Run the producing phase it names |
+| Task landing or Verify reports ignored `.project/` state | Fix the matching product ignore rule through an owning task or patch wave (for example, anchor `build/` as `/build/`), then resume the pipeline. For the pre-existing ignored verify ledger exception, see the [build checkpoint](skills/gsd-path-build/SKILL.md). |
+| Pipeline on unrelated work | Explicit invocation only — [DOCS.md](DOCS.md#faq) |
+| Contradictory STATE / tasks | Re-invoke router; artifacts outrank chat |
+| Archive tamper blocked | Expected with hooks — [HOOKS.md](HOOKS.md) |
+| Upgrade skills or hooks | [UPDATE.md](UPDATE.md) |
+| More help | [DOCS.md](DOCS.md#help) |
+
+---
+
+## Command reference
+
+See [UPDATE.md](UPDATE.md) for updating. Install and hooks:
+
+```bash
+# Install
+node scripts/install.mjs --all [--local] [--dry-run]
+node scripts/install.mjs --claude --cursor --project /path/to/repo [--hooks]
+
+# Update skills
+node scripts/install.mjs --update [--local]
+
+# Update hooks
+node scripts/install.mjs --hooks-refresh --project /path/to/repo
+node scripts/install.mjs --hooks-refresh-full --project /path/to/repo
+
+# From npm
+npx @opengsd/gsd-path --all
+npx @opengsd/gsd-path@latest --update
+```

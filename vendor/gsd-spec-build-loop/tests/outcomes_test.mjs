@@ -1,0 +1,433 @@
+import { spawnSync } from "node:child_process";
+import assert from "node:assert/strict";
+import {
+  fingerprintContract,
+  parseOutcomeArguments,
+  syncIssueOutcomes,
+  transformOutcomeChecklist,
+} from "../lib/outcomes.mjs";
+
+const issueBody = `## Why
+
+Ship the walking skeleton.
+
+## Outcomes
+
+- [ ] O-1 — tests pass
+- [x] O-2 — command works
+
+## Exclusions
+
+- X-1 — no delete command
+`;
+
+const parsed = parseOutcomeArguments([
+  "1", "complete",
+  "--repo", "octocat/project",
+  "--pr", "2",
+  "--head", "abc1234",
+]);
+assert.deepEqual(parsed, {
+  issue: 1,
+  state: "complete",
+  repo: "octocat/project",
+  pullRequest: 2,
+  expectedHead: "abc1234",
+});
+assert.throws(
+  () => parseOutcomeArguments(["1", "complete", "--repo", "octocat/project", "--pr", "2"]),
+  /--head COMMIT_SHA/,
+);
+
+assert.equal(transformOutcomeChecklist(issueBody, "complete"), issueBody
+  .replace("- [ ] O-1", "- [x] O-1"));
+assert.equal(transformOutcomeChecklist(issueBody, "pending"), issueBody
+  .replace("- [x] O-2", "- [ ] O-2"));
+const uppercaseCompletedBody = issueBody
+  .replace("- [ ] O-1", "- [X] O-1")
+  .replace("- [x] O-2", "- [X] O-2");
+assert.equal(
+  transformOutcomeChecklist(uppercaseCompletedBody, "complete"),
+  uppercaseCompletedBody,
+);
+const multilineOutcomeBody = `## Outcomes
+
+- [ ] O-6 — tests cover every required path, including
+  each failure case in O-5 exiting 1 without changing state.
+`;
+assert.equal(transformOutcomeChecklist(multilineOutcomeBody, "complete"), multilineOutcomeBody
+  .replace("- [ ] O-6", "- [x] O-6"));
+const leadingOutcomeReferenceBody = `## Outcomes
+
+- [ ] O-6 — tests cover every required path, including
+  O-5 must exit 1 without changing state.
+`;
+assert.equal(
+  transformOutcomeChecklist(leadingOutcomeReferenceBody, "complete"),
+  leadingOutcomeReferenceBody.replace("- [ ] O-6", "- [x] O-6"),
+);
+const nestedDescriptionBody = `## Outcomes
+
+- [ ] O-6 — tests cover every required path, including
+  - failure details
+    O-5 must exit 1 without changing state.
+`;
+assert.equal(
+  transformOutcomeChecklist(nestedDescriptionBody, "complete"),
+  nestedDescriptionBody.replace("- [ ] O-6", "- [x] O-6"),
+);
+const postBlankDescriptionBody = `## Outcomes
+
+- [ ] O-6 — tests cover every required path, including
+
+  O-5 must exit 1 without changing state.
+`;
+assert.equal(
+  transformOutcomeChecklist(postBlankDescriptionBody, "complete"),
+  postBlankDescriptionBody.replace("- [ ] O-6", "- [x] O-6"),
+);
+const wideMarkerDescriptionBody = `## Outcomes
+
+-   [ ] O-6 — tests cover every required path, including
+    O-5 must exit 1 without changing state.
+`;
+assert.equal(
+  transformOutcomeChecklist(wideMarkerDescriptionBody, "complete"),
+  wideMarkerDescriptionBody.replace("-   [ ] O-6", "-   [x] O-6"),
+);
+const tabbedDescriptionBody = `## Outcomes
+
+-\t[ ] O-6 — tests cover every required path, including
+\tO-5 must exit 1 without changing state.
+`;
+assert.equal(
+  transformOutcomeChecklist(tabbedDescriptionBody, "complete"),
+  tabbedDescriptionBody.replace("-\t[ ] O-6", "-\t[x] O-6"),
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Why\n\nNo contract.\n", "complete"),
+  /Outcomes section/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [ ] O-1 — duplicate\n", "complete"),
+  /duplicate outcome O-1/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- O-2 — missing checkbox\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\nO-2 — missing checkbox\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n  O-2 — missing checkbox\n- [ ] O-1 — first\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n1. O-2 — missing checkbox\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n  O-2 — missing checkbox\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\nNotes\n  O-2 must not be ignored.\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n\n O-2 must not be ignored.\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n-   [ ] O-1 — first\n  O-2 must not be ignored.\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [y] O-2 — bad marker\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [] O-2 — empty marker\n", "complete"),
+  /malformed outcome O-2/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [ ] O-two — word id\n", "complete"),
+  /malformed outcome O-two/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [ ] O-2a — suffixed id\n", "complete"),
+  /malformed outcome O-2a/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n- [ ] unrelated task\n", "complete"),
+  /malformed outcome checklist entry/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n* [ ] unrelated task\n", "complete"),
+  /malformed outcome checklist entry/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n+ [ ] unrelated task\n", "complete"),
+  /malformed outcome checklist entry/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n1. [ ] unrelated task\n", "complete"),
+  /malformed outcome checklist entry/,
+);
+assert.throws(
+  () => transformOutcomeChecklist("## Outcomes\n\n- [ ] O-1 — first\n\n## Outcomes\n\n- [ ] O-2 — second\n", "complete"),
+  /multiple Outcomes sections/,
+);
+const extraSectionBody = `## Why
+
+Ship the walking skeleton.
+
+## Outcomes
+
+- [ ] O-1 — tests pass
+
+## Notes
+
+- [ ] a stray checkbox is fine outside Outcomes
+- free-form prose survives untouched
+`;
+assert.equal(
+  transformOutcomeChecklist(extraSectionBody, "complete"),
+  extraSectionBody.replace("- [ ] O-1", "- [x] O-1"),
+);
+
+const calls = [];
+const completedBody = transformOutcomeChecklist(issueBody, "complete");
+const bodies = [issueBody, issueBody, completedBody];
+function run(program, argumentsList, options = {}) {
+  calls.push({ program, argumentsList, input: options.input });
+  if (argumentsList[0] === "pr") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        headRefOid: "abc123",
+        body: "Closes #1",
+        closingIssuesReferences: [{
+          number: 1,
+          repository: {
+            name: "project",
+            owner: { login: "octocat" },
+          },
+        }],
+      }),
+      stderr: "",
+    };
+  }
+  if (argumentsList[0] === "issue" && argumentsList[1] === "view") {
+    return { status: 0, stdout: JSON.stringify({ body: bodies.shift() }), stderr: "" };
+  }
+  if (argumentsList[0] === "issue" && argumentsList[1] === "edit") {
+    return { status: 0, stdout: "", stderr: "" };
+  }
+  return { status: 1, stdout: "", stderr: "unexpected command" };
+}
+
+const changed = syncIssueOutcomes({
+  cwd: "/tmp/project",
+  repo: "octocat/project",
+  issue: 1,
+  pullRequest: 2,
+  expectedHead: "abc123",
+  state: "complete",
+  run,
+});
+assert.equal(changed, true);
+assert.deepEqual(calls.map(({ argumentsList }) => argumentsList.slice(0, 3)), [
+  ["pr", "view", "2"],
+  ["issue", "view", "1"],
+  ["pr", "view", "2"],
+  ["issue", "view", "1"],
+  ["issue", "edit", "1"],
+  ["issue", "view", "1"],
+  ["pr", "view", "2"],
+]);
+const edit = calls.find(({ argumentsList }) => (
+  argumentsList[0] === "issue" && argumentsList[1] === "edit"
+));
+assert.equal(edit.input, issueBody.replace("- [ ] O-1", "- [x] O-1"));
+assert.ok(edit.argumentsList.includes("--body-file"));
+assert.ok(edit.argumentsList.includes("-"));
+
+const noOpCalls = [];
+function noOpRun(program, argumentsList) {
+  noOpCalls.push(argumentsList);
+  if (argumentsList[0] === "pr") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        headRefOid: "abc123",
+        body: "Closes #1",
+        closingIssuesReferences: [{
+          number: 1,
+          repository: { nameWithOwner: "octocat/project" },
+        }],
+      }),
+      stderr: "",
+    };
+  }
+  if (argumentsList[0] === "issue" && argumentsList[1] === "view") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        body: transformOutcomeChecklist(issueBody, "complete"),
+      }),
+      stderr: "",
+    };
+  }
+  return { status: 1, stdout: "", stderr: "unexpected command" };
+}
+
+assert.equal(syncIssueOutcomes({
+  cwd: "/tmp/project",
+  repo: "octocat/project",
+  issue: 1,
+  pullRequest: 2,
+  expectedHead: "abc123",
+  state: "complete",
+  run: noOpRun,
+}), false);
+assert.equal(noOpCalls.filter(([commandName]) => commandName === "pr").length, 2);
+assert.equal(noOpCalls.filter(([commandName]) => commandName === "issue").length, 2);
+
+assert.throws(
+  () => syncIssueOutcomes({
+    cwd: "/tmp/project",
+    repo: "octocat/project",
+    issue: 1,
+    pullRequest: 2,
+    expectedHead: "stale",
+    state: "complete",
+    run,
+  }),
+  /head changed/,
+);
+
+function unlinkedRun(program, argumentsList) {
+  if (argumentsList[0] === "pr") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        headRefOid: "abc123",
+        body: "Closes #1",
+        closingIssuesReferences: [{
+          number: 1,
+          repository: { nameWithOwner: "octocat/project" },
+        }],
+      }),
+      stderr: "",
+    };
+  }
+  return { status: 1, stdout: "", stderr: "issue access must not occur" };
+}
+
+assert.throws(
+  () => syncIssueOutcomes({
+    cwd: "/tmp/project",
+    repo: "octocat/project",
+    issue: 99,
+    pullRequest: 2,
+    expectedHead: "abc123",
+    state: "complete",
+    run: unlinkedRun,
+  }),
+  /issue #99 is not linked to PR #2/,
+);
+
+function crossRepositoryRun(program, argumentsList) {
+  if (argumentsList[0] === "pr") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        headRefOid: "abc123",
+        body: "",
+        closingIssuesReferences: [{
+          number: 1,
+          repository: { nameWithOwner: "other/project" },
+        }],
+      }),
+      stderr: "",
+    };
+  }
+  return { status: 1, stdout: "", stderr: "issue access must not occur" };
+}
+
+assert.throws(
+  () => syncIssueOutcomes({
+    cwd: "/tmp/project",
+    repo: "octocat/project",
+    issue: 1,
+    pullRequest: 2,
+    expectedHead: "abc123",
+    state: "complete",
+    run: crossRepositoryRun,
+  }),
+  /issue #1 is not linked to PR #2/,
+);
+
+function negatedFallbackRun(program, argumentsList) {
+  if (argumentsList[0] === "pr") {
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        headRefOid: "abc123",
+        body: "This does not close #99.",
+        closingIssuesReferences: [],
+      }),
+      stderr: "",
+    };
+  }
+  return { status: 1, stdout: "", stderr: "issue access must not occur" };
+}
+
+assert.throws(
+  () => syncIssueOutcomes({
+    cwd: "/tmp/project",
+    repo: "octocat/project",
+    issue: 99,
+    pullRequest: 2,
+    expectedHead: "abc123",
+    state: "complete",
+    run: negatedFallbackRun,
+  }),
+  /issue #99 is not linked to PR #2/,
+);
+
+console.log("outcome checklist synchronization passed");
+
+// A verdict for an older contract must not complete the current issue.
+assert.throws(() => syncIssueOutcomes({
+  cwd: "/tmp/project", repo: "octocat/project", issue: 1, pullRequest: 2,
+  expectedHead: "abc123", state: "complete", expectedContract: "0".repeat(64),
+  run: noOpRun,
+}), /contract changed/);
+
+const contract = fingerprintContract(issueBody);
+assert.equal(contract, fingerprintContract(transformOutcomeChecklist(issueBody, "complete")));
+for (const amended of [
+  issueBody.replace("## Exclusions", "- [ ] O-3 — new requirement\n\n## Exclusions"),
+  issueBody.replace("no delete command", "no network access"),
+]) {
+  assert.notEqual(fingerprintContract(amended), contract);
+}
+assert.equal(syncIssueOutcomes({
+  cwd: "/tmp/project", repo: "octocat/project", issue: 1, pullRequest: 2,
+  expectedHead: "abc123", state: "complete", expectedContract: contract,
+  run: noOpRun,
+}), false);
+assert.equal(parseOutcomeArguments([
+  "1", "complete", "--repo", "octocat/project", "--pr", "2", "--head", "abc1234",
+  "--contract", contract,
+]).expectedContract, contract);
+const fingerprintCommand = spawnSync(process.execPath, [
+  new URL("../.agents/skills/gsd-loop-review/scripts/sync-outcomes.mjs", import.meta.url).pathname,
+  "fingerprint",
+], { input: issueBody, encoding: "utf8" });
+assert.equal(fingerprintCommand.status, 0, fingerprintCommand.stderr);
+assert.equal(fingerprintCommand.stdout.trim(), contract);

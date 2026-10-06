@@ -1,0 +1,1712 @@
+ANTIHERO AI · LIVE GUIDE · FREE
+
+BUILD A BRAND
+FROM SCRATCH
+WITH AI.
+Your why, your look, your voice, and one document your AI
+reads before it writes a single word for you. Logo, fonts,
+colors, backgrounds, brand voice and 18 long copy-paste
+prompts. The demo uses Grok Bot. Any decent AI works.
+
+THURSDAY, OCTOBER 1, 2026 · FACEBOOK LIVE
+
+BE YOUR OWN HERO
+
+READ THIS FIRST · 4 MINUTES
+
+WHAT'S INSIDE
+A brand isn't a logo. It's what people feel about you when you're not in the room. The logo is just the name tag.
+This guide walks you through building the whole thing, in order, with AI doing the heavy lifting and you doing the
+deciding.
+
+01
+
+Start with why. The Golden Circle, why people buy you, five talks worth your time
+
+02
+
+Steal like an artist. Gather context before you make anything
+
+03
+
+Your mood folder. What to collect, where to find it, brands to study
+
+04
+
+Story, archetype, positioning. Who you are, who you're for, who you're not for
+
+05
+
+Color. Psychology (with the honest caveats), 60-30-10, contrast
+
+06
+
+Typography. Two fonts, free sources, pairings that work
+
+07
+
+Logo. Types, tests, the files you actually need
+
+08
+
+Backgrounds and templates. Imagery rules and a social system
+
+09
+
+Brand voice. Three traits, banned words, rewrites, tagline
+
+10
+
+The brand brain. One doc your AI reads first, every time
+
+11
+
+Checklist and mistakes. What brand people check, and what everyone gets wrong
+
+12
+
+Run of show, cheat sheet, links. Tonight's timings, every prompt on one page, every link
+
+H OW TO USE THIS GUIDE
+
+Work top to bottom in one long chat with your AI, so it remembers everything you've decided. Every section
+ends with prompts. Text in [red brackets] is yours to fill in. Don't skip the why. Everyone wants to skip the
+why. That's why everyone's brand looks the same.
+The demo tonight uses Grok Bot because it can browse, make images, work with files and build the
+PDF at the end. ChatGPT, Claude or Gemini will do most of it too. The thinking is the part that matters, and the
+thinking is yours.
+ANY AI
+
+The AntiHero AI group teaches you to do this stuff yourself instead of paying monthly for an AI wrapper with a logo on it. It's free and
+it sells nothing.
+
+02
+
+PART ONE
+
+START
+WITH WHY.
+Before fonts, before colors, before you ask an AI for a logo,
+figure out why you exist. Otherwise you'll get a very pretty
+brand for nobody.
+
+BE YOUR OWN HERO
+
+01
+
+SIMON SINEK · START WITH WHY · THE GOLDEN CIRCLE
+
+PEOPLE BUY WHY
+YOU DO IT.
+In 2009 Simon Sinek gave a TEDx talk with a marker and a
+flip chart. It's now one of the most watched talks on TED.
+
+WHAT
+
+His idea fits on a napkin: three circles.
+• WHAT you do. Everyone knows this. It's the product.
+• HOW you do it. Your process, your difference. Some
+people know this.
+• WHY you do it. Your purpose, your belief. Almost
+nobody can say it out loud. Profit is not a why. Profit is a
+result.
+
+HOW
+
+WHY
+
+Most brands talk from the outside in: here's what we sell,
+here's why it's great, please buy it. The ones people love
+talk from the inside out: here's what we believe, here's
+how we act on it, and by the way, here's the thing we
+make.
+
+“People don't buy what you do, they buy why you do it.”
+Simon Sinek, How Great Leaders Inspire Action (TEDxPuget Sound, 2009)
+
+W HY THIS MATTERS EVEN MORE NOW
+
+AI can make anyone's logo in thirty seconds. It can write anyone's website by lunch. The product is getting
+easier to copy every month. You are not. Your story, your opinions, your weird history, the way you treat
+people: that's the part nobody can generate. People buy you, not the stuff. Small brands win because the
+person is visible. So be visible.
+WATCH
+
+Watch the talk before you start. It's 18 minutes. ted.com or YouTube.
+
+04
+
+FIVE TALKS · ALL FREE · ALL LINKS CHECKED OCT 1, 2026
+
+WATCH THESE
+FIRST
+SPEAKER
+
+TALK
+
+WHY IT'S HERE
+
+LINK
+
+Simon Sinek
+
+How great leaders inspire The Golden Circle. If you watch one, watch this.
+action
+
+watch
+
+Seth Godin
+
+How to get your ideas to
+spread
+
+Safe is risky. Be remarkable or be invisible. Purple cows.
+
+watch
+
+Seth Godin
+
+The tribes we lead
+
+People want to belong to something. Lead them. Brand as a
+movement, not a megaphone.
+
+watch
+
+Andrew
+Stanton
+
+The clues to a great story The Pixar writer on story: make me care. Useful for your brand story
+section.
+
+Austin Kleon
+
+Steal like an artist
+(TEDxKC)
+
+watch
+
+Nothing is original. Collect, remix, credit, make it yours. Next section. watch
+
+On a Facebook Live, link the talks instead of playing them. Rights holders' auto-detection doesn't care how inspiring the clip is.
+
+Marty Neumeier's definition, worth stealing
+Neumeier, author of The Brand Gap, defines a brand as "a person's gut feeling about a product, service or
+organization." Translation: it isn't what you say it is. It's what they say it is. Your job is to give them good reasons
+to feel something specific. martyneumeier.com.
+
+05
+
+PROMPT 01 · WHY FINDER
+
+You are a brand strategist who has read Simon Sinek's "Start With Why" twice and has zero patience
+for corporate mush. Your job is to find the WHY behind my brand.
+About me: I'm [your name]. I run (or I'm starting) [business or project] for [who it's for] in
+[city, region or online].
+How to run this:
+- Ask me one question at a time and wait for my answer before the next one.
+- Ask at least 12 questions. Mix the easy ones (why did you start this) with the uncomfortable ones
+(what makes you angry about your industry, what would you keep doing if nobody paid you, what do you
+say at a party when someone asks what you do and you can see their eyes glaze).
+- When I give a vague answer like "I want to help people", push back. Ask for a specific moment, a
+specific person, a specific day.
+- Dig for the origin story: a frustration, a turning point, someone who did it badly and made me
+think "I can do better".
+When you have enough, give me:
+1. My WHY in one sentence, in this format: "To [contribution] so that [impact]."
+2. My HOW: 3 to 5 principles or behaviors that make me different from the others.
+3. My WHAT: a plain-English description of what I sell, no jargon.
+4. Three versions of a one-line belief I could put on my website, from safe to bold.
+5. The single best story from my answers that proves the WHY, 120 words, first person, in my words.
+Use my own words wherever you can. If anything I said sounds like it came off a motivational poster,
+call it out and ask me again.
+
+06
+
+THE BIG ONE · DO THIS BEFORE ANYTHING ELSE
+
+THE DISCOVERY
+INTERVIEW
+A real brand agency starts every job with a discovery session. It costs thousands because it takes hours and
+somebody has to ask the awkward questions. Your AI will ask them for free and it doesn't get bored. Budget 30
+to 45 minutes. Answer out loud with voice typing if you can. You'll say better stuff than you'd type.
+PROMPT 02 · BRAND DISCOVERY INTERVIEW
+
+Act as a senior brand strategist running a paid discovery session with a new client. I'm the client.
+Interview me, then write my Brand Discovery Brief. This brief will be the foundation for my name,
+logo, colors, fonts and voice, so do it properly.
+My starting point: [business name or "no name yet"], [what I sell], [who buys it], [how long I've
+been doing it], [what I charge, roughly].
+Interview me in five rounds. One question at a time. Wait for each answer.
+Round 1, the business: what I sell, what problem it solves, what a customer's life looks like before
+and after, why someone would pick me over doing nothing.
+Round 2, the people: my best customer ever (describe them), my worst customer ever, where my
+customers hang out online and offline, what they're tired of hearing.
+Round 3, the competition: who else they could buy from, what those brands get right, what they all
+do that's boring or annoying.
+Round 4, the personality: if my brand walked into a bar, who would it be; three words I want people
+to use about me; three words I never want to hear; brands I love from any industry and why.
+Round 5, the practical stuff: budget, deadlines, where the brand shows up first (Facebook, website,
+truck wrap, packaging), anything I'm keeping (an old logo, a color I'm attached to).
+Rules: if an answer is vague, ask a follow-up. If I contradict myself, point it out. Don't move to
+the next round until you understand this one.
+Then write the brief with these headings: The Business in One Paragraph, The Why (draft), Ideal
+Customer, Competitors and the Sea of Sameness, Personality (3 traits, plus 3 anti-traits), Visual
+Direction Notes, Must-Haves and Never-Evers, Open Questions. End with the 3 biggest risks to this
+brand, stated bluntly.
+
+Save the brief it gives you. You'll paste it into almost every prompt after this one.
+
+07
+
+02
+
+ORIGINALITY IS OVERRATED
+
+STEAL LIKE
+AN ARTIST
+“The secret to creativity is knowing how to hide your sources.”
+
+Usually credited to Albert Einstein. He almost certainly never said it. Quote Investigator traces it to the
+writer C. E. M. Joad in 1926 ("the height of originality is skill in concealing origins"), and the Einstein
+version shows up in 1989, decades after he died. Source. Which is funny, because the quote hid its own source.
+
+Whoever said it, the point stands. Every brand you admire is a remix of things its makers loved. Austin Kleon
+wrote a whole book about this, Steal Like an Artist: nothing is completely original, so collect what moves you,
+study it, mix it, and turn it into something that's yours. austinkleon.com/steal.
+
+Good theft versus bad theft
+STEAL THIS
+
+NEVER THIS
+
+The structure: how a brand tells its story, the order of a
+homepage, how a template is built
+
+Their logo, their exact colors, their tagline, their
+photos
+
+The principle: why a color works, why the copy is funny
+
+One brand, copied whole. That's not stealing, that's
+cosplay
+
+From many places, including outside your industry
+
+Only from your direct competitors, which is how
+everyone ends up beige
+
+T HE RULE
+
+Gather context before you make anything. An AI with no context gives you the average of the internet, and the
+average of the internet is a blue logo with a swoosh. Feed it your taste and it gives you something with a
+pulse.
+
+08
+
+PROMPT 03 · COMPETITOR TEARDOWN
+
+Act as a ruthless but fair brand analyst. I'm building a brand for [your business] aimed at [your
+customer]. Here are [3 to 5] competitors or brands in my space:
+1. [name] [website or social link]
+2. [name] [link]
+3. [name] [link]
+[Optional: I've attached screenshots of their homepages, logos and recent posts.]
+If you can browse, look at their websites, social pages and customer reviews. If you can't, work
+from the screenshots and tell me what you can't see.
+For each competitor give me:
+- Positioning in one sentence (what they want to be known for)
+- Who they're really talking to
+- Personality in 3 adjectives
+- Visual identity: colors (hex guesses), type style, logo type, photo style
+- Voice: 2 or 3 typical phrases they use
+- What they do better than anyone
+- Where they're generic, weak or forgettable
+- What customers complain about
+Then:
+1. A comparison table across all of them.
+2. The Sea of Sameness: the colors, words, photos and promises everyone uses. These are the things I
+should avoid.
+3. Three white-space opportunities: positions nobody owns that fit me.
+4. What I should steal (structure and ideas, never surface: no copying their logo, colors or
+slogans).
+5. One sentence on how I could be the obvious choice for a specific customer they're all ignoring.
+
+09
+
+BUILD IT BEFORE YOU BUILD ANYTHING
+
+YOUR MOOD
+FOLDER
+Make one folder on your computer. Name it after your brand, or after your dog if you don't have a name yet. For
+one week, every time something catches your eye, screenshot it and drop it in. Aim for 30 to 60 things. Don't
+judge yet.
+• Fonts you like (and two you hate)
+
+• Competitors, to know what to avoid
+
+• Logos and brands from any industry
+
+• Words: lines and headlines you wish you'd written
+
+• Websites that feel right
+
+• Colors from anywhere, even a jacket
+
+• Photos: light, places, moods
+
+• One thing that's just you: a tool, a place, a band
+
+• Packaging, signs, menus, trucks
+WHAT
+
+WHERE TO LOOK
+
+LINK
+
+Fonts
+
+Google Fonts, Fontshare (free, high quality), Fonts In Use (realworld type, searchable)
+
+fonts.google.com
+fontshare.com
+fontsinuse.com
+
+Color
+
+Coolors, Adobe Color, Realtime Colors (preview a palette on a real coolors.co
+color.adobe.com
+site)
+
+realtimecolors.com
+underconsideration.com/brandnew
+brandingstyleguides.com
+
+Logos and
+identity
+
+Brand New by UnderConsideration (reviews of real rebrands),
+Branding Style Guides (archive of real brand books)
+
+Websites
+
+Mobbin (real app and web screens), Godly, Awwwards, Land-book mobbin.com
+
+Images and
+boards
+
+Pinterest, Unsplash, Pexels
+
+pinterest.com
+unsplash.com
+pexels.com
+
+Design work
+
+Behance, Dribbble
+
+behance.net
+dribbble.com
+
+godly.website
+awwwards.com
+land-book.com
+
+Free to browse doesn't mean free to use. Fonts and photos each have a license. Google Fonts are free for commercial use, Fontshare
+fonts are free for personal and commercial use, and Unsplash and Pexels have their own licenses. Read the page before you put
+something in a logo.
+
+10
+
+NO MOOD FOLDER YET · STUDY THE BEST
+
+STEAL FROM
+THE GREATS
+If your folder is empty, start with brands that are famous for a reason. Don't copy the look. Ask why each
+decision works, then ask what the same thinking would look like for a plumber in Tulsa or a candle shop in
+Cartago.
+BRAND
+
+WHAT TO STEAL (THE THINKING, NOT THE LOOK)
+
+Apple
+
+Restraint. One idea per screen. Huge white space. They cut more than they add.
+
+Nike
+
+Belief over product. The customer is the hero. Three words: Just Do It.
+
+Airbnb
+
+A clear why: belonging. A symbol simple enough to draw in the sand.
+
+Patagonia
+
+Mission first. In 2011 they ran a full-page ad that said Don't Buy This Jacket. People bought the jacket.
+
+Liquid Death It's canned water. The brand is a heavy metal joke, done with total commitment.
+Mailchimp
+
+A voice guide good enough that other companies study it. Read it: styleguide.mailchimp.com
+
+Duolingo
+
+A mascot with a personality, let loose on social. Proof that weird and consistent beats safe.
+
+PROMPT 04 · MOOD FOLDER ANALYZER (UPLOAD SCREENSHOTS)
+
+I'm attaching [number] images from my mood folder: fonts, logos, brands, websites, packaging and
+photos I like. Analyze them like a design director who doesn't flatter clients.
+1. Common threads: colors, contrast, typography, layout density, photography, textures, overall
+mood. Be specific.
+2. Name the aesthetic I'm drawn to in 3 words, and name 2 real brands that already live in that
+space.
+3. Pull a draft palette of 5 to 7 hex codes from the images, and tell me which image each came from.
+4. Typography: classify the type I keep picking (geometric sans, grotesk, humanist sans, serif,
+slab, condensed display, script) and suggest free equivalents from Google Fonts or Fontshare.
+5. Photo and image style: lighting, color grade, subjects, how much empty space.
+6. Outliers: which images don't fit the rest and why. Ask me whether to keep or cut them.
+7. Three distinct directions I could take. For each: a name, two sentences of description, palette,
+font pair, imagery style, and one brand it reminds you of.
+Then ask me which direction feels most like me, and why. Keep in mind my business is [what you do]
+for [who], and my personality words are [3 words].
+
+11
+
+PROMPT 05 · REVERSE-ENGINEER A BRAND YOU LOVE
+
+Treat [brand you admire, for example Liquid Death, Patagonia, Mailchimp or
+Duolingo] as a case study for someone building a small brand with no budget.
+Break down:
+1. Their WHY, HOW and WHAT (Golden Circle), as best you can tell from the outside.
+2. Their archetype and how it shows up in copy, visuals and behavior.
+3. The 3 to 5 brand decisions that do most of the work (a color, a tone, a stunt, a rule they never
+break).
+4. Their voice: 5 example lines, and the rules you think their writers follow.
+5. What they refuse to do. Brands are defined by their no's.
+6. What it would look like if a [your business type] in [your town or niche] borrowed the thinking
+but not the look. Give me 5 specific ideas that cost under [budget].
+Be honest about what only works because they have millions to spend.
+
+12
+
+04
+
+WHO YOU ARE · WHO YOU'RE FOR · WHO YOU'RE NOT FOR
+
+STORY, ARCHETYPE,
+POSITIONING
+
+The 12 brand archetypes come from Carl Jung's ideas about universal characters, turned into a branding tool by
+Margaret Mark and Carol Pearson in their 2001 book The Hero and the Outlaw. It's a shortcut, not a science. Pick
+one main archetype and maybe a second. If you pick five, you picked none.
+ARCHETYPE
+
+CORE DESIRE
+
+COMMONLY CITED EXAMPLES
+
+Innocent
+
+Safety, simplicity, goodness
+
+Dove, Coca-Cola
+
+Everyman
+
+Belonging, being normal
+
+IKEA
+
+Hero
+
+Proving worth through effort
+
+Nike
+
+Outlaw
+
+Breaking the rules
+
+Harley-Davidson, Liquid Death
+
+Explorer
+
+Freedom, discovery
+
+Patagonia, The North Face
+
+Creator
+
+Making something new
+
+LEGO, Adobe
+
+Ruler
+
+Control, status, order
+
+Rolex, Mercedes-Benz
+
+Magician
+
+Transformation, wonder
+
+Disney
+
+Lover
+
+Intimacy, beauty, pleasure
+
+Chanel, Godiva
+
+Caregiver
+
+Protecting and helping
+
+Johnson & Johnson
+
+Jester
+
+Fun, joy, irreverence
+
+Old Spice, Duolingo
+
+Sage
+
+Truth, wisdom, insight
+
+Google, TED
+
+P OSITIONING IN ONE SENTENCE
+
+For [target customer] who [need], [brand] is the [category] that [benefit] because [proof]. Unlike
+[alternative], we [difference].
+Your customer is the hero of the story. You're the guide. Yoda, not Luke. Nobody wants to buy
+from a brand that thinks it's the main character.
+STORY RULE
+
+13
+
+PROMPTS · STORY AND POSITIONING
+
+WRITE THE
+STORY
+PROMPT 06 · ARCHETYPE, POSITIONING AND IDEAL CUSTOMER
+
+Here's my brand brief: [paste brief, or describe the business, customer and personality in a few
+sentences].
+Step 1, archetype. From the 12 brand archetypes (Innocent, Everyman, Hero, Outlaw, Explorer,
+Creator, Ruler, Magician, Lover, Caregiver, Jester, Sage), recommend a primary and a secondary
+archetype for me. Explain why in plain English. Show how each choice would change my headline, my
+colors and my photos. Tell me which archetypes my competitors are already using so I don't blend in.
+Step 2, positioning. Write 3 versions of this statement:
+"For [target customer] who [need or frustration], [brand] is the [category] that [key benefit]
+because [reason to believe]. Unlike [main alternative], we [real difference]."
+Mark the one that's most honest and the one that's most bold.
+Step 3, ideal customer. Build a profile of one specific person: name, age range, job, a day in their
+life, what they've already tried, what they're sick of, the exact words they'd type into Google,
+where they hang out online, and what would make them trust me in 10 seconds. Then list 3 people who
+are NOT my customer, so I stop trying to please them.
+
+PROMPT 07 · BRAND STORY WRITER
+
+Using my discovery brief and why statement below, write my brand story.
+[paste your discovery brief and why statement]
+Rules:
+- The customer is the hero. I'm the guide who has been where they are. (Think Luke Skywalker and
+Yoda, not me in a cape.)
+- Structure: the world as it is, the problem that annoyed me into action, the turning point, what I
+do now, what changes for the customer.
+- Use my archetype: [archetype].
+- Plain words. Real details. One specific moment beats ten adjectives.
+- Banned: passionate, journey, innovative, solutions, world-class, unlock, elevate, seamless, and
+any sentence that could appear on a competitor's site.
+Give me 3 lengths:
+1. 25 words (social bio).
+2. 100 words (About section, top of page).
+3. 300 words (full About page), with a short headline.
+Then give me a one-sentence version I can say out loud at a barbecue without sounding like a
+LinkedIn post.
+
+14
+
+PART TWO
+
+THE
+LOOK.
+Color, type, logo, imagery. This is the part everyone wants to
+start with. You're allowed now, because you know who you
+are and who it's for.
+
+BE YOUR OWN HERO
+
+05
+
+WHAT COLORS TEND TO SIGNAL · WITH CAVEATS
+
+COLOR
+PSYCHOLOGY
+COLOR
+
+TENDS TO SIGNAL
+
+WATCH OUT
+
+Red
+
+Energy, urgency, appetite, danger
+
+Food, sports, sales, rebels
+
+Orange
+
+Friendly, playful, affordable
+
+Can look cheap when overdone
+
+Yellow
+
+Optimism, attention
+
+Hard to read on white. Use as an accent
+
+Green
+
+Nature, health, money, growth
+
+Eco, wellness, finance
+
+Blue
+
+Trust, calm, competence
+
+So common in tech and banking it's hard to stand out
+
+Purple
+
+Luxury, creativity, spirituality
+
+Beauty, wellness, premium
+
+Pink
+
+Playful, warm, bold when hot
+
+No longer just for girls, and hot pink is loud
+
+Brown and tan
+
+Earthy, reliable, handmade
+
+Coffee, outdoors, craft
+
+Black
+
+Premium, power, edge
+
+Luxury, fashion, anything with attitude
+
+White and bone
+
+Clean, simple, space
+
+The silence between the notes
+
+T HE HONEST CAVEAT
+
+Most of what you'll read online about color psychology is overconfident. The research is mixed. Meaning
+shifts with culture (white is weddings in much of the West and mourning in parts of East Asia), with shade
+(navy and baby blue are different animals) and with category. What matters more than any chart: does the
+color fit your personality, and does it stand out from your competitors? If every roofer in town is blue, the
+orange roofer gets remembered.
+
+16
+
+60-30-10 · CONTRAST · HEX CODES
+
+BUILD THE
+PALETTE
+The 60-30-10 rule
+Borrowed from interior design. 60 percent is your dominant color (backgrounds, big areas). 30 percent is your
+secondary (panels, type, supporting shapes). 10 percent is your accent, the thing you want eyes on: buttons,
+one key word, the call to action. If everything is the accent, nothing is.
+
+Contrast is not optional
+If people can't read it, the brand doesn't exist. The accessibility standard (WCAG, level AA) asks for a contrast
+ratio of at least 4.5:1 for normal text and 3:1 for large text, roughly 18 point and up or 14 point bold. Check every
+text and background pair with the WebAIM contrast checker. The full rule is at w3.org.
+
+Example: the AntiHero palette
+
+Anti Black
+#0A0A0B
+60 percent. The
+ground.
+
+Bone
+#ECE8E1
+Light layouts,
+paper.
+
+Graphite
+Ash
+#2B3035
+#8A9096
+Panels, dividers. Captions, small
+stuff.
+
+Hero White
+#FFFFFF
+Type on dark.
+
+Ignition Red
+#E0261E
+10 percent. One
+idea per layout.
+
+Ignition Red on white is 4.7:1, so it passes for body text, barely. That's why it's used big, bold and sparingly. Write your palette down
+with hex codes, RGB and a job for each color. A color without a job ends up everywhere.
+
+17
+
+PROMPT 08 · PALETTE GENERATOR WITH PSYCHOLOGY
+
+Act as a color strategist. Build my brand palette.
+Brand: [name]. What we do: [one line]. Archetype: [archetype]. Personality: [3 traits]. Audience:
+[who].
+Competitors' main colors: [list them, so we don't copy the category].
+Colors I love: [list]. Colors I can't stand: [list]. Colors I have to keep: [list or none].
+Give me 3 different palette options. For each one:
+1. Primary, secondary, accent, plus a dark neutral and a light neutral, all with hex codes.
+2. The 60-30-10 split: which color is the 60, the 30 and the 10.
+3. The psychology reasoning for each color, with an honest note that color meaning depends on
+context, culture and shade.
+4. Contrast check: give the contrast ratio for each text-on-background pair I'd actually use, and
+flag anything under 4.5:1 for body text or 3:1 for large headlines.
+5. How it would look in real life: a website hero section, an Instagram post and a business card,
+described in two sentences each.
+Then pick the one you'd choose for me and defend it in 3 sentences. Tell me what to avoid using
+these colors for.
+
+18
+
+TWO FONTS · ONE JOB EACH
+
+TYPOGRAPHY
+
+06
+
+• Two fonts, maximum. One for headlines with personality, one for body text that disappears and lets people
+read. A third font is how you end up looking like a yard sale flyer.
+• Contrast, not conflict. Pair a loud headline with a calm body. Two loud fonts fight. Two calm fonts snooze.
+• One family is a legit choice. Bold for headlines, regular for body. Done.
+• Legibility first. Body text at 16 px or more on screens, line height around 1.4 to 1.6, lines of roughly 45 to 75
+characters. Test on your phone in sunlight.
+• Check the license. Google Fonts and Fontshare are free for commercial use. Paid fonts can have separate
+terms for logos, apps and web.
+
+• Find your taste. Fonts In Use shows real brands and the fonts they use. Fontjoy generates pairings to start from.
+PAIRING
+
+WHY IT WORKS
+
+SOURCE
+
+Bebas Neue + Barlow
+
+Condensed display caps with a clean, friendly sans. The pair in this guide.
+
+Google Fonts
+
+Space Grotesk + Inter
+
+Techy with a bit of personality, plus the most readable workhorse there is.
+
+Google Fonts
+
+DM Serif Display + DM Sans Elegant headline, simple body. Designed to sit together.
+
+Google Fonts
+
+Fraunces + Work Sans
+
+Warm, slightly quirky serif with a sturdy sans. Good for food and craft.
+
+Google Fonts
+
+Archivo Black + Archivo
+
+One family, two moods. The easiest pairing there is.
+
+Google Fonts
+
+Clash Display + Satoshi
+
+Modern, sharp, a bit fashion. Free from Fontshare.
+
+Fontshare
+
+PROMPT 09 · FONT PAIRING
+
+Recommend 5 headline and body font pairings for [brand], a [business type] whose personality is [3
+traits] and whose archetype is [archetype]. Free fonts only, from Google Fonts or Fontshare, and
+include the link to each.
+For each pairing:
+1. Headline font and body font, with the weights to use.
+2. Why they work together (contrast, shared proportions, mood).
+3. Sizes for web: H1, H2, body and caption in px, plus line height.
+4. Where it could fail: tiny sizes, numbers, all caps, other languages, long paragraphs.
+5. A sample: write a headline in my voice, a subhead and a 40-word body paragraph, and tell me how
+it should be set.
+Rules: two fonts maximum per pairing. At least one pairing must be a single family using different
+weights. Avoid anything that screams template (no Lobster, no Papyrus, nothing that's on every
+coffee shop menu). Flag any license I need to check before using a font in a logo.
+
+19
+
+THE NAME TAG, NOT THE PERSON
+
+LOGO
+TYPE
+
+WHAT IT IS
+
+EXAMPLES
+
+Wordmark
+
+The name, set in type
+
+Google, Coca-Cola, FedEx
+
+Lettermark
+
+Initials
+
+IBM, HBO, CNN
+
+Symbol
+
+A picture you recognize
+
+Apple, Target
+
+Abstract mark
+
+A shape that means you
+
+Nike, Pepsi
+
+Combination
+
+Symbol plus name
+
+Burger King, Doritos
+
+Emblem
+
+Name inside a badge or crest
+
+Starbucks, Harley-Davidson
+
+Mascot
+
+A character
+
+KFC, Duolingo
+
+The tests
+
+The files you need
+
+• Simple. Could a kid draw it from memory after one
+look?
+
+• Master SVG (vector, scales forever)
+
+• Memorable. Show it for 3 seconds, hide it, ask
+someone to describe it.
+
+• One-color black, one-color white
+
+• Scalable. Still works at 32 px as a favicon and on a
+billboard.
+
+• Square profile picture (circle-safe)
+
+• One color. Works in pure black and pure white. If it
+needs a gradient to work, it doesn't work.
+• Squint test. Squint at it from across the room. Still a
+shape?
+
+07
+
+• Full color on light, full color on dark
+• Icon or mark only
+• Favicon at 32 and 16 px, app icon at 512
+• Transparent PNGs at 4096, 1024 and 512 px
+• PDF for print
+
+• Mockup test. Put it on a shirt, a van, a profile
+picture and a coffee cup before you fall in love.
+
+A I AND LOGOS, HONESTLY
+
+Image models are great at concepts and still bad at letters. Use AI to explore 10 directions fast, pick one, then
+set the actual name in a real font in Canva or Figma, or have your AI trace it to a clean SVG. And check your
+favorite isn't already somebody else's trademark before you print 500 shirts.
+
+20
+
+PROMPTS · LOGO
+
+FROM 10 IDEAS
+TO 1 LOGO
+PROMPT 10 · 10-LOGO CONCEPT SHEET
+
+You're a logo designer with 20 years of experience and strong opinions. Create a concept sheet of 10
+genuinely different logo ideas for [brand name], a [business type] for [customer]. Personality: [3
+traits]. Archetype: [archetype]. Palette: [hex codes]. Fonts: [headline font].
+Spread the 10 across types:
+- 2 wordmarks (the name set in type, with one custom detail)
+- 2 lettermarks (initials)
+- 2 symbols or pictorial marks
+- 2 combination marks (symbol plus name)
+- 1 emblem or badge
+- 1 wildcard that breaks a rule on purpose
+For each concept: a name, the idea and what it means, a description precise enough that a designer
+could draw it without asking questions, the font, how color is used, and how it holds up at 32
+pixels and in one color.
+Then [if your AI can make images]: generate the top 4 as flat vector-style images on a plain white
+background, centered, no mockups, no extra text. Don't worry if the lettering comes out wrong. Image
+models still mangle letters, and we'll set the type properly later.
+Finish by ranking all 10 on simple, memorable, scalable and right for this brand, with one line on
+each.
+
+PROMPT 11 · LOGO REFINEMENT AND EXPORTS
+
+Here's the logo concept I picked: [attach the image, or describe it]. My palette is [hex codes] and
+my headline font is [font].
+1. Critique it like a design director: what's working, what's fussy, what will break at small sizes.
+2. Suggest 3 specific refinements (spacing, weight, a detail to cut, a detail to add), and show the
+refined version if you can make images.
+3. Run the tests: does it work at 16 and 32 px (favicon), in pure black, in pure white on dark,
+embroidered on a hat, as a sticker, squinting from across the room?
+4. Write the usage rules: minimum size, clear space, what never to do (stretch, recolor, add
+shadows, put it on a busy photo).
+If you can work with files: trace it to a clean SVG, then export full color on light, full color on
+dark, one-color black, one-color white, icon only, a 512 px square app icon and a 32 px favicon, as
+transparent PNGs at 4096, 1024 and 512 px. Name the files like [brand]-logo-[version][size].png and put them in one folder.
+
+Make favicons and app icons from your square mark with RealFaviconGenerator. Lay out mockups and templates in Canva or Figma.
+
+21
+
+08
+
+THE WORLD YOUR BRAND LIVES IN
+
+BACKGROUNDS
+AND TEMPLATES
+
+Your images do half the talking before anyone reads a word. Pick a world and stay in it. AntiHero lives in big,
+majestic outdoor scenes at golden hour, with calm space for the words. A bakery might live in warm close-ups
+and flour dust. A security company might live in night city blues. Pick yours on purpose.
+
+Imagery rules to write down
+• What you show, and what you never show
+
+Templates that make you look
+consistent
+
+• Light and time of day
+
+• Announcement
+
+• Color grade tied to your palette
+
+• Quote
+
+• Always leave calm space for text
+
+• Quick tip
+
+• Real people over stock handshakes
+
+• Event or live
+
+• One illustration and icon style, or none
+
+• Testimonial
+• Same logo spot and footer on every single one
+
+W HY TEMPLATES MATTER
+
+Consistency is what makes a small brand look big. When the footer, the label boxes and the colors land in the
+same place every time, people know it's you before they read it. That's the whole game: recognition, then
+trust.
+PROMPT 12 · IMAGERY STYLE GUIDE AND BACKGROUNDS
+
+Write an imagery style guide for [brand]. Archetype: [archetype]. Personality: [3 traits]. Palette:
+[hex codes]. Where images will be used: [website hero, social posts, slides, print].
+Cover:
+1. Subjects we show and subjects we never show.
+2. Lighting and time of day.
+3. Color grade, tied to my palette (for example warm golden highlights, deep shadows, no neon).
+4. Composition: always leave calm, empty space where text can sit.
+5. People: real, candid, no stock-photo handshakes, no people pointing at laptops and laughing.
+6. Textures, illustration style and icon style, if any.
+Then write 6 image prompts I can paste into any image generator for brand backgrounds: 3 landscape
+at 16:9 and 3 square at 1:1. Each prompt should describe the scene, the light, the mood, the color
+grade, the camera angle and where the empty space is. Every prompt must end with: no text, no
+letters, no logos, no watermarks, no faces.
+
+22
+
+PROMPT 13 · SOCIAL TEMPLATE SYSTEM
+
+Design a social template system for [brand] using my brand brain below.
+[paste brand brain, or palette, fonts, logo rules and voice traits]
+I need 5 templates: announcement, quote, quick tip, event or live, testimonial. Sizes: 1080 x 1350
+(feed) and 1080 x 1080 (square), plus a 1080 x 1920 story version of the event template.
+For each template give me:
+1. The layout: where the headline, body, logo and call to action sit, with margins in px.
+2. Type sizes and weights for each text element.
+3. Color rules: background, text, the one accent.
+4. Maximum copy length (headline words, body characters).
+5. One example post written in my voice.
+Then [choose one]: build them as HTML files I can screenshot / give me step-by-step Canva
+instructions / give me a Figma frame spec. Keep the logo and footer in the same spot on every
+template so people recognize me before they read a word.
+
+23
+
+PART THREE
+
+THE
+VOICE.
+How you sound is the brand people hear every day. The logo
+shows up once a post. The voice shows up in every caption,
+email, reply and apology.
+
+BE YOUR OWN HERO
+
+09
+
+THREE TRAITS · THIS, NOT THAT
+
+BRAND VOICE
+
+A voice guide is three traits, a list of words you never use, and examples. That's it. Example from AntiHero:
+WE ARE
+
+WE ARE NOT
+
+IN PRACTICE
+
+Direct
+
+Rude
+
+Say the thing. Then stop.
+
+Funny
+
+Clowning
+
+Dry humor that serves the point, never jokes instead of help.
+
+Human
+
+Sloppy
+
+Talk like a person who knows their stuff and respects your time.
+
+Banned words (the AI slop list)
+delve, unlock, elevate, seamless, game-changer, leverage, synergy, robust, cutting-edge, journey, tapestry,
+landscape, empower, revolutionize, “in today's fast-paced world”, “it's not just X, it's Y”, and anything that starts
+with “In a world where”. Add your own. Tell your AI the list every time, or better, put it in your brand brain.
+
+Before and after
+BEFORE (SOUNDS LIKE EVERYONE)
+
+AFTER (SOUNDS LIKE SOMEONE)
+
+We leverage cutting-edge AI solutions to unlock your We show you how to use AI yourself, so you stop paying
+business's full potential.
+someone to do it badly.
+DON'T MISS OUT on this game-changing opportunity. It's free. Show up live or catch the replay. No guilt trip either
+Spots are LIMITED.
+way.
+At Acme, we're passionate about delivering
+exceptional customer experiences.
+
+We answer the phone. Weirdly rare. We're keeping it.
+
+In today's fast-paced digital landscape, your brand is Your brand is what people say about you when you leave the
+more important than ever.
+room. Let's give them better material.
+
+Tagline
+Short, true, and impossible for a competitor to steal without it sounding wrong. Nike: Just Do It. AntiHero: Be
+your own hero. Test it out loud. If it sounds like a mattress ad, start again.
+
+25
+
+PROMPTS · VOICE AND TAGLINE
+
+SOUND LIKE
+YOURSELF
+PROMPT 14 · BRAND VOICE GUIDE WRITER
+
+Write the brand voice guide for [brand]. Here's what you need to know: [paste brief, why statement,
+archetype and ideal customer].
+Here are 3 to 5 real things I've written that sound like me on a good day: [paste them]. And here's
+one that sounds nothing like me: [paste it].
+The guide must include:
+1. Three voice traits, each with "this, not that" (for example: direct, not rude). Two sentences on
+what each trait means in practice.
+2. A do and don't table with 8 rows.
+3. Vocabulary: words we use, words we never use. Put these on the banned list automatically: delve,
+unlock, elevate, seamless, game-changer, leverage, synergy, robust, cutting-edge, journey, tapestry,
+"in today's fast-paced world", "it's not just X, it's Y", and any sentence that starts with "In a
+world where".
+4. Punctuation and formatting rules (exclamation points, emojis, dashes, caps, sentence length).
+5. How the tone shifts by situation: sales page, social post, apology email, a complaint reply, an
+error message.
+6. Five before and after rewrites of my own samples.
+Keep it short enough that someone could read it in four minutes and sound like me by the end.
+
+PROMPT 15 · TAGLINE GENERATOR
+
+Write 30 taglines for [brand]. What we do: [one line]. Why: [why statement]. Customer: [who]. Voice
+traits: [3 traits]. Things competitors already say: [list, so we avoid them].
+Give me 5 in each of these styles:
+1. Plain and true (says exactly what we do).
+2. The belief (our why in a few words).
+3. The challenge (an imperative, like "Be your own hero").
+4. The wink (dry humor).
+5. The contrast (us versus the usual way).
+6. The weird one (might be terrible, might be genius).
+Six words maximum each. Then pick your top 5 and test each one:
+- Is it true?
+- Could a competitor put it on their site tomorrow? If yes, kill it.
+- Does it sound good said out loud?
+- Does it still work in 10 years?
+- Would my ideal customer screenshot it?
+End with your single favorite and why.
+
+26
+
+PROMPT 16 · DAILY USE: SAY IT IN MY VOICE
+
+Read my brand brain first: [paste or attach]. Now rewrite this so it sounds like me: [paste text].
+Keep the facts. Cut it by a third. No banned words. Give me 2 versions: one safe, one with a bit
+more edge. Tell me which line you're least sure about.
+
+27
+
+ONE DOC · YOUR AI READS IT FIRST · EVERY TIME
+
+THE BRAND
+BRAIN
+
+10
+
+Here's the move that makes everything else pay off. Put every decision into one document: your why, customer,
+positioning, archetype, palette, fonts, logo rules, voice, banned words, imagery rules and templates. Then make
+your AI read it before it writes or designs anything for you.
+• Grok Bot: keep it in the Bot's files and tell the Bot to read it before every brand task. It remembers.
+• ChatGPT: put it in a Project, or paste the short version into custom instructions.
+• Claude: add it to a Project's knowledge.
+• Gemini: put it in a Gem's instructions.
+• Anything else: paste it at the top of the chat. Old school, still works.
+
+W HY IT WORKS
+
+Without it, every new chat starts from zero and you get the average of the internet again. With it, your AI
+writes like you on the first try, uses your colors, skips your banned words and tells you when a request is offbrand. It's the difference between a temp and a coworker who's been there a year.
+Keep a short version (under 1,500 words) for custom instructions and a full version with logos
+and examples for humans and designers.
+TWO VERSIONS
+
+28
+
+PROMPT 17 · BRAND BRAIN COMPILER
+
+Compile my brand brain: one document that every AI and every human reads before they make anything
+for my brand. Use everything we've built in this conversation.
+[If it's a new chat, paste: discovery brief, why statement, positioning, archetype, ideal customer,
+palette, fonts, logo rules, voice guide, imagery guide.]
+Structure:
+1. The brand in 30 seconds (5 lines a stranger could read and get it).
+2. Why, How, What.
+3. Ideal customer, and who we're not for.
+4. Positioning statement and tagline.
+5. Personality and archetype.
+6. Voice: 3 traits with "this, not that", banned words, 5 example lines, punctuation rules.
+7. Logo: versions, file names, minimum size, clear space, don'ts.
+8. Color: every color with hex and RGB, its job, and the 60-30-10 split.
+9. Typography: fonts, weights, sizes, links.
+10. Imagery: style rules and 3 example image prompts.
+11. Templates: what exists and where the files live.
+12. Instructions for AI, written to the AI: "Before you write or design anything for [brand], read
+this whole document. Follow the voice rules. Never use the banned words. If a request conflicts with
+this guide, say so before doing it."
+Output it in markdown first. Keep it under [1,500] words so it fits in custom instructions. Then
+[make a nicely designed one-page HTML version / a PDF using my fonts and colors].
+
+29
+
+WHAT BRAND PEOPLE ACTUALLY CHECK
+
+THE CHECKLIST
+Your why fits in one sentence and it isn't about money.
+
+11
+
+You can name your customer a specific person, not 'everyone aged 25 to 65'.
+You know your competitors' colors and words and you're not using them.
+One main archetype two at most.
+Palette has hex codes and jobs 60-30-10, every text pair passes contrast.
+Two fonts, max with sizes written down.
+Logo works at 32 px and in one color and you have every version exported.
+Voice guide has banned words and real before and after examples.
+Templates keep the logo and footer in the same spot
+The brand brain exists and your AI reads it every time.
+You showed it to five real customers and listened more than you defended.
+PROMPT 18 · ACT AS MY BRAND DIRECTOR
+
+Act as my brand director. You've run brands for 20 years and you're allergic to flattery. Here is my
+brand brain: [paste it or attach it]. Here is the thing I want you to judge:
+[attach the logo, post, flyer, homepage or ad, or paste the copy].
+Give me:
+1. Your first impression in 3 seconds, the way a stranger scrolling past would get it.
+2. An on-brand score from 1 to 10 for each: message and why, voice, color, typography, imagery,
+layout. One line of reasoning each.
+3. The single biggest problem.
+4. Three specific fixes ordered by impact. Specific means "cut the headline from 14 words to 6", not
+"make it pop".
+5. A rewrite of the copy in my voice.
+6. What to keep, so I don't throw out the good stuff.
+If it's off-brand in a way that's actually better, tell me, and tell me what to update in the brand
+brain.
+
+30
+
+LEARN FROM OTHER PEOPLE'S EXPENSIVE ERRORS
+
+COMMON
+MISTAKES
+MISTAKE
+
+THE FIX
+
+Starting with the logo
+
+The logo is the last 10 percent. Without the why, it's decoration.
+
+Designing for yourself
+
+You're not the customer. Your taste matters, their gut matters more.
+
+Copying the category leader
+
+You'll look like the cheaper version of them.
+
+Too many colors and fonts
+
+Restraint reads as confidence.
+
+Trends
+
+Gradients and blobs date fast. Make the decision you'll still like in five years.
+
+Being nobody
+
+A faceless brand has to outspend everyone. You can't. Show up as you.
+
+Letting AI pick for you
+
+AI gives you options. You make decisions. The whole value is in the deciding.
+
+Rebranding every six months You get bored of your brand long before customers notice it. Consistency compounds.
+Never asking real people
+
+Five customer conversations beat fifty AI critiques.
+
+Forgetting the boring stuff
+
+Trademark search, domain, social handles, font licenses. Do it before the shirts.
+
+O NE MORE TIP FROM THE PROS
+
+Brand people judge a brand by its least polished touchpoint: the email signature, the invoice, the voicemail,
+the reply to a one-star review. That's where the brand is real. Run those through your brand brain too.
+
+31
+
+ABOUT 40 MINUTES · 5 MINUTES OF BUFFER
+
+TONIGHT'S
+RUN OF SHOW
+START END
+
+SEGMENT
+
+ON SCREEN
+
+00:00 02:00 Cold open: your brand isn't your logo
+
+Your face, this cover
+
+02:00 07:00 Start with why: Golden Circle, people buy you
+
+Golden Circle page
+
+07:00 10:00 Steal like an artist, the mood folder
+
+Mood folder page, Fonts In Use, Brand
+New
+
+10:00 15:00
+
+DEMO 1: why finder on a business from the
+comments
+
+Grok Bot, Prompt 01
+
+15:00 19:00
+
+DEMO 2: palette and font pairing
+
+Prompts 08 and 09, Realtime Colors
+
+19:00 25:00
+
+DEMO 3: 10 logo concepts, pick one, refine
+
+Prompts 10 and 11
+
+25:00 29:00
+
+DEMO 4: voice guide and taglines
+
+Prompts 14 and 15
+
+29:00 33:00
+
+DEMO 5: compile the brand brain
+
+Prompt 17, the finished doc
+
+33:00 36:00 Brand director roasts something live
+
+Prompt 18 on a viewer's logo or post
+
+36:00 38:00 Mistakes and checklist
+
+Checklist page
+
+38:00 40:00 Close: one homework task, group plug
+
+Closing page
+
+40:00 45:00 Buffer: Q&A and demo overrun
+
+Comments
+
+D EMO NOTES
+
+Before you go live, start one chat in Grok Bot, paste the guide's prompts into a note in order and pick a
+backup business in case nobody volunteers (a mobile dog groomer works, everyone has an opinion about
+dogs). Take a real business from the comments if you can. Answer the why finder questions as that owner,
+quickly, three or four answers is enough to show it. Let the long jobs (logo images, the brand brain PDF) run
+while you talk through the next section.
+If a demo stalls, cut to the checklist and come back. Nobody minds waiting for a logo. Everybody
+minds watching a spinner in silence.
+PRO MOVE
+
+32
+
+EVERY PROMPT · ONE PAGE · FULL TEXT ON THE PAGES BEFORE
+
+PROMPT
+CHEAT SHEET
+01 WHY FINDER
+
+Find your one-sentence why. Asks 12+ questions, one at a time.
+
+02 BRAND DISCOVERY
+INTERVIEW
+
+The full agency-style interview. Output: Brand Discovery Brief.
+
+03 COMPETITOR TEARDOWN
+
+Competitors, the sea of sameness, white space.
+
+04 MOOD FOLDER
+ANALYZER (UPLOAD
+SCREENSHOTS)
+
+Upload your mood folder, get 3 directions.
+
+05 REVERSE-ENGINEER A
+BRAND YOU LOVE
+
+Learn from a famous brand at your budget.
+
+06 ARCHETYPE,
+POSITIONING AND IDEAL
+CUSTOMER
+
+Archetype, positioning statement, ideal customer.
+
+07 BRAND STORY WRITER
+
+Brand story in 25, 100 and 300 words.
+
+08 PALETTE GENERATOR
+WITH PSYCHOLOGY
+
+3 palettes, 60-30-10, contrast checked.
+
+09 FONT PAIRING
+
+5 free pairings with sizes and samples.
+
+10 10-LOGO CONCEPT
+SHEET
+
+10 concepts across logo types, top 4 rendered.
+
+11 LOGO REFINEMENT AND
+EXPORTS
+
+Polish, test, usage rules, every export.
+
+12 IMAGERY STYLE GUIDE
+AND BACKGROUNDS
+
+Image style rules plus 6 background prompts.
+
+13 SOCIAL TEMPLATE
+SYSTEM
+
+5 templates at feed, square and story sizes.
+
+14 BRAND VOICE GUIDE
+WRITER
+
+3 traits, banned words, rewrites.
+
+15 TAGLINE GENERATOR
+
+30 taglines, tested, one favorite.
+
+16 DAILY USE: SAY IT
+IN MY VOICE
+
+Daily: say this in my voice.
+
+17 BRAND BRAIN
+COMPILER
+
+Compile everything into the brand brain.
+
+18 ACT AS MY BRAND
+DIRECTOR
+
+Brutal, specific critique of anything.
+
+T HE ORDER THAT WORKS
+
+01 or 02, then 03, 04, 06, 07. Then 08, 09, 10, 11, 12, 13. Then 14 and 15. Finish with 17. Use 16 and 18 forever
+after.
+
+33
+
+EVERY LINK · CHECKED OCT 1, 2026 · ALL CLICKABLE
+
+LINKS AND
+RESOURCES
+Talks
+Simon Sinek: How great leaders inspire action
+(TED)
+
+ted.com/talks/
+simon_sinek_how_great_leaders_inspire_action
+
+Same talk on YouTube (TED channel)
+
+youtube.com/watch?v=qp0HIF3SfI4
+
+Seth Godin: How to get your ideas to spread
+
+ted.com/talks/seth_godin_how_to_get_your_ideas_to_spread
+
+Seth Godin: The tribes we lead
+
+ted.com/talks/seth_godin_the_tribes_we_lead
+
+Andrew Stanton: The clues to a great story
+
+ted.com/talks/andrew_stanton_the_clues_to_a_great_story
+
+Austin Kleon: Steal Like an Artist (TEDxKC)
+
+youtube.com/watch?v=oww7oB9rjgw
+
+Reading
+Simon Sinek
+
+simonsinek.com
+
+Austin Kleon: Steal Like an Artist
+
+austinkleon.com/steal
+
+Quote Investigator: hide your sources
+
+quoteinvestigator.com/2014/06/01/creative
+
+Marty Neumeier
+
+martyneumeier.com
+
+Mailchimp voice and tone guide
+
+styleguide.mailchimp.com/voice-and-tone
+
+Nielsen Norman Group: tone of voice
+
+nngroup.com/articles/tone-of-voice-dimensions
+
+Fonts
+Google Fonts
+
+fonts.google.com
+
+Fontshare
+
+fontshare.com
+
+Fonts In Use
+
+fontsinuse.com
+
+Fontjoy
+
+fontjoy.com
+
+Color and contrast
+Coolors
+
+coolors.co
+
+34
+
+Adobe Color
+
+color.adobe.com
+
+Realtime Colors
+
+realtimecolors.com
+
+WebAIM contrast checker
+
+webaim.org/resources/contrastchecker
+
+WCAG contrast minimum (W3C)
+
+w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
+
+Inspiration
+Brand New (UnderConsideration)
+
+underconsideration.com/brandnew
+
+Branding Style Guides
+
+brandingstyleguides.com
+
+Mobbin
+
+mobbin.com
+
+Godly
+
+godly.website
+
+Awwwards
+
+awwwards.com
+
+Land-book
+
+land-book.com
+
+Pinterest
+
+pinterest.com
+
+Behance
+
+behance.net
+
+Dribbble
+
+dribbble.com
+
+Unsplash
+
+unsplash.com
+
+Pexels
+
+pexels.com
+
+Make it
+Canva
+
+canva.com
+
+Figma
+
+figma.com
+
+RealFaviconGenerator
+
+realfavicongenerator.net
+
+Grok Bot
+
+x.ai/bot
+
+Grok
+
+grok.com
+
+AntiHero AI group
+
+facebook.com/groups/antiheroai
+
+35
+
+NOW GO BE
+SOMEBODY.
+Homework: run Prompt 01 this week and post your why in
+the group. One sentence. Brave is better than polished.
+Then build the rest, one section at a time. The AntiHero AI
+group is free, sells nothing, and will tell you honestly if your
+logo looks like a dentist's.
+
+FACEBOOK.COM/GROUPS/ANTIHEROAI
+
+BE YOUR OWN HERO
+
+

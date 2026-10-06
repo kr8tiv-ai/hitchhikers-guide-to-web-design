@@ -1,0 +1,33 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "codex",
+  "run_id": "01a0a234-e3f6-75e3-9275-51b81a86cb57",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "collaboration.spawn_agent",
+  "child_api": "collaboration.spawn_agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "spawn_call": {
+      "call_id": "call_9Hj4usdPRCTNAJW8FGSqW2oS",
+      "name": "spawn_agent",
+      "namespace": "collaboration",
+      "arguments": {
+        "task_name": "build_t001",
+        "fork_turns": "all"
+      }
+    },
+    "spawn_output": "{\"task_name\":\"/root/build_t001\"}",
+    "list_agents_states": [
+      {
+        "agent_name": "/root/build_t001",
+        "agent_status": {
+          "completed": "T001 ready. Static diff check passed; isolated Task Verify awaits orchestrator.\nChanged: `count.py`, `tests/test_count.py`, `.project/tasks/T001-counter-cli.md` (Log only).\nNo tests ran in the primary worktree; no Git mutations.\nRESULT: T001 ready"
+        }
+      }
+    ]
+  }
+}

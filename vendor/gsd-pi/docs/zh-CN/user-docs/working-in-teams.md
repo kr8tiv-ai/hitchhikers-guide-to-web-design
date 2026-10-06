@@ -1,0 +1,69 @@
+# 团队协作
+
+GSD 支持多人并行工作流，让多个开发者可以同时在同一个仓库中工作。
+
+## 设置
+
+### 1. 启用 Team Mode
+
+为团队使用配置 GSD 的最简单方法，是在项目偏好中设置 `mode: team`。这会一次性开启唯一 milestone ID、推送分支和预合并检查：
+
+```yaml
+# .gsd/PREFERENCES.md（项目级，提交到 git）
+---
+version: 1
+mode: team
+---
+```
+
+这相当于手动设置 `unique_milestone_ids: true`、`git.push_branches: true`、`git.pre_merge_check: true` 以及其他适合团队协作的默认值。你仍然可以覆盖单个选项，例如如果团队偏好自动推送，也可以在 `mode: team` 基础上再加 `git.auto_push: true`。
+
+你也可以不使用 mode，而是单独配置每一项设置（详见 [Git 策略](git-strategy.md)）。
+
+### 2. 了解哪些内容会共享
+
+工作流数据库不会提交到 git，每个 checkout 都有自己的数据库。提交到 git 的 `.gsd/` markdown 只是供阅读和评审的导出内容，不是共享的权威状态：它只能通过显式的 `/gsd recover` 导入进入数据库。GSD 会自动把运行时文件排除在 git 之外。checkout 绑定规则以及 clone 或 pull 之后的导入流程，见[权威团队指南](../../user-docs/working-in-teams.md#2-know-what-is-shared)。
+
+### 3. 提交偏好设置
+
+```bash
+git add .gsd/PREFERENCES.md
+git commit -m "chore: enable GSD team workflow"
+```
+
+## 迁移现有项目
+
+如果你当前项目里对 `.gsd/` 做了整目录忽略：
+
+1. 确保当前没有进行中的 milestones（工作区状态干净）
+2. 停止忽略你想共享的 `.gsd/` markdown；GSD 会继续忽略自己的运行时文件
+3. 在 `.gsd/PREFERENCES.md` 中添加 `unique_milestone_ids: true`
+4. 如有需要，重命名现有 milestones 以使用唯一 ID：
+
+   ```
+   I have turned on unique milestone ids, please update all old milestone
+   ids to use this new format e.g. M001-abc123 where abc123 is a random
+   6 char lowercase alpha numeric string. Update all references in all
+   .gsd file contents, file names and directory names. Validate your work
+   once done to ensure referential integrity.
+   ```
+
+5. 提交修改
+
+## 并行开发
+
+多个开发者可以同时对不同 milestones 运行自动模式。每个开发者都会：
+
+- 获得自己的 worktree（`.gsd-worktrees/<MID>/`，已加入 gitignore）
+- 在独立的 `milestone/<MID>` 分支上工作
+- 独立地 squash merge 回主分支
+
+milestone 依赖可以通过 phase context frontmatter 声明：
+
+```yaml
+---
+depends_on: [M001-eh88as]
+---
+```
+
+GSD 会强制要求上游依赖 milestone 先完成，之后才会启动下游工作。

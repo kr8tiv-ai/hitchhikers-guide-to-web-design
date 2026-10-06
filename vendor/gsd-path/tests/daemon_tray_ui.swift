@@ -1,0 +1,172 @@
+import AppKit
+
+@main
+struct TrayUITest {
+    static func main() throws {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let data = Data("""
+        {"projects":[
+          {"root":"/sample/gsd","project":"GSD Path","workflow":{"state":"active","label":"In build"},"milestone":"daemon","phase":"build","status":"active","branch":"gsd-path/M004","next_skill":"gsd-path-build","tasks_done":6,"tasks_total":9,"current_wave":2,
+           "roadmap_milestones":[{"number":"M003","slug":"core","status":"shipped","archive":".project/archive/003-core","manifest":{"shipped":"2026-09-06","tasks_total":12}},{"number":"M004","slug":"daemon","status":"active","goal":"Native tray and dashboard for the daemon."},{"number":"M005","slug":"notify","status":"pending"}],
+           "criteria":[{"id":"SC1","verdict":"met"},{"id":"SC2","verdict":"met"},{"id":"SC3","verdict":"not-met"}],
+           "phase_log":[{"phase":"plan","date":"2026-09-09"},{"phase":"build","date":"2026-09-10"}],
+           "spend":{"turns":90,"cost":26.1,"milestones":{"M003":{"turns":6,"tokens":1000,"cost":1.5},"M004":{"turns":84,"tokens":14100000,"cost":24.6}}}},
+          {"root":"/sample/atlas'&tab=usage","project":"Atlas API","workflow":{"state":"blocked","label":"Blocked"},"milestone":"api-v2","phase":"ship","status":"blocked","branch":"gsd-path/M002","health":"red","attention":[{"kind":"blocked","label":"ship blocked","ref":null}],
+           "next_milestone":{"milestone":"api-v3","phase":"define","status":"pending"}},
+          {"root":"/sample/notes","project":"Field Notes","workflow":{"state":"active","label":"In research"},"milestone":"bootstrap","phase":"research","status":"active","branch":"gsd-path/M001"},
+          {"root":"/sample/done","project":"Done Thing","workflow":{"state":"shipped","label":"Shipped"},"milestone":"graph","phase":"shipped","status":"shipped","archive":".project/archive/001-graph",
+           "roadmap_milestones":[{"number":"M001","slug":"graph","status":"shipped","archive":".project/archive/001-graph","manifest":{"shipped":"2026-09-01","tasks_total":4}}]}
+        ]}
+        """.utf8)
+        let status = try JSONDecoder().decode(StatusResponse.self, from: data)
+        UserDefaults.standard.removeObject(forKey: "appearance")
+        defer { UserDefaults.standard.removeObject(forKey: "appearance") }
+        var rescans = 0
+        let vc = PopoverViewController(statusURL: URL(string: "http://127.0.0.1:8765/status")!) { rescans += 1 }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 680),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentViewController = vc
+        vc.show(status: status)
+        vc.view.appearance = NSAppearance(named: .darkAqua)
+        vc.view.display()
+        func descendants(_ view: NSView) -> [NSView] {
+            [view] + view.subviews.flatMap(descendants)
+        }
+        func labels() -> [String] {
+            descendants(vc.view).compactMap { ($0 as? NSTextField)?.stringValue }
+        }
+        func buttons() -> [NSButton] { descendants(vc.view).compactMap { $0 as? NSButton } }
+        func require(_ condition: Bool, _ message: String) {
+            if !condition { print("FAIL: \(message)"); exit(1) }
+        }
+        let mainFolder = "\(NSHomeDirectory())/github/open-gsd/gsd-path/app"
+        let linkedCheckout = "\(NSHomeDirectory())/orca/workspaces/preview"
+        let identity = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project":"widget-counter","repository":"gsd-path","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","phase":"build","branch":"gsd-path/M001","tasks_done":1,"tasks_total":3,"current_wave":1,"phase_log":[{"phase":"build","date":"2026-09-16"}],"spend":{"milestones":{"M001":{"turns":523,"cost":62.13}}}}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [identity]))
+        vc.view.layoutSubtreeIfNeeded()
+        let identityRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(identityRow.detail.lineBreakMode == .byWordWrapping, "status values wrap between words")
+        require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
+        let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
+        require(identityRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "actual project and worktree folders are visible with home abbreviated")
+        require(!identityRow.location.isHidden, "actual project folder is always visible")
+        require(identityRow.toolTip?.contains("Project folder: \(mainFolder)\nWorktree: \(linkedCheckout)") == true, "full paths remain in tooltip")
+        for label in identityLabels {
+            require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
+            require(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.frame.width, height: .greatestFiniteMagnitude)).height <= label.frame.height, "all lines fit in their label")
+        }
+        let nestedMain = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(mainFolder)","project_root":"\(mainFolder)","repository":"gsd-path","project":"widget-counter"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [nestedMain]))
+        let nestedMainRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(nestedMainRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app", "nested main project has no worktree label")
+        let detached = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","repository":"gsd-path","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [detached]))
+        let detachedRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(detachedRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "detached worktree shows folder instead of HEAD")
+        let bareBacked = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(linkedCheckout)/app","worktree_root":"\(linkedCheckout)","repository":"repository.git","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [bareBacked]))
+        let bareRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(bareRow.name.stringValue == "repository.git", "bare repository identity stays visible")
+        require(bareRow.location.stringValue == "Project folder: ~/orca/workspaces/preview/app\nWorktree: ~/orca/workspaces/preview", "bare-backed worktree shows tracked project and checkout folders")
+        require(bareRow.toolTip?.contains("Project folder: \(linkedCheckout)/app\nWorktree: \(linkedCheckout)") == true, "bare-backed full paths remain in tooltip")
+        vc.show(status: status)
+        require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
+        require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
+        let rows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
+        // Board order: blocked first, then active by name, then shipped.
+        require(rows.map(\.name.stringValue) == ["Atlas API", "Field Notes", "GSD Path", "Done Thing"], "row order")
+        require(rows.map(\.detail.stringValue) == [
+            "M002 · Blocked · ship\nno tasks yet",
+            "M001 · research\nno tasks yet",
+            "M004 · build · wave 2\n6 of 9 tasks · 2/3 criteria · since 2026-09-10\n$24.60 · 84 turns",
+            "M001 shipped 2026-09-01\n4 tasks",
+        ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
+        require(rows.map(\.location.stringValue) == ["Project folder: /sample/atlas'&tab=usage", "Project folder: /sample/notes", "Project folder: /sample/gsd", "Project folder: /sample/done"], "main checkouts show their actual folders")
+        let meter: (ProjectRowView) -> String = { row in
+            row.meter.segments.map { $0 == .done ? "d" : $0 == .now ? "n" : "-" }.joined()
+        }
+        require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
+        require(rows[2].toolTip == "Project folder: /sample/gsd\nM003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
+        require(rows[0].toolTip == "Project folder: /sample/atlas'&tab=usage\nM002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
+        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, Project folder: /sample/gsd, In build, M004 · build") == true, "row accessibility label")
+        rows[2].hovered = true
+        var nativeSelection = false
+        rows[2].effectiveAppearance.performAsCurrentDrawingAppearance {
+            nativeSelection = rows[2].layer?.backgroundColor == NSColor.selectedContentBackgroundColor.cgColor
+        }
+        require(nativeSelection && rows[2].name.textColor == .alternateSelectedControlTextColor && rows[2].meter.highlighted,
+                "hover uses the native selection colors")
+        rows[2].hovered = false
+        require(rows[2].name.textColor == .labelColor && rows[2].detail.textColor == .secondaryLabelColor, "hover clears to native label colors")
+        // A status board: no attention summary, next steps, copy or reveal actions.
+        require(!buttons().contains { $0.title.contains("needs you") }, "no attention summary")
+        require(!buttons().contains { $0.title == "Actions" }, "no actions menu")
+        require(!buttons().contains { $0 is NSPopUpButton }, "no per-row menus")
+        require(!labels().contains("ship blocked"), "no attention copy")
+        let icons = buttons().compactMap { $0 as? IconButton }
+        require(icons.map { $0.toolTip ?? "" } == ["Open dashboard", "Plugin settings", "Watched folders", "Rescan", "Quit"], "footer icon buttons")
+        require(icons.allSatisfy { $0.image != nil && $0.accessibilityLabel() == $0.toolTip }, "icons have symbols and accessibility names")
+        require(descendants(vc.view).compactMap { $0 as? DaemonRowView }.first!.fittingSize.height == 24, "daemon row is sized before its status arrives")
+        // Appearance: light by default; the choice is stored and applied app-wide.
+        let appearance = descendants(vc.view).compactMap { $0 as? NSSegmentedControl }.first!
+        require(appearance.selectedSegment == 1 && appearanceChoice == "light", "light appearance by default")
+        appearance.selectedSegment = 2
+        _ = appearance.sendAction(appearance.action, to: appearance.target)
+        require(UserDefaults.standard.string(forKey: "appearance") == "dark" && NSApp.appearance?.name == .darkAqua, "dark appearance applied")
+        require(window.appearance?.name == .darkAqua, "open windows (the popover's included) take the choice")
+        appearance.selectedSegment = 0
+        _ = appearance.sendAction(appearance.action, to: appearance.target)
+        require(NSApp.appearance == nil && window.appearance == nil, "system appearance follows macOS")
+        require(appearance.toolTip(forSegment: 1) == "Appearance: Light" && appearance.image(forSegment: 1) != nil, "appearance icons with tooltips")
+        let themed = themedDashboardURL(projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/gsd"), choice: "dark")
+        require(themed.absoluteString == "http://localhost:8765?theme=dark#project=%2Fsample%2Fgsd", "dashboard link carries the appearance")
+        let scroll = descendants(vc.view).compactMap { $0 as? NSScrollView }.first!
+        require(!descendants(scroll).contains { $0 is IconButton }, "footer stays outside scrolling content")
+        buttons().first { $0.toolTip == "Rescan" }?.performClick(nil)
+        require(rescans == 1, "rescan action invokes its callback")
+        let link = projectDeepLink(base: URL(string: "http://localhost:8765")!, root: "/sample/atlas'&tab=usage")
+        require(link.fragment?.contains("&tab=usage") == false, "root cannot inject a dashboard tab")
+        if CommandLine.arguments.contains("--preview") {
+            window.setContentSize(vc.preferredContentSize)
+            window.center()
+            window.orderFrontRegardless()
+            vc.view.layoutSubtreeIfNeeded()
+            window.display()
+            NSApp.activate(ignoringOtherApps: true)
+            print("Preview PID: \(ProcessInfo.processInfo.processIdentifier)")
+            NSApp.run()
+        }
+        let proofStates = Data("""
+        {"projects":[
+          {"root":"/closing","project":"Closing","phase":"ship","archive":".project/archive/001-first","workflow":{"state":"active","label":"In ship"}},
+          {"root":"/uncertain","project":"Uncertain","phase":"shipped","archive":".project/archive/001-first","workflow":{"state":"unverified","label":"Unverified"}},
+          {"root":"/legacy","project":"Legacy","phase":"shipped","archive":".project/archive/001-first"}
+        ]}
+        """.utf8)
+        vc.show(status: try JSONDecoder().decode(StatusResponse.self, from: proofStates))
+        let proofRows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
+        require(proofRows.first { $0.name.stringValue == "Closing" }?.accessibilityLabel()?.contains("In ship") == true, "archive alone does not finish closing")
+        for name in ["Uncertain", "Legacy"] {
+            let row = proofRows.first { $0.name.stringValue == name }
+            require(row?.detail.stringValue.contains("Unverified") == true, "unavailable proof stays visibly Unverified")
+            require(row?.meter.segments.allSatisfy { $0 != .done } == true, "unverified completion does not fill phase meter")
+        }
+        vc.show(status: StatusResponse(projects: []))
+        require(labels().contains { $0.contains("No projects") }, "empty state")
+        vc.showOffline()
+        require(labels().contains("Offline"), "offline state clears live status")
+        require(!labels().contains("Connected"), "no stale connected status")
+        buttons().first { $0.title == "Retry" }?.performClick(nil)
+        require(rescans == 2, "offline retry")
+        print("PASS: rows, detail lines, phase meters, hover, menu items, rescan, links, empty and offline states")
+    }
+}

@@ -1,0 +1,150 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+import { recoverFailedMigration } from "../migrate-external.ts";
+import { externalGsdRoot } from "../repo-identity.ts";
+import { closeDatabase, insertMilestone, openDatabase } from "../gsd-db.ts";
+import { drainLogs } from "../workflow-logger.ts";
+
+function createDatabase(path: string, withWorkflowRows = true): void {
+  assert.equal(openDatabase(path), true);
+  if (withWorkflowRows) insertMilestone({ id: "M001", title: "Current work", status: "active" });
+  closeDatabase();
+}
+
+// Regression tests for #4416: `.gsd.migrating` must be healed before auto-mode
+// proceeds, including on the resume path in auto.ts (fixed at auto.ts:1325).
+// The `recoverFailedMigration` function is already called in `auto-start.ts:350`
+// for fresh-start sessions. The fix adds an identical call to `auto.ts:startAuto`
+// so that resume sessions (triggered by a persisted paused-session.json) also heal
+// a leftover `.gsd.migrating` directory before acquiring the session lock.
+
+test("recoverFailedMigration renames .gsd.migrating to .gsd when .gsd is absent", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-recovery-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const migratingPath = join(base, ".gsd.migrating");
+  mkdirSync(join(migratingPath, "milestones"), { recursive: true });
+
+  const recovered = recoverFailedMigration(base);
+
+  assert.equal(recovered, true, "expected recovery to succeed");
+  assert.ok(existsSync(join(base, ".gsd")), ".gsd must exist after recovery");
+  assert.ok(!existsSync(migratingPath), ".gsd.migrating must not exist after recovery");
+});
+
+test("recoverFailedMigration returns false when .gsd.migrating is absent (nothing to do)", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-noop-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const recovered = recoverFailedMigration(base);
+  assert.equal(recovered, false, "no migration to recover");
+});
+
+test("recoverFailedMigration returns false when both .gsd and .gsd.migrating exist (ambiguous)", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-ambig-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  mkdirSync(join(base, ".gsd.migrating"), { recursive: true });
+
+  const recovered = recoverFailedMigration(base);
+  assert.equal(recovered, false, "should not touch ambiguous state");
+  assert.ok(existsSync(join(base, ".gsd")), ".gsd must still exist");
+  assert.ok(existsSync(join(base, ".gsd.migrating")), ".gsd.migrating must still exist");
+});
+
+test("recoverFailedMigration removes orphan when .gsd is a real intact directory", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-real-orphan-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const localGsd = join(base, ".gsd");
+  mkdirSync(join(localGsd, "phases"), { recursive: true });
+  mkdirSync(join(localGsd, "activity"), { recursive: true });
+  createDatabase(join(localGsd, "gsd.db"));
+  mkdirSync(join(base, ".gsd.migrating"), { recursive: true });
+
+  const recovered = recoverFailedMigration(base);
+
+  assert.equal(recovered, true, "expected orphan cleanup to succeed");
+  assert.ok(existsSync(localGsd), ".gsd real directory must remain");
+  assert.ok(!existsSync(join(base, ".gsd.migrating")), ".gsd.migrating orphan must be removed");
+});
+
+test("recoverFailedMigration removes orphan when .gsd is an intact external-state junction", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-orphan-"));
+  const stateDir = mkdtempSync(join(tmpdir(), "gsd-migrating-state-"));
+  const previousStateDir = process.env.GSD_STATE_DIR;
+  const previousProjectId = process.env.GSD_PROJECT_ID;
+  process.env.GSD_STATE_DIR = stateDir;
+  process.env.GSD_PROJECT_ID = "recover-orphan";
+  t.after(() => {
+    if (previousStateDir === undefined) delete process.env.GSD_STATE_DIR;
+    else process.env.GSD_STATE_DIR = previousStateDir;
+    if (previousProjectId === undefined) delete process.env.GSD_PROJECT_ID;
+    else process.env.GSD_PROJECT_ID = previousProjectId;
+    rmSync(base, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  const externalPath = externalGsdRoot(base);
+  mkdirSync(join(externalPath, "phases"), { recursive: true });
+  createDatabase(join(externalPath, "gsd.db"));
+  symlinkSync(externalPath, join(base, ".gsd"), "junction");
+  mkdirSync(join(base, ".gsd.migrating"), { recursive: true });
+
+  const recovered = recoverFailedMigration(base);
+
+  assert.equal(recovered, true, "expected orphan cleanup to succeed");
+  assert.ok(existsSync(join(base, ".gsd")), ".gsd junction must remain");
+  assert.ok(!existsSync(join(base, ".gsd.migrating")), ".gsd.migrating orphan must be removed");
+});
+
+test("recoverFailedMigration keeps .gsd.migrating when only projections prove the current state", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-projections-only-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const localGsd = join(base, ".gsd");
+  mkdirSync(join(localGsd, "milestones", "M001"), { recursive: true });
+  writeFileSync(join(localGsd, "STATE.md"), "# State\n", "utf-8");
+  writeFileSync(join(localGsd, "gsd.db"), "not a database\n", "utf-8");
+  mkdirSync(join(base, ".gsd.migrating"), { recursive: true });
+
+  assert.equal(recoverFailedMigration(base), false);
+  assert.ok(existsSync(join(base, ".gsd.migrating")), "the staged copy must stay until the database proves the state");
+});
+
+test("recoverFailedMigration keeps .gsd.migrating when an interrupted migration left a new schema-only database", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-schema-only-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const migratingPath = join(base, ".gsd.migrating");
+  mkdirSync(migratingPath, { recursive: true });
+  createDatabase(join(migratingPath, "gsd.db"));
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  createDatabase(join(base, ".gsd", "gsd.db"), false);
+
+  assert.equal(recoverFailedMigration(base), false);
+  assert.ok(existsSync(join(migratingPath, "gsd.db")), "the staged copy holds the only real database and must stay");
+  assert.ok(
+    drainLogs().some((entry) => entry.component === "migration" && entry.message.includes(migratingPath)),
+    "the kept staged copy must be reported",
+  );
+});
+
+test("recoverFailedMigration preserves contents of .gsd.migrating", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "gsd-migrating-contents-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+
+  const migratingPath = join(base, ".gsd.migrating");
+  mkdirSync(join(migratingPath, "milestones", "M001"), { recursive: true });
+  writeFileSync(join(migratingPath, "milestones", "M001", "M001-ROADMAP.md"), "# M001\n");
+
+  recoverFailedMigration(base);
+
+  const roadmap = join(base, ".gsd", "milestones", "M001", "M001-ROADMAP.md");
+  assert.ok(existsSync(roadmap), "Milestone file must be accessible via .gsd after recovery");
+});

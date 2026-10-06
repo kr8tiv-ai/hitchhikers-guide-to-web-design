@@ -1,0 +1,356 @@
+# gsd-pi Prompt ↔ Database Combined Map
+
+> How each prompt in the pipeline reads and writes the database, and which DB state drives which prompt to fire.
+
+See also:
+
+- [prompt-map.md](./prompt-map.md) — full prompt system detail
+- [db-map.md](./db-map.md) — full database schema detail
+
+---
+
+## 1. Master Flow: State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         gsd.db (SQLite WAL)                         │
+│                                                                     │
+│  milestones  slices  tasks  quality_gates  workers  unit_dispatches │
+│  memories  artifacts  decisions  requirements  runtime_kv  ...      │
+└──────────────────────┬──────────────────────────────────────────────┘
+                       │  reads
+                       ▼
+              auto-dispatch.ts
+            (DISPATCH_RULES,
+             first match → prompt + builder)
+                       │
+                       ▼
+              auto-prompts.ts
+           (buildXxxPrompt — inlines
+            context from DB + disk files)
+                       │
+                       ▼
+              Pi SDK session.run(prompt)
+                       │
+                       ▼
+                   LLM runs
+                       │
+                       ▼ calls gsd_* tools
+              bootstrap/db-tools.ts
+                       │
+                       ▼
+              gsd-db.ts  (compatibility barrel over the explicit
+                          single-writer allowlist)
+                       │
+                 transaction()/immediateTransaction()
+                       │
+                       ▼
+               SQLite writes
+                       │
+         ┌─────────────┴──────────────┐
+         │                            │
+         ▼                            ▼
+   DB tables updated          Markdown artifacts
+   (canonical source)         regenerated + written to disk
+         │
+         ▼
+   auto.ts loop ──► back to auto-dispatch.ts
+```
+
+`QUEUE-ORDER.json` is a projection of `milestones.sequence`. `/gsd queue` and the `gsd_milestone_reorder` tool (used by `/gsd rethink`) change the order through the `milestone.reorder` Domain Operation, which renders the file. No startup, state derivation, dispatch, reconciliation or `/gsd sync` path reads the file back into the database.
+
+The current lifecycle authority and cutover boundaries are owned by the
+[architecture overview](./dev/architecture.md) and the
+[lifecycle command integration runbook](./dev/lifecycle-command-integration-runbook.md).
+This map covers prompt-to-database relationships without duplicating their
+cutover-status inventory.
+
+---
+
+## 2. Prompt → DB Read/Write Reference
+
+Each row = one prompt file. Columns show which DB tables it touches and how.
+
+### Setup Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `guided-workflow-preferences` | — | — | PREFERENCES.md |
+| `guided-discuss-project` | — | artifacts (PROJECT); workflow_operations, workflow_domain_events (`project.setup.record`) when the user asks for research | PROJECT.md |
+| `guided-discuss-requirements` | requirements | requirements (INSERT), artifacts (REQUIREMENTS); workflow_operations, workflow_domain_events (`project.setup.record`) when the user asks for research | REQUIREMENTS.md |
+| `guided-research-project` | milestones, artifacts | artifacts (RESEARCH × 4 aspects) | M##-RESEARCH.md |
+
+### Milestone Planning Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `discuss` / `guided-discuss-milestone` | milestones, artifacts | artifacts (CONTEXT), milestones.depends_on via `gsd_milestone_set_dependencies`, workflow_work_checkpoints via `gsd_checkpoint_save` for a queued milestone (`discuss` only) | M##-CONTEXT.md |
+| `discuss-headless` | milestones, artifacts | milestones, slices, decisions, artifacts, workflow_work_checkpoints via `gsd_checkpoint_save` for a queued milestone | M##-CONTEXT.md, DECISIONS.md |
+| `research-milestone` | milestones, artifacts | artifacts (RESEARCH) | M##-RESEARCH.md |
+| `plan-milestone` | project_authority, workflow_operations, workflow_item_lifecycles, milestones, slices | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, milestones (UPDATE planning), slices (INSERT), optional single-slice metadata via `gsd_plan_slice`, optional single-slice tasks via `gsd_plan_task`, decisions | ROADMAP.md; NN-MM-PLAN.md with embedded tasks for single-slice fast path |
+| `queue` | milestones | milestones (INSERT queued), artifacts (CONTEXT), milestones.depends_on via `gsd_milestone_set_dependencies` | PROJECT.md, QUEUE.md |
+
+### Slice Planning Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `parallel-research-slices` | slices, artifacts | artifacts (RESEARCH per slice) | S##-RESEARCH.md × N |
+| `guided-discuss-slice` | slices, artifacts | artifacts (CONTEXT) | S##-CONTEXT.md |
+| `research-slice` / `guided-research-slice` | slices, memories | artifacts (RESEARCH), memories (hit_count++) | S##-RESEARCH.md |
+| `plan-slice` | project_authority, workflow_operations, workflow_item_lifecycles, slices, tasks, memories | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, slices metadata via `gsd_plan_slice`, per-task rows (including `required_workflow_tools`) via `gsd_plan_task`, memories (hit_count++) | NN-MM-PLAN.md with embedded active task planning and `required_workflow_tools` frontmatter |
+| `refine-slice` | project_authority, workflow_operations, workflow_item_lifecycles, slices (is_sketch=1), tasks | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, slices metadata and full task replacement/update (including `required_workflow_tools`) via `gsd_plan_slice`; removed pending tasks become `skipped` / `cancelled` | NN-MM-PLAN.md with embedded active task planning and `required_workflow_tools` frontmatter |
+
+The task-bearing planning payloads use camel-case `requiredWorkflowTools` on `gsd_plan_slice.tasks[]` and `gsd_plan_task`. Public native and MCP schemas require the array for every persisted Task; `[]` means ordinary implementation work. Before the Domain Operation starts, each declared tool must belong to both the `execute-task` and `execute-task-simple` tool contracts, so completion-owned mutations such as `gsd_requirement_update` cannot be smuggled into an execution Task.
+
+### Execution Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `execute-task` | Task lifecycle, current Attempt/Result/verdict evidence, the head Work Checkpoint of the task (`workflow_work_checkpoints`), slices, milestones, memories, quality gates | invokes evidence-backed Task publication; see the [database map](./db-map.md), plus memory hit counts | S##-T##-SUMMARY.md and NN-MM-PLAN.md projections after commit; legacy T##-SUMMARY.md readable |
+| `guided-resume-task` | Task lifecycle, current Attempt/Result/verdict evidence, the head Work Checkpoint of the task (`workflow_work_checkpoints`), slices | invokes evidence-backed Task publication; see the [database map](./db-map.md) | S##-T##-SUMMARY.md projection after commit; legacy T##-SUMMARY.md readable |
+| `reactive-execute` | tasks | tasks via N× execute-task subagents; retry-cap exhaustion records a recovery block (`gate_runs`) and does not derive completion/skipped state from summaries | S##-T##-SUMMARY.md × N; S##-REACTIVE-BLOCKER.md diagnostic when batch tasks are still open with no Attempt Result after retries |
+| `quick-task` | — | — (no DB; writes summaryPath directly) | {{summaryPath}} |
+
+### Quality Gate Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `gate-evaluate` | quality_gates | quality_gates (UPDATE), gate_runs (INSERT, same transaction) | gate result per subagent |
+| `validate-milestone` | current Milestone lifecycle, planned verification, and source-bound evidence | invokes the authoritative `gsd_validate_milestone` Domain Operation; see the [database map](./db-map.md) | VALIDATION.md projection after commit |
+| `run-uat` | slices, assessments | assessments (INSERT ASSESSMENT) | S##-ASSESSMENT.md |
+
+### Completion Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `complete-slice` | evidence-backed terminal Task state, Slice lifecycle, quality gates | invokes the authoritative `gsd_slice_complete` Domain Operation; see the [database map](./db-map.md) | S##-SUMMARY.md, S##-UAT.md, ROADMAP.md, and STATE.md projections after commit |
+| `reassess-roadmap` | project_authority, workflow_operations, workflow_item_lifecycles, milestones, slices | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, milestones (UPDATE), slices (INSERT/UPDATE; removed pending rows become `skipped` / `cancelled`), assessments; optional `metadataCorrections` updates only audited milestone acceptance fields or completed-slice evidence fields | ROADMAP.md, ROADMAP-ASSESSMENT.md; milestone metadata corrections remove the superseded VALIDATION.md projection |
+| `complete-milestone` | current validation receipt, terminal descendant parity, Waivers, and active Attempts | invokes the authoritative `gsd_complete_milestone` Domain Operation; see the [database map](./db-map.md) | M##-SUMMARY.md projection after commit |
+
+`reassess-roadmap` may apply metadata-only corrections even after a Milestone completes, while cancelled Milestones remain closed. Completed-slice corrections require an existing canonically completed Slice and cannot carry status, Task, dependency, or other structural fields. Milestone corrections invalidate the prior milestone-validation assessment; completed-slice-only evidence corrections preserve it. Requirement ownership wording belongs in milestone `requirementCoverage`, while requirement status terminalization remains owned by `complete-slice` or `complete-milestone`.
+
+### Maintenance Phase
+
+| Prompt | DB Reads | DB Writes | Disk Artifact Written |
+|--------|----------|-----------|----------------------|
+| `replan-slice` | project_authority, workflow_operations, workflow_item_lifecycles, slices, tasks | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, slices, tasks (including execution-compatible `required_workflow_tools`), replan_history, quality_gates; removed pending tasks become `skipped` / `cancelled` | NN-MM-PLAN.md, NN-MM-REPLAN.md |
+| `replan-task` | project_authority, workflow_operations, workflow_item_lifecycles, slices, tasks, current recovery evidence | project_authority, workflow_operations, workflow_domain_events, workflow_outbox, workflow_projection_work, workflow_item_lifecycles, one pending task planning row (including execution-compatible `required_workflow_tools`), replan_history | re-renders the task/slice PLAN projection before replacement execution |
+| `rethink` | milestones, slices, artifacts | Slice cancellation through `gsd_skip_slice`; milestone park, unpark, discard, reorder and dependency changes through the `gsd_milestone_*` tools, one Domain Operation each | QUEUE-ORDER.json and PARKED.md, rendered from the DB |
+| `rewrite-docs` | decisions, requirements, artifacts | decisions, requirements, artifacts (PROJECT), slices and incomplete tasks via `gsd_plan_slice` / `gsd_plan_task` | DECISIONS.md, REQUIREMENTS.md, slice plans with embedded task planning |
+| `doctor-heal` | slices, tasks, artifacts | artifacts (repair CONTEXT/SUMMARY/UAT) | repairs existing artifacts |
+| `review-migration` | milestones, slices, tasks, artifacts, decisions, requirements | — (read-only audit) | — |
+| `scan` | — | — | STACK.md, INTEGRATIONS.md, ARCHITECTURE.md |
+| `debug-diagnose` | memories | memories (INSERT pattern/gotcha), memories (hit_count++) | — |
+| `forensics` | audit_events, gate_runs, turn_git_transactions | — (read-only) | — |
+| `triage-captures` | workflow_domain_events (`capture.*`) | workflow operations/events/Projection Work (one `capture.resolve` operation per `gsd_capture_resolve` call) | CAPTURES.md (render) |
+| `add-tests` | tasks, slices | — | test files (via code execution) |
+| `heal-skill` | — | — | skill-review-queue.md |
+
+---
+
+## 3. DB State → Which Prompt Fires
+
+The dispatch loop reads DB state to determine which prompt to issue next. This is the precise join between DB and prompt layer:
+
+```
+DB State                                           → Prompt Dispatched
+───────────────────────────────────────────────────────────────────────
+no project.setup.recorded event for 'workflow-preferences'
+  (and PROJECT + REQUIREMENTS not both saved)      → workflow preferences defaults (in-process)
+
+no valid PROJECT artifact row                      → guided-discuss-project
+
+no valid REQUIREMENTS artifact row                 → guided-discuss-requirements
+
+newest project.setup.recorded event for 'research-decision'
+  absent or decision='skip'                        → no project research (default)
+  decision='research' AND
+  .gsd/research/ files missing                     → guided-research-project × 4 subagents
+
+milestones.status='active' AND
+  artifacts WHERE artifact_type='CONTEXT' missing  → discuss / guided-discuss-milestone
+
+CONTEXT present AND
+  M##-RESEARCH missing AND complexity='high'       → research-milestone
+
+CONTEXT present AND
+  slices WHERE milestone_id=M## count = 0          → plan-milestone
+
+slices exist AND
+  S##-RESEARCH artifacts missing                   → parallel-research-slices × N subagents
+
+slices WHERE slice_id=S## AND
+  S##-CONTEXT artifact missing                     → guided-discuss-slice
+
+S##-CONTEXT present AND
+  tasks WHERE slice_id=S## count = 0               → plan-slice
+
+slices WHERE is_sketch = 1                         → refine-slice
+
+tasks WHERE status='pending' AND count ≥ 3 AND no recorded reactive recovery block
+  AND no selected task has a lifecycle row (IO read from tasks.inputs / expected_output / files)
+                                                       → reactive-execute (parallel)
+
+tasks WHERE status='pending' AND count < 3         → execute-task (sequential)
+
+quality_gates WHERE status='pending'               → gate-evaluate
+
+tasks all terminal AND
+  S##-ASSESSMENT artifact missing                  → run-uat
+
+tasks all terminal AND
+  slices.status ≠ 'complete'                       → complete-slice
+
+slice just completed AND
+  roadmap requires update                          → reassess-roadmap
+
+slices all complete AND
+  current DB validation receipt missing or stale   → validate-milestone
+
+current DB validation passes AND
+  Milestone lifecycle is not complete              → complete-milestone
+
+milestones.status = 'closed' AND
+  next milestone in queue                          → loop: next milestone
+
+nothing matches                                    → stop
+```
+
+---
+
+## 4. Full Data Lineage: Task Completion
+
+The authoritative planning, Task execution/publication, and Slice lifecycle
+lineage is maintained in the [database map](./db-map.md)
+and the [lifecycle command integration
+runbook](./dev/lifecycle-command-integration-runbook.md). This prompt map does
+not duplicate their transaction, evidence, replay, or projection-failure
+contracts.
+
+---
+
+## 5. Memory System: capture_thought → memory_query
+
+```
+execute-task / debug-diagnose / complete-milestone prompts
+  └─► capture_thought(category, content)
+        └─► INSERT INTO memories (id, category, content, confidence, source_unit_type, created_at)
+        └─► FTS triggers fire: INSERT INTO memories_fts
+
+later execute-task / plan-slice / research-slice prompts
+  └─► memory_query(keywords)
+        └─► SELECT FROM memories_fts WHERE content MATCH keywords  (FTS5)
+             OR  SELECT FROM memories WHERE content LIKE '%keywords%' LIMIT cap  (fallback)
+        └─► incrementMemoryHitCount(id, now):
+            UPDATE memories SET hit_count = hit_count + 1, last_hit_at = now  ← V28
+        └─► queryMemoriesRanked applies memoryDecayFactor(last_hit_at):
+            score *= max(0.7, 1.0 - 0.3 * min(1.0, daysAgo/90))               ← V28
+        └─► Returns ranked memory rows → inlined into {{inlinedContext}}
+```
+
+### Artifact Integrity Fingerprint (V27)
+
+Artifact-producing tools that persist through the `artifacts` table (for
+example, `guided-discuss-project` writing `PROJECT`) use `insertArtifact` in
+`gsd-db.ts`, which computes and persists a SHA-256 of `full_content` alongside
+the row:
+
+```
+prompt → gsd_summary_save tool → insertArtifact({...})
+  └─► content_hash = createHash('sha256').update(full_content).digest('hex')   ← V27
+  └─► INSERT OR REPLACE INTO artifacts (..., content_hash) VALUES (..., :hash)
+```
+
+The hash is read-only metadata for now (no consumers verify it yet); the column
+exists so future integrity-check tooling can detect manual edits or truncated
+writes without breaking older binaries (column is nullable).
+
+---
+
+## 6. Coordination: Auto-Mode Multi-Worker DB Interactions
+
+```
+worker process starts
+  └─► INSERT INTO workers (worker_id, host, pid, started_at, version, status)
+
+worker claims a milestone
+  └─► INSERT INTO milestone_leases (milestone_id, worker_id, fencing_token, expires_at, status='active')
+  └─► (unique PK on milestone_id prevents two workers claiming same milestone)
+
+worker dispatches a unit
+  └─► INSERT INTO unit_dispatches (trace_id, turn_id, worker_id, milestone_lease_token,
+                                   milestone_id, slice_id, task_id, unit_type, unit_id,
+                                   status='claimed', attempt_n, started_at)
+  └─► unique partial index: only one row with status IN ('claimed','running') per unit_id
+
+user cancels
+  └─► INSERT INTO cancellation_requests (scope, scope_id, dispatch_id, reason, status='pending')
+  └─► worker polls: SELECT FROM cancellation_requests WHERE status='pending'
+  └─► UPDATE cancellation_requests SET status='acked', acked_worker_id, acked_at
+
+parallel pause / resume / stop (details: db-map.md, `command_queue`)
+  └─► INSERT INTO command_queue (target_worker='<milestone ID>', command)
+  └─► worker takes the oldest pending row at a unit boundary; the take runs in
+      BEGIN IMMEDIATE so read-then-write claim races serialize under WAL
+
+unit completes
+  └─► UPDATE unit_dispatches SET status='done'|'failed', ended_at, exit_reason, error_summary
+  └─► (all further state from gsd_task_complete, gsd_slice_complete, etc.)
+```
+
+---
+
+## 7. Primary Table-Owner Files
+
+Trigger-, index-, and constraint-only migration helpers are intentionally not
+duplicated here; [db-map.md](./db-map.md#2-schema-version-history) owns the
+complete migration history.
+
+| Source File | Tables |
+|------------|--------|
+| `db-base-schema.ts` | schema_version, decisions, requirements, artifacts, memories, memory_processed_units, memory_sources, memory_embeddings, memory_relations, milestones, slices, tasks, verification_evidence, replan_history, assessments, quality_gates, slice_dependencies, gate_runs, turn_git_transactions, milestone_commit_attributions, audit_events, audit_turn_index + all indexes + active_decisions/active_requirements/active_memories views |
+| `db-canonical-foundation-schema.ts` | project_authority, workflow_operations, workflow_domain_events, workflow_outbox + domain-event immutability, durable-outbox deletion, safe-integer identity triggers, and canonical-foundation indexes (V31; planning handlers are runtime-routed) |
+| `db-lifecycle-foundation-schema.ts` | workflow_item_lifecycles, workflow_execution_attempts, workflow_attempt_results, workflow_blockers, workflow_waivers, workflow_requirement_dispositions + lifecycle, fencing, provenance, history, and vocabulary constraints (V32) |
+| `db-conversation-foundation-schema.ts` | workflow_milestone_contexts, workflow_open_questions, workflow_question_dependencies, workflow_interactions, workflow_interaction_options, workflow_answers, workflow_conversation_decisions, workflow_decision_impacts, workflow_work_checkpoints + recommendation-first, causal provenance, targeted revalidation, immutability, and single-head history constraints (V33) |
+| `db-recovery-evidence-foundation-schema.ts` | workflow_failure_observations, workflow_recovery_budgets, workflow_recovery_actions, workflow_acceptance_criteria, workflow_technical_verdicts, workflow_verification_evidence, workflow_human_acceptances, workflow_remediation_links + explicit agent/user/external recovery ownership, immutable count budgets derived from linked Actions, requirement-scoped criterion lineage, verdict-owned objective evidence, separate subjective acceptance, and immutable rework/remediation routing (V34) |
+| `db-projection-import-kernel-closeout-foundation-schema.ts` | workflow_projection_work, workflow_import_applications, workflow_kernel_checkpoints, workflow_closeout_plans, workflow_closeout_effects, workflow_settlement_receipts + per-key fenced projection delivery, import receipts carrying preview and verified-backup metadata, immutable kernel-stage lineage, versioned closeout plans, ordered idempotency-keyed effects, and success-only settlement receipts (V35) |
+| `db-coordination-schema.ts` | workers, milestone_leases, unit_dispatches, cancellation_requests, command_queue |
+| `db-memory-fts-schema.ts` | memories_fts (FTS5 virtual table), memories_ai/ad/au triggers |
+| `db-runtime-kv-schema.ts` | runtime_kv |
+| `db-verification-evidence-schema.ts` | verification_evidence dedup index (helper for V13 migration) |
+| `eval-review-schema.ts` | YAML frontmatter schema + parser for `/gsd eval-review` output (no SQL table — the eval-review contract lives in markdown frontmatter) |
+
+---
+
+## 8. Accessor Layer → Tables
+
+| Row Accessor File | Tables It Accesses |
+|------------------|--------------------|
+| `db-task-slice-rows.ts` | slices, tasks (row → typed struct parsers) |
+| `db-milestone-artifact-rows.ts` | milestones, artifacts (row → typed struct parsers) |
+| `db-decision-requirement-rows.ts` | decisions, requirements (row → typed struct parsers) |
+| `db-gate-rows.ts` | quality_gates (row → GateRow) |
+| `db-verification-evidence-rows.ts` | verification_evidence (row → VerificationEvidenceRow) |
+| `db-lightweight-query-rows.ts` | tasks (IdStatusSummary, ActiveTaskSummary, TaskStatusCounts aggregates) |
+
+---
+
+## 9. Key Invariants (Cross-Cutting)
+
+| Invariant | Where Enforced |
+|-----------|---------------|
+| Single-writer: raw write SQL is limited to the explicit writer-layer allowlists and named exceptions; `db/queries.ts` is read-only | authoritative allowlists and enforcement in `single-writer-invariant.test.ts`; architecture detail in [db-map.md](./db-map.md#7-write-path-invariants) |
+| Milestone full-redo reopen: every hierarchy head → canonical `ready`, legacy Milestone → `active`, Slices → `in_progress`, Tasks → `pending`; current cancellation Waivers are revoked | `gsd_milestone_reopen` Domain Operation |
+| No nested write transactions: `transaction()` and `immediateTransaction()` share one depth counter; `executeDomainOperation()` rejects an existing outer transaction so it owns the reserved-writer boundary; read-then-write claims use `immediateTransaction()` and gate verdict + ledger writes commit atomically | `db-transaction.test.ts`, `domain-operation.test.ts`, `gate-storage.test.ts` |
+| Workspace isolation: one DB per project root, shared across worktrees via WAL | `db-connection-cache.ts` identityKey |
+| Coordination: one active dispatch per unit_id at a time | `idx_unit_dispatches_active_per_unit` unique partial index |
+| Memory FTS fallback: LIKE scan if FTS5 unavailable | `tryCreateMemoriesFtsSchema` onUnavailable callback |
+| Pre-migration backup: file-backed migrations checkpoint WAL before replacing `.gsd/gsd.db.backup-vN`; the copied database must have the expected schema version and pass SQLite `quick_check`, and checkpoint/copy/validation failures warn then stop before migration DDL | `db-migration-backup.ts` |
+| Prompt template vars: all `{{vars}}` must be provided before substitution | `prompt-loader.ts` pre-substitution validation |
+| Prompt cache stability: static sections always before dynamic | `prompt-ordering.ts` reorderForCaching |
+
+The schema and migration contracts for these tables are owned by the
+[database map](./db-map.md). Current runtime adoption and deferred lifecycle
+boundaries are owned by the [architecture overview](./dev/architecture.md) and
+the [lifecycle command integration
+runbook](./dev/lifecycle-command-integration-runbook.md).

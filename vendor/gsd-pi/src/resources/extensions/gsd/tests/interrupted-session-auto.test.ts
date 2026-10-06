@@ -1,0 +1,333 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+
+import { _handlePausedSessionResumeRecoveryForTest, startAuto } from "../auto.ts";
+import { autoSession } from "../auto-runtime-state.ts";
+import { assessInterruptedSession } from "../interrupted-session.ts";
+import {
+  openDatabase,
+  closeDatabase,
+  insertMilestone,
+  insertSlice,
+  insertTask,
+  _getAdapter,
+} from "../gsd-db.ts";
+import { registerAutoWorker } from "../db/auto-workers.ts";
+import { claimMilestoneLease } from "../db/milestone-leases.ts";
+import { recordDispatchClaim } from "../db/unit-dispatches.ts";
+import { openAutoPause } from "../db/writers/auto-pauses.ts";
+import {
+  readPausedSessionMetadata,
+  type InterruptedSessionAssessment,
+} from "../interrupted-session.ts";
+import { normalizeRealPath } from "../paths.ts";
+
+function makeTmpBase(): string {
+  const base = join(tmpdir(), `gsd-auto-interrupted-${randomUUID()}`);
+  mkdirSync(join(base, ".gsd"), { recursive: true });
+  return base;
+}
+
+function cleanup(base: string): void {
+  try { closeDatabase(); } catch { /* */ }
+  try { rmSync(base, { recursive: true, force: true }); } catch { /* */ }
+}
+
+function openFixtureDb(base: string): void {
+  openDatabase(join(base, ".gsd", "gsd.db"));
+}
+
+function expireWorker(workerId: string): void {
+  const db = _getAdapter()!;
+  db.prepare(
+    `UPDATE workers SET last_heartbeat_at = '1970-01-01T00:00:00.000Z' WHERE worker_id = :worker_id`,
+  ).run({ ":worker_id": workerId });
+}
+
+function writeLock(base: string, unitType: string, unitId: string): number {
+  openFixtureDb(base);
+  insertMilestone({
+    id: "M001",
+    title: "Test Milestone",
+    status: unitType === "complete-slice" ? "complete" : "active",
+  });
+  const workerId = registerAutoWorker({ projectRootRealpath: normalizeRealPath(base) });
+  const lease = claimMilestoneLease(workerId, "M001");
+  assert.equal(lease.ok, true);
+  let dispatchId = 0;
+  if (lease.ok) {
+    const [, sliceId = null, taskId = null] = unitId.split("/");
+    const claimed = recordDispatchClaim({
+      traceId: `trace-${randomUUID().slice(0, 8)}`,
+      workerId,
+      milestoneLeaseToken: lease.token,
+      milestoneId: "M001",
+      sliceId,
+      taskId,
+      unitType,
+      unitId,
+    });
+    assert.equal(claimed.ok, true);
+    if (claimed.ok) dispatchId = claimed.dispatchId;
+  }
+  _getAdapter()!
+    .prepare(`UPDATE workers SET pid = 99999 WHERE worker_id = :worker_id`)
+    .run({ ":worker_id": workerId });
+  expireWorker(workerId);
+  return dispatchId;
+}
+
+function writePausedSession(base: string, milestoneId = "M001", stepMode = false): void {
+  openFixtureDb(base);
+  openAutoPause({
+    blockerKind: "user_request",
+    milestoneId,
+    originalBasePath: base,
+    stepMode,
+  });
+}
+
+function writeRoadmap(base: string, checked = false): void {
+  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  mkdirSync(join(milestoneDir, "slices", "S01", "tasks"), { recursive: true });
+  writeFileSync(
+    join(milestoneDir, "M001-ROADMAP.md"),
+    [
+      "# M001: Test Milestone",
+      "",
+      "## Vision",
+      "",
+      "Test milestone.",
+      "",
+      "## Success Criteria",
+      "",
+      "- It works.",
+      "",
+      "## Slices",
+      "",
+      `- [${checked ? "x" : " "}] **S01: Test slice** \`risk:low\``,
+      "  After this: Demo",
+      "",
+      "## Boundary Map",
+      "",
+      "- S01 → terminal",
+      "  - Produces: done",
+      "  - Consumes: nothing",
+    ].join("\n"),
+    "utf-8",
+  );
+}
+
+function writeCompleteArtifacts(base: string): void {
+  const milestoneDir = join(base, ".gsd", "milestones", "M001");
+  const sliceDir = join(milestoneDir, "slices", "S01");
+  const tasksDir = join(sliceDir, "tasks");
+  mkdirSync(sliceDir, { recursive: true });
+  mkdirSync(tasksDir, { recursive: true });
+  writeFileSync(join(sliceDir, "S01-PLAN.md"), "# S01: Test Slice\n\n## Tasks\n- [x] **T01: Do thing** `est:10m`\n", "utf-8");
+  writeFileSync(join(tasksDir, "T01-SUMMARY.md"), "# Task Summary\nDone.\n", "utf-8");
+  writeFileSync(join(sliceDir, "S01-SUMMARY.md"), "# Summary\nDone.\n", "utf-8");
+  writeFileSync(join(sliceDir, "S01-UAT.md"), "# UAT\nPassed.\n", "utf-8");
+  writeFileSync(join(milestoneDir, "M001-SUMMARY.md"), "# Milestone Summary\nDone.\n", "utf-8");
+}
+
+test("direct /gsd auto stale complete repo yields stale classification with no recovery payload", async () => {
+  const base = makeTmpBase();
+  try {
+    writeRoadmap(base, true);
+    writeCompleteArtifacts(base);
+    writeLock(base, "complete-slice", "M001/S01");
+
+    const assessment = await assessInterruptedSession(base);
+    assert.equal(assessment.classification, "stale");
+    assert.equal(assessment.recoveryPrompt, null);
+    assert.equal(assessment.hasResumableDiskState, false);
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("direct /gsd auto paused-session metadata remains recoverable when work is unfinished", async () => {
+  const base = makeTmpBase();
+  try {
+    writeRoadmap(base, false);
+    writePausedSession(base, "M001", false);
+    writeLock(base, "execute-task", "M001/S01/T01");
+
+    const assessment = await assessInterruptedSession(base);
+    assert.equal(assessment.classification, "recoverable");
+    assert.equal(assessment.pausedSession?.milestoneId, "M001");
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("direct /gsd auto stale paused-session metadata is treated as stale when no resumable work remains", async () => {
+  const base = makeTmpBase();
+  try {
+    writeRoadmap(base, true);
+    writeCompleteArtifacts(base);
+    writePausedSession(base, "M999", true);
+
+    const assessment = await assessInterruptedSession(base);
+    assert.equal(assessment.classification, "stale");
+    assert.equal(assessment.hasResumableDiskState, false);
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("direct /gsd auto never restores a paused milestone superseded by the active milestone", async (t) => {
+  const base = makeTmpBase();
+  const priorProjectId = process.env.GSD_PROJECT_ID;
+  process.env.GSD_PROJECT_ID = "invalid project id";
+  t.after(() => {
+    if (priorProjectId === undefined) delete process.env.GSD_PROJECT_ID;
+    else process.env.GSD_PROJECT_ID = priorProjectId;
+    autoSession.reset();
+    cleanup(base);
+  });
+
+  const pausedMilestoneId = "M016-5b17xo";
+  const activeMilestoneId = "M018-6b0xxe";
+  const milestoneDir = join(base, ".gsd", "milestones", pausedMilestoneId);
+  mkdirSync(milestoneDir, { recursive: true });
+  writeFileSync(join(milestoneDir, `${pausedMilestoneId}-CONTEXT.md`), "# Paused milestone\n");
+  openFixtureDb(base);
+  insertMilestone({ id: pausedMilestoneId, title: "Paused milestone", status: "active" });
+  writePausedSession(base, pausedMilestoneId);
+
+  const interrupted: InterruptedSessionAssessment = {
+    classification: "recoverable",
+    lock: null,
+    pausedSession: {
+      milestoneId: pausedMilestoneId,
+      originalBasePath: base,
+    },
+    state: {
+      activeMilestone: { id: activeMilestoneId, title: "Current milestone" },
+      phase: "pre-planning",
+    } as InterruptedSessionAssessment["state"],
+    recovery: null,
+    recoveryPrompt: null,
+    recoveryToolCallCount: 0,
+    artifactSatisfied: false,
+    hasResumableDiskState: true,
+    isBootstrapCrash: false,
+  };
+  const notifications: string[] = [];
+  const ctx = {
+    ui: {
+      notify: (message: string) => notifications.push(message),
+    },
+    sessionManager: {
+      getSessionId: () => "superseded-paused-session-test",
+    },
+    modelRegistry: {
+      getAvailable: () => [],
+      isProviderRequestReady: () => false,
+    },
+    model: undefined,
+  } as unknown as Parameters<typeof startAuto>[0];
+  const pi = {
+    getThinkingLevel: () => "off",
+  } as unknown as Parameters<typeof startAuto>[1];
+
+  await startAuto(ctx, pi, base, false, { interrupted });
+
+  assert.equal(readPausedSessionMetadata(base), null, "the superseded pause must be closed");
+  // #1644 required that the stale pin never be restored; #1643 goes one step
+  // further and adopts the project's current active milestone instead of
+  // starting from no milestone at all.
+  assert.notEqual(
+    autoSession.currentMilestoneId,
+    pausedMilestoneId,
+    "superseded milestone must not be pinned",
+  );
+  assert.equal(autoSession.currentMilestoneId, activeMilestoneId);
+  assert.ok(notifications.some((message) =>
+    message.includes(`Paused milestone ${pausedMilestoneId} was superseded`)
+    && message.includes(activeMilestoneId)
+  ));
+  assert.ok(notifications.some((message) => message.includes("GSD_PROJECT_ID must contain only")),
+    "clearing the stale pause should continue through fresh bootstrap");
+});
+
+test("direct /gsd auto source only resumes paused-session metadata for recoverable state with real recovery signals", async () => {
+  const source = await import(`node:fs/promises`).then((fs) =>
+    fs.readFile(new URL("../auto.ts", import.meta.url), "utf-8")
+  );
+  assert.ok(source.includes('const shouldResumePausedSession ='));
+  assert.ok(source.includes('freshStartAssessment.classification === "recoverable"'));
+  assert.ok(source.includes('&& ('));
+  assert.ok(source.includes('freshStartAssessment.hasResumableDiskState'));
+  assert.ok(source.includes('|| !!freshStartAssessment.recoveryPrompt'));
+  assert.ok(source.includes('|| !!freshStartAssessment.lock'));
+});
+
+test("direct /gsd auto skips paused-session replay when recovered unit already completed", async () => {
+  const base = makeTmpBase();
+  try {
+    // The paused plan-slice unit recorded its result: the slice has a task
+    // row (ADR-046). No PLAN file is written. Its dispatch row is still in the
+    // execute stage, so the result rows decide.
+    const dispatchId = writeLock(base, "plan-slice", "M001/S01");
+    insertSlice({ id: "S01", milestoneId: "M001", title: "Test Slice", status: "pending" });
+    insertTask({ id: "T01", sliceId: "S01", milestoneId: "M001", title: "First task", status: "pending" });
+
+    const state = {
+      pausedSessionFile: join(base, ".gsd", "activity", "paused-session.jsonl"),
+      pausedDispatchId: dispatchId,
+      pendingCrashRecovery: "stale-recovery-prompt",
+    };
+
+    const result = _handlePausedSessionResumeRecoveryForTest(base, state);
+    assert.equal(result.skippedReplay, true);
+    assert.equal(state.pausedSessionFile, null);
+    assert.equal(state.pendingCrashRecovery, null);
+    assert.equal(state.pausedDispatchId, null);
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("paused-session resume skips replay when the pause has no dispatch link", () => {
+  const base = makeTmpBase();
+  try {
+    // The pause row links no dispatch row: no unit was active. A replay with
+    // an unknown unit can neither be verified nor correctly targeted (the
+    // thrash that turns one stuck unit into several). Resume skips the replay
+    // and takes the next unit from the database.
+    openFixtureDb(base);
+    const state = {
+      pausedSessionFile: join(base, ".gsd", "activity", "paused-session.jsonl"),
+      pausedDispatchId: null,
+      pendingCrashRecovery: "stale-recovery-prompt",
+    };
+
+    const result = _handlePausedSessionResumeRecoveryForTest(base, state);
+    assert.equal(result.skippedReplay, true);
+    assert.equal(state.pausedSessionFile, null);
+    assert.equal(state.pendingCrashRecovery, null, "must not synthesize a replay for an unknown unit");
+  } finally {
+    cleanup(base);
+  }
+});
+
+test("interrupted-session source preserves raw lock and excludes same-pid from running classification", async () => {
+  const source = await import(`node:fs/promises`).then((fs) =>
+    fs.readFile(new URL("../interrupted-session.ts", import.meta.url), "utf-8")
+  );
+  assert.ok(source.includes('const lock = readCrashLock(basePath);'));
+  assert.ok(source.includes('if (lock && lock.pid !== process.pid && isLockProcessAlive(lock)) {'));
+});
+
+test("auto module imports successfully after interrupted-session changes", async () => {
+  const mod = await import(`../auto.ts?ts=${Date.now()}-${Math.random()}`);
+  assert.equal(typeof mod.startAuto, "function");
+  assert.equal(typeof mod.pauseAuto, "function");
+});

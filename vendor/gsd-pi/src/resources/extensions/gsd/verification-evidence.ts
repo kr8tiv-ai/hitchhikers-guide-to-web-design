@@ -1,0 +1,318 @@
+/**
+ * Verification Evidence — JSON persistence and markdown table formatting.
+ *
+ * Two pure-ish functions:
+ *   - writeVerificationJSON: persists a machine-readable T##-VERIFY.json artifact
+ *   - formatEvidenceTable:   returns a markdown evidence table string
+ *
+ * JSON schema uses schemaVersion: 1 for forward-compatibility.
+ * Failed-command output is persisted as bounded excerpts for forensics.
+ */
+
+import { join } from "node:path";
+import { atomicWriteSync } from "./atomic-write.js";
+import type { VerificationResult } from "./types.ts";
+
+// ─── JSON Evidence Artifact ──────────────────────────────────────────────────
+
+export interface EvidenceCheckJSON {
+  command: string;
+  exitCode: number;
+  durationMs: number;
+  verdict: "pass" | "fail" | "inconclusive";
+  failureClass?: "timeout" | "command-not-found" | "shell-parse";
+  stdoutExcerpt?: string;
+  stderrExcerpt?: string;
+}
+
+/** Maximum bytes retained for each stdout/stderr excerpt in VERIFY.json. */
+const MAX_OUTPUT_EXCERPT_BYTES = 4 * 1024;
+const OUTPUT_TRUNCATION_MARKER = "\n…[truncated]\n";
+
+function boundedOutputExcerpt(value: string): string | undefined {
+  if (!value) return undefined;
+  const output = Buffer.from(value, "utf-8");
+  if (output.byteLength <= MAX_OUTPUT_EXCERPT_BYTES) return value;
+
+  const marker = Buffer.from(OUTPUT_TRUNCATION_MARKER, "utf-8");
+  const retainedBytes = MAX_OUTPUT_EXCERPT_BYTES - marker.byteLength;
+  const headBytes = Math.floor(retainedBytes / 2);
+  const tailBytes = retainedBytes - headBytes;
+  let headEnd = headBytes;
+  while (headEnd > 0 && (output[headEnd] & 0xc0) === 0x80) headEnd--;
+  let tailStart = output.byteLength - tailBytes;
+  while (tailStart < output.byteLength && (output[tailStart] & 0xc0) === 0x80) tailStart++;
+  return Buffer.concat([
+    output.subarray(0, headEnd),
+    marker,
+    output.subarray(tailStart),
+  ]).toString("utf-8");
+}
+
+export interface RuntimeErrorJSON {
+  source: "bg-shell" | "browser";
+  severity: "crash" | "error" | "warning";
+  message: string;
+  blocking: boolean;
+}
+
+export interface AuditWarningJSON {
+  name: string;
+  severity: string;
+  title: string;
+  url: string;
+  fixAvailable: boolean;
+}
+
+export interface BrowserEvidenceCheckJSON {
+  description: string;
+  passed: boolean;
+  actual?: string;
+  evidence?: string;
+  error?: string;
+}
+
+export interface BrowserEvidenceJSON {
+  url: string;
+  passed: boolean;
+  checks: BrowserEvidenceCheckJSON[];
+  duration: number;
+}
+
+export interface PreExecutionCheckJSON {
+  /** Check category: package, file, tool, endpoint, schema */
+  category: "package" | "file" | "tool" | "endpoint" | "schema";
+  /** What was checked (e.g., package name, file path) */
+  target: string;
+  /** Whether the check passed */
+  passed: boolean;
+  /** Human-readable message explaining the result */
+  message: string;
+  /** Whether this failure should block execution (only meaningful when passed=false) */
+  blocking?: boolean;
+}
+
+export interface PostExecutionCheckJSON {
+  /** Check category: import, signature, pattern */
+  category: "import" | "signature" | "pattern";
+  /** What was checked (e.g., file:line, function name) */
+  target: string;
+  /** Whether the check passed */
+  passed: boolean;
+  /** Human-readable message explaining the result */
+  message: string;
+  /** Whether this failure should block completion (only meaningful when passed=false) */
+  blocking?: boolean;
+}
+
+export interface EvidenceJSON {
+  schemaVersion: 1;
+  taskId: string;
+  unitId: string;
+  timestamp: number;
+  passed: boolean;
+  discoverySource: string;
+  checks: EvidenceCheckJSON[];
+  retryAttempt?: number;
+  maxRetries?: number;
+  runtimeErrors?: RuntimeErrorJSON[];
+  auditWarnings?: AuditWarningJSON[];
+  browser?: BrowserEvidenceJSON;
+  /** Pre-execution checks run before task execution (package existence, file refs, etc.) */
+  preExecutionChecks?: PreExecutionCheckJSON[];
+  /** Post-execution checks run after task completion (import resolution, signature drift, pattern consistency) */
+  postExecutionChecks?: PostExecutionCheckJSON[];
+}
+
+/**
+ * The record of each host check: command, exit code, duration, verdict and the
+ * bounded output of a failed check. The canonical evidence row stores it, so
+ * the check output is in the database and not only in T##-VERIFY.json.
+ */
+export function evidenceChecks(result: VerificationResult): EvidenceCheckJSON[] {
+  return result.checks.map((check) => {
+    const stdoutExcerpt = check.exitCode === 0 ? undefined : boundedOutputExcerpt(check.stdout);
+    const stderrExcerpt = check.exitCode === 0 ? undefined : boundedOutputExcerpt(check.stderr);
+    return {
+      command: check.command,
+      exitCode: check.exitCode,
+      durationMs: check.durationMs,
+      verdict: check.failureClass === "command-not-found" || check.failureClass === "shell-parse"
+        ? "inconclusive"
+        : check.exitCode === 0
+          ? "pass"
+          : "fail",
+      ...(check.failureClass ? { failureClass: check.failureClass } : {}),
+      ...(stdoutExcerpt !== undefined ? { stdoutExcerpt } : {}),
+      ...(stderrExcerpt !== undefined ? { stderrExcerpt } : {}),
+    };
+  });
+}
+
+/**
+ * Write a T##-VERIFY.json artifact to the evidence directory.
+ * Creates the directory with mkdirSync({ recursive: true }) if it doesn't exist.
+ * Flat-phase callers can pass sliceId to write S##-T##-VERIFY.json.
+ *
+ * Failed-command stdout/stderr excerpts are bounded per stream so output is
+ * available to forensics without allowing artifacts to grow without limit.
+ */
+export function writeVerificationJSON(
+  result: VerificationResult,
+  tasksDir: string,
+  taskId: string,
+  unitId?: string,
+  retryAttempt?: number,
+  maxRetries?: number,
+  sliceId?: string,
+): void {
+
+  const evidence: EvidenceJSON = {
+    schemaVersion: 1,
+    taskId,
+    unitId: unitId ?? taskId,
+    timestamp: result.timestamp,
+    passed: result.passed,
+    discoverySource: result.discoverySource,
+    checks: evidenceChecks(result),
+    ...(retryAttempt !== undefined ? { retryAttempt } : {}),
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
+  };
+
+  if (result.runtimeErrors && result.runtimeErrors.length > 0) {
+    evidence.runtimeErrors = result.runtimeErrors.map(e => ({
+      source: e.source,
+      severity: e.severity,
+      message: e.message,
+      blocking: e.blocking,
+    }));
+  }
+
+  if (result.auditWarnings && result.auditWarnings.length > 0) {
+    evidence.auditWarnings = result.auditWarnings.map(w => ({
+      name: w.name,
+      severity: w.severity,
+      title: w.title,
+      url: w.url,
+      fixAvailable: w.fixAvailable,
+    }));
+  }
+
+  const fileName = sliceId ? `${sliceId}-${taskId}-VERIFY.json` : `${taskId}-VERIFY.json`;
+  const filePath = join(tasksDir, fileName);
+  atomicWriteSync(filePath, JSON.stringify(evidence, null, 2) + "\n", "utf-8");
+}
+
+// ─── Pre-Execution Evidence ──────────────────────────────────────────────────
+
+export interface PreExecutionEvidenceJSON {
+  schemaVersion: 1;
+  milestoneId: string;
+  sliceId: string;
+  timestamp: number;
+  status: "pass" | "warn" | "fail";
+  durationMs: number;
+  checks: PreExecutionCheckJSON[];
+}
+
+/**
+ * Write pre-execution check results to a PRE-EXEC-VERIFY.json artifact
+ * in the slice directory.
+ */
+export function writePreExecutionEvidence(
+  result: { status: "pass" | "warn" | "fail"; checks: PreExecutionCheckJSON[]; durationMs: number },
+  sliceDir: string,
+  milestoneId: string,
+  sliceId: string,
+): void {
+
+  const evidence: PreExecutionEvidenceJSON = {
+    schemaVersion: 1,
+    milestoneId,
+    sliceId,
+    timestamp: Date.now(),
+    status: result.status,
+    durationMs: result.durationMs,
+    checks: result.checks,
+  };
+
+  const filePath = join(sliceDir, `${sliceId}-PRE-EXEC-VERIFY.json`);
+  atomicWriteSync(filePath, JSON.stringify(evidence, null, 2) + "\n", "utf-8");
+}
+
+// ─── Markdown Evidence Table ─────────────────────────────────────────────────
+
+/**
+ * Format duration in milliseconds as seconds with 1 decimal place.
+ * e.g. 2340 → "2.3s", 150 → "0.2s", 0 → "0.0s"
+ *
+ * Distinct from the shared formatDuration (which uses adaptive ms/s/m/h units);
+ * evidence tables always display seconds for consistent column alignment.
+ */
+function formatDurationSecs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Generate a markdown evidence table from a VerificationResult.
+ *
+ * Returns a "no checks" note if result.checks is empty.
+ * Otherwise returns a 5-column markdown table: #, Command, Exit Code, Verdict, Duration.
+ */
+export function formatEvidenceTable(result: VerificationResult): string {
+  if (result.checks.length === 0) {
+    return "_No verification checks discovered._";
+  }
+
+  const lines: string[] = [
+    "| # | Command | Exit Code | Verdict | Duration |",
+    "| --- | --- | --- | --- | --- |",
+  ];
+
+  for (let i = 0; i < result.checks.length; i++) {
+    const check = result.checks[i];
+    const num = i + 1;
+    const verdict =
+      check.exitCode === 0 ? "✅ pass" : "❌ fail";
+    const duration = formatDurationSecs(check.durationMs);
+
+    lines.push(
+      `| ${num} | ${check.command} | ${check.exitCode} | ${verdict} | ${duration} |`,
+    );
+  }
+
+  if (result.runtimeErrors && result.runtimeErrors.length > 0) {
+    lines.push("");
+    lines.push("**Runtime Errors**");
+    lines.push("");
+    lines.push("| # | Source | Severity | Blocking | Message |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    for (let i = 0; i < result.runtimeErrors.length; i++) {
+      const err = result.runtimeErrors[i];
+      const blockIcon = err.blocking ? "🚫 yes" : "ℹ️ no";
+      lines.push(`| ${i + 1} | ${err.source} | ${err.severity} | ${blockIcon} | ${err.message.slice(0, 100)} |`);
+    }
+  }
+
+  if (result.auditWarnings && result.auditWarnings.length > 0) {
+    const severityEmoji: Record<string, string> = {
+      critical: "🔴",
+      high: "🟠",
+      moderate: "🟡",
+      low: "⚪",
+    };
+    lines.push("");
+    lines.push("**Audit Warnings**");
+    lines.push("");
+    lines.push("| # | Package | Severity | Title | Fix Available |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    for (let i = 0; i < result.auditWarnings.length; i++) {
+      const w = result.auditWarnings[i];
+      const emoji = severityEmoji[w.severity] ?? "⚪";
+      const fix = w.fixAvailable ? "✅ yes" : "❌ no";
+      lines.push(`| ${i + 1} | ${w.name} | ${emoji} ${w.severity} | ${w.title} | ${fix} |`);
+    }
+  }
+
+  return lines.join("\n");
+}

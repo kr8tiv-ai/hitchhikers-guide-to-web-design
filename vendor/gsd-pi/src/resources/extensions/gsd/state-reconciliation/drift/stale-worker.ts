@@ -1,0 +1,73 @@
+// Project/App: gsd-pi
+// File Purpose: ADR-017 stale-worker drift handler. Detects a worker row
+// whose process is no longer alive (typical after SIGKILL or laptop sleep
+// where the heartbeat wasn't released cleanly), and a session-lock artifact
+// left by a dead process, and clears them before the next dispatch.
+
+import {
+  effectiveLockFile,
+  isSessionLockProcessAlive,
+  readSessionLockData,
+  removeStaleSessionLock,
+} from "../../session-lock.js";
+import { clearStaleWorkerLock } from "../../crash-recovery.js";
+import { findStaleWorkerForProject } from "../../db/auto-workers.js";
+import { isDbAvailable } from "../../gsd-db.js";
+import { normalizeRealPath } from "../../paths.js";
+import { logWarning } from "../../workflow-logger.js";
+import type { GSDState } from "../../types.js";
+import type { DriftContext, DriftHandler, DriftRecord } from "../types.js";
+
+type StaleWorkerDrift = Extract<DriftRecord, { kind: "stale-worker" }>;
+
+export function detectStaleWorkerDrift(
+  _state: GSDState,
+  ctx: DriftContext,
+): StaleWorkerDrift[] {
+  // The worker registry decides. A crashed worker leaves a workers row
+  // 'active' with held leases and in-flight dispatches; the lock file of a
+  // live session (this one, after a restart) must not hide that row.
+  if (isDbAvailable()) {
+    try {
+      const stale = findStaleWorkerForProject(normalizeRealPath(ctx.basePath));
+      if (stale && typeof stale.pid === "number") {
+        return [{ kind: "stale-worker", lockPath: effectiveLockFile(), pid: stale.pid }];
+      }
+    } catch (err) {
+      // Best-effort: detection must never throw and abort the reconcile cycle.
+      logWarning(
+        "reconcile",
+        `stale-worker detection failed: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // No dead worker row. A lock file left by a dead process is still removed,
+  // so it cannot block the next lock acquisition.
+  const data = readSessionLockData(ctx.basePath);
+  if (data && typeof data.pid === "number" && !isSessionLockProcessAlive(data)) {
+    return [{ kind: "stale-worker", lockPath: effectiveLockFile(), pid: data.pid }];
+  }
+
+  return [];
+}
+
+export function repairStaleWorker(_record: StaleWorkerDrift, ctx: DriftContext): void {
+  // removeStaleSessionLock is idempotent: it re-reads lock state and is a
+  // no-op when the lock is held by an alive process. Safe under cap=2 retry.
+  removeStaleSessionLock(ctx.basePath);
+
+  // Removing the lock file alone leaves the DB-side worker state dangling: the
+  // dead worker's milestone_leases stay 'held' and its unit_dispatches stay
+  // 'running'/'claimed', blocking new claims until the lease TTL expires.
+  // clearStaleWorkerLock cancels those dispatches, releases the leases, and
+  // marks the worker stopping — the same cleanup the startup crash-recovery
+  // path performs. It is DB-gated, idempotent, and best-effort.
+  clearStaleWorkerLock(ctx.basePath);
+}
+
+export const staleWorkerHandler: DriftHandler<StaleWorkerDrift> = {
+  kind: "stale-worker",
+  detect: detectStaleWorkerDrift,
+  repair: repairStaleWorker,
+};

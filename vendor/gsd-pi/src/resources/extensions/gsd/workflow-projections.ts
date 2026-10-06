@@ -1,0 +1,521 @@
+// Project/App: gsd-pi
+// File Purpose: Projection renderers for GSD workflow database rows.
+// GSD Extension — Projection Renderers (DB -> Markdown)
+// Renders PLAN.md, ROADMAP.md, SUMMARY.md, and STATE.md from database rows.
+// Projections are read-only views of engine state (Layer 3 of the architecture).
+
+import {
+  _getAdapter,
+  isDbAvailable,
+  getAllMilestones,
+  getMilestoneSlices,
+  getSliceTasks,
+} from "./gsd-db.js";
+import type { MilestoneRow } from "./db-milestone-artifact-rows.js";
+import type { SliceRow, TaskRow } from "./db-task-slice-rows.js";
+import { atomicWriteSync } from "./atomic-write.js";
+import { writeProjectionFileSync } from "./compat/compat-marker.js";
+import { join } from "node:path";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { logWarning } from "./workflow-logger.js";
+import { isClosedStatus, isDiscardedMilestoneStatus } from "./status-guards.js";
+import { deriveState, invalidateStateCache } from "./state.js";
+import type { GSDState } from "./types.js";
+import { renderPlanFromDb, renderRoadmapFromDb, renderTaskSummary } from "./markdown-renderer.js";
+import { gsdRoot, resolveMilestoneFile, resolveSliceFile } from "./paths.js";
+import { stripIdPrefix } from "./strip-id-prefix.js";
+export { stripIdPrefix };
+
+// ─── PLAN.md Projection ──────────────────────────────────────────────────
+
+/**
+ * Render PLAN.md content from a slice row and its task rows.
+ * Pure function — no side effects.
+ */
+export function renderPlanContent(sliceRow: SliceRow, taskRows: TaskRow[]): string {
+  const lines: string[] = [];
+
+  const displayTitle = stripIdPrefix(sliceRow.title, sliceRow.id);
+  lines.push(`# ${sliceRow.id}: ${displayTitle}`);
+  lines.push("");
+  // #2945: never use full_summary_md/full_uat_md as display fallbacks —
+  // they contain multi-line rendered markdown that corrupts single-line fields.
+  lines.push(`**Goal:** ${sliceRow.goal || "TBD"}`);
+  lines.push(`**Demo:** After this: ${sliceRow.demo || "TBD"}`);
+  lines.push("");
+  lines.push("## Tasks");
+
+  for (const task of taskRows) {
+    const checkbox = isClosedStatus(task.status) ? "[x]" : "[ ]";
+    lines.push(`- ${checkbox} **${task.id}: ${task.title}** \u2014 ${task.description}`);
+
+    // Estimate subline (always present if non-empty)
+    if (task.estimate) {
+      lines.push(`  - Estimate: ${task.estimate}`);
+    }
+
+    // Files subline (only if non-empty array)
+    if (task.files && task.files.length > 0) {
+      lines.push(`  - Files: ${task.files.join(", ")}`);
+    }
+
+    // Verify subline (only if non-null)
+    if (task.verify) {
+      lines.push(`  - Verify: ${task.verify}`);
+    }
+
+    // Duration subline (only if recorded)
+    if (task.duration) {
+      lines.push(`  - Duration: ${task.duration}`);
+    }
+
+    // Blocker subline (if discovered)
+    if (task.blocker_discovered && task.known_issues) {
+      lines.push(`  - Blocker: ${task.known_issues}`);
+    }
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ─── ROADMAP.md Projection ───────────────────────────────────────────────
+
+/**
+ * Render ROADMAP.md content from a milestone row and its slice rows.
+ * Pure function — no side effects.
+ */
+export function renderRoadmapContent(milestoneRow: MilestoneRow, sliceRows: SliceRow[]): string {
+  const lines: string[] = [];
+
+  const displayTitle = stripIdPrefix(milestoneRow.title, milestoneRow.id);
+  lines.push(`# ${milestoneRow.id}: ${displayTitle}`);
+  lines.push("");
+  lines.push("## Vision");
+  lines.push(milestoneRow.vision || milestoneRow.title || "TBD");
+  lines.push("");
+  lines.push("## Slice Overview");
+  lines.push("| ID | Slice | Risk | Depends | Done | After this |");
+  lines.push("|----|-------|------|---------|------|------------|");
+
+  for (const slice of sliceRows) {
+    const done = isClosedStatus(slice.status) ? "\u2705" : "\u2B1C";
+
+    // depends is already parsed to string[] by rowToSlice
+    let depends = "\u2014";
+    if (slice.depends && slice.depends.length > 0) {
+      depends = slice.depends.join(", ");
+    }
+
+    const risk = (slice.risk || "low").toLowerCase();
+    // #2945 Bug 1: never use full_uat_md as a table cell fallback — it contains
+    // multi-line UAT content (preconditions, steps, expected results) that
+    // corrupts the markdown table and makes subsequent slices invisible.
+    const demo = slice.demo || "TBD";
+
+    lines.push(`| ${slice.id} | ${slice.title} | ${risk} | ${depends} | ${done} | ${demo} |`);
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+function milestoneStatusGlyph(status: string): string {
+  if (status === "complete" || status === "done") return "\u2705";
+  if (status === "active" || status === "in_progress") return "\uD83D\uDD04";
+  if (status === "parked") return "\u23F8\uFE0F";
+  return "\u2B1C";
+}
+
+export function renderTopLevelRoadmapContent(milestones: readonly MilestoneRow[]): string {
+  const lines: string[] = ["# Roadmap", "", "## Milestones", ""];
+
+  for (const milestone of milestones) {
+    if (isDiscardedMilestoneStatus(milestone.status)) continue;
+    const title = stripIdPrefix(milestone.title || milestone.id, milestone.id);
+    const depends = milestone.depends_on && milestone.depends_on.length > 0
+      ? milestone.depends_on.join(", ")
+      : "\u2014";
+    lines.push(`- ${milestoneStatusGlyph(milestone.status)} **${milestone.id}: ${title}** (\`depends:[${depends}]\`)`);
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+/** Write a file at the root of `.gsd` through the projection write rule. */
+function writeRootProjection(basePath: string, fileName: string, content: string): void {
+  const dir = gsdRoot(basePath);
+  mkdirSync(dir, { recursive: true });
+  writeProjectionFileSync(basePath, join(dir, fileName), content, []);
+}
+
+export function renderTopLevelRoadmapFromDb(basePath: string): void {
+  writeRootProjection(basePath, "ROADMAP.md", renderTopLevelRoadmapContent(getAllMilestones()));
+}
+
+export function renderTopLevelQueueFromDb(basePath: string): void {
+  const milestones = getAllMilestones();
+  const pending = milestones.filter(m =>
+    m.status !== "complete" && m.status !== "done" && !isDiscardedMilestoneStatus(m.status));
+  const lines: string[] = ["# Queue", ""];
+
+  if (pending.length === 0) {
+    lines.push("- No queued milestones.");
+  } else {
+    for (const milestone of pending) {
+      const title = stripIdPrefix(milestone.title || milestone.id, milestone.id);
+      lines.push(`- ${milestoneStatusGlyph(milestone.status)} **${milestone.id}: ${title}**`);
+    }
+  }
+
+  lines.push("");
+  writeRootProjection(basePath, "QUEUE.md", lines.join("\n"));
+}
+
+// ─── SUMMARY.md Projection ──────────────────────────────────────────────
+
+/**
+ * Render SUMMARY.md content from a task row.
+ * Single source of truth for summary rendering — used both at completion
+ * time and at projection regeneration time (#2720).
+ *
+ * @param evidence - Optional verification evidence rows, passed by complete-task.
+ */
+export function renderSummaryContent(
+  taskRow: TaskRow,
+  sliceId: string,
+  milestoneId: string,
+  evidence?: Array<{ command: string; exitCode?: number; exit_code?: number; verdict: string; durationMs?: number; duration_ms?: number }>,
+): string {
+  // If the task already has a fully rendered summary (written by handleCompleteTask's
+  // renderSummaryMarkdown), use it as-is. That content already includes frontmatter,
+  // heading, and all sections. Re-wrapping it inside a second frontmatter/heading
+  // envelope produces double frontmatter and duplicate sections.
+  if (taskRow.full_summary_md && taskRow.full_summary_md.trimStart().startsWith("---")) {
+    return taskRow.full_summary_md;
+  }
+
+  // ── Frontmatter (YAML list format, matches parseSummary() expectations) ──
+  const keyFilesYaml = taskRow.key_files && taskRow.key_files.length > 0
+    ? taskRow.key_files.map(f => `  - ${f}`).join("\n")
+    : "  - (none)";
+  const keyDecisionsYaml = taskRow.key_decisions && taskRow.key_decisions.length > 0
+    ? taskRow.key_decisions.map(d => `  - ${d}`).join("\n")
+    : "  - (none)";
+
+  // Derive verification_result from evidence if available
+  const evidenceList = evidence ?? [];
+  const allPassed = evidenceList.length > 0 &&
+    evidenceList.every(e => {
+      const code = e.exitCode ?? e.exit_code ?? -1;
+      return code === 0 || e.verdict.includes("\u2705") || e.verdict.toLowerCase().includes("pass");
+    });
+  const verificationResult = taskRow.verification_result
+    ? (allPassed ? "passed" : (evidenceList.length === 0 ? "untested" : "mixed"))
+    : (allPassed ? "passed" : (evidenceList.length === 0 ? "untested" : "mixed"));
+
+  // Build verification evidence table
+  let evidenceTable = "| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n";
+  if (evidenceList.length > 0) {
+    evidenceList.forEach((e, i) => {
+      const code = e.exitCode ?? e.exit_code ?? 0;
+      const dur = e.durationMs ?? e.duration_ms ?? 0;
+      evidenceTable += `| ${i + 1} | \`${e.command}\` | ${code} | ${e.verdict} | ${dur}ms |\n`;
+    });
+  } else {
+    evidenceTable += "| \u2014 | No verification commands discovered | \u2014 | \u2014 | \u2014 |\n";
+  }
+
+  const title = taskRow.one_liner || taskRow.title || taskRow.id;
+
+  return `---
+id: ${taskRow.id}
+parent: ${sliceId}
+milestone: ${milestoneId}
+key_files:
+${keyFilesYaml}
+key_decisions:
+${keyDecisionsYaml}
+duration:${taskRow.duration ? ` ${taskRow.duration}` : ""}
+verification_result: ${verificationResult}
+completed_at:${taskRow.completed_at ? ` ${taskRow.completed_at}` : ""}
+blocker_discovered: ${taskRow.blocker_discovered ? "true" : "false"}
+---
+
+# ${taskRow.id}: ${title}
+
+**${taskRow.one_liner || ""}**
+
+## What Happened
+
+${taskRow.narrative || "No summary recorded."}
+
+## Verification
+
+${taskRow.verification_result || "No verification recorded."}
+
+## Verification Evidence
+
+${evidenceTable}
+## Deviations
+
+${taskRow.deviations || "None."}
+
+## Known Issues
+
+${taskRow.known_issues || "None."}
+
+## Files Created/Modified
+
+${taskRow.key_files && taskRow.key_files.length > 0 ? taskRow.key_files.map(f => `- \`${f}\``).join("\n") : "None."}
+`;
+}
+
+// ─── STATE.md Projection ────────────────────────────────────────────────
+
+/**
+ * Render STATE.md content from GSDState. The only STATE.md content builder.
+ * Pure function — no side effects.
+ */
+export function renderStateContent(state: GSDState): string {
+  const lines: string[] = [];
+  lines.push("# GSD State", "");
+
+  const activeSlice = state.activeSlice
+    ? `${state.activeSlice.id}: ${stripIdPrefix(state.activeSlice.title, state.activeSlice.id)}`
+    : "None";
+
+  if (state.phase === 'complete' && state.lastCompletedMilestone) {
+    lines.push(`**Last Completed Milestone:** ${state.lastCompletedMilestone.id}: ${state.lastCompletedMilestone.title}`);
+  } else {
+    const activeMilestone = state.activeMilestone
+      ? `${state.activeMilestone.id}: ${stripIdPrefix(state.activeMilestone.title, state.activeMilestone.id)}`
+      : "None";
+    lines.push(`**Active Milestone:** ${activeMilestone}`);
+  }
+  lines.push(`**Active Slice:** ${activeSlice}`);
+  lines.push(`**Phase:** ${state.phase}`);
+  if (state.requirements) {
+    lines.push(`**Requirements Status:** ${state.requirements.active} active \u00b7 ${state.requirements.validated} validated \u00b7 ${state.requirements.deferred} deferred \u00b7 ${state.requirements.outOfScope} out of scope`);
+  }
+  lines.push("");
+  lines.push("## Milestone Registry");
+
+  for (const entry of state.registry) {
+    const glyph = entry.status === "complete" ? "\u2705" : entry.status === "active" ? "\uD83D\uDD04" : entry.status === "parked" ? "\u23F8\uFE0F" : "\u2B1C";
+    lines.push(`- ${glyph} **${entry.id}:** ${stripIdPrefix(entry.title, entry.id)}`);
+  }
+
+  lines.push("");
+  lines.push("## Recent Decisions");
+  if (state.recentDecisions.length > 0) {
+    for (const decision of state.recentDecisions) lines.push(`- ${decision}`);
+  } else {
+    lines.push("- None recorded");
+  }
+
+  lines.push("");
+  lines.push("## Blockers");
+  if (state.blockers.length > 0) {
+    for (const blocker of state.blockers) lines.push(`- ${blocker}`);
+  } else {
+    lines.push("- None");
+  }
+
+  lines.push("");
+  lines.push("## Next Action");
+  lines.push(state.nextAction || "None");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+/**
+ * Render STATE.md projection to disk. This is the only STATE.md writer: every
+ * mutation, the full rebuild, doctor, and guided entry call it after commit.
+ * Derives state from DB, renders content, writes via atomicWriteSync.
+ * When the DB is unavailable the file is left unchanged and stale is returned.
+ */
+export async function renderStateProjection(basePath: string): Promise<{ stale: boolean }> {
+  // A render follows a commit, so a cached derive from before it is stale.
+  invalidateStateCache();
+  try {
+    if (!isDbAvailable()) return { stale: true };
+    // Probe DB handle — adapter may be set but underlying handle closed
+    const adapter = _getAdapter();
+    if (!adapter) return { stale: true };
+    try {
+      adapter.prepare("SELECT 1").get();
+    } catch (err) {
+      logWarning("projection", "renderStateProjection: DB handle probe failed, skipping render", {
+        error: (err as Error).message,
+      });
+      return { stale: true };
+    }
+    const content = renderStateContent(await deriveState(basePath));
+    const dir = gsdRoot(basePath);
+    mkdirSync(dir, { recursive: true });
+    const statePath = join(dir, "STATE.md");
+    // A render of unchanged state writes nothing.
+    if (!existsSync(statePath) || readFileSync(statePath, "utf-8") !== content) {
+      atomicWriteSync(statePath, content);
+    }
+    return { stale: false };
+  } catch (err) {
+    logWarning("projection", `renderStateProjection failed: ${(err as Error).message}`);
+    return { stale: true };
+  } finally {
+    // The render's own derive must not stay cached: a later commit with no
+    // render of its own would be read back as this older state.
+    invalidateStateCache();
+  }
+}
+
+// ─── renderMilestoneShellProjections ─────────────────────────────────────
+
+/**
+ * Regenerate milestone-level projections (roadmap, top-level views, STATE.md).
+ * Does not touch slice PLAN.md or task SUMMARY.md — those have authoritative
+ * renderers in plan-slice / complete-task.
+ */
+export async function renderMilestoneShellProjections(
+  basePath: string,
+  milestoneId: string,
+  options: { skipRoadmap?: boolean } = {},
+): Promise<{ stale: boolean }> {
+  let stale = false;
+  if (!options.skipRoadmap) {
+    try {
+      await renderRoadmapFromDb(basePath, milestoneId);
+    } catch (err) {
+      stale = true;
+      logWarning("projection", `renderRoadmapFromDb failed for ${milestoneId}: ${(err as Error).message}`);
+    }
+  }
+  try {
+    renderTopLevelRoadmapFromDb(basePath);
+  } catch (err) {
+    stale = true;
+    logWarning("projection", `renderTopLevelRoadmapFromDb failed: ${(err as Error).message}`);
+  }
+  try {
+    renderTopLevelQueueFromDb(basePath);
+  } catch (err) {
+    stale = true;
+    logWarning("projection", `renderTopLevelQueueFromDb failed: ${(err as Error).message}`);
+  }
+  try {
+    const rendered = await renderStateProjection(basePath);
+    stale ||= rendered.stale;
+  } catch (err) {
+    stale = true;
+    logWarning("projection", `renderStateProjection failed: ${(err as Error).message}`);
+  }
+  return { stale };
+}
+
+// ─── renderAllProjections ───────────────────────────────────────────────
+
+/**
+ * Regenerate all projection files for a milestone from DB state.
+ * All calls are wrapped in try/catch — projection failure is non-fatal per D-02.
+ */
+export async function renderAllProjections(
+  basePath: string,
+  milestoneId: string,
+): Promise<{ stale: boolean }> {
+  const shell = await renderMilestoneShellProjections(basePath, milestoneId);
+  let stale = shell.stale;
+
+  // Query all slices for this milestone
+  const sliceRows = getMilestoneSlices(milestoneId);
+
+  for (const slice of sliceRows) {
+    // PLAN.md is rendered by the authoritative markdown-renderer.js in
+    // plan-slice/replan-slice tools. Do NOT overwrite it here — the simplified
+    // projection is missing key sections (Must-Haves, Verification, Files
+    // Likely Touched) and corrupts multi-line task descriptions (#3651).
+
+    // Task SUMMARY.md: the same renderer as the full rebuild, so a flush and a
+    // rebuild write the same bytes.
+    for (const task of getSliceTasks(milestoneId, slice.id)) {
+      try {
+        await renderTaskSummary(basePath, milestoneId, slice.id, task.id);
+      } catch (err) {
+        stale = true;
+        logWarning("projection", `renderTaskSummary failed for ${milestoneId}/${slice.id}/${task.id}: ${(err as Error).message}`);
+      }
+    }
+  }
+  return { stale };
+}
+
+// ─── regenerateIfMissing ────────────────────────────────────────────────
+
+/**
+ * Check if a projection file exists on disk. If missing, regenerate it from DB.
+ * Returns true if the file was regenerated, false if it already existed or
+ * regeneration failed.
+ * Satisfies PROJ-05 (corrupted/deleted projections regenerate on demand).
+ */
+export async function regenerateIfMissing(
+  basePath: string,
+  milestoneId: string,
+  sliceId: string,
+  fileType: "PLAN" | "ROADMAP" | "STATE",
+): Promise<boolean> {
+  let filePath: string;
+
+  switch (fileType) {
+    case "PLAN":
+      // Use resolveSliceFile so both flat-phase and legacy layouts are detected.
+      // Falls back to "" (non-existent) when the file hasn't been rendered yet.
+      filePath = resolveSliceFile(basePath, milestoneId, sliceId, "PLAN") ?? "";
+      break;
+    case "ROADMAP":
+      filePath = resolveMilestoneFile(basePath, milestoneId, "ROADMAP") ?? "";
+      break;
+    case "STATE":
+      filePath = join(gsdRoot(basePath), "STATE.md");
+      break;
+  }
+
+  if (existsSync(filePath)) {
+    return false;
+  }
+
+  // A sketch slice (or any slice not yet planned into tasks) legitimately has
+  // no PLAN.md to project. renderPlanFromDb throws on a zero-task slice, so
+  // skip cleanly here rather than logging a spurious failure. The PLAN.md will
+  // be created once the slice is refined and its first task is written through
+  // the single writer.
+  if (
+    fileType === "PLAN" &&
+    !getSliceTasks(milestoneId, sliceId).some((task) => task.status !== "skipped")
+  ) {
+    return false;
+  }
+
+  // Regenerate the missing file. Each renderer may swallow its own errors
+  // (e.g. renderStateProjection), so confirm the file actually exists on
+  // disk before reporting success — true must mean "file is there now".
+  try {
+    switch (fileType) {
+      case "PLAN":
+        await renderPlanFromDb(basePath, milestoneId, sliceId);
+        // Re-resolve after render: the rendered file may be at a different path
+        // from the pre-check (flat-phase vs legacy). resolveSliceFile finds it.
+        return !!(resolveSliceFile(basePath, milestoneId, sliceId, "PLAN"));
+      case "ROADMAP":
+        await renderRoadmapFromDb(basePath, milestoneId);
+        return !!resolveMilestoneFile(basePath, milestoneId, "ROADMAP");
+      case "STATE":
+        await renderStateProjection(basePath);
+        return existsSync(filePath);
+    }
+  } catch (err) {
+    logWarning("projection", `regenerateIfMissing ${fileType} failed: ${(err as Error).message}`);
+    return false;
+  }
+}

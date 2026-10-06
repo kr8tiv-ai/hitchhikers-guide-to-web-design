@@ -1,0 +1,3137 @@
+import io
+import json
+import subprocess
+import shutil
+import sys
+import tempfile
+import unittest
+from datetime import date
+from pathlib import Path
+from unittest import mock
+
+from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
+from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
+
+PIPELINE_STATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_state.py"
+
+
+SETTLED_SYNTHESIS = """# Synthesis
+
+## Settled
+- Python only, per INTENT constraints.
+
+## Decisions
+- None
+
+## For the planner
+- **Wave-1 blockers**: No open decisions.
+- **Walking skeleton**: Counter CLI with JSON.
+- **Pitfalls → tasks**: Reject invalid CLI arguments.
+
+## User rulings
+- None
+
+## Still unknown
+- None
+"""
+
+
+def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        encoding="utf-8", errors="replace",
+    )
+
+
+def state_text(
+    *,
+    project: str = "demo",
+    milestone: str = "second",
+    phase: str = "plan",
+    status: str = "done",
+    branch: str = "null",
+    archive: str = "null",
+    integration_default=None,
+    integration=None,
+    integration_source=None,
+) -> str:
+    integration_fields = ""
+    if integration_default is not None:
+        integration_fields += f"integration_default: {integration_default}\n"
+    if integration is not None:
+        integration_fields += f"integration: {integration}\n"
+    if integration_source is not None:
+        integration_fields += f"integration_source: {integration_source}\n"
+    return (
+        "---\n"
+        "pipeline: gsd-path/v2\n"
+        f"project: {project}\n"
+        f"milestone: {milestone}\n"
+        f"phase: {phase}\n"
+        f"status: {status}\n"
+        f"branch: {branch}\n"
+        f"archive: {archive}\n"
+        f"{integration_fields}"
+        "---\n\n"
+        "# Project State\n\n"
+        "## Log\n\n"
+        "- 2026-08-23 — plan — fixture\n"
+    )
+
+
+def repo_with_collect_journal(
+    root: Path, *, stage: str, previous_primary: bool = False
+) -> Path:
+    repo = root / "repo"
+    run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+    project = repo / ".project"
+    project.mkdir()
+    (project / "STATE.md").write_bytes(
+        state_text(
+            milestone="first",
+            phase="build",
+            status="active",
+            branch="gsd-path/M001",
+        ).encode("utf-8"),
+    )
+    run_git(repo, "add", ".project/STATE.md")
+    run_git(
+        repo,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "fixture",
+    )
+    head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+    common = Path(run_git(repo, "rev-parse", "--git-common-dir").stdout.strip())
+    if not common.is_absolute():
+        common = repo / common
+    receipt = common / "gsd-path" / "collect-artifact" / "receipt.json"
+    receipt.parent.mkdir(parents=True)
+    receipt.write_bytes(
+        json.dumps(
+            {
+                "schema": "gsd-path/collect-artifact/v1",
+                "primary_worktree": str(
+                    root / "previous-primary" if previous_primary else repo.resolve()
+                ),
+                "source_worktree": str(repo.resolve()),
+                "base": head,
+                "branch": "gsd-path-verify/demo",
+                "source": "artifact.md",
+                "destination": ".project/review/artifact.md",
+                "expected_destination": None,
+                "bytes": 4,
+                "previous_sha256": None,
+                "replaced": False,
+                "sha256": "a" * 64,
+                "stage": stage,
+            }
+        ).encode("utf-8"),
+    )
+    return repo
+
+
+def roadmap_text() -> str:
+    return (
+        "# Roadmap — demo\n\n"
+        "## Milestones\n\n"
+        "### M001 — first\n\n"
+        "Goal: first\n"
+        "Depends on: []\n"
+        "Status: shipped\n"
+        "Archive: .project/archive/001-first/\n"
+        "Integrated: null\n\n"
+        "Open questions\n"
+        "- None\n\n"
+        "### M002 — second\n\n"
+        "Goal: second\n"
+        "Depends on: [M001]\n"
+        "Status: pending\n"
+        "Archive: null\n"
+        "Integrated: null\n\n"
+        "Open questions\n"
+        "- None\n"
+    )
+
+
+def task_text() -> str:
+    return TASK_TEMPLATE.format(
+        task_id="T002", files_block="  - app.py", context="Change the app.",
+        approach="Implement the approved behavior.", contract="- None",
+        verify="python3 app.py",
+    )
+
+
+class PipelineStateTests(unittest.TestCase):
+    def test_authorized_task_worktree_routes_build_but_not_over_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path-task/T001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+            with mock.patch.object(
+                pipeline_state, "authorized_task_worktree", return_value=True
+            ):
+                routed = pipeline_state.route_state(repo)
+                self.assertEqual("run-phase", routed["route"]["action"])
+                self.assertEqual("build", routed["route"]["phase"])
+
+                with mock.patch.object(
+                    pipeline_state,
+                    "undo_transaction",
+                    return_value={"kind": "task", "expected_head": "a" * 40},
+                ):
+                    recovery = pipeline_state.route_state(repo)
+
+            self.assertEqual("resume-undo", recovery["route"]["action"])
+
+    def test_legacy_state_defaults_to_direct_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+
+            state, _, _ = pipeline_state.load_state(repo)
+
+            self.assertEqual(state.integration_default, "direct")
+            self.assertEqual(state.integration, "direct")
+
+    def test_state_accepts_explicit_pull_request_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    integration_default="pull-request",
+                    integration="pull-request",
+                ).encode("utf-8"),
+            )
+
+            state, _, _ = pipeline_state.load_state(repo)
+
+            self.assertEqual(state.integration_default, "pull-request")
+            self.assertEqual(state.integration, "pull-request")
+
+    def test_state_rejects_partial_integration_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(integration_default="pull-request").encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "integration_default and integration must appear together",
+            ):
+                pipeline_state.load_state(repo)
+
+    def test_configure_integration_updates_default_and_milestone_before_build(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+
+            configured = pipeline_state.configure_integration(
+                repo, "default", "pull-request"
+            )
+            overridden = pipeline_state.configure_integration(
+                repo, "milestone", "direct"
+            )
+
+            self.assertEqual(configured["state"]["integration_default"], "pull-request")
+            self.assertEqual(configured["state"]["integration"], "pull-request")
+            self.assertEqual(overridden["state"]["integration_default"], "pull-request")
+            self.assertEqual(overridden["state"]["integration"], "direct")
+
+    def test_pre_approval_grant_is_bound_before_intent_and_consumed_by_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            state = project / "STATE.md"
+            state.write_bytes(state_text(milestone="null", phase="define", status="active").encode("utf-8"))
+            for bad in ("ship", "intent,intent", "plan,"):
+                with self.subTest(grant=bad), self.assertRaisesRegex(pipeline_state.PipelineStateError, "distinct"):
+                    pipeline_state.pre_approve(repo, bad, None)
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "no pre-approval"):
+                pipeline_state.pre_approve(repo, None, "intent")
+
+            pipeline_state.pre_approve(repo, "intent", None)
+            pipeline_state.pre_approve(repo, None, "intent")
+            self.assertTrue(state.read_text(encoding="utf-8").endswith("— define — pre-authorized approval: intent\n"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "does not grant plan"):
+                pipeline_state.pre_approve(repo, None, "plan")
+
+            pipeline_state.transition_state(
+                repo,
+                {"phase": "define", "status": "active", "branch": None, "archive": None, "milestone": None},
+                {"status": "done", "milestone": "first"},
+                "milestone intent approved",
+            )
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "before milestone intent approval"):
+                pipeline_state.pre_approve(repo, "intent,plan", None)
+            state.write_bytes(state.read_text(encoding="utf-8").replace("status: done", "status: active").encode("utf-8"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "used or out of scope"):
+                pipeline_state.pre_approve(repo, None, "intent")
+
+    def test_explicit_milestone_override_survives_matching_default_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+
+            pipeline_state.configure_integration(repo, "milestone", "pull-request")
+            pipeline_state.configure_integration(repo, "default", "pull-request")
+            configured = pipeline_state.configure_integration(repo, "default", "direct")
+
+            self.assertEqual(configured["state"]["integration_default"], "direct")
+            self.assertEqual(configured["state"]["integration"], "pull-request")
+            self.assertEqual(configured["state"]["integration_source"], "milestone")
+
+    def test_configure_integration_rejects_build_or_later(self) -> None:
+        positions = (("build", "active"), ("ship", "active"), ("shipped", "done"))
+        for phase, status in positions:
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                run_git(repo, "init", "-b", "gsd-path/M001")
+                project = repo / ".project"
+                project.mkdir()
+                archive = (
+                    ".project/archive/001-first/" if phase == "shipped" else "null"
+                )
+                (project / "STATE.md").write_bytes(
+                    state_text(
+                        milestone="first",
+                        phase=phase,
+                        status=status,
+                        branch="gsd-path/M001",
+                        archive=archive,
+                    ).encode("utf-8"),
+                )
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "integration mode is locked when build starts",
+                ):
+                    pipeline_state.configure_integration(
+                        repo, "milestone", "pull-request"
+                    )
+
+    def test_lookahead_cannot_change_project_integration_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            next_project = repo / ".project" / "next"
+            next_project.mkdir(parents=True)
+            state_path = next_project / "STATE.md"
+            state_path.write_bytes(
+                state_text(
+                    milestone="second",
+                    phase="plan",
+                    status="active",
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "active track",
+            ):
+                pipeline_state.configure_integration(
+                    repo,
+                    "default",
+                    "pull-request",
+                    ".project/next",
+                )
+
+            state, _, _ = pipeline_state.load_state(repo, ".project/next")
+            self.assertEqual(state.integration_default, "direct")
+
+    def test_transition_cannot_bypass_integration_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                    integration_default="direct",
+                    integration="direct",
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "integration mode changes require configure-integration",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "active",
+                        "branch": "gsd-path/M001",
+                        "archive": None,
+                        "integration": "direct",
+                    },
+                    {"integration": "pull-request"},
+                    "bypass integration helper",
+                )
+
+    def test_validate_and_route_approved_unbound_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+
+            validated = pipeline_state.validate_state(repo)
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(validated["status"], "valid")
+            self.assertEqual(routed["route"]["action"], "bind-initial")
+            self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
+
+    def test_status_reports_bind_initial_before_git_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual("bind-initial", status["route"]["action"])
+            self.assertEqual("gsd-path/M001", status["route"]["branch"])
+            self.assertEqual(
+                {
+                    "branch": None,
+                    "head": None,
+                    "subject": "",
+                    "dirty": [],
+                    "origin_branch": None,
+                    "origin_main": None,
+                    "published": False,
+                    "ancestor_of_origin_main": False,
+                },
+                status["git"],
+            )
+            self.assertTrue(
+                all(value is None for value in status["journals"].values())
+            )
+
+    def test_pending_future_owner_blocks_routing_and_transition(self) -> None:
+        from tests.test_discussion_records import DiscussionRecordTests
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            fixture = DiscussionRecordTests()
+            fixture.make_repo(repo)
+            run_git(repo, "checkout", "-b", "gsd-path/M001")
+            state = repo / ".project/STATE.md"
+            state.write_bytes(state_text(phase="define", status="done", branch="gsd-path/M001").encode("utf-8"))
+            intent = repo / ".project/intent/INTENT.md"
+            intent.parent.mkdir()
+            intent.write_bytes("# Intent\n\nLane: standard\n".encode("utf-8"))
+            prepared = fixture.command(repo, "prepare")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+            appended = fixture.command(repo, "append", fixture.turn_payload(repo, "turn.json"))
+            self.assertEqual(appended.returncode, 0, appended.stderr)
+            before = state.read_bytes()
+
+            with self.subTest(operation="route"):
+                result = pipeline_state.route_state(repo)
+                self.assertEqual(result["route"]["action"], "block")
+                self.assertIn("A001", result["route"]["reason"])
+                self.assertIn("gsd-path-plan", result["route"]["reason"])
+            with self.subTest(operation="transition"):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "pending discussion"):
+                    pipeline_state.transition_state(
+                        repo,
+                        {"phase": "define", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                        {"phase": "research", "status": "active"},
+                        "research started",
+                    )
+                self.assertEqual(state.read_bytes(), before)
+
+            state.write_bytes(state_text(phase="decide", status="done", branch="gsd-path/M001").encode("utf-8"))
+            synthesis = repo / ".project/research/SYNTHESIS.md"
+            synthesis.parent.mkdir(exist_ok=True)
+            synthesis.write_bytes(SETTLED_SYNTHESIS.encode("utf-8"))
+            result = pipeline_state.route_state(repo)
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "plan")
+            entered = pipeline_state.transition_state(
+                repo,
+                {"phase": "decide", "status": "done", "branch": "gsd-path/M001", "archive": None},
+                {"phase": "plan", "status": "active"},
+                "planning started",
+            )
+            self.assertEqual(entered["state"]["phase"], "plan")
+
+    def test_status_reports_route_without_mutating(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "intent").mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8"),
+            )
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: plan done")
+            before = (project / "STATE.md").read_text(encoding="utf-8")
+
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(status["schema"], pipeline_state.STATUS_SCHEMA)
+            self.assertFalse(status["advance"])
+            self.assertEqual(status["route"]["action"], "run-phase")
+            self.assertEqual(status["route"]["phase"], "build")
+            self.assertEqual(status["next_skill"], "gsd-path-build")
+            self.assertEqual((project / "STATE.md").read_text(encoding="utf-8"), before)
+            self.assertEqual(status["pending_answers"], [])
+
+    def test_status_marks_head_published_when_remote_branch_advanced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", branch="gsd-path/M001").encode("utf-8"),
+            )
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8")
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: published ancestor")
+            published = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            (repo / "later.txt").write_bytes("later\n".encode("utf-8"))
+            run_git(repo, "add", "later.txt")
+            run_git(repo, "commit", "-m", "fixture: later remote tip")
+            run_git(repo, "push", "origin", "gsd-path/M001")
+            run_git(repo, "reset", "--hard", published)
+
+            self.assertTrue(pipeline_state.status_state(repo)["git"]["published"])
+
+    def test_status_ignores_completed_artifact_collection_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = repo_with_collect_journal(Path(tmp), stage="complete")
+
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["collect_artifact"]
+            )
+
+    def test_status_ignores_completed_receipts_from_previous_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = repo_with_collect_journal(
+                Path(tmp), stage="complete", previous_primary=True
+            )
+
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["collect_artifact"]
+            )
+
+    def test_status_rejects_completed_receipts_with_invalid_primary(self) -> None:
+        for primary in ("", ".", "previous-primary"):
+            with self.subTest(primary=primary), tempfile.TemporaryDirectory() as tmp:
+                repo = repo_with_collect_journal(
+                    Path(tmp), stage="complete", previous_primary=True
+                )
+                receipt = repo / ".git/gsd-path/collect-artifact/receipt.json"
+                journal = json.loads(receipt.read_text(encoding="utf-8"))
+                journal["primary_worktree"] = primary
+                receipt.write_bytes(json.dumps(journal).encode("utf-8"))
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "artifact collection primary worktree must be absolute",
+                ):
+                    pipeline_state.status_state(repo)
+
+    def test_status_rejects_incomplete_receipts_from_previous_primary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = repo_with_collect_journal(
+                Path(tmp), stage="prepared", previous_primary=True
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "artifact collection journal belongs to another worktree",
+            ):
+                pipeline_state.status_state(repo)
+
+    def test_status_blocks_when_git_ancestry_probe_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            origin = root / "origin.git"
+            subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+            repo = root / "repo"
+            run_git(root, "init", "-b", "gsd-path/M001", str(repo))
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(
+                repo,
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "fixture",
+            )
+            run_git(repo, "remote", "add", "origin", str(origin))
+            run_git(repo, "push", "-u", "origin", "gsd-path/M001")
+            original = pipeline_state._run_git
+
+            def fail_ancestry(path, *arguments, **kwargs):
+                if arguments[:2] == ("merge-base", "--is-ancestor"):
+                    return subprocess.CompletedProcess(arguments, 128, "", "bad object")
+                return original(path, *arguments, **kwargs)
+
+            with mock.patch.object(pipeline_state, "_run_git", side_effect=fail_ancestry):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError, "bad object"
+                ):
+                    pipeline_state.status_state(repo)
+
+    def test_route_binds_initialized_state_before_phase_work(self) -> None:
+        for phase in ("inspect", "define"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                run_git(repo, "init", "-b", "main")
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_bytes(
+                    state_text(phase=phase, status="active", milestone="null").encode("utf-8"),
+                )
+
+                routed = pipeline_state.route_state(repo)
+
+                self.assertEqual(routed["route"]["action"], "bind-initial")
+                self.assertEqual(routed["route"]["branch"], "gsd-path/M001")
+
+    def test_validate_rejects_unowned_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            text = state_text().replace("pipeline: gsd-path/v2", "pipeline: other/v1")
+            (project / "STATE.md").write_bytes(text.encode("utf-8"))
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "pipeline must be gsd-path/v2",
+            ):
+                pipeline_state.validate_state(repo)
+
+    def test_validate_rejects_m000_branch_and_archive(self) -> None:
+        cases = (
+            (
+                state_text(branch="gsd-path/M000"),
+                "invalid branch",
+            ),
+            (
+                state_text(
+                    milestone="first",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M001",
+                    archive=".project/archive/000-first/",
+                ),
+                "invalid archive",
+            ),
+        )
+        for content, message in cases:
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_bytes(content.encode("utf-8"))
+
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, message):
+                    pipeline_state.validate_state(repo)
+
+    def test_route_rejects_m000_roadmap_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("M002", "M000").encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "invalid milestone id: M000",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_route_rejects_duplicate_roadmap_slugs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("### M002 — second", "### M002 — first").encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "repeats milestone slug: first",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_validate_enforces_lookahead_context(self) -> None:
+        cases = (
+            (
+                state_text(branch="gsd-path/M002"),
+                "lookahead branch and archive must be null",
+            ),
+            (
+                state_text(phase="build", status="active"),
+                "lookahead cannot enter build",
+            ),
+            (
+                state_text(phase="roadmap", status="active"),
+                "lookahead cannot enter roadmap",
+            ),
+        )
+        for content, message in cases:
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                next_root = repo / ".project" / "next"
+                next_root.mkdir(parents=True)
+                (next_root / "STATE.md").write_bytes(content.encode("utf-8"))
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    message,
+                ):
+                    pipeline_state.validate_state(repo, ".project/next")
+
+    def test_validate_accepts_initial_lookahead_inspect_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            next_root = repo / ".project" / "next"
+            next_root.mkdir(parents=True)
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="inspect", status="active").encode("utf-8"),
+            )
+
+            result = pipeline_state.validate_state(repo, ".project/next")
+
+            self.assertEqual(result["state"]["phase"], "inspect")
+
+    def test_validate_skips_ignored_ds_store_in_lookahead(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-q")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
+            next_root = repo / ".project" / "next"
+            (next_root / "intent").mkdir(parents=True)
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="inspect", status="active").encode("utf-8"),
+            )
+            (next_root / "intent" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
+
+            result = pipeline_state.validate_state(repo, ".project/next")
+
+            self.assertEqual(result["state"]["phase"], "inspect")
+
+    def test_route_keeps_approved_lookahead_unbound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            next_root = repo / ".project" / "next"
+            next_root.mkdir(parents=True)
+            (next_root / "STATE.md").write_bytes(state_text().encode("utf-8"))
+
+            result = pipeline_state.route_state(repo, ".project/next")
+
+            self.assertEqual(result["route"]["action"], "wait")
+            self.assertEqual(result["route"]["mode"], "lookahead-ready")
+
+    def test_route_reads_lookahead_milestone_open_questions_at_define_done(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            next_root = project / "next"
+            (next_root / "intent").mkdir(parents=True)
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="build", status="active", branch="gsd-path/M001").encode("utf-8"),
+            )
+            (next_root / "STATE.md").write_bytes(
+                state_text(milestone="second", phase="define", status="done").encode("utf-8"),
+            )
+            (next_root / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\nLane: milestone\n".encode("utf-8")
+            )
+            roadmap = (
+                roadmap_text()
+                .replace("Status: shipped", "Status: active")
+                .replace(
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n- None\n",
+                    "Status: pending\nArchive: null\nIntegrated: null\n\nOpen questions\n"
+                    "- Which storage backend?\n",
+                )
+            )
+            (project / "ROADMAP.md").write_bytes(roadmap.encode("utf-8"))
+
+            result = pipeline_state.route_state(repo, ".project/next")
+
+            self.assertEqual(result["route"]["action"], "run-phase")
+            self.assertEqual(result["route"]["phase"], "research")
+            self.assertEqual(result["route"]["mode"], "milestone")
+            self.assertEqual(
+                result["route"]["reason"], "lookahead roadmap milestone has open questions"
+            )
+
+    def test_route_derives_initial_branch_from_active_roadmap_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            roadmap = roadmap_text().replace(
+                "### M002 — second\n\nGoal: second\nDepends on: [M001]\nStatus: pending",
+                "### M002 — second\n\nGoal: second\nDepends on: [M001]\nStatus: active",
+            )
+            (project / "ROADMAP.md").write_bytes(roadmap.encode("utf-8"))
+
+            result = pipeline_state.route_state(repo)
+
+            self.assertEqual(result["route"]["action"], "bind-initial")
+            self.assertEqual(result["route"]["branch"], "gsd-path/M002")
+
+    def test_decide_transition_refuses_invalid_synthesis_before_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "research").mkdir(parents=True)
+            state = project / "STATE.md"
+            state.write_bytes(state_text(phase="decide", status="active", branch="gsd-path/M001").encode("utf-8"))
+            synthesis = project / "research/SYNTHESIS.md"
+            valid = SETTLED_SYNTHESIS
+            expected = {"phase": "decide", "status": "active", "branch": "gsd-path/M001", "archive": None}
+            for phase, status, changes, event in (
+                ("decide", "active", {"status": "done"}, "synthesis validated"),
+                ("decide", "done", {"phase": "plan", "status": "active"}, "planning started"),
+            ):
+                with self.subTest(status=status):
+                    state.write_bytes(state_text(phase=phase, status=status, branch="gsd-path/M001").encode("utf-8"))
+                    before = state.read_bytes()
+                    synthesis.write_bytes(valid.replace("## Decisions\n- None", "## Decisions\nNone. All choices are settled.").encode("utf-8"))
+                    expected["status"] = status
+                    with self.assertRaisesRegex(pipeline_state.PipelineStateError, "decide handoff failed"):
+                        pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(state.read_bytes(), before)
+                    synthesis.write_bytes(valid.encode("utf-8"))
+                    result = pipeline_state.transition_state(repo, expected, changes, event)
+                    self.assertEqual(result["state"]["status"], changes["status"])
+
+    def test_define_done_transition_requires_complete_probe_tables(self) -> None:
+        criteria = "## Success criteria\n\n1. First outcome.\n2. Second outcome.\n"
+        head = (
+            "## Edge coverage\n\n"
+            "| Edge | Criterion | Category | Disposition | Detail |\n"
+            "|------|-----------|----------|-------------|--------|\n"
+        )
+        incomplete = head + "| E1 | SC1 | none | dismissed | static |\n"
+        complete = incomplete + "| E2 | SC2 | none | dismissed | static |\n"
+        expected = {"phase": "define", "status": "active", "branch": "gsd-path/M001", "archive": None}
+        changes = {"status": "done"}
+        event = "intent approved"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            state = project / "STATE.md"
+            intent = project / "intent/INTENT.md"
+            active = state_text(phase="define", status="active", branch="gsd-path/M001").encode("utf-8")
+            state.write_bytes(active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + incomplete).encode("utf-8"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "define handoff failed"):
+                pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(state.read_bytes(), active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + complete).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # An intent written before the probe carries no tables and still passes.
+            state.write_bytes(active)
+            intent.write_bytes(("# Intent\n\n" + criteria).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # Program mode has a CHARTER and no INTENT.md.
+            state.write_bytes(active)
+            intent.unlink()
+            (project / "CHARTER.md").write_bytes(b"# Charter\n")
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+    def test_transition_compares_expected_state_before_atomic_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            state_path = project / "STATE.md"
+            state_path.write_bytes(state_text().encode("utf-8"))
+
+            result = pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "plan",
+                    "status": "done",
+                    "branch": None,
+                    "archive": None,
+                },
+                {"branch": "gsd-path/M002"},
+                "router bound initial milestone",
+            )
+
+            self.assertEqual(result["state"]["branch"], "gsd-path/M002")
+            changed = state_path.read_text(encoding="utf-8")
+            self.assertIn("router bound initial milestone", changed)
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "expected state does not match",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "done",
+                        "branch": None,
+                        "archive": None,
+                    },
+                    {"status": "active"},
+                    "must not write",
+                )
+            self.assertEqual(state_path.read_text(encoding="utf-8"), changed)
+
+    def test_transition_rejects_gate_skips_and_wrong_edge_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            state_path = project / "STATE.md"
+            state_path.write_bytes(
+                state_text(
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "illegal state transition",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "active",
+                        "branch": "gsd-path/M001",
+                        "archive": None,
+                    },
+                    {
+                        "phase": "shipped",
+                        "status": "done",
+                        "archive": ".project/archive/001-second/",
+                    },
+                    "skip every gate",
+                )
+
+            state_path.write_bytes(
+                state_text(
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M002",
+                ).encode("utf-8"),
+            )
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "requires event: build started",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "done",
+                        "branch": "gsd-path/M002",
+                        "archive": None,
+                    },
+                    {"phase": "build", "status": "active"},
+                    "start somehow",
+                )
+
+    def _plan_intent_correction_repo(self, *, status: str = "active") -> Path:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repo = Path(temporary.name)
+        run_git(repo, "init", "-b", "gsd-path/M001")
+        run_git(repo, "config", "user.name", "GSD Path Test")
+        run_git(repo, "config", "user.email", "test@example.com")
+        project = repo / ".project"
+        for directory in ("plan", "intent"):
+            (project / directory).mkdir(parents=True)
+        (project / "STATE.md").write_bytes(
+            state_text(
+                phase="plan",
+                status=status,
+                branch="gsd-path/M001",
+            ).encode("utf-8"),
+        )
+        (project / "intent/INTENT.md").write_bytes(
+            b"# Intent\n\nLane: quick\n\n## Success criteria\n\n- SC1: observable behavior\n",
+        )
+        (project / "plan/PLAN.md").write_bytes(PLAN_WAVE.format(title="demo").encode("utf-8"))
+        run_git(repo, "add", ".project")
+        run_git(repo, "commit", "-m", "fixture: plan intent correction base")
+        return repo
+
+    def test_plan_intent_correction_transitions_to_define_from_active(self) -> None:
+        repo = self._plan_intent_correction_repo()
+        result = pipeline_state.transition_state(
+            repo,
+            {
+                "phase": "plan",
+                "status": "active",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            {"phase": "define", "status": "active"},
+            "plan intent corrections requested",
+        )
+        self.assertEqual(result["state"]["phase"], "define")
+        self.assertEqual(result["state"]["status"], "active")
+        text = (repo / ".project/STATE.md").read_text(encoding="utf-8")
+        self.assertIn("build recovery:", text)
+        recovery = pipeline_state._build_recovery().context(repo, text)
+        self.assertTrue(recovery and recovery["active"])
+        self.assertEqual(recovery["source"], "plan")
+        self.assertEqual(recovery["kind"], "define")
+        route = pipeline_state.route_state(repo)["route"]
+        self.assertEqual(route["phase"], "define")
+        self.assertEqual(route["mode"], "corrections")
+
+    def test_plan_intent_correction_transitions_to_define_from_blocked(self) -> None:
+        repo = self._plan_intent_correction_repo(status="blocked")
+        result = pipeline_state.transition_state(
+            repo,
+            {
+                "phase": "plan",
+                "status": "blocked",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            {"phase": "define", "status": "active"},
+            "plan intent corrections requested",
+        )
+        self.assertEqual((result["state"]["phase"], result["state"]["status"]), ("define", "active"))
+
+    def test_plan_intent_correction_requires_exact_event(self) -> None:
+        repo = self._plan_intent_correction_repo()
+        with self.assertRaisesRegex(
+            pipeline_state.PipelineStateError,
+            "requires event: plan intent corrections requested",
+        ):
+            pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "plan",
+                    "status": "active",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                {"phase": "define", "status": "active"},
+                "build intent corrections requested",
+            )
+
+    def test_transition_cannot_enter_build_on_lookahead_track(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            next_root = repo / ".project" / "next"
+            next_root.mkdir(parents=True)
+            (next_root / "STATE.md").write_bytes(state_text().encode("utf-8"))
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "lookahead cannot enter build",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "plan",
+                        "status": "done",
+                        "branch": None,
+                        "archive": None,
+                    },
+                    {"phase": "build", "status": "active"},
+                    "build started",
+                    ".project/next",
+                )
+
+    def test_transition_allows_shipment_only_with_the_ship_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            state_path = project / "STATE.md"
+            state_path.write_bytes(
+                state_text(
+                    milestone="second",
+                    phase="ship",
+                    status="active",
+                    branch="gsd-path/M002",
+                    archive=".project/archive/002-second/",
+                ).encode("utf-8"),
+            )
+            expected = {
+                "phase": "ship",
+                "status": "active",
+                "branch": "gsd-path/M002",
+                "archive": ".project/archive/002-second/",
+            }
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "archive preflight passed; shipment recorded",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    expected,
+                    {"phase": "shipped", "status": "done"},
+                    "ship somehow",
+                )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected,
+                {"phase": "shipped", "status": "done"},
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(
+                (result["state"]["phase"], result["state"]["status"]),
+                ("shipped", "done"),
+            )
+
+    def test_transition_rejects_build_phase_milestone_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="build",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "illegal STATE.milestone transition",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "build",
+                        "status": "active",
+                        "milestone": "first",
+                        "branch": "gsd-path/M001",
+                        "archive": None,
+                    },
+                    {"milestone": "renamed"},
+                    "rename active work",
+                )
+
+    def test_transition_allows_active_track_roadmap_reslice_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    phase="define",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "define",
+                    "status": "active",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                {"phase": "roadmap", "status": "active"},
+                "roadmap re-slice started",
+            )
+            self.assertEqual(result["state"]["phase"], "roadmap")
+
+            next_root = project / "next"
+            next_root.mkdir()
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="define", status="active").encode("utf-8"),
+            )
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "lookahead cannot enter roadmap|active track",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "define",
+                        "status": "active",
+                        "branch": None,
+                        "archive": None,
+                    },
+                    {"phase": "roadmap", "status": "active"},
+                    "roadmap re-slice started",
+                    ".project/next",
+                )
+
+    def test_transition_binds_abandon_event_to_state_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            state_path = project / "STATE.md"
+            content = state_text(
+                milestone="first",
+                phase="build",
+                status="active",
+                branch="gsd-path/M001",
+                archive=".project/archive/001-first/",
+                integration_default="direct",
+                integration="pull-request",
+                integration_source="milestone",
+            )
+            state_path.write_bytes(content.encode("utf-8"))
+            expected = {
+                "phase": "build",
+                "status": "active",
+                "milestone": "first",
+                "branch": "gsd-path/M001",
+                "archive": ".project/archive/001-first/",
+            }
+            changes = {
+                "phase": "roadmap",
+                "status": "active",
+                "milestone": None,
+                "archive": None,
+            }
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "abandon event",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    expected,
+                    changes,
+                    "milestone abandoned: other; archive: elsewhere; ruling: stop",
+                )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected,
+                changes,
+                "milestone abandoned: first; archive: .project/archive/001-first/; "
+                "ruling: stop this milestone",
+            )
+            self.assertEqual(
+                (result["state"]["phase"], result["state"]["milestone"]),
+                ("roadmap", None),
+            )
+            self.assertEqual(result["state"]["integration_default"], "direct")
+            self.assertEqual(result["state"]["integration"], "direct")
+            self.assertEqual(result["state"]["integration_source"], "default")
+
+    def test_main_rejects_mixed_promote_next_argument_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            error = io.StringIO()
+            with (
+                mock.patch.object(sys, "stderr", error),
+                mock.patch.object(state_promote, "promote_next") as promote,
+            ):
+                result = pipeline_state.main(
+                    [
+                        "promote-next",
+                        "--repo",
+                        tmp,
+                        "--milestone",
+                        "second",
+                        "--branch",
+                        "gsd-path/M002",
+                        "--integrate",
+                        "a" * 40,
+                        "--base",
+                        "b" * 40,
+                        "--landing",
+                        "c" * 40,
+                    ]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertIn("cannot combine", error.getvalue())
+            promote.assert_not_called()
+
+    def test_transition_requires_a_higher_branch_after_shipment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="second",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M002",
+                    archive=".project/archive/002-second/",
+                ).encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "higher router-bound branch",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    {
+                        "phase": "shipped",
+                        "status": "done",
+                        "milestone": "second",
+                        "branch": "gsd-path/M002",
+                        "archive": ".project/archive/002-second/",
+                    },
+                    {
+                        "phase": "define",
+                        "status": "active",
+                        "milestone": "third",
+                        "branch": "gsd-path/M002",
+                        "archive": None,
+                    },
+                    "next milestone bound",
+                )
+
+    def test_next_milestone_resets_integration_from_project_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            archive = ".project/archive/001-first/"
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M001",
+                    archive=archive,
+                    integration_default="pull-request",
+                    integration="direct",
+                    integration_source="milestone",
+                ).encode("utf-8"),
+            )
+            expected = {
+                "phase": "shipped",
+                "status": "done",
+                "milestone": "first",
+                "branch": "gsd-path/M001",
+                "archive": archive,
+                "integration": "direct",
+            }
+            changes = {
+                "phase": "inspect",
+                "status": "active",
+                "milestone": "second",
+                "branch": "gsd-path/M002",
+                "archive": None,
+            }
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected,
+                changes,
+                "next milestone bound",
+            )
+
+            self.assertEqual(result["state"]["integration_default"], "pull-request")
+            self.assertEqual(result["state"]["integration"], "pull-request")
+            self.assertEqual(result["state"]["integration_source"], "default")
+
+    def test_legacy_next_milestone_materializes_direct_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            archive = ".project/archive/001-first/"
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="shipped",
+                    status="done",
+                    branch="gsd-path/M001",
+                    archive=archive,
+                ).encode("utf-8"),
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "shipped",
+                    "status": "done",
+                    "milestone": "first",
+                    "branch": "gsd-path/M001",
+                    "archive": archive,
+                },
+                {
+                    "phase": "inspect",
+                    "status": "active",
+                    "milestone": "second",
+                    "branch": "gsd-path/M002",
+                    "archive": None,
+                },
+                "next milestone bound",
+            )
+
+            self.assertEqual(result["state"]["integration_default"], "direct")
+            self.assertEqual(result["state"]["integration"], "direct")
+            self.assertEqual(result["state"]["integration_source"], "default")
+
+    def test_transition_requires_canonical_patch_reopen_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            state_path = project / "STATE.md"
+            state_path.write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+            expected = {
+                "phase": "plan",
+                "status": "done",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            }
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "illegal state transition",
+            ):
+                pipeline_state.transition_state(
+                    repo,
+                    expected,
+                    {"status": "active"},
+                    "reopen somehow",
+                )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected,
+                {"status": "active"},
+                "patch plan reopened",
+            )
+            self.assertEqual(result["state"]["status"], "active")
+
+    def test_transition_state_rejects_direct_plan_and_roadmap_approval(self) -> None:
+        cases = (
+            (
+                "plan",
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                {
+                    "phase": "plan",
+                    "status": "active",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                {"status": "done"},
+                "plan approved",
+            ),
+            (
+                "roadmap",
+                state_text(
+                    milestone="null",
+                    phase="roadmap",
+                    status="active",
+                    branch="gsd-path/M001",
+                ),
+                {
+                    "phase": "roadmap",
+                    "status": "active",
+                    "milestone": None,
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                {"status": "done", "milestone": "first"},
+                "program roadmap approved",
+            ),
+        )
+        for kind, content, expected, changes, event in cases:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                state_path = project / "STATE.md"
+                state_path.write_bytes(content.encode("utf-8"))
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    rf"{kind} approval requires pipeline_state.py approve --kind {kind}",
+                ):
+                    pipeline_state.transition_state(
+                        repo,
+                        expected,
+                        changes,
+                        event,
+                    )
+
+                self.assertEqual(state_path.read_text(encoding="utf-8"), content)
+
+    def test_transition_cli_rejects_direct_plan_and_roadmap_approval(self) -> None:
+        cases = (
+            ("plan", "first", "plan approved"),
+            ("roadmap", "null", "program roadmap approved"),
+        )
+        for kind, milestone, event in cases:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                content = state_text(
+                    milestone=milestone,
+                    phase=kind,
+                    status="active",
+                    branch="gsd-path/M001",
+                )
+                state_path = project / "STATE.md"
+                state_path.write_bytes(content.encode("utf-8"))
+                command = [
+                    sys.executable,
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
+                    "transition",
+                    "--repo",
+                    str(repo),
+                    "--event",
+                    event,
+                    "--expect-phase",
+                    kind,
+                    "--expect-status",
+                    "active",
+                    "--expect-branch",
+                    "gsd-path/M001",
+                    "--expect-archive",
+                    "null",
+                    "--set-status",
+                    "done",
+                ]
+                if kind == "roadmap":
+                    command.extend(
+                        [
+                            "--expect-milestone",
+                            "null",
+                            "--set-milestone",
+                            "first",
+                        ]
+                    )
+
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    encoding="utf-8", errors="replace",
+                    check=False,
+                )
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    f"{kind} approval requires pipeline_state.py approve --kind {kind}",
+                    result.stderr,
+                )
+                self.assertEqual(state_path.read_text(encoding="utf-8"), content)
+
+    def _approval_repo(self, tmp: str, kind: str) -> tuple[Path, str]:
+        repo = Path(tmp) / "repo"
+        run_git(Path(tmp), "init", "-b", "gsd-path/M001", str(repo))
+        run_git(repo, "config", "user.name", "GSD Path Test")
+        run_git(repo, "config", "user.email", "test@example.com")
+        project = repo / ".project"
+        project.mkdir()
+        phase = "plan" if kind == "plan" else "roadmap"
+        milestone = "first" if kind == "plan" else "null"
+        (project / "STATE.md").write_bytes(
+            state_text(
+                milestone=milestone,
+                phase=phase,
+                status="active",
+                branch="gsd-path/M001",
+            ).encode("utf-8"),
+        )
+        run_git(repo, "add", ".project/STATE.md")
+        run_git(repo, "commit", "-m", "fixture: approval base")
+        expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        if kind == "plan":
+            (project / "tasks").mkdir()
+            (project / "tasks" / "T001-new.md").write_bytes(
+                TASK_TEMPLATE.format(
+                    task_id="T001", files_block="  - newpkg/app.py",
+                    context="Create the requested module.", approach="Implement the module.",
+                    contract="- None", verify="python3 newpkg/app.py",
+                ).encode("utf-8"),
+            )
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8"),
+            )
+        else:
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("Status: shipped", "Status: pending", 1).encode("utf-8"),
+            )
+        return repo, expected_head
+
+    def test_deferred_approval_requires_no_head_new_github_or_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "checkpoint deferral requires.*approve --kind plan --expected-head",
+            ):
+                state_checkpoint.defer_approval(repo, "plan")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError, "--patch applies only to --kind plan"
+            ):
+                state_checkpoint.defer_approval(repo, "roadmap", patch=True)
+
+            (repo / ".project" / "REPOSITORY.md").write_bytes(
+                "Kind: new-github\nRemote: https://github.com/o/r\n".encode("utf-8"),
+            )
+            result = state_checkpoint.defer_approval(repo, "plan")
+
+            self.assertEqual(result["status"], "approved")
+            self.assertIsNone(result["commit"])
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn(".project/STATE.md", run_git(repo, "status", "--porcelain").stdout)
+
+    def test_patch_plan_approval_defers_its_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+
+            result = state_checkpoint.defer_approval(repo, "plan", patch=True)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertEqual(result["kind"], "plan")
+            self.assertIsNone(result["commit"])
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertIn("patch plan approved", text)
+
+    def test_deferred_approvals_work_before_git_exists(self) -> None:
+        for kind, milestone in (("plan", "first"), ("roadmap", "null")):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                project = repo / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_bytes(
+                    state_text(milestone=milestone, phase=kind, status="active").encode("utf-8"),
+                )
+                (project / "ROADMAP.md").write_bytes(
+                    roadmap_text().replace("Status: shipped", "Status: pending", 1).encode("utf-8"),
+                )
+                command = [
+                    sys.executable,
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
+                    "approve",
+                    "--repo",
+                    str(repo),
+                    "--kind",
+                    kind,
+                    "--defer-checkpoint",
+                ]
+                if kind == "roadmap":
+                    command.extend(["--milestone", "first"])
+
+                result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["status"], "approved")
+                self.assertTrue(payload["deferred"])
+                state = pipeline_state.load_state(repo)[0]
+                self.assertEqual((state.phase, state.status, state.milestone), (kind, "done", "first"))
+                if kind == "roadmap":
+                    roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+                    self.assertIn("### M001 — first\n\nGoal: first\nDepends on: []\nStatus: active", roadmap)
+
+    def test_approve_cli_requires_expected_head_unless_deferred(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, _ = self._approval_repo(tmp, "plan")
+            command = [
+                sys.executable,
+                str(PIPELINE_STATE_SCRIPT.resolve()),
+                "approve",
+                "--repo",
+                str(repo),
+                "--kind",
+                "plan",
+            ]
+
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("approve requires --expected-head", result.stderr)
+
+    def test_post_abandon_selection_moves_roadmap_active_to_inspect(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="null", phase="roadmap", status="active", branch="gsd-path/M001").encode("utf-8"),
+            )
+
+            result = pipeline_state.transition_state(
+                repo,
+                expected={
+                    "phase": "roadmap",
+                    "status": "active",
+                    "milestone": None,
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                changes={"phase": "inspect", "status": "active", "milestone": "second"},
+                event="roadmap approved after abandoned milestone: first",
+            )
+
+            self.assertEqual(result["status"], "transitioned")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual(
+                (state.phase, state.status, state.milestone, state.branch),
+                ("inspect", "active", "second", "gsd-path/M001"),
+            )
+
+    def test_plan_approval_rejects_invalid_brief_before_state_or_commit(self) -> None:
+        for patch in (False, True):
+            with self.subTest(patch=patch), tempfile.TemporaryDirectory() as tmp:
+                repo, head = self._approval_repo(tmp, "plan")
+                task = repo / ".project/tasks/T001-new.md"
+                task.write_bytes(task.read_text(encoding="utf-8").replace("newpkg/app.py", "../outside.py").encode("utf-8"))
+                state = repo / ".project/STATE.md"
+                before = state.read_bytes()
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "task brief.*validation|must not contain"):
+                    if patch:
+                        state_checkpoint.defer_approval(repo, "plan", patch=True)
+                    else:
+                        state_checkpoint.checkpoint_approval(repo, "plan", head)
+                self.assertEqual(before, state.read_bytes())
+                self.assertEqual(head, run_git(repo, "rev-parse", "HEAD").stdout.strip())
+                self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
+
+    def test_plan_approval_owns_state_change_and_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+
+            result = state_checkpoint.checkpoint_approval(
+                repo,
+                "plan",
+                expected_head,
+            )
+
+            self.assertEqual(result["status"], "approved")
+            self.assertEqual(result["state"]["status"], "done")
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+                "plan: build plan approved",
+            )
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%b", "HEAD").stdout.strip(),
+                "Why: approved plan checkpoint\nMilestone: first",
+            )
+            self.assertFalse(
+                pipeline_state._git_path(
+                    repo,
+                    pipeline_state.CHECKPOINT_JOURNAL_NAME,
+                ).exists()
+            )
+
+    def test_plan_approval_uses_historical_bases_and_dependency_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "gsd-path/M001", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            (repo / "src").mkdir()
+            (repo / "src" / "legacy.ts").write_bytes("export {}\n".encode("utf-8"))
+            (repo / "src" / "helper.ts").write_bytes("export {}\n".encode("utf-8"))
+            run_git(repo, "add", "src/legacy.ts", "src/helper.ts")
+            run_git(repo, "commit", "-m", "historical product")
+            historical = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (repo / "src" / "legacy.ts").unlink()
+            (repo / "src" / "helper.ts").unlink()
+            run_git(repo, "add", "-u", "src/legacy.ts", "src/helper.ts")
+            run_git(repo, "commit", "-m", "remove historical product")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first",
+                    phase="plan",
+                    status="active",
+                    branch="gsd-path/M001",
+                ).encode("utf-8"),
+            )
+            run_git(repo, "add", ".project/STATE.md")
+            run_git(repo, "commit", "-m", "fixture: approval base")
+            expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            (project / "plan").mkdir()
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8"),
+            )
+            (project / "tasks").mkdir()
+            t001 = TASK_TEMPLATE.format(
+                task_id="T001",
+                files_block="  - src/legacy.ts",
+                context="Read `src/helper.ts`.",
+                approach="Keep the historical file.",
+                contract="- None",
+                verify="python3 src/legacy.ts",
+            ).replace("status: pending", "status: done").replace(
+                "agent: null", "agent: coder"
+            ).replace("base: null", f"base: {historical}")
+            t002 = TASK_TEMPLATE.format(
+                task_id="T002",
+                files_block="  - src/other.py",
+                context="Read `src/legacy.ts`.",
+                approach="Consume the landed file.",
+                contract="- None",
+                verify="python3 src/other.py",
+            ).replace("deps: []", "deps: [T001]")
+            (project / "tasks" / "T001-legacy.md").write_bytes(t001.encode("utf-8"))
+            (project / "tasks" / "T002-other.md").write_bytes(t002.encode("utf-8"))
+
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+
+            self.assertEqual(result["status"], "approved")
+
+    def test_approval_refused_for_project_junk_resumes_after_removal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            junk = repo / ".project" / ".inspect-inventory.tmp"
+            junk.write_bytes("junk\n".encode("utf-8"))
+
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported .project artifacts"):
+                state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+            junk.unlink()
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertNotEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
+
+    def test_plan_approval_allows_runtime_model_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            (repo / ".project" / "model-policy.json").write_bytes(
+                b'{"roles": {"coder": {"model": "inherit"}}}\n'
+            )
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+            self.assertEqual(result["status"], "approved")
+
+    def test_roadmap_approval_owns_selection_state_and_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "roadmap")
+
+            result = state_checkpoint.checkpoint_approval(
+                repo,
+                "roadmap",
+                expected_head,
+                selected_milestone="first",
+            )
+
+            self.assertEqual(
+                (result["state"]["milestone"], result["state"]["status"]),
+                ("first", "done"),
+            )
+            roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "### M001 — first\n\nGoal: first\nDepends on: []\nStatus: active",
+                roadmap,
+            )
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+                "roadmap: program roadmap approved",
+            )
+
+    def test_route_and_resume_approval_after_state_write_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            with mock.patch.object(
+                state_checkpoint,
+                "isolation_checkpoint",
+                side_effect=pipeline_state.IsolationError("simulated interruption"),
+            ):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "simulated interruption",
+                ):
+                    state_checkpoint.checkpoint_approval(
+                        repo,
+                        "plan",
+                        expected_head,
+                    )
+
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
+            routed = pipeline_state.route_state(repo)
+            self.assertEqual(routed["route"]["action"], "resume-checkpoint")
+            self.assertEqual(routed["route"]["kind"], "plan")
+
+            result = state_checkpoint.resume_checkpoint(repo)
+
+            self.assertEqual(result["status"], "approved")
+            self.assertNotEqual(result["commit"], expected_head)
+
+    def test_resume_approval_survives_scripts_dir_on_sys_path(self) -> None:
+        # test_pipeline_git imports scripts.pipeline_state first; test_members then
+        # puts scripts/ on sys.path. A later scripts.state_checkpoint must still
+        # share pipeline_state's IsolationError, so run that order in a fresh process.
+        program = (
+            "import sys, unittest\n"
+            "import tests.test_pipeline_git, tests.test_members\n"
+            "unittest.main(module='tests.test_pipeline_state', argv=['order', "
+            "'PipelineStateTests.test_resume_approval_rejects_artifact_drift'])\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", program],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            encoding="utf-8", errors="replace",
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_resume_approval_rejects_artifact_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            with mock.patch.object(
+                state_checkpoint,
+                "isolation_checkpoint",
+                side_effect=pipeline_state.IsolationError("simulated interruption"),
+            ):
+                with self.assertRaises(pipeline_state.PipelineStateError):
+                    state_checkpoint.checkpoint_approval(
+                        repo,
+                        "plan",
+                        expected_head,
+                    )
+            (repo / ".project" / "plan" / "PLAN.md").write_bytes(
+                "# Changed after approval preparation\n".encode("utf-8"),
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "approval artifacts drifted",
+            ):
+                state_checkpoint.resume_checkpoint(repo)
+
+    def test_resume_approval_ignores_ignored_ds_store_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
+            with mock.patch.object(
+                state_checkpoint,
+                "isolation_checkpoint",
+                side_effect=pipeline_state.IsolationError("simulated interruption"),
+            ):
+                with self.assertRaises(pipeline_state.PipelineStateError):
+                    state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+            (repo / ".project" / "plan" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
+
+            state_checkpoint.resume_checkpoint(repo)
+
+    def test_resume_approval_after_commit_before_journal_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "roadmap")
+            with mock.patch.object(
+                state_checkpoint,
+                "_unlink_checkpoint_journal",
+                side_effect=pipeline_state.PipelineStateError("simulated cleanup crash"),
+            ):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "simulated cleanup crash",
+                ):
+                    state_checkpoint.checkpoint_approval(
+                        repo,
+                        "roadmap",
+                        expected_head,
+                        selected_milestone="first",
+                    )
+            committed = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.assertNotEqual(committed, expected_head)
+
+            result = state_checkpoint.resume_checkpoint(repo)
+
+            self.assertEqual(result["commit"], committed)
+            self.assertFalse(
+                pipeline_state._git_path(
+                    repo,
+                    pipeline_state.CHECKPOINT_JOURNAL_NAME,
+                ).exists()
+            )
+
+    def _promotion_repo(
+        self,
+        tmp: str,
+        drift: bool,
+        *,
+        delete_declared: bool = False,
+        mutate_plan: bool = False,
+        mutate_task: bool = False,
+        remove_task: bool = False,
+        next_project: str = "demo",
+        next_phase: str = "plan",
+        next_status: str = "done",
+        duplicate_approval: bool = False,
+        pull_request: bool = False,
+        member_task: bool = False,
+        context_repo_example: bool = False,
+    ) -> tuple[Path, str]:
+        repo = Path(tmp) / "repo"
+        remote = Path(tmp) / "origin.git"
+        if pull_request:
+            run_git(Path(tmp), "init", "--bare", "-b", "main", str(remote))
+        run_git(Path(tmp), "init", "-b", "main", str(repo))
+        run_git(repo, "config", "user.name", "GSD Path Test")
+        run_git(repo, "config", "user.email", "test@example.com")
+        if pull_request:
+            run_git(repo, "remote", "add", "origin", str(remote))
+        project = repo / ".project"
+        (project / "next" / "tasks").mkdir(parents=True)
+        (project / "next" / "plan").mkdir()
+        (project / "next" / "review").mkdir()
+        (repo / "app.py").write_bytes("approved = True\n".encode("utf-8"))
+        run_git(repo, "add", "app.py")
+        run_git(repo, "commit", "-m", "fixture: milestone base")
+        run_git(repo, "switch", "-c", "gsd-path/M001")
+        (project / "STATE.md").write_bytes(
+            state_text(
+                milestone="first",
+                phase="build",
+                status="active",
+                branch="gsd-path/M001",
+            ).encode("utf-8"),
+        )
+        (project / "ROADMAP.md").write_bytes(roadmap_text().encode("utf-8"))
+        (project / "next" / "STATE.md").write_bytes(
+            state_text(
+                project=next_project,
+                phase=next_phase,
+                status="active" if next_phase == "plan" and next_status == "done" else next_status,
+                integration_default="pull-request" if pull_request else None,
+                integration="pull-request" if pull_request else None,
+            ).encode("utf-8"),
+        )
+        (project / "next" / "tasks" / "T001-base.md").write_bytes(
+            TASK_TEMPLATE.format(
+                task_id="T001",
+                files_block="  - src/base.py",
+                context="Create the base module.",
+                approach="Implement the base.",
+                contract="- None",
+                verify="python3 src/base.py",
+            ).encode("utf-8"),
+        )
+        task = task_text()
+        if context_repo_example:
+            task = task.replace("Change the app.", "Change the app.\n\nrepo: web", 1)
+        (project / "next" / "tasks" / "T002-change-app.md").write_bytes(task.encode("utf-8"))
+        (project / "next" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="second").encode("utf-8"),
+        )
+        (project / "next" / "review" / "PLAN-PANEL.md").write_bytes(
+            "# Plan review panel\n\nStatus: ready\n".encode("utf-8"),
+        )
+        if next_phase == "plan" and next_status == "done":
+            approval_base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            state_checkpoint.checkpoint_approval(
+                repo,
+                "plan",
+                approval_base,
+                ".project/next",
+            )
+            if duplicate_approval:
+                plan_path = project / "next" / "plan" / "PLAN.md"
+                plan_path.write_bytes("# Plan — second revision\n".encode("utf-8"))
+                # A matching approval must checkpoint the complete task set.
+                for task_path in (project / "next" / "tasks").glob("*.md"):
+                    task_path.write_bytes(
+                        (task_path.read_text(encoding="utf-8") + "\n## Revision\n\n- approved again\n").encode("utf-8"),
+                    )
+                next_state_path = project / "next" / "STATE.md"
+                next_state_path.write_bytes(
+                    (next_state_path.read_text(encoding="utf-8")
+                    + "- 2026-08-23 — plan — duplicate approval\n").encode("utf-8"),
+                )
+                run_git(repo, "add", ".project/next")
+                run_git(
+                    repo,
+                    "commit",
+                    "-m",
+                    "plan: build plan approved",
+                    "-m",
+                    "Why: approved plan checkpoint\nMilestone: second",
+                )
+        else:
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: lookahead phase")
+        if drift:
+            (repo / "app.py").write_bytes("approved = False\n".encode("utf-8"))
+        if delete_declared:
+            (repo / "app.py").unlink()
+        if mutate_plan:
+            (project / "next" / "plan" / "PLAN.md").write_bytes(
+                "# Plan — changed after approval\n".encode("utf-8"),
+            )
+        task_path = project / "next" / "tasks" / "T002-change-app.md"
+        if member_task:
+            task_path.write_bytes(
+                task_path.read_text(encoding="utf-8")
+                .replace("files:", "repo: web\nfiles:", 1)
+                .encode("utf-8")
+            )
+        if mutate_task:
+            task_path.write_bytes(
+                task_path.read_text(encoding="utf-8").replace(
+                    "  - app.py\n",
+                    "  - replacement.py\n",
+                ).encode("utf-8"),
+            )
+        if remove_task:
+            task_path.unlink()
+        (project / "STATE.md").write_bytes(
+            state_text(
+                milestone="first",
+                phase="shipped",
+                status="done",
+                branch="gsd-path/M001",
+                archive=".project/archive/001-first/",
+                integration_default="pull-request" if pull_request else None,
+                integration="pull-request" if pull_request else None,
+            ).encode("utf-8"),
+        )
+        run_git(repo, "add", "-A", "--", ".project", "app.py")
+        run_git(
+            repo,
+            "commit",
+            "-m",
+            "ship: M001 — first",
+        )
+        run_git(repo, "switch", "main")
+        run_git(
+            repo,
+            "merge",
+            "--no-ff",
+            "gsd-path/M001",
+            "-m",
+            "integrate: M001 — merge gsd-path/M001 into main",
+        )
+        integrate = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+        run_git(
+            repo,
+            "tag",
+            "-a",
+            "-m",
+            "milestone 001-first",
+            "milestone/001-first",
+            integrate,
+        )
+        tag_object = run_git(
+            repo,
+            "rev-parse",
+            "refs/tags/milestone/001-first",
+        ).stdout.strip()
+        run_git(
+            repo,
+            "update-ref",
+            "refs/remotes/origin/tags/milestone/001-first",
+            tag_object,
+        )
+        run_git(repo, "update-ref", "refs/remotes/origin/main", integrate)
+        if pull_request:
+            run_git(repo, "push", "origin", "main", "milestone/001-first")
+        run_git(repo, "switch", "-c", "gsd-path/M002")
+        return repo, integrate
+
+    def test_promote_next_moves_track_commits_and_retries_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+
+            unowned = pipeline_state.route_state(repo)
+            self.assertEqual(unowned["route"]["action"], "block")
+
+            journal_path = pipeline_git.bind_next_journal_path(repo, "gsd-path/M002")
+            pipeline_git._write_bind_next_journal(
+                journal_path,
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": integrate,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "allow_remote_absent": True,
+                    "stage": "switched",
+                },
+            )
+            handoff = pipeline_state.route_state(repo)
+            self.assertEqual(handoff["route"]["action"], "resume-next-handoff")
+            self.assertEqual(handoff["route"]["previous_branch"], "gsd-path/M001")
+            self.assertEqual(handoff["route"]["branch"], "gsd-path/M002")
+            self.assertEqual(handoff["route"]["landing"], integrate)
+            self.assertTrue(handoff["route"]["allow_remote_absent"])
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["status"], "promoted")
+            self.assertEqual(result["drift"]["class"], "clean")
+            self.assertFalse((repo / ".project" / "next").exists())
+            self.assertTrue((repo / ".project" / "tasks" / "T002-change-app.md").is_file())
+            self.assertTrue((repo / ".project" / "review" / "PLAN-PANEL.md").is_file())
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual(
+                (state.milestone, state.phase, state.status),
+                ("second", "plan", "done"),
+            )
+            self.assertEqual(state.branch, "gsd-path/M002")
+            self.assertIsNone(
+                pipeline_state.status_state(repo)["journals"]["bind_next"]
+            )
+            roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn(f"Integrated: {integrate}", roadmap)
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+                "router: promote lookahead milestone second",
+            )
+
+            retry = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+            self.assertEqual(retry["status"], "already-complete")
+            self.assertEqual(retry["commit"], result["commit"])
+
+    def test_route_and_status_report_a_journaled_handoff_on_a_dirty_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": integrate,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "switched",
+                },
+            )
+            (repo / "scratch.txt").write_bytes("dirty\n".encode("utf-8"))
+
+            routed = pipeline_state.route_state(repo)
+            status = pipeline_state.status_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["dirty"], ["scratch.txt"])
+            self.assertEqual(status["git"]["dirty"], ["scratch.txt"])
+            self.assertIsNotNone(status["journals"]["bind_next"])
+
+    def test_retired_bind_next_stale_journals_do_not_mask_current_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            run_git(repo, "switch", "-c", "gsd-path/M003", integrate)
+            for branch, stage in (("gsd-path/M002", "retired"), ("gsd-path/M003", "switched")):
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, branch),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": branch,
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": stage,
+                    },
+                )
+
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["branch"], "gsd-path/M003")
+
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": "0" * 40,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "ship is not an existing full SHA",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_retired_bind_next_missing_target_on_previous_branch_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": ship,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+            run_git(repo, "switch", "gsd-path/M001")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "stage conflicts with previous branch",
+            ):
+                pipeline_state.route_state(repo)
+
+            run_git(repo, "branch", "-D", "gsd-path/M002")
+            routed = pipeline_state.route_state(repo)
+
+            self.assertEqual(routed["route"]["action"], "run-phase")
+            self.assertEqual(routed["route"]["phase"], "ship")
+            self.assertEqual(routed["route"]["mode"], "validate-integrated")
+
+            run_git(repo, "commit", "--allow-empty", "-m", "move previous branch")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "previous branch is not at journal ship",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_retired_bind_next_current_target_still_requires_journal_base(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            pipeline_git._write_bind_next_journal(
+                pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                {
+                    "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                    "repo": str(repo.resolve()),
+                    "branch": "gsd-path/M002",
+                    "previous_branch": "gsd-path/M001",
+                    "ship": ship,
+                    "remote_default": "origin/main",
+                    "base": integrate,
+                    "landing": integrate,
+                    "stage": "retired",
+                },
+            )
+
+            routed = pipeline_state.route_state(repo)
+            self.assertEqual(routed["route"]["action"], "resume-next-handoff")
+            self.assertEqual(routed["route"]["branch"], "gsd-path/M002")
+
+            run_git(repo, "commit", "--allow-empty", "-m", "advance M002")
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "target branch is not at journal base",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_bind_next_prepared_and_switched_journals_still_reject_wrong_branch(self) -> None:
+        for stage in ("prepared", "switched"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as tmp:
+                repo, integrate = self._promotion_repo(tmp, drift=False)
+                ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+                run_git(repo, "switch", "-c", "feature/elsewhere", integrate)
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, "gsd-path/M002"),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": "gsd-path/M002",
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": stage,
+                    },
+                )
+
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "does not own the current branch",
+                ):
+                    pipeline_state.route_state(repo)
+
+    def test_multiple_prepared_bind_next_journals_still_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            ship = run_git(repo, "rev-parse", "gsd-path/M001").stdout.strip()
+            run_git(repo, "switch", "gsd-path/M001")
+            run_git(repo, "branch", "-D", "gsd-path/M002")
+            for branch in ("gsd-path/M002", "gsd-path/M003"):
+                pipeline_git._write_bind_next_journal(
+                    pipeline_git.bind_next_journal_path(repo, branch),
+                    {
+                        "schema": pipeline_git.BIND_NEXT_JOURNAL_SCHEMA,
+                        "repo": str(repo.resolve()),
+                        "branch": branch,
+                        "previous_branch": "gsd-path/M001",
+                        "ship": ship,
+                        "remote_default": "origin/main",
+                        "base": integrate,
+                        "landing": integrate,
+                        "stage": "prepared",
+                    },
+                )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "multiple bind-next journals claim",
+            ):
+                pipeline_state.route_state(repo)
+
+    def test_promote_next_separates_landing_from_a_later_main_base(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(tmp, drift=False)
+            run_git(repo, "switch", "main")
+            (repo / "after-landing.txt").write_bytes("later\n".encode("utf-8"))
+            run_git(repo, "add", "after-landing.txt")
+            run_git(repo, "commit", "-m", "product: after milestone landing")
+            base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            run_git(repo, "update-ref", "refs/remotes/origin/main", base)
+            run_git(repo, "branch", "-f", "gsd-path/M002", base)
+            run_git(repo, "switch", "gsd-path/M002")
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                base,
+                landing,
+            )
+
+            self.assertEqual(result["base"], base)
+            self.assertEqual(result["landing"], landing)
+            self.assertEqual(result["drift"]["class"], "clean")
+            state = pipeline_state.load_state(repo)[0]
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+            self.assertEqual(
+                run_git(repo, "show", "-s", "--format=%P", "HEAD").stdout.strip(),
+                base,
+            )
+            roadmap = (repo / ".project" / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn(f"Integrated: {landing}", roadmap)
+            self.assertNotIn(f"Integrated: {base}", roadmap)
+
+    def test_promote_next_rejects_ancestor_other_than_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(tmp, drift=False)
+            older_ancestor = run_git(repo, "rev-parse", f"{landing}^1").stdout.strip()
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "milestone tag does not point at landing",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    landing,
+                    older_ancestor,
+                )
+
+    def test_promote_next_rejects_local_tag_that_differs_from_published_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, base = self._promotion_repo(tmp, drift=False)
+            older_ancestor = run_git(repo, "rev-parse", f"{base}^1").stdout.strip()
+            run_git(
+                repo,
+                "tag",
+                "-f",
+                "-a",
+                "-m",
+                "spoofed milestone landing",
+                "milestone/001-first",
+                older_ancestor,
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "published milestone tag",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    base,
+                    older_ancestor,
+                )
+
+    def test_promote_next_rejects_deleted_live_pull_request_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(
+                tmp,
+                drift=False,
+                pull_request=True,
+            )
+            remote = Path(tmp) / "origin.git"
+            run_git(
+                remote,
+                "update-ref",
+                "-d",
+                "refs/tags/milestone/001-first",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "missing on origin",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    landing,
+                )
+
+    def test_promote_next_accepts_live_pull_request_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, landing = self._promotion_repo(
+                tmp,
+                drift=False,
+                pull_request=True,
+            )
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                landing,
+            )
+
+            self.assertEqual(result["landing"], landing)
+
+    def test_promote_next_reopens_plan_when_task_paths_drifted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=True)
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "active"))
+            self.assertIn("plan drift flagged tasks T002", text)
+
+    def test_promote_next_flags_a_task_that_became_a_member_task_after_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False, member_task=True)
+            result = state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "active"))
+            self.assertIn("plan drift flagged tasks T002", text)
+
+    def test_promote_next_keeps_coordinator_task_with_repo_context_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False, context_repo_example=True)
+            result = state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
+            self.assertEqual(result["drift"]["class"], "clean")
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "done"))
+
+    def test_promote_next_detects_deleted_declared_path_as_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                delete_declared=True,
+            )
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
+            self.assertEqual(result["drift"]["changed_paths"], ["app.py"])
+
+    def test_promote_next_reopens_when_plan_contract_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                mutate_plan=True,
+            )
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(
+                result["drift"]["contract_paths"],
+                [".project/next/plan/PLAN.md"],
+            )
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "active"))
+
+    def test_promote_next_reopens_when_task_declaration_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                mutate_task=True,
+            )
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
+            self.assertEqual(
+                result["drift"]["contract_paths"],
+                [".project/next/tasks/T002-change-app.md"],
+            )
+
+    def test_promote_next_reopens_when_approved_task_is_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                remove_task=True,
+            )
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
+            state, _, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "active"))
+
+    def test_promote_next_rejects_duplicate_current_attempt_approvals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                duplicate_approval=True,
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "multiple matching plan approval checkpoints",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    integrate,
+                )
+
+    def test_plan_approval_search_does_not_adopt_prior_milestone_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            run_git(Path(tmp), "init", "-b", "main", str(repo))
+            run_git(repo, "config", "user.name", "GSD Path Test")
+            run_git(repo, "config", "user.email", "test@example.com")
+            prior = repo / ".project" / "next"
+            (prior / "plan").mkdir(parents=True)
+            (prior / "tasks").mkdir()
+            (prior / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (prior / "plan" / "PLAN.md").write_bytes("# Plan — second\n".encode("utf-8"))
+            (prior / "tasks" / "T002-change-app.md").write_bytes(task_text().encode("utf-8"))
+            (repo / "app.py").write_bytes("base = True\n".encode("utf-8"))
+            run_git(repo, "add", ".")
+            run_git(
+                repo,
+                "commit",
+                "-m",
+                "plan: build plan approved",
+                "-m",
+                "Why: approved plan checkpoint\nMilestone: second",
+            )
+            shutil.rmtree(repo / ".project")
+            run_git(repo, "add", "-A")
+            run_git(repo, "commit", "-m", "fixture: current milestone boundary")
+            run_git(repo, "switch", "-c", "gsd-path/M001")
+            current = repo / ".project" / "next"
+            (current / "plan").mkdir(parents=True)
+            (current / "tasks").mkdir()
+            (current / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (current / "plan" / "PLAN.md").write_bytes("# Plan — second\n".encode("utf-8"))
+            (current / "tasks" / "T002-change-app.md").write_bytes(task_text().encode("utf-8"))
+            run_git(repo, "add", ".project")
+            run_git(repo, "commit", "-m", "fixture: unapproved current lookahead")
+            run_git(repo, "switch", "main")
+            run_git(
+                repo,
+                "merge",
+                "--no-ff",
+                "gsd-path/M001",
+                "-m",
+                "integrate: M001 — merge gsd-path/M001 into main",
+            )
+            integrate = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            candidate = pipeline_state._state_from_text(
+                (current / "STATE.md").read_text(encoding="utf-8")
+            )
+
+            self.assertIsNone(
+                state_checkpoint._approval_checkpoint(repo, candidate, integrate)
+            )
+
+    def test_promote_next_rejects_spoofed_data_losing_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            project = repo / ".project"
+            shutil.rmtree(project / "next")
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="second",
+                    phase="plan",
+                    status="done",
+                    branch="gsd-path/M002",
+                ).encode("utf-8"),
+            )
+            run_git(repo, "add", "-A", "--", ".project")
+            run_git(
+                repo,
+                "commit",
+                "-m",
+                "router: promote lookahead milestone second",
+                "-m",
+                "Why: promote lookahead track\n"
+                "Milestone: second\n"
+                f"Integrate: {integrate}",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "wrong path set|did not preserve track",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    integrate,
+                )
+
+    def test_promote_next_rejects_lookahead_from_another_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                next_project="other",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "project does not match",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    integrate,
+                )
+
+    def test_promote_next_rejects_phase_outside_lookahead(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(
+                tmp,
+                drift=False,
+                next_phase="build",
+                next_status="active",
+            )
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "lookahead cannot enter build",
+            ):
+                state_promote.promote_next(
+                    repo,
+                    "second",
+                    "gsd-path/M002",
+                    integrate,
+                )
+
+    def test_promote_next_resumes_from_its_journal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            with mock.patch.object(
+                state_promote,
+                "_resume_metadata",
+                side_effect=pipeline_state.PipelineStateError("simulated interruption"),
+            ):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "simulated interruption",
+                ):
+                    state_promote.promote_next(
+                        repo,
+                        "second",
+                        "gsd-path/M002",
+                        integrate,
+                    )
+            self.assertTrue((repo / ".project" / "tasks").is_dir())
+            self.assertFalse((repo / ".project" / "next" / "tasks").exists())
+            recovery = pipeline_state.route_state(repo)
+            self.assertEqual(recovery["route"]["action"], "resume-promotion")
+            self.assertEqual(recovery["route"]["milestone"], "second")
+            self.assertEqual(recovery["route"]["base"], integrate)
+            self.assertEqual(recovery["route"]["landing"], integrate)
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["status"], "promoted")
+            self.assertFalse((repo / ".project" / "next").exists())
+
+    def test_promote_next_resumes_after_staging_residual_track(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False)
+            with mock.patch.object(
+                state_promote,
+                "_commit_promotion",
+                side_effect=pipeline_state.PipelineStateError("simulated interruption"),
+            ):
+                with self.assertRaisesRegex(
+                    pipeline_state.PipelineStateError,
+                    "simulated interruption",
+                ):
+                    state_promote.promote_next(
+                        repo,
+                        "second",
+                        "gsd-path/M002",
+                        integrate,
+                    )
+
+            residual = repo / pipeline_state.PROMOTION_RESIDUAL
+            self.assertTrue(residual.is_dir())
+            self.assertFalse((repo / ".project" / "next").exists())
+
+            result = state_promote.promote_next(
+                repo,
+                "second",
+                "gsd-path/M002",
+                integrate,
+            )
+
+            self.assertEqual(result["status"], "promoted")
+            self.assertFalse(residual.exists())
+
+    def test_record_shipment_is_atomic_and_resumable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first", phase="ship", status="active",
+                    branch="gsd-path/M001", archive=".project/archive/001-first",
+                ).encode("utf-8"),
+            )
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("Status: shipped", "Status: active", 1)
+                .replace("Archive: .project/archive/001-first/", "Archive: null", 1).encode("utf-8"),
+            )
+            original = pipeline_state._atomic_write
+
+            def interrupt(path: Path, content: str) -> None:
+                if path.name == "STATE.md":
+                    raise pipeline_state.PipelineStateError("simulated interruption")
+                original(path, content)
+
+            with mock.patch.object(pipeline_state, "_atomic_write", side_effect=interrupt):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interruption"):
+                    pipeline_state.record_shipment(
+                        repo, ".project/archive/001-first",
+                        "archive preflight passed; shipment recorded",
+                    )
+
+            recovery = pipeline_state.route_state(repo)
+            self.assertEqual(recovery["route"]["action"], "resume-shipment")
+
+            result = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+            retry = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(result["state"]["phase"], "shipped")
+            self.assertEqual(retry["status"], "recorded")
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn("Status: shipped", roadmap)
+            self.assertIn("Archive: .project/archive/001-first", roadmap)
+
+    def test_record_shipment_resumes_on_a_later_day(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(
+                    milestone="first", phase="ship", status="active",
+                    branch="gsd-path/M001", archive=".project/archive/001-first",
+                ).encode("utf-8"),
+            )
+            original = pipeline_state._atomic_write
+
+            def interrupt(path: Path, content: str) -> None:
+                if path.name == "STATE.md":
+                    raise pipeline_state.PipelineStateError("simulated interruption")
+                original(path, content)
+
+            with mock.patch.object(pipeline_state, "_atomic_write", side_effect=interrupt):
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interruption"):
+                    pipeline_state.record_shipment(
+                        repo, ".project/archive/001-first",
+                        "archive preflight passed; shipment recorded",
+                    )
+            journal_path = pipeline_state._git_path(repo, pipeline_state.SHIPMENT_JOURNAL_NAME)
+            journal = json.loads(journal_path.read_text(encoding="utf-8"))
+            today = date.today().isoformat()
+            self.assertIn(today, journal["state_after"])
+            journal["state_after"] = journal["state_after"].replace(today, "2000-01-01")
+            journal_path.write_bytes(json.dumps(journal).encode("utf-8"))
+
+            result = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(result["status"], "recorded")
+            self.assertIn(
+                "- 2000-01-01 — shipped — archive preflight passed; shipment recorded",
+                (project / "STATE.md").read_text(encoding="utf-8"),
+            )
+
+    def test_record_shipment_preserves_single_milestone_flow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
+            )
+
+            result = pipeline_state.record_shipment(
+                repo, ".project/archive/001-first",
+                "archive preflight passed; shipment recorded",
+            )
+
+            self.assertEqual(result["state"]["phase"], "shipped")
+            self.assertFalse((project / "ROADMAP.md").exists())
+
+    def test_record_shipment_rejects_a_tampered_journal_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "gsd-path/M001")
+            project = repo / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
+            )
+            original = pipeline_state._atomic_write
+
+            def interrupt(path: Path, content: str) -> None:
+                if path.name == "STATE.md":
+                    raise pipeline_state.PipelineStateError("simulated interruption")
+                original(path, content)
+
+            with mock.patch.object(pipeline_state, "_atomic_write", side_effect=interrupt):
+                with self.assertRaises(pipeline_state.PipelineStateError):
+                    pipeline_state.record_shipment(repo, ".project/archive/001-first", "archive preflight passed; shipment recorded")
+            journal_path = pipeline_state._git_path(repo, pipeline_state.SHIPMENT_JOURNAL_NAME)
+            journal = pipeline_state._read_json(journal_path)
+            journal["state_after"] = journal["state_before"]
+            pipeline_state._write_json(journal_path, journal)
+
+            with self.assertRaisesRegex(
+                pipeline_state.PipelineStateError,
+                "journal target does not match derived metadata",
+            ):
+                pipeline_state.record_shipment(repo, ".project/archive/001-first", "archive preflight passed; shipment recorded")
+
+    def test_record_shipment_rejects_missing_or_wrong_roadmap(self) -> None:
+        for case in ("missing", "wrong"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp)
+                run_git(repo, "init", "-b", "gsd-path/M001")
+                project = repo / ".project"
+                project.mkdir()
+                (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+                (project / "STATE.md").write_bytes(
+                    state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
+                )
+                if case == "wrong":
+                    (project / "ROADMAP.md").write_bytes(roadmap_text().encode("utf-8"))
+                with self.assertRaises(pipeline_state.PipelineStateError):
+                    pipeline_state.record_shipment(repo, ".project/archive/001-first", "archive preflight passed; shipment recorded")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,138 @@
+// gsd-pi — Auto-worktree runtime cleanup module.
+//
+// Owns stale worktree cwd escape and runtime unit cleanup during auto startup.
+
+import { existsSync, readdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+
+import { gsdHome } from "./gsd-home.js";
+import { MILESTONE_ID_RE } from "./milestone-ids.js";
+import {
+  normalizeWorktreePathForCompare,
+  projectRootFromWorktreePath,
+} from "./worktree-root.js";
+import { logWarning } from "./workflow-logger.js";
+import { deleteUnitRuntimeRow, listUnitRuntimeRows } from "./db/writers/runtime-control.js";
+import { unitRuntimeFileName } from "./unit-runtime.js";
+
+const LEGACY_DEEP_SETUP_RUNTIME_UNIT_FILES = new Set([
+  "workflow-preferences-WORKFLOW-PREFS.json",
+  "discuss-project-PROJECT.json",
+  "discuss-requirements-REQUIREMENTS.json",
+  "research-decision-RESEARCH-DECISION.json",
+  "research-project-RESEARCH-PROJECT.json",
+]);
+
+/**
+ * Detect and escape a stale worktree cwd (#608).
+ *
+ * After milestone completion + merge, the worktree directory is removed but
+ * the process cwd may still point inside `.gsd/worktrees/<MID>/`.
+ * When a new session starts, `process.cwd()` is passed as `base` to startAuto
+ * and all subsequent writes land in the wrong directory. This function detects
+ * that scenario and chdir back to the project root.
+ *
+ * Returns the corrected base path.
+ */
+export function escapeStaleWorktree(base: string): string {
+  const projectRoot = projectRootFromWorktreePath(base);
+  if (projectRoot === null) return base;
+
+  // Guard: If the candidate project root's .gsd IS the user-level ~/.gsd,
+  // the string-slice heuristic matched the wrong /.gsd/ boundary. This happens
+  // when .gsd is a symlink into ~/.gsd/projects/<hash> and process.cwd()
+  // resolved through the symlink. Returning ~ would be catastrophic (#1676).
+  const candidateGsd = normalizeWorktreePathForCompare(join(projectRoot, ".gsd"));
+  const gsdHomeNorm = normalizeWorktreePathForCompare(gsdHome());
+  if (candidateGsd === gsdHomeNorm || candidateGsd.startsWith(gsdHomeNorm + "/")) {
+    // Don't chdir to home — return base unchanged.
+    // resolveProjectRoot() in worktree.ts has the full git-file-based recovery
+    // and will be called by the caller (startAuto → projectRoot()).
+    return base;
+  }
+
+  try {
+    process.chdir(projectRoot);
+  } catch (e) {
+    // If chdir fails, return the original — caller will handle errors downstream
+    logWarning("worktree", `escapeStaleWorktree chdir failed: ${(e as Error).message}`);
+    return base;
+  }
+  return projectRoot;
+}
+
+/**
+ * Clean stale unit runtime records for completed milestones.
+ *
+ * After restart, stale records from prior milestones can cause deriveState
+ * to resume the wrong milestone (#887). Removes the database rows (in every
+ * work root) and the runtime/units/*.json diagnostic copies for milestones
+ * that have a SUMMARY (fully complete). Returns the number of files removed.
+ */
+export function cleanStaleRuntimeUnits(
+  gsdRootPath: string,
+  hasMilestoneSummary: (mid: string) => boolean,
+): number {
+  // The database rows are the records that are read; the files below are
+  // their diagnostic copies. Both are cleared by the same rule. A closed
+  // milestone has no live unit, so its rows are cleared in every work root.
+  try {
+    for (const row of listUnitRuntimeRows()) {
+      if (shouldRemoveRuntimeUnit(unitRuntimeFileName(row.unit_type, row.unit_id), hasMilestoneSummary)) {
+        deleteUnitRuntimeRow(row.work_root, row.unit_type, row.unit_id);
+      }
+    }
+  } catch (err) {
+    logWarning(
+      "worktree",
+      `stale runtime unit row cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const runtimeUnitsDir = join(gsdRootPath, "runtime", "units");
+  if (!existsSync(runtimeUnitsDir)) return 0;
+
+  let cleaned = 0;
+  try {
+    for (const file of readdirSync(runtimeUnitsDir)) {
+      if (!file.endsWith(".json")) continue;
+      if (shouldRemoveRuntimeUnit(file, hasMilestoneSummary)) {
+        cleaned += unlinkRuntimeUnit(runtimeUnitsDir, file);
+      }
+    }
+  } catch (err) {
+    logWarning(
+      "worktree",
+      `stale runtime unit cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return cleaned;
+}
+
+function shouldRemoveRuntimeUnit(
+  file: string,
+  hasMilestoneSummary: (mid: string) => boolean,
+): boolean {
+  if (LEGACY_DEEP_SETUP_RUNTIME_UNIT_FILES.has(file)) return true;
+
+  const staleDiscussMatch = file.match(/^discuss-milestone-(.+)\.json$/);
+  if (staleDiscussMatch && !MILESTONE_ID_RE.test(staleDiscussMatch[1])) {
+    return true;
+  }
+
+  const midMatch = file.match(/(M\d+(?:-[a-z0-9]{6})?)/);
+  return Boolean(midMatch && hasMilestoneSummary(midMatch[1]));
+}
+
+function unlinkRuntimeUnit(runtimeUnitsDir: string, file: string): number {
+  try {
+    unlinkSync(join(runtimeUnitsDir, file));
+    return 1;
+  } catch (err) {
+    logWarning(
+      "worktree",
+      `stale runtime unit unlink failed (${file}): ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return 0;
+  }
+}

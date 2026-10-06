@@ -1,0 +1,1114 @@
+ANTIHERO AI · LIVE GUIDE · FREE
+
+WEBSITES
+ON
+AUTOPILOT.
+How you get a real, award-style website built by an AI coding
+agent while you watch, check and decide. The interview, the
+plan, every build prompt, the visuals, the autopilot loop, and
+the review. The exact workflow behind the Aura Homes site.
+
+FRIDAY, OCTOBER 2, 2026 · FACEBOOK LIVE
+
+BE YOUR OWN HERO
+
+READ THIS FIRST · 3 MINUTES
+
+WHAT'S INSIDE
+You're about to build a website the way agencies wish they could: you make the decisions, and an AI does the
+typing, one small job at a time, while a second AI checks its homework. Autopilot doesn't mean you take a nap. It
+means you set the destination and watch the instruments.
+
+00
+
+The pre-checklist. Brand first. If it isn't done, stop here
+
+01
+
+The words. Seven terms, explained once
+
+02
+
+The interview. Your AI asks, you answer, you get a Site Brief
+
+03
+
+The section plan. Every page, every section, every visual
+
+04
+
+Write all the prompts. One meta-prompt, one RULES paragraph, a stack of TASKs
+
+05
+
+The visuals. Grok Imagine stills and scroll videos
+
+06
+
+The autopilot. Grok Build builds, Grok Bot checks, you approve
+
+07
+
+The build prompts. Hero to 3D, ready to paste
+
+08
+
+Review and fix. Localhost, hard refresh, fix list, credits
+
+09
+
+Make it stand out. No slop rules, visual and features interviews, elevation passes, jury review
+
+10
+
+Pick what you need. Most sites shouldn't use all of this
+
+11
+
+Links. Every tool, checked Oct 2, 2026
+
+H OW TO USE THIS GUIDE
+
+Work top to bottom. Every grey box is a prompt: copy all of it. Text in [red brackets] is yours to fill in. In the
+build prompts, [RULES] means paste your whole RULES paragraph there. The full text of every prompt is also
+in prompt-guide.md in the group, so you can copy without fighting a PDF.
+Tonight's demo brand is AntiHero. Next up is an AntiHero site that lists every guide in the group, built
+the same way.
+TONIGHT
+
+02
+
+STEP 00 · BEFORE YOU OPEN A TERMINAL
+
+THE
+PRE-CHECKLIST
+
+00
+
+A website is your brand in a trench coat. If the brand isn't decided, the AI decides for you, and the AI's taste is
+the average of the internet. Tick all five before you start.
+Brand voice is written down. Three traits, a banned words list, a couple of before and after examples.
+Your logo is done. Ideally an SVG, plus a white version for dark backgrounds.
+Colors and fonts are picked. Hex codes with a job for each color. Two fonts, max.
+You have a tagline. Short, true, and yours.
+You have a brand brain. One doc with all of the above that your AI reads first, every time.
+
+N OT DONE YET?
+
+Go through Build a Brand From Scratch With AI, the October 1 guide in the group. It takes an evening and it
+makes every step in this guide better. Come back with your brand brain.
+Missing just one piece? Make a stand-in, mark it TODO in your RULES paragraph and keep going.
+Just don't ship it like that.
+SHORTCUT
+
+Tools on your computer
+Node.js (LTS) nodejs.org
+Git git-scm.com
+Grok Build installed and logged in. Install command in step 06.
+Two folders one for the project, one called assets with your logo, fonts and images.
+
+03
+
+STEP 01 · SAY THEM ONCE · NEVER AGAIN
+
+THE WORDS
+You'll hear these all night. Here's what they mean in English.
+
+01
+
+GROK BOT
+
+Your AI teammate on a cloud computer. It interviews you, writes the plan and the prompts, and
+checks every step. x.ai/bot
+
+GROK BUILD
+
+xAI's coding agent. It runs in a terminal on your computer, inside your project folder, and writes the
+actual files. x.ai/cli
+
+GROK IMAGINE
+
+xAI's image and video generator. grok.com/imagine
+
+ASTRO
+
+The website framework. Fast pages, very little code sent to the visitor. astro.build
+
+GSAP
+
+The animation library behind most award-winning sites. Free, plugins included. gsap.com
+
+SCROLLTRIGGER
+
+The GSAP plugin that ties animation to your scroll. Scroll down, it happens. Scroll up, it unhappens.
+
+LENIS
+
+Makes scrolling feel smooth and weighted instead of jumpy. lenis.darkroom.engineering
+
+THREE.JS
+
+Real 3D in the browser: landscapes, glass, steam, models. threejs.org
+
+AWWWARDS
+
+The website awards site. The best free mood board there is. awwwards.com
+
+RULES
+
+One paragraph of non-negotiables pasted at the top of every build prompt.
+
+TASK
+
+One job for the coding agent. One prompt, one job, one commit.
+
+COMMIT
+
+A saved checkpoint in git. Something breaks, you go back. You lose nothing.
+
+LOCALHOST
+
+Your site running privately on your own computer. Nobody else can see it.
+
+04
+
+PART ONE
+
+THE
+PLAN.
+The AI is a brilliant builder with no taste of its own. So before
+anybody writes code, you get interviewed, you get a plan, and
+the AI writes every instruction the builder will ever get.
+
+BE YOUR OWN HERO
+
+STEP 02 · 20 TO 40 MINUTES · VOICE TYPING RECOMMENDED
+
+THE INTERVIEW
+
+02
+
+Start one long chat with Grok Bot (or any decent chat AI) so it remembers everything you decide. Attach your
+brand brain. Then let it ask the awkward questions an agency would charge you for.
+PROMPT 01 · INTERVIEW ME ABOUT THE SITE
+
+You are a senior web designer and art director who has built sites that won Awwwards Site of the Day.
+Interview me to plan a website. Read my brand brain first: [paste it or attach it].
+Ask me one question at a time. Wait for my answer before the next one. Push back if an answer is vague.
+Cover:
+1. What the site is for, in one sentence, and the one action a visitor should take.
+2. Who the visitor is: a specific person, what they want, what they're afraid of, what device they're
+on.
+3. The offer: what I sell or give away, and why anyone should care.
+4. The pages and sections I think I need (you'll fix this list later).
+5. The vibe in three words, and three words it must never feel like.
+6. Three to five reference sites I love (Awwwards, Godly, anything) and exactly what I love about each.
+7. What I already have: logo, photos, video, copy, fonts, an old site.
+8. What must never change (an existing page, a video, legal wording).
+9. Motion appetite from 1 to 10: 1 is a calm brochure, 10 is a 3D scroll movie.
+10. Hard limits: deadline, budget, hosting, things I legally can't say.
+When you have enough, write a one-page Site Brief: goal, visitor, offer, vibe, references and what to
+steal from each (the thinking, not the look), what exists, what's protected, motion level, limits. Then
+ask me what you got wrong.
+
+F IND YOUR REFERENCES
+
+Go to awwwards.com, open Websites, filter to Sites of the Day, and screenshot three you'd steal from. Write
+one line on what you love about each: the scroll, the type, the way the menu opens. Steal the thinking, not the
+look. The Aura Homes references were Lando Norris, Igloo Inc, Cozy Lake Cabin, Edelschwarz and The
+Floating Forest.
+PRO MOVE
+
+Answer out loud with voice typing. You'll say better stuff than you'd type, and you'll stop editing
+
+yourself.
+
+06
+
+STEP 03 · SMALL ENOUGH TO SHIP IN A WEEKEND
+
+THE SECTION
+PLAN
+
+03
+
+Now you turn the Site Brief into pages and sections. The trick is the Version 2 list at the bottom: everything you
+love but don't need yet goes there, so version 1 actually ships.
+PROMPT 02 · WRITE THE SECTION PLAN
+
+Using the Site Brief, write the section plan for the site.
+For each page: the URL, its one job, and its sections in order. For each section: a name, what it says
+(draft headline and one line of copy in my brand voice), what the visitor sees (image, video, 3D,
+plain), and the one effect that earns its place there (or "none"). Mark which sections are protected
+and must never be changed once built.
+Rules: the homepage hero gets the most attention. No more than one "wow" effect per section. Every page
+ends with the one action from the brief. Keep the first version small enough to ship in a weekend, and
+put everything else in a "Version 2" list at the bottom.
+Then list every image and video I need, with a short Grok Imagine prompt for each, the aspect ratio,
+and where it goes.
+
+R EAD IT OUT LOUD
+
+If a section's job takes more than one sentence to explain, it's two sections, or zero. Cut one on purpose. It
+feels great.
+The plan also lists every image and video you need, with a Grok Imagine prompt for each. Save that list. You need it in step 05.
+
+07
+
+STEP 04 · THE TRICK THAT MAKES IT AUTOPILOT
+
+WRITE ALL
+THE PROMPTS
+
+04
+
+You don't write the build prompts. You make the AI write all of them, in order, each one complete on its own,
+each one starting with the same RULES paragraph. That's what lets a coding agent work for hours without
+forgetting your brand or wrecking the part you love.
+PROMPT 03 · WRITE ME ALL THE BUILD PROMPTS
+
+Now write the complete build package for Grok Build, the coding agent that will build this site in my
+project folder.
+Format:
+1. Start with one RULES paragraph that every prompt repeats word for word. It must include: the project
+type (Astro site, or tell me if something else fits better), my brand name spelled correctly, fonts and
+colors with hex codes, my voice rules and banned words, everything that must never be touched, "do not
+deploy", "do not delete files, move unused ones to /_archive", motion rules (calm or energetic, respect
+prefers-reduced-motion, animate only transform and opacity), and "commit to git when done with a short
+message".
+2. Then numbered prompts, one job each, in build order: setup and backup, site map and navigation, each
+page and section, imagery, then the motion and effects pass, then performance, credits page and QA.
+3. Every prompt is one copy-paste block: the full RULES paragraph, then "TASK: [name]", then exact
+instructions. Name files, components and routes. Say what "done" looks like and what to report back.
+4. Each prompt must work on its own. Never write "as before" or "see above".
+5. Anything borrowed (code, models, fonts, textures) must get a credits entry in the same commit.
+6. Elevated by default: every prompt aims for an Awwwards Site of the Day result, not a regular
+website. Each section gets one bold idea, real copy in my voice and a specific detail nobody else would
+think of.
+7. Put my NO SLOP RULES inside the RULES paragraph, word for word: [paste the NO SLOP RULES].
+Write them all. Don't summarize. Save it as a file I can download.
+
+W HY EVERY PROMPT REPEATS THE RULES
+
+Coding agents have short memories and big enthusiasm. If the rules only live in prompt one, by prompt thirty
+it has redesigned your homepage and added a crypto section. Repeat them every time. It costs a paragraph
+and saves your site.
+RULE
+
+Never let a prompt say "as before" or "see above". If a prompt can't be pasted alone, it isn't finished.
+
+08
+
+STEP 04 · YOUR BRAND KIT IN ONE PARAGRAPH
+
+THE RULES
+PARAGRAPH
+The AI writes this for you in step 04, but check it against the template. Brand, fonts, colors, voice, banned
+words, and the line that matters most: what must never be touched.
+PROMPT 04 · RULES TEMPLATE
+
+RULES: This is the [Brand] [Astro] site. Do NOT change [the protected page, video or section] in any
+way. Do not deploy. Do not delete files; move unused ones to /_archive. Fonts: [display font] for
+headlines, [body font] for text. Colors: [name #hex], [name #hex], [accent name #hex] (accent used
+sparingly). Use the logo in /src/assets/logo wherever a logo is needed. Brand name is "[Brand]"
+everywhere. Never say: [banned words or claims, e.g. prices, guarantees, competitor names]. Tone:
+[three voice traits]. No em dashes, no exclamation points. Motion must feel
+[calm, slow and expensive / quick and playful]: [long eases, nothing bouncy], respect prefers-reducedmotion, animate only transform and opacity. Elevated by default: aim for an Awwwards Site of the Day
+result, not a regular website; one bold idea per section, real copy, specific details. Follow the NO
+SLOP RULES: [paste them]. Commit to git when done with a short message.
+
+PROMPT 05 · RULES · THE ANTIHERO VERSION
+
+RULES: This is the AntiHero Astro site. Do NOT change the homepage hero video or its scroll logic once
+it is approved. Do not deploy. Do not delete files; move unused ones to /_archive. Fonts: [Bebas Neue]
+for headlines, [Barlow] for text. Colors: [Anti Black #0A0A0B] 60 percent, [Bone #ECE8E1] 30 percent,
+[accent #hex] 10 percent. Use the AntiHero logo in /src/assets/logo wherever a logo is needed. Brand
+name is "AntiHero" everywhere. Never say: delve, unlock, elevate, seamless, game-changer, empower,
+journey. Tone: direct, funny, human. No em dashes, no exclamation points. Motion must feel confident
+and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and
+opacity. Elevated by default: aim for an Awwwards Site of the Day result, not a regular website. Follow
+the NO SLOP RULES (Stage 9). Commit to git when done with a short message.
+
+On Aura Homes the protected part was the splash page and its scroll video. Every one of 55 prompts said "do NOT change the splash/
+landing page in any way", and after 55 prompts it was still byte for byte the same. Boring sentence. Massive payoff.
+
+09
+
+PART TWO
+
+THE
+BUILD.
+Visuals first, then the coding agent gets your prompts one at
+a time. It builds, it commits, the watcher checks, you look,
+you approve. Repeat until it's a website.
+
+BE YOUR OWN HERO
+
+STEP 05 · GROK IMAGINE · STILL FIRST, THEN MOTION
+
+THE VISUALS
+
+05
+
+Use grok.com/imagine (easiest) or the API at x.ai/api/imagine if you like code. Make the still, approve it, then
+animate it. Never put text in the image. The site adds the words.
+PROMPT 06 · HERO STILL
+
+[Scene in one sentence], shot like a premium brand campaign, [time of day and light], [your palette]
+color grade, calm empty space on the [left] third for a headline, no text, no logos, photoreal, 16:9.
+
+PROMPT 07 · SCROLL VIDEO FROM YOUR STILL
+
+Animate this image. Slow, steady camera [push-in / dolly right / rise], no cuts, no shake, no zoom
+pulses, subjects move gently, light stays constant, ends on a calm composed frame. [10] seconds.
+
+W HY NO CUTS AND NO SHAKE
+
+A scroll-scrubbed video gets played forwards and backwards by your visitor's thumb. Any cut or camera jump
+looks like a glitch. One slow, steady camera move scrubs like butter. Ten seconds is plenty.
+Keep the same light and color grade across every image, so the whole site feels like one world. AntiHero
+lives in golden hour. Pick yours.
+RULE
+
+11
+
+STEP 06 · ONE PROMPT · ONE JOB · ONE COMMIT
+
+THE AUTOPILOT
+Install Grok Build
+
+06
+
+# Mac or Linux, in Terminal
+curl -fsSL https://x.ai/cli/install.sh | bash
+# Windows, in PowerShell
+irm https://x.ai/cli/install.ps1 | iex
+# then, inside your project folder
+grok
+
+The first launch opens a browser to log in. Inside Grok Build, type /model to switch models. Grok 4.7 Fast is great for quick jobs like
+copy and simple sections. Switch back to the bigger model for 3D, transitions and anything with "refactor" in it. Docs: docs.x.ai/
+build/overview.
+
+The loop
+1
+
+Paste prompt N into Grok Build. Let it work. Don't help.
+
+2
+
+It commits. That's your checkpoint.
+
+3
+
+Grok Bot checks the commit: did it do the task, did it touch anything protected, did it follow the RULES.
+
+4
+
+You look on localhost and hard refresh: Ctrl+Shift+R on Windows, Cmd+Shift+R on Mac.
+
+5
+
+Good? Next prompt. Bad? Paste Grok Bot's fix prompt, or roll back.
+PROMPT 08 · THE WATCHER · GIVE THIS TO GROK BOT
+
+You're my build supervisor. Here is the full build package: [attach it]. Grok Build is running these
+prompts one at a time in my project. After each one I'll paste its final report and the output of `git
+show /-stat HEAD` (and the diff if it's small).
+For each step tell me:
+1. Done or not done, against the TASK's own definition of done.
+2. Did it touch anything the RULES protect? Name the file.
+3. Any RULES broken (banned words, em dashes, wrong colors, missing credits entry, deploys, deleted
+files).
+4. What to look at on localhost before moving on.
+5. If something is wrong: the exact fix prompt to paste back into Grok Build, with the RULES paragraph
+on top.
+Then give me the next prompt number. Keep it short.
+
+12
+
+STEP 06 · WHEN SOMETHING BREAKS
+
+ROLL BACK,
+DON'T PANIC
+Something will break. That's not the workflow failing, that's the workflow. Read the error, paste it into Grok Bot,
+paste the fix back. Because every prompt commits, the worst case is you lose one step.
+# see your checkpoints
+git log /-oneline
+# then ask Grok Build, in plain English
+Revert the last commit, keep a backup branch called backup-[date].
+
+F ULL AUTOPILOT
+
+If your Grok Bot can see the project directly (a shared repo or folder), tell it to run git log and git diff itself
+after every step. Now you're approving, it's checking, Grok Build is building. On Aura Homes that's how 55
+prompts went through without the protected splash page moving a pixel.
+Keep your hands off the code while the agent works. Two people editing the same file is how you get a
+website with two front doors.
+RULE
+
+The order that works
+• Setup and backup first, always.
+• Structure: site map, navigation, then each page and section.
+• Imagery: drop in your Grok Imagine visuals.
+• Motion: smooth scroll, reveals, scroll video, transitions, 3D, glow.
+• Finish: media compression, credits page, QA.
+
+Effects come last. Decorating before the walls are up gets you a very pretty tent.
+
+13
+
+STEP 07 · THE BUILD PROMPTS · STRUCTURE
+
+SETUP, HERO,
+NAV
+
+07
+
+Examples, ready to paste. Your step 04 package will have its own versions written for your site. Use these to
+check them, or to fill gaps.
+PROMPT 09 · SETUP AND BACKUP
+
+[RULES]
+TASK: Project setup and backup
+Create a new Astro project in this folder (latest stable, TypeScript strict, no UI framework yet). Add
+Tailwind only if I said so in the brief. Set up git, a .gitignore for node_modules and .env, and make a
+first commit called "Fresh start". Create /src/assets/logo, /src/assets/img, /public/media and /
+_archive. Copy my logo files from [path to assets folder] into /src/assets/logo and my fonts into /
+public/fonts with @font-face rules in a global CSS file. Add CSS variables for every brand color. Tell
+me the command to run the site locally and the URL.
+
+PROMPT 10 · HOMEPAGE HERO
+
+[RULES]
+TASK: Homepage hero
+Build the homepage hero as src/components/Hero.astro. Full viewport height. Background: [image or
+looping muted video] from /public/media/[file], with a poster image so something shows instantly.
+Headline "[headline]" in the display font, very large, low-left, with generous empty space. One line
+under it: "[subline]". One button: "[CTA text]" linking to [URL]. Text must pass contrast over the
+image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video.
+Show me a screenshot description of desktop and mobile.
+
+PROMPT 11 · NAVIGATION AND MENU
+
+[RULES]
+TASK: Navigation and menu
+Build a slim top bar (about 56px): logo left, text links [Page 1, Page 2, Page 3], and an outlined
+"[CTA]" button right. Transparent over the hero, soft frosted background after 80px of scroll, hides on
+scroll down and comes back on scroll up. Under 1024px show only the logo and a "Menu" button that opens
+a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes,
+focus stays inside the open menu and returns to the button on close. Add the same links to the footer.
+
+14
+
+STEP 07 · ONE PROMPT PER SECTION
+
+SECTIONS AND
+SMOOTH SCROLL
+PROMPT 12 · ONE SECTION
+
+[RULES]
+TASK: [Section name] section
+Build src/components/[SectionName].astro and add it to [page] after [previous section]. Purpose: [one
+job of this section]. Content: headline "[headline]", copy "[copy]", [cards / image grid /
+testimonial / FAQ list]. Layout: [describe it, or "steal the structure of [reference site]'s
+[section], not the look"]. Use only brand fonts and colors. Mobile first, then desktop. No effects yet;
+motion comes in a later prompt.
+
+PROMPT 13 · LENIS SMOOTH SCROLL
+
+[RULES]
+TASK: Smooth scroll foundation
+Install Lenis and GSAP. Wire Lenis to GSAP ScrollTrigger site-wide (lenis.on('scroll',
+ScrollTrigger.update) and drive Lenis from gsap.ticker). [Except the protected page; leave its scroll
+logic exactly as is.] Create src/scripts/motion.ts with shared eases, durations and a prefers-reducedmotion check, so every later effect uses the same feel. With reduced motion on, Lenis is disabled and
+scrolling is native. Anchor links must still land in the right place.
+
+PROMPT 14 · GSAP SCROLLTRIGGER REVEALS
+
+[RULES]
+TASK: Scroll reveals
+Create a reusable reveal system using GSAP ScrollTrigger and the shared settings in src/scripts/
+motion.ts. (1) Headings: a <RevealHeading> component that splits text into lines (GSAP SplitText), each
+line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clippath "window opening" from the center outward while the image inside scales from 1.1 to 1. (3) Cards in
+grids stagger by 0.1s. Each animation plays once. Use on every H1 and H2 [outside the protected page].
+Reduced motion: everything is simply visible.
+
+15
+
+STEP 07 · THE ONE EVERYBODY ASKS ABOUT
+
+SCROLL VIDEO,
+TRANSITIONS
+The video that plays as you scroll. Make the clip in step 05 first.
+PROMPT 15 · SCROLL-SCRUBBED VIDEO
+
+[RULES]
+TASK: Scroll-scrubbed hero video
+Build src/components/ScrollFilm.astro: a section about
+[400vh] tall with a sticky full-screen stage. As the visitor scrolls through it, the video /public/
+media/[file].mp4 plays forward frame by frame, and backwards when they scroll up, using GSAP
+ScrollTrigger with scrub: true. First, re-encode the video for smooth seeking with ffmpeg: H.264,
+keyframe every frame (-g 1), no audio (-an), 1920px wide, -movflags +faststart, and keep the original
+in /_archive. If seeking still stutters, extract frames to WebP (about 120 to 180 frames) and draw them
+to a canvas instead. Overlay three lines of copy that fade in at 20, 50 and 80 percent progress:
+"[line 1]", "[line 2]", "[line 3]". Poster image first. Mobile and reduced motion get the poster and
+the copy, no scrubbing.
+
+M AKE IT SCRUB LIKE BUTTER
+
+Normal web video is compressed so it only has a full picture every few seconds, which is why scrubbing it
+backwards stutters. The prompt fixes that by re-encoding with a keyframe on every frame, and falls back to a
+stack of still frames drawn on a canvas if it still isn't smooth. That's how the big launch sites do it.
+Use a clip with one slow camera move and roughly 400vh of scroll for 10 seconds of video.
+Shorter scroll feels rushed. Longer feels like homework.
+RULE OF THUMB
+
+PROMPT 16 · PAGE TRANSITIONS
+
+[RULES]
+TASK: Page transitions
+Add Astro View Transitions (ClientRouter) with a custom transition: [a thin line in the accent color
+sweeps across the screen, the old page fades and lifts 20px, the new page rises
+in], about 700ms total. The logo and nav persist without flicker. Re-initialize GSAP, ScrollTrigger and
+Lenis correctly after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick
+fade.
+
+16
+
+STEP 07 · ONLY IF YOUR MOTION APPETITE IS 8 OR MORE
+
+3D AND
+GLOW
+PROMPT 17 · THREE.JS 3D SCENE
+
+[RULES]
+TASK: 3D scene in [section]
+Install three. Build src/three/scene.ts and mount it in [section] on desktop only (1024px and up, fine
+pointer). Scene: [describe it, e.g. a slow camera drift over a meadow at golden hour with a glass cube
+catching the light]. Light it with a free HDRI from Poly Haven (polyhaven.com, CC0) for real
+reflections, ACES or AgX tone mapping, soft shadows. The camera moves with scroll progress through the
+section using GSAP ScrollTrigger. One renderer only, pixel ratio capped at 2, rendering paused when the
+section is offscreen or the tab is hidden. Mobile, low-power devices and reduced motion get a still
+image rendered from the same scene. Load models through one shared GLTFLoader with Draco and Meshopt
+support, and leave a drop-in folder /public/models/custom/ so I can replace the model later without
+code changes. Add every model, texture and HDRI to the credits data.
+
+W HAT WE LEARNED ON AURA HOMES
+
+The Aura site has hyper-real grass, pine trees, polycarbonate glass and a steaming cedar hot tub. The big
+lesson from that research: what makes 3D look real is light, not more triangles. A free outdoor HDRI from
+Poly Haven, good tone mapping, soft shadows and a bit of fog beat a million extra polygons. And one renderer
+per page, or your visitor's laptop takes off.
+PROMPT 18 · HOVER GLOW TITLES
+
+[RULES]
+TASK: Title glow on hover
+On desktop, headings (H1, H2 and card titles) get a soft glow that "heats up" behind them on hover: a
+blurred radial gradient in [accent color] at low opacity, easing in over about 1.2s and cooling out
+over about 2.4s. Build it in CSS first (a /:before pseudo-element, animating only opacity and
+transform). Optionally upgrade to one shared WebGL canvas with animated noise if it stays under 1ms per
+frame. Keyboard focus triggers it too. Touch devices and reduced motion get a static faint glow or
+nothing.
+
+17
+
+STEP 07 · THE BORING PART THAT MAKES IT GOOD
+
+SPEED, CREDITS,
+QA
+PROMPT 19 · MEDIA AND PERFORMANCE PASS
+
+[RULES]
+TASK: Media and performance pass
+Find every image and video on the site. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and
+serve them through Astro's Picture component with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264,
+crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster
+frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the
+poster only. Keep originals in /_archive/originals. Preload the two brand fonts. Write scripts/
+optimize-media.mjs so I can rerun this on new files. Report a before and after size table and a
+Lighthouse estimate (target: LCP under 2.5s, no layout shift).
+
+PROMPT 20 · CREDITS PAGE
+
+[RULES]
+TASK: Credits page
+Create src/data/credits.ts: a typed list of { name, author, license, link, usedFor, category }, with
+categories "Code and libraries", "3D models", "Textures and HDRIs", "Fonts", "Inspiration". Build /
+credits from it: a calm page with one intro line ("[Brand] stands on the generosity of open-source
+makers. Thank you."), then each category as a clean list with the name linked to the source and the
+license linked. Seed it with everything that ships to the browser (read each package's license in
+node_modules), plus Astro, GSAP (Standard no-charge license, https://gsap.com/standard-license), Lenis,
+three.js and the fonts. Add a small "Credits" link in the footer. Add a comment at the top of
+credits.ts: anything borrowed gets an entry in the same commit.
+
+PROMPT 21 · QA WITH PLAYWRIGHT
+
+[RULES]
+TASK: QA pass
+Install Playwright as a dev dependency. Write tests/qa.spec.ts that, for every page at 375px, 768px,
+1440px and 1920px: loads the page, fails on any console error or 404, takes a full-page screenshot
+into /qa/screenshots, checks every internal link resolves, checks every image has alt text, and checks
+the menu opens and closes with the keyboard. Also run it once with reduced motion on. Run npm run
+build, then the tests. Fix anything you broke. Report what you fixed and anything you need me to
+decide. Confirm with git diff that the protected files are unchanged.
+
+Playwright is a free tool that opens your site in a real browser by itself and checks it, at phone, tablet and desktop sizes.
+playwright.dev. The credits page is for every bit of open source you borrowed. Saying thank you is free. Not saying it is sometimes a
+license violation.
+
+18
+
+STEP 08 · LOOK AT IT LIKE A STRANGER
+
+REVIEW AND
+FIX
+
+08
+
+Screenshot every page on desktop and on your phone. Hand them to Grok Bot with your brief and brand brain,
+and get a fix list where every fix is already a ready-to-paste prompt.
+PROMPT 22 · THE FIX LIST
+
+Here are screenshots of my site on desktop and mobile: [attach]. Here is my Site Brief and brand
+brain: [attach]. Act as an Awwwards juror and my brand director. Give me a numbered fix list, most
+important first. Each fix must be specific ("headline is 14 words, cut to 6", not "make it pop") and
+written as a ready-to-paste Grok Build TASK with my RULES paragraph on top. Also tell me what to keep
+so I don't break the good stuff.
+
+Before you call it done
+Hard refresh every page. Then open it on your actual phone, in daylight.
+Turn on reduced motion in your accessibility settings and scroll the whole site. Still works, still reads.
+Run the homepage through PageSpeed pagespeed.web.dev once it's live. Aim for a fast first load.
+Check /credits lists everything you borrowed.
+Check the protected parts with git diff. Unchanged means the autopilot held.
+
+19
+
+PART THREE
+
+MAKE IT
+STAND OUT.
+A working website is the floor. Nobody remembers the floor.
+This part is how you get from nice site to wait, who made
+this.
+
+BE YOUR OWN HERO
+
+STEP 09 · WRITTEN FOR THE AI · PASTE INTO EVERY RULES PARAGRAPH
+
+THE NO SLOP
+RULES
+
+09
+
+Left alone, an AI builds the website it built for everyone else this morning: purple gradient, centered headline,
+three cards with emoji, a button that says Learn More. This rulebook bans the defaults and tells it what to do
+instead. Paste it into your RULES paragraph, right before "Commit to git".
+PROMPT 23 · NO SLOP RULES
+
+NO SLOP RULES. Never use: purple-to-blue or rainbow gradients; a centered hero with a floating stock
+blob or abstract 3D shape; the generic row of 3 feature cards with icons; emoji as icons; the words
+unlock, elevate, seamless, revolutionize, empower, game-changer, delve, leverage, cutting-edge,
+journey, "in today's fast-paced world" or "it's not just X, it's Y"; lorem ipsum or placeholder copy;
+stock photos of smiling people pointing at laptops; the default Tailwind look (gray-50 backgrounds,
+rounded-xl cards, indigo buttons, everything centered); every section with the same rhythm (headline,
+subline, grid, repeat); invented testimonials, fake logos or made-up numbers. Instead, always: one bold
+idea per section, and say what it is in your report; real copy in the brand voice, specific and human;
+asymmetric layouts with intentional empty space; a deliberate type scale with big contrast between
+display and body; motion with a purpose (it guides the eye, reveals the story or gives feedback, never
+decoration); specific details only this brand would have; brand colors and fonts only. If you're about
+to do something you've seen on a thousand sites, stop and do the more interesting version. If something
+isn't real yet, mark it TODO instead of faking it.
+
+E LEVATED BY DEFAULT
+
+Your RULES template and the write-all-the-prompts meta-prompt now carry one more line: aim for an
+Awwwards Site of the Day result, not a regular website. One bold idea per section, real copy, specific
+details. It sounds like a small thing. It changes what the AI reaches for on every single prompt.
+Copy the updated RULES template and meta-prompt from prompt-guide.md. They already include
+both lines.
+UPDATED
+
+21
+
+STEP 09 · RIGHT AFTER THE SITE INTERVIEW · SAME CHAT
+
+THE VISUAL
+INTERVIEW
+The site interview decides what the site says. This one decides how it feels. You come out with a Visual
+Direction brief, which you then attach to the meta-prompt so every build prompt knows the look.
+PROMPT 24 · INTERVIEW ME ON LOOK AND FEEL
+
+You're an award-winning art director. Read my brand brain and Site Brief: [paste or attach]. Interview
+me about the look and feel of the site, one question at a time, and wait for each answer. Show me
+examples or options when I'm stuck. Cover:
+1. Five mood words, and three words it must never feel like.
+2. Three to five Awwwards sites I love (awwwards.com, Sites of the Day), and exactly which part of
+each: the type, the scroll, the layout, the color, the motion.
+3. Type pairing: how loud the headlines should be, and how big the contrast between headline and body.
+4. Color temperature: warm, cool or neutral, light or dark, and how often the accent color shows up.
+5. Motion personality: calm and expensive, snappy and playful, heavy and cinematic, or something else.
+Give me a real-world comparison for each.
+6. Texture: clean and flat, film grain, paper, glass, noise, or something physical from my world.
+7. Imagery style: photo, illustration, 3D or video, light and time of day, real people or no people,
+and what never shows up.
+8. The signature moment: the one thing people will screenshot and send to a friend.
+Then write a one-page Visual Direction brief: mood, references and what to steal from each, type scale
+with sizes, color usage with hex codes, motion rules (eases, durations, what moves and what never
+moves), texture, imagery rules, the signature moment, and a "never do" list. Ask me what you got wrong.
+
+T HE SIGNATURE MOMENT
+
+Question 8 is the one that matters. Every site people remember has one thing they screenshot and send to a
+friend: a menu that opens like a horizon, a video that plays as you scroll, steam rising off a hot tub. Decide
+yours on purpose, or the site won't have one.
+
+22
+
+STEP 09 · 3 TO 5 FEATURES · NOT 12
+
+STANDOUT
+FEATURES
+Now the AI pitches you features like an agency creative technologist would, explains each one in English, and
+helps you pick the few that actually fit. The ones you don't pick are not lost. They're Version 2.
+PROMPT 25 · STANDOUT FEATURES INTERVIEW
+
+You're the creative technologist on an agency team that wins Awwwards. Read my Site Brief and Visual
+Direction brief: [paste or attach]. Propose features that would make this site memorable, then
+interview me about them one at a time. Consider at least: a signature hero interaction, scroll
+storytelling, a cursor effect, a 3D moment, micro-interactions (buttons, links, forms), an optional
+sound toggle (off by default), page transitions, and a playful easter egg. For each one, explain in
+plain English what the visitor sees and feels, why it fits my brand (or why it doesn't), how heavy it
+is for phones, and a version for people who turn motion off. Ask me which ones excite me. Then pick the
+3 to 5 best for my brand, rank them, and for each write: the plain-English description, where on the
+site it lives, and a ready-to-paste Grok Build TASK with my RULES paragraph on top. Cut anything that's
+a trick without a reason.
+
+FEATURE
+
+WHAT THE VISITOR GETS
+
+Signature hero interaction
+
+The first thing they touch does something only your site does.
+
+Scroll storytelling
+
+The page tells a story as they scroll, like a short film they control.
+
+Cursor effect
+
+The pointer reacts to what it is over. Desktop only.
+
+3D moment
+
+One real 3D scene where it earns its place.
+
+Micro-interactions
+
+Buttons, links and forms that feel alive when touched.
+
+Sound toggle
+
+Optional ambient sound, off by default, always.
+
+Page transitions
+
+Moving between pages feels like one continuous place, not a reload.
+
+Easter egg
+
+A small reward for the curious. Keeps people poking around.
+
+23
+
+STEP 09 · WHEN IT WORKS BUT FEELS ORDINARY
+
+ELEVATION
+PASSES
+Point each one at a single section or the whole site. Run them in this order: type and spacing, motion, imagery,
+copy.
+PROMPT 26 · TYPOGRAPHY AND SPACING PASS
+
+[RULES]
+TASK: Typography and spacing pass on [section or whole site]
+Audit and upgrade the type and spacing. Define one type scale (display, h1, h2, h3, body, small,
+caption) with real contrast between display and body, using only the brand fonts, and use it
+everywhere. Tighten letter spacing on big display type, loosen it on small caps. Set body text at 16 to
+18px with a line length of 45 to 75 characters and line height around 1.5. Create one spacing scale and
+use it for every gap. Break the identical section rhythm: vary alignment, widths and empty space so
+each section has its own shape. Report before and after for each section in one line.
+
+PROMPT 27 · MOTION PASS
+
+[RULES]
+TASK: Motion pass on [section or whole site]
+Audit every animation. Remove anything that moves just because it can. For what's left, give each one a
+job (guide the eye, reveal the story, or give feedback) and say which job in your report. Use one
+shared set of eases and durations from src/scripts/motion.ts. Add the one motion moment from the Visual
+Direction brief if it's missing. Stagger related elements, never animate everything at once, animate
+only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you
+removed, what you kept and what you added.
+
+24
+
+STEP 09 · ELEVATION PASSES, CONTINUED
+
+IMAGERY
+AND COPY
+PROMPT 28 · IMAGERY PASS
+
+[RULES]
+TASK: Imagery pass on [section or whole site]
+Audit every image and video against the Visual Direction brief (light, color grade, subject, what never
+shows up). List anything off-brand, generic or stock-looking. For each, write a Grok Imagine prompt for
+a replacement in the brand's world and leave a clearly named placeholder slot. Crop for intent: make
+sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply
+one consistent color treatment (grade, grain or duotone) so the whole site feels like one world. Report
+the list and the prompts.
+
+PROMPT 29 · COPY PASS
+
+[RULES]
+TASK: Copy pass on [section or whole site]
+Rewrite every headline, subline, button and caption in the brand voice from the brand brain. Kill every
+banned word and every generic line ("Welcome to our website", "We are passionate about", "Learn more").
+Headlines: short, specific, a little surprising. Buttons: say exactly what happens ("Book a call", not
+"Submit"). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of
+inventing it. Report a before and after table.
+
+The copy pass marks anything that needs a real fact as TODO instead of inventing it. An AI will happily write "Trusted by 10,000
+customers" for a business that opened on Tuesday. Don't let it.
+
+25
+
+STEP 09 · SCORED OUT OF 10 · NO FLATTERY
+
+THE AWWWARDS
+JURY
+Awwwards judges score Design, Usability, Creativity and Content. Your AI can do a decent impression, as long
+as you tell it not to be nice. Then a second prompt turns the fix list into build prompts, so the review becomes
+work instead of feelings.
+PROMPT 30 · AWWWARDS JURY REVIEW
+
+Act as a jury of three Awwwards judges: a designer, a developer and a brand strategist. Review my
+site: [live URL, or attach screenshots of every page on desktop and mobile]. Here is my Site Brief and
+Visual Direction brief: [attach]. Score it out of 10 on Design, Usability, Creativity and Content, the
+way Awwwards does, with two lines of honest reasoning for each score. Then tell me: the first
+impression in 3 seconds, the single thing holding it back the most, anything that looks like AI slop or
+a template, and what's already good enough to keep. Finish with a numbered fix list, most important
+first, each fix specific enough that a developer could do it without asking a question. No flattery. If
+it's a 6, say 6.
+
+PROMPT 31 · TURN THE FIX LIST INTO BUILD PROMPTS
+
+Turn this fix list into Grok Build prompts: [paste the jury's fix list]. Group related fixes so each
+prompt is one job and one commit, and order them by impact. Every prompt is a single copy-paste block
+that starts with my full RULES paragraph (including the NO SLOP RULES and the elevated-by-default
+line), then "TASK: [name]", then exact instructions, files to touch, what done looks like and what to
+report. Each prompt must work on its own. Finish with the order to run them in and what to check on
+localhost after each.
+
+26
+
+STEP 09 · WHEN THE SITE IS FINISHED AND LIVE
+
+POST-LAUNCH
+UPGRADE
+Run this when the site is live. A week later is better, when you look at it with fresh, slightly annoyed eyes. The AI
+reviews the site first, before you tell it anything, so you get an honest outside look. Then it interviews you and
+writes the upgrade prompts.
+PROMPT 32 · QUALITY UPGRADE INTERVIEW
+
+My site is finished and live at [URL]. Read my Site Brief, Visual Direction brief and brand brain:
+[attach]. First, review the live site yourself (open it, or use these screenshots:
+[attach]) on desktop and mobile, and write down what feels flat, generic, slow or confusing, before I
+tell you anything. Then interview me one question at a time: which pages I avoid showing people, where
+visitors drop off or get confused (if I have analytics, ask for them), what people have said about it,
+what feels flat to me, what I'd be proudest of if it were better, and what I've been too scared to try.
+Then write an upgrade plan with no more than 8 upgrades, ranked by impact versus effort, each explained
+in one plain-English sentence. Then write every upgrade as a ready-to-paste Grok Build prompt with my
+full RULES paragraph on top (including the NO SLOP RULES and elevated by default). Protect everything
+that already works.
+
+W HY IT REVIEWS FIRST
+
+If you tell it what you think is wrong, it agrees with you and misses the thing you can't see anymore. Let it look
+cold, like a stranger would. Then compare notes.
+RULE
+
+Limit it to 8 upgrades. Twenty upgrades is a rebuild wearing a disguise.
+
+27
+
+10
+
+MOST SITES SHOULDN'T USE ALL OF THIS
+
+PICK WHAT
+YOU NEED
+YOUR SITE
+
+USE
+
+SKIP
+
+Local business, 3 to 5 pages
+
+Steps 02 to 04, hero, nav, sections, smooth scroll, reveals,
+media pass, QA
+
+3D, scroll video, glow
+
+Personal brand or creator
+(AntiHero)
+
+All of the above, plus one scroll video, page transitions,
+hover glow
+
+Heavy 3D
+
+Product launch or wow
+landing page
+
+Everything, including one 3D scene
+
+More than one 3D scene
+per page
+
+Guides library (the AntiHero
+site)
+
+Hero, nav, a card grid of guides with filters, reveals,
+transitions, credits, QA
+
+Scroll video, 3D
+
+Rules of thumb
+• One wow per section. Three effects fighting is not three times the wow.
+• Motion appetite 1 to 4: smooth scroll and reveals. 5 to 7: add a scroll video and transitions. 8 to 10: add 3D.
+Respect the number you gave in the interview.
+• Mobile is half your visitors. Every heavy effect needs a calm phone version.
+• Effects come last. Content and structure first.
+• Ship version 1. The Version 2 list will still be there next weekend. It's very patient.
+
+T HE PILOT AND THE AUTOPILOT
+
+The AI can build anything you describe. It can't tell you what's worth building, who it's for, or when to stop.
+That's the job. That was always the job. The typing was never the hard part.
+
+28
+
+STEP 11 · EVERY LINK · CHECKED OCT 2, 2026 · ALL CLICKABLE
+
+LINKS
+Grok
+Grok
+
+grok.com
+
+Grok Imagine
+
+grok.com/imagine
+
+Grok Imagine API
+
+x.ai/api/imagine
+
+Grok Build, install
+
+x.ai/cli
+
+Grok Build docs
+
+docs.x.ai/build/overview
+
+Grok Build CLI reference
+
+docs.x.ai/build/cli/reference
+
+Grok Bot
+
+x.ai/bot
+
+xAI console, API keys
+
+console.x.ai
+
+11
+
+Build and motion
+Astro
+
+astro.build
+
+Astro view transitions
+
+docs.astro.build/en/guides/view-transitions
+
+GSAP
+
+gsap.com
+
+ScrollTrigger docs
+
+gsap.com/docs/v3/Plugins/ScrollTrigger
+
+GSAP license
+
+gsap.com/standard-license
+
+Lenis
+
+lenis.darkroom.engineering
+
+Three.js
+
+threejs.org
+
+Poly Haven, free HDRIs, textures, models
+
+polyhaven.com
+
+Setup, checks, ideas
+Node.js
+
+nodejs.org
+
+Git
+
+git-scm.com
+
+Playwright
+
+playwright.dev
+
+PageSpeed Insights
+
+pagespeed.web.dev
+
+Awwwards
+
+awwwards.com
+
+AntiHero AI group
+
+facebook.com/groups/antiheroai
+
+29
+
+NOW GO
+BUILD IT.
+Homework: run the interview this weekend and post your
+Site Brief in the group. One page. Brave beats polished.
+Bonus points for the one Awwwards site you'd steal from,
+and why. The AntiHero AI group is free, sells nothing, and
+will tell you honestly if your hero section looks like a
+dentist's.
+
+FACEBOOK.COM/GROUPS/ANTIHEROAI
+
+BE YOUR OWN HERO
+
+

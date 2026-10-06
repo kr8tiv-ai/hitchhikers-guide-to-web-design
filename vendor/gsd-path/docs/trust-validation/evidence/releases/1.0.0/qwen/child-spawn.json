@@ -1,0 +1,30 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "qwen",
+  "run_id": "795bf3f3-cbbd-4682-a8b3-14d80455cf76",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "agent",
+  "child_api": "agent",
+  "child_id": "build_t001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_t001",
+    "status": "completed",
+    "child_api": "agent",
+    "run": "run-20260915T035745207654Z",
+    "tool_use": {
+      "id": "call_e949b74ef19b4ebda0fba200",
+      "input": {
+        "description": "build_t001",
+        "run_in_background": false,
+        "subagent_type": "general-purpose"
+      },
+      "prompt_sha256": "a5b8f0dc1faf12229a968726413c13cbfb0d1751f23f71aa6c5bc91c78604256"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "**T001** \u2014 `ready`. Preflight was clean at base `02edf248` (branch `gsd-path/M001`, `count.py` present, `test_count.py` declared, SC1\u2013SC5 present in INTENT.md, Interface contract `None`, no sibling tasks), so I implemented the CLI contract and the suite.\n**Verify:** `python3 -m unittest test_count -v` from the worktree root \u2192 `Ran 21 tests in 0.596s` / `OK`, 0 failures, 0 errors, **exit 0**; I also byte-checked all 24 invocations directly (text/JSON/invalid), confirming exit 2, empty stdout, exactly one stderr line naming the input and the accepted form, and no `Traceback` even under `LC_ALL=C`/`PYTHONIOENCODING=ascii`.\nNo Git mutation, no frontmatter edit, no stray `__pycache__`; the task-file diff is the two appended Log lines only (the frontmatter hunk predates my run \u2014 it was already ` M` at dispatch).\n\nChanged paths:\n- `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo/count.py` (modified)\n- `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo/test_count.py` (new)\n- `/Users/jeremymcspadden/orca/evaluations/gsd-path-release-0524757/qwen/quick/repo/.project/tasks/T001-count-json-cli.md` (`## Log` append only)\n\nRESULT: T001 ready"
+    }
+  }
+}

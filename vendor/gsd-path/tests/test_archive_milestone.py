@@ -1,0 +1,6719 @@
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+from typing import Optional
+from unittest import mock
+
+from scripts import (
+    archive_milestone,
+    build_state,
+    discussion_validate,
+    integration,
+    isolation,
+    pipeline_git,
+    pipeline_state,
+    review_panel,
+)
+from tests._platform import requires_symlink
+
+if sys.platform != "win32":
+    import fcntl
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ARCHIVE_SCRIPT = PROJECT_ROOT / "scripts" / "archive_milestone.py"
+GIT_GUARD_SCRIPT = PROJECT_ROOT / "scripts" / "git_guard.py"
+
+
+class ArchiveMilestoneTests(unittest.TestCase):
+    def run_command(self, *args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            cwd=cwd,
+            # git and the scripts speak UTF-8; text=True alone decodes cp1252 on Windows.
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+        )
+
+    def git(self, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return self.run_command("git", *args, cwd=repo)
+
+    def make_repo(self, root: Path, branch: str = "gsd-path/M001", landing: str = "land", acceptance: str = "") -> None:
+        self.git(root, "init", "-q", "-b", branch)
+        # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
+        self.git(root, "config", "gc.autoDetach", "false")
+        self.git(root, "config", "user.name", "Validation")
+        self.git(root, "config", "user.email", "validation@example.invalid")
+
+        project = root / ".project"
+        for directory in ("intent", "research", "plan", "tasks", "review"):
+            (project / directory).mkdir(parents=True, exist_ok=True)
+
+        (project / "STATE.md").write_bytes(
+            f"""---
+pipeline: gsd-path/v2
+project: demo
+milestone: demo
+phase: ship
+status: active
+branch: {branch}
+archive: null
+---
+
+# Project State
+
+## Log
+- 2026-08-01 — ship — final review passed
+""".encode("utf-8")
+        )
+        (project / "intent" / "INTENT.md").write_bytes(
+            "# Intent\n\n## Success criteria\n\n1. demo works\n".encode("utf-8")
+        )
+        for evidence in ("domain", "stack", "pitfalls", "similar"):
+            (project / "research" / f"evidence-{evidence}.md").write_bytes("# Evidence\n".encode("utf-8"))
+        (project / "research" / "SYNTHESIS.md").write_bytes("# Synthesis\n".encode("utf-8"))
+        (project / "research" / "DOCS-AUDIT.md").write_bytes(
+            """# Docs Audit
+
+## User rulings
+
+| Queue # | Ruling | User's words | Planned |
+|---------|--------|--------------|---------|
+| 1 | fix-doc | "keep this queued" | no |
+""".encode("utf-8")
+        )
+        (project / "plan" / "PLAN.md").write_bytes(
+            """# Plan
+
+## Wave 1 — demo
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | demo | — | src/demo.py |
+
+Review depth: full
+
+## Intent coverage
+
+| Criterion | Task | Acceptance |
+|-----------|------|------------|
+| SC1 | T001 | AC1 |
+""".encode("utf-8")
+        )
+        (root / "src").mkdir()
+        product = root / "src" / "demo.py"
+        product.write_bytes("value = 'before'\n".encode("utf-8"))
+        task = project / "tasks" / "T001-demo.md"
+        task.write_bytes(
+            """---
+id: T001
+title: demo
+wave: 1
+deps: []
+status: pending
+agent: null
+base: null
+worktree: null
+task_branch: null
+files: [src/demo.py]
+---
+
+# T001 — demo
+
+## Intent coverage
+
+- SC1
+
+## Verify
+
+```bash
+python3 -c 'print(1)'
+```
+
+## Log
+
+- created
+""".encode("utf-8"),
+        )
+        if acceptance:
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
+                "## Intent coverage", f"## Acceptance criteria\n\n{acceptance}\n\n## Intent coverage"
+            ).encode("utf-8"))
+        (project / "review" / "FINAL.md").write_bytes("Overall verdict: pass\n".encode("utf-8"))
+        (project / "review" / "wave-1.cycle1.md").write_bytes(
+            """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — focused Verify passed
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ focused Verify passed in tests
+""".encode("utf-8")
+        )
+
+        self.git(root, "add", ".project", "src/demo.py")
+        baseline = self.git(root, "commit", "-q", "-m", "baseline")
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        base = self.git(root, "rev-parse", "HEAD").stdout.strip()
+        task.write_bytes(
+            task.read_text(encoding="utf-8")
+            .replace("status: pending", "status: in-progress")
+            .replace("agent: null", "agent: builder")
+            .replace("base: null", f"base: {base}")
+            .replace("worktree: null", f"worktree: {root}").encode("utf-8"),
+        )
+        task.write_bytes(
+            isolation._landed_task_text(
+                task.read_text(encoding="utf-8") + "- implementation complete\n",
+                base,
+            ).encode("utf-8"),
+        )
+        product.write_bytes("value = 'implemented'\n".encode("utf-8"))
+        task_file = ".project/tasks/T001-demo.md"
+        changed_paths = [task_file, "src/demo.py"]
+        self.git(root, "add", *changed_paths)
+        if landing == "attest":
+            # Work committed outside isolation.py land, then attested by ruling.
+            direct = self.git(root, "commit", "-q", "-m", "feat: direct commit outside land")
+            self.assertEqual(direct.returncode, 0, direct.stderr)
+            head = self.git(root, "rev-parse", "HEAD").stdout.strip()
+            build_state.verify_record(str(root), "python3 -c 'print(1)'", head, "pass")
+            isolation.attest(root, task_file, "owner ruling: hand-landed during evaluation")
+        else:
+            landed = self.git(
+                root,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.task_commit_subject("T001", "demo"),
+                "-m",
+                pipeline_git.task_commit_body(task_file, changed_paths, base),
+            )
+            self.assertEqual(landed.returncode, 0, landed.stderr)
+        reviewed_head = self.git(root, "rev-parse", "HEAD").stdout.strip()
+        (project / "review" / "FINAL.md").write_bytes(
+            f"""# Final Review — demo
+
+Reviewed HEAD: {reviewed_head}
+Overall verdict: pass
+
+## Success criteria
+
+### SC1 — demo works
+
+- **Verdict**: met
+- **Check**: `python -m unittest`
+- **Observed**: focused tests passed
+- **Reference**: tests
+- **Finding**: none
+- **Fix direction**: none
+""".encode("utf-8")
+        )
+        (project / "review" / "final-gap-1.md").write_bytes(
+            f"""# Gap Review — 1: project Verify command
+
+Reviewed HEAD: {reviewed_head}
+Gap verdict: pass
+Risk: project Verify command
+Waves checked: 1
+
+## Checked evidence
+
+- **Check**: `python -m unittest`
+- **Observed**: focused project verification passed.
+- **Reference**: `tests/test_archive_milestone.py`
+
+## Finding
+
+- **Found**: The project Verify command passed at the reviewed HEAD.
+- **Fix direction**: none
+""".encode("utf-8")
+        )
+
+    def write_manifest(self, archive: Path) -> None:
+        contents = sorted(
+            path.relative_to(archive).as_posix()
+            for path in archive.rglob("*")
+            if path.is_file() and path.name != "MANIFEST.md"
+        )
+        listed_contents = "\n".join(f"- {path}" for path in contents)
+        (archive / "MANIFEST.md").write_bytes(
+            f"""# Archive — {archive.name}
+
+Milestone: demo
+Shipped: 2026-08-01
+Final verdict: all criteria met; project verify passed
+Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1
+Carried forward: 1 DOCS-AUDIT ruling(s)
+
+## Success criteria at ship
+
+| Criterion | Verdict | Evidence |
+|-----------|---------|----------|
+| demo works | met | tests |
+
+## Contents
+
+{listed_contents}
+
+## Notes
+
+- none
+""".encode("utf-8")
+        )
+
+    def write_panel_skip_receipt(self, path: Path) -> None:
+        payload = review_panel.resolve_panel(
+            {"mode": "detected", "families": ()},
+            (),
+        )
+        path.write_bytes((json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+
+    def write_discussion(
+        self, directory: Path, turn: int = 1, final: bool = True,
+        phase_status: str = "ship/active",
+    ) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        dialogue_turns = []
+        answer_records = []
+        for number in range(1, turn + 1):
+            previous = f"D{number - 1:03d}" if number > 1 else "none"
+            supersedes = f"A{number - 1:03d}" if number > 1 else "none"
+            status = "final" if final and number == turn else "working"
+            dialogue_turns.append(
+                f"""### D{number:03d} — 2026-08-01 — {phase_status} — demo
+
+- **Thread**: T001
+- **Reply to**: {previous}
+- **User (verbatim)**:
+
+  > question {number}
+
+- **Assistant**:
+
+  answer {number}
+
+- **Evidence checked**: tests/test_archive_milestone.py
+- **Research**: not needed — local behavior
+- **Thread status**: {status}
+"""
+            )
+            answer_records.append(
+                f"""## Answer A{number:03d} — 2026-08-01 — demo
+
+- **Thread**: T001
+- **Turn**: D{number:03d}
+- **Supersedes**: {supersedes}
+- **Question**: question {number}
+- **Status**: {status}
+- **Phase/status**: {phase_status}
+- **Conclusion**: answer {number}
+- **Reasoning / pushback**: evidence supports the answer
+- **Evidence**: tests/test_archive_milestone.py
+- **Research**: not needed — local behavior
+- **Confidence**: high
+- **Unresolved**: none
+- **Next owner**: none
+- **Target artifact**: none
+- **Follow-up**: none
+"""
+            )
+
+        (directory / "DIALOGUE.md").write_bytes(
+            ("# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
+            + "\n".join(dialogue_turns)).encode("utf-8")
+        )
+        (directory / "ANSWERS.md").write_bytes(
+            ("# GSD Path Discussion — Answers\n\n" + "\n".join(answer_records)).encode("utf-8")
+        )
+
+    def restamp_final_review(self, repo: Path) -> None:
+        """Point the final review at HEAD after a fixture commits more setup."""
+        head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        for name in ("FINAL.md", "final-gap-1.md"):
+            path = repo / ".project" / "review" / name
+            text = path.read_text(encoding="utf-8")
+            old = text.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+            path.write_bytes(text.replace(old, head).encode("utf-8"))
+
+    def prepare_archive(self, repo: Path, slug: str = "demo") -> Path:
+        prepare = self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "prepare",
+            "--repo",
+            str(repo),
+            "--slug",
+            slug,
+            cwd=PROJECT_ROOT,
+        )
+        self.assertEqual(prepare.returncode, 0, prepare.stderr)
+        return repo / json.loads(prepare.stdout)["archive"]
+
+    def preflight(self, repo: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "preflight",
+            "--repo",
+            str(repo),
+            cwd=PROJECT_ROOT,
+        )
+
+    def write_deep_review_cycle(self, repo: Path) -> None:
+        plan = repo / ".project" / "plan" / "PLAN.md"
+        plan.write_bytes(
+            plan.read_text(encoding="utf-8").replace(
+                "Review depth: full", "Review depth: deep"
+            ).encode("utf-8"),
+        )
+        review = repo / ".project" / "review"
+        (review / "wave-1.cycle1.md").unlink()
+        for lens in ("contract", "adversarial"):
+            (review / f"wave-1.cycle1.{lens}.md").write_bytes(
+                f"""# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: deep
+Lens: {lens}
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — {lens} evidence passed
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ {lens} evidence passed in focused tests
+""".encode("utf-8"),
+            )
+
+    def write_skeptic(
+        self,
+        repo: Path,
+        *,
+        recorded_locator: Optional[str] = None,
+    ) -> Path:
+        locator = "t001_ac1" if recorded_locator is None else recorded_locator
+        path = (
+            repo
+            / ".project"
+            / "review"
+            / "wave-1.cycle1.skeptic-t001_ac1.md"
+        )
+        path.write_bytes(
+            f"""# Skeptic — wave 1, cycle 1
+
+- Criterion: demo works
+- Criterion locator: {locator}
+- Lenses: contract
+
+## Observations
+
+### Observation 1 — contract
+
+The reported failure cannot occur.
+
+## Observation verdicts
+
+### Observation 1: refuted
+
+The archived evidence proves the criterion holds.
+
+## Verdict
+
+refuted
+""".encode("utf-8"),
+        )
+        return path
+
+    def render_manifest(self, repo: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "render-manifest",
+            "--repo",
+            str(repo),
+            cwd=PROJECT_ROOT,
+        )
+
+    def mark_shipped(self, repo: Path) -> None:
+        state_path = repo / ".project" / "STATE.md"
+        state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+        state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
+
+    def commit_ship(
+        self,
+        repo: Path,
+        archive: Path,
+        *,
+        subject: Optional[str] = None,
+        body: Optional[str] = None,
+        allow_empty: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        arguments = ["commit", "-q"]
+        if allow_empty:
+            arguments.append("--allow-empty")
+        arguments.extend(
+            (
+                "-m",
+                subject or pipeline_git.ship_subject(archive.name),
+                "-m",
+                body
+                or pipeline_git.ship_commit_body(
+                    archive.relative_to(repo).as_posix(), reviewed_head
+                ),
+            )
+        )
+        return self.git(repo, *arguments)
+
+    def snapshot_worktree(self, repo: Path) -> dict:
+        snapshot = {}
+        for path in sorted(repo.rglob("*")):
+            relative = path.relative_to(repo)
+            if relative.parts[0] == ".git":
+                continue
+            if path.is_symlink():
+                snapshot[relative.as_posix()] = ("symlink", os.readlink(path))
+            elif path.is_dir():
+                snapshot[relative.as_posix()] = ("directory", None)
+            else:
+                snapshot[relative.as_posix()] = ("file", path.read_bytes())
+        return snapshot
+
+    def test_frontmatter_value_keeps_hash_inside_task_titles(self) -> None:
+        task = textwrap.dedent(
+            """---
+id: T001
+title: Make completion store-wide (#212)
+wave: 1   # inline comment
+---"""
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "title"),
+            "Make completion store-wide (#212)",
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "wave"),
+            "1",
+        )
+        quoted = '---\ntitle: "Add endpoint (#213)"\n---'
+        self.assertEqual(
+            archive_milestone.frontmatter_value(quoted, "title"),
+            "Add endpoint (#213)",
+        )
+        self.assertEqual(
+            archive_milestone.frontmatter_value(task, "title"),
+            isolation.task_frontmatter(task)[0]["title"],
+        )
+
+    def test_prepare_is_idempotent_and_validate_requires_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            result = json.loads(prepare.stdout)
+            self.assertEqual(result["archive"], ".project/archive/001-demo")
+            self.assertEqual(result["carried_forward"], 1)
+
+            archive = repo / result["archive"]
+            self.assertTrue((archive / "intent" / "INTENT.md").is_file())
+            self.assertTrue((archive / "research" / "DOCS-AUDIT.md").is_file())
+            self.assertTrue((repo / ".project" / "research" / "DOCS-AUDIT.md").is_file())
+
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertEqual(json.loads(retry.stdout)["archive"], result["archive"])
+            archive_directories = sorted((repo / ".project" / "archive").iterdir())
+            self.assertEqual([path.name for path in archive_directories], ["001-demo"])
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state = state.replace("status: active", "status: done")
+            state_path.write_bytes(state.encode("utf-8"))
+            self.write_manifest(archive)
+
+            before_commit = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(before_commit.returncode, 0)
+
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            after_commit = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(after_commit.returncode, 0, after_commit.stderr)
+            self.assertEqual(json.loads(after_commit.stdout)["archive"], result["archive"])
+
+    def test_prepare_allows_archive_sequence_gap_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
+            )
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            self.assertEqual(json.loads(prepare.stdout)["archive"], ".project/archive/002-demo")
+
+    def test_prepare_rejects_later_archive_sequence_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
+            self.assertEqual(switched.returncode, 0, switched.stderr)
+            state = repo / ".project" / "STATE.md"
+            state.write_bytes(
+                state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
+            )
+            (repo / ".project" / "archive" / "003-future").mkdir(parents=True)
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("later=[3]", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def _minimal_archive_project(self, repo: Path) -> Path:
+        project = repo / ".project"
+        project.mkdir(parents=True)
+        (project / "archive").mkdir()
+        (project / "STATE.md").write_bytes(
+            b"---\npipeline: gsd-path/v2\nbranch: gsd-path/M002\narchive: null\n---\n"
+        )
+        return project
+
+    def test_resolved_archive_target_allows_gap_with_persisted_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            archive = project / "archive" / "002-demo"
+            archive.mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=".project/archive/002-demo",
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            target = archive_milestone.resolved_archive_target(repo, "demo", parsed)
+            self.assertEqual(target, archive)
+
+    def test_resolved_archive_target_rejects_later_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            (project / "archive" / "003-future").mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=None,
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, r"later=\[3\]"):
+                archive_milestone.resolved_archive_target(repo, "demo", parsed)
+
+    def test_resolved_archive_target_rejects_archive_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            project = self._minimal_archive_project(repo)
+            (project / "archive" / "002-other").mkdir(parents=True)
+            parsed = pipeline_state.PipelineState(
+                pipeline="gsd-path/v2",
+                project="demo",
+                milestone="demo",
+                phase="ship",
+                status="active",
+                branch="gsd-path/M002",
+                archive=".project/archive/002-demo",
+                integration_default="direct",
+                integration="direct",
+                integration_source="default",
+            )
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, "collides with 002-other"):
+                archive_milestone.resolved_archive_target(repo, "demo", parsed)
+
+    def test_prepare_rejects_stale_final_review_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            moved = self.git(repo, "commit", "-q", "--allow-empty", "-m", "build: record final review evidence")
+            self.assertEqual(moved.returncode, 0, moved.stderr)
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable, str(ARCHIVE_SCRIPT), "prepare", "--repo", str(repo), "--slug", "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("FINAL.md Reviewed HEAD", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_prepare_rejects_m000_bound_branch_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, branch="gsd-path/M000")
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("STATE.md is invalid", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_prepare_rejects_existing_archive_zero_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "archive" / "000-legacy").mkdir(parents=True)
+            before = self.snapshot_worktree(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("archive milestone number must be >= 1", prepare.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_archive_preserves_wrapped_criterion_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_bytes(intent.read_text(encoding="utf-8").replace("1. demo works", "1. demo\n   works").encode("utf-8"))
+            before = intent.read_bytes()
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertEqual((archive / "intent/INTENT.md").read_bytes(), before)
+
+    def test_render_manifest_replaces_stale_content_with_derived_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            final = repo / ".project" / "review" / "FINAL.md"
+            final.write_bytes(final.read_text(encoding="utf-8").replace("tests", "tests | smoke").encode("utf-8"))
+            archive = self.prepare_archive(repo)
+            manifest = archive / "MANIFEST.md"
+            manifest.write_bytes("stale\n".encode("utf-8"))
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertEqual(json.loads(rendered.stdout)["archive"], ".project/archive/001-demo")
+            content = manifest.read_text(encoding="utf-8")
+            self.assertIn("# Archive — 001-demo", content)
+            self.assertRegex(content, r"(?m)^Shipped: \d{4}-\d{2}-\d{2}$")
+            self.assertIn("Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1", content)
+            self.assertIn("| demo works | met | tests \\| smoke |", content)
+            self.assertIn("Carried forward: 1 DOCS-AUDIT ruling(s)", content)
+            self.assertFalse((archive / ".MANIFEST.md.gsd-path-tmp").exists())
+            checked = self.preflight(repo)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+    def test_render_manifest_checks_evidence_after_quoted_task_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, acceptance="1. AC1 — `demo.py <integer>` prints\n   the signed integer.")
+            criterion = "AC1 — `demo.py <integer>` prints the signed integer."
+            intent_criterion = "`demo.py <integer>` prints the signed integer."
+            for relative in ("intent/INTENT.md", "review/FINAL.md", "review/wave-1.cycle1.md"):
+                path = repo / ".project" / relative
+                path.write_bytes(path.read_text(encoding="utf-8").replace("demo works", intent_criterion).encode("utf-8"))
+            wave = repo / ".project/review/wave-1.cycle1.md"
+            original = wave.read_text(encoding="utf-8")
+            old = f"- ✅ {intent_criterion} — focused Verify passed"
+            wave.write_bytes(original.replace(old, f"- ✅ {criterion} — ran demo.py 7; stdout 7").encode("utf-8"))
+            archive = self.prepare_archive(repo)
+            result = self.render_manifest(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = self.preflight(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = archive / "MANIFEST.md"
+            content = manifest.read_text(encoding="utf-8")
+            manifest.write_bytes(content.replace("<integer>", "<other>").encode("utf-8"))
+            self.assertNotEqual(self.preflight(repo).returncode, 0)
+            manifest.write_bytes(content.encode("utf-8"))
+            wave = archive / "review/wave-1.cycle1.md"
+            for evidence in ("<observed result>", "none", ""):
+                with self.subTest(evidence=evidence):
+                    wave.write_bytes(original.replace(old, f"- ✅ {criterion} — {evidence}").encode("utf-8"))
+                    result = self.render_manifest(repo)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("non-placeholder evidence", result.stderr)
+
+    def test_render_manifest_counts_attested_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, landing="attest")
+            archive = self.prepare_archive(repo)
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            content = (archive / "MANIFEST.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1  Attested: 1", content
+            )
+            checked = self.preflight(repo)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+            (archive / "MANIFEST.md").write_bytes(content.replace("  Attested: 1", "").encode("utf-8"))
+            checked = self.preflight(repo)
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("counts do not match", checked.stderr)
+
+    def test_render_manifest_rejects_a_task_not_recorded_done(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            task = archive / "tasks" / "T001-demo.md"
+            task.write_bytes(
+                task.read_text(encoding="utf-8").replace(
+                    "status: done", "status: in-progress"
+                ).encode("utf-8"),
+            )
+
+            rendered = self.render_manifest(repo)
+
+            self.assertNotEqual(rendered.returncode, 0)
+            self.assertIn("status: done", rendered.stderr)
+            self.assertFalse((archive / "MANIFEST.md").exists())
+
+    def test_render_manifest_rejects_a_final_criterion_renamed_from_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            final = archive / "review" / "FINAL.md"
+            final.write_bytes(
+                final.read_text(encoding="utf-8").replace(
+                    "### SC1 — demo works", "### SC1 — an easier demo starts"
+                ).encode("utf-8"),
+            )
+
+            rendered = self.render_manifest(repo)
+
+            self.assertNotEqual(rendered.returncode, 0)
+            self.assertIn("heading text differs", rendered.stderr)
+            self.assertFalse((archive / "MANIFEST.md").exists())
+
+    def test_render_manifest_ignores_an_unrelated_commit_off_first_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            landed = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            tree = self.git(repo, "rev-parse", "HEAD^{tree}").stdout.strip()
+            side = self.git(
+                repo,
+                "commit-tree",
+                tree,
+                "-p",
+                landed,
+                "-m",
+                "side task",
+            ).stdout.strip()
+            merge = self.git(repo, "merge", "--no-ff", "-q", "-m", "merge side", side)
+            self.assertEqual(merge.returncode, 0, merge.stderr)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            for name in ("FINAL.md", "final-gap-1.md"):
+                review = repo / ".project" / "review" / name
+                review.write_bytes(
+                    review.read_text(encoding="utf-8").replace(
+                        landed, reviewed_head
+                    ).encode("utf-8"),
+                )
+            archive = self.prepare_archive(repo)
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertTrue((archive / "MANIFEST.md").exists())
+
+    def test_preflight_rejects_a_task_commit_with_noncanonical_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            previous = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            task = repo / ".project" / "tasks" / "T001-demo.md"
+            task.write_bytes(
+                (task.read_text(encoding="utf-8") + "\n- malformed landing\n").encode("utf-8"),
+            )
+            self.git(repo, "add", ".project/tasks/T001-demo.md")
+            committed = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.task_commit_subject("T001", "demo"),
+                "-m",
+                "not the canonical task body",
+            )
+            self.assertEqual(committed.returncode, 0, committed.stderr)
+            malformed = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            for name in ("FINAL.md", "final-gap-1.md"):
+                review = repo / ".project" / "review" / name
+                review.write_bytes(
+                    review.read_text(encoding="utf-8").replace(previous, malformed).encode("utf-8"),
+                )
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("body has no Base: field", preflight.stderr)
+
+    def test_prepare_archives_optional_discussion_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            expected_dialogue = (discussion / "DIALOGUE.md").read_text(encoding="utf-8")
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(discussion.exists())
+            self.assertEqual(
+                (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"),
+                expected_dialogue,
+            )
+            self.assertIn("## Answer A001", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_prepare_archives_the_optional_verify_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            ledger = repo / ".project" / "build" / "verify-ledger.jsonl"
+            ledger.parent.mkdir()
+            ledger.write_bytes('{"command": "true", "commit": "x", "result": "pass", "recorded_at": "t"}\n'.encode("utf-8"))
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(ledger.parent.exists())
+            self.assertTrue((archive / "build" / "verify-ledger.jsonl").is_file())
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_prepare_accepts_canonical_empty_discussion_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            discussion.mkdir()
+            dialogue_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "dialogue.md"
+            ).read_text(encoding="utf-8")
+            answers_template = (
+                PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "answers.md"
+            ).read_text(encoding="utf-8")
+            (discussion / "DIALOGUE.md").write_bytes(
+                (dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n").encode("utf-8")
+            )
+            (discussion / "ANSWERS.md").write_bytes(
+                (answers_template.split("\n## Answer A001", 1)[0].rstrip() + "\n").encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+
+            self.assertFalse(discussion.exists())
+            self.assertEqual(
+                (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"),
+                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n",
+            )
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX lock contention check")
+    def test_prepare_holds_discussion_lock_while_reconciling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            original = archive_milestone.reconcile_append_only_discussion
+
+            def assert_locked(active_root, archive):
+                descriptor = os.open(active_root, os.O_RDONLY)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(descriptor)
+                return original(active_root, archive)
+
+            with mock.patch.object(
+                archive_milestone,
+                "reconcile_append_only_discussion",
+                side_effect=assert_locked,
+            ):
+                result = archive_milestone.prepare(repo, "demo")
+
+            self.assertEqual(result["archive"], ".project/archive/001-demo")
+
+    def test_discussion_lock_uses_windows_locking_without_fcntl(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            program = textwrap.dedent(
+                f"""
+                # Import the script's platform-sensitive standard library
+                # modules before faking sys.platform: shutil imports _winapi
+                # on "win32", which does not exist on POSIX interpreters.
+                import argparse
+                import filecmp
+                import json
+                import runpy
+                import shutil
+                import subprocess
+                import sys
+                import types
+                from pathlib import Path
+
+                calls = []
+                locking = types.ModuleType("msvcrt")
+                locking.LK_NBLCK = 1
+                locking.LK_UNLCK = 2
+                locking.locking = lambda descriptor, mode, size: calls.append(mode)
+                sys.modules["fcntl"] = None
+                sys.modules["msvcrt"] = locking
+                sys.platform = "win32"
+                module = runpy.run_path({str(ARCHIVE_SCRIPT)!r}, run_name="archive_portability")
+                with module["discussion_lock"](Path({str(repo / ".project")!r})):
+                    calls.append("inside")
+                print(json.dumps(calls))
+                """
+            )
+
+            result = self.run_command(
+                sys.executable,
+                "-c",
+                program,
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [1, "inside", 2])
+
+    def test_prepare_reconciles_append_only_discussion_after_archive_started(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, final=False)
+
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+
+            resumed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            self.assertFalse(discussion.exists())
+            self.assertIn("### D002", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"))
+            self.assertIn("## Answer A002", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
+
+    def test_prepare_rejects_incomplete_discussion_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            (discussion / "ANSWERS.md").unlink()
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("discussion archive", prepare.stderr)
+
+    def test_prepare_rejects_empty_dialogue_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            dialogue = discussion / "DIALOGUE.md"
+            dialogue.write_bytes(
+                dialogue.read_text(encoding="utf-8").replace("  > question 1", "  >   ").encode("utf-8"),
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("verbatim user block", prepare.stderr)
+
+    def test_prepare_accepts_markdown_headings_inside_dialogue(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            dialogue = discussion / "DIALOGUE.md"
+            dialogue.write_bytes(
+                dialogue.read_text(encoding="utf-8").replace(
+                    "  answer 1",
+                    "- **Decision:** keep it\n\n### Result\n\nanswer 1",
+                ).encode("utf-8"),
+            )
+
+            archive = self.prepare_archive(repo)
+
+            self.assertIn(
+                "### Result", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8")
+            )
+
+    def test_prepare_rejects_cross_thread_reply_and_supersession(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, turn=2)
+            for name in ("DIALOGUE.md", "ANSWERS.md"):
+                path = discussion / name
+                content = path.read_text(encoding="utf-8")
+                marker = "### D002" if name == "DIALOGUE.md" else "## Answer A002"
+                before, after = content.split(marker, 1)
+                path.write_bytes((before + marker + after.replace("T001", "T002", 1)).encode("utf-8"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("same thread", prepare.stderr)
+
+    def test_prepare_rejects_required_follow_up_without_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            answers = discussion / "ANSWERS.md"
+            answers.write_bytes(
+                answers.read_text(encoding="utf-8")
+                .replace("- **Next owner**: none", "- **Next owner**: gsd-path-ship")
+                .replace(
+                    "- **Target artifact**: none",
+                    "- **Target artifact**: .project/review/FINAL.md",
+                )
+                .replace("- **Follow-up**: none", "- **Follow-up**: required").encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("disposition", prepare.stderr)
+
+    def test_prepare_rejects_disposition_from_wrong_owner_or_artifact(self) -> None:
+        cases = (
+            ("gsd-path-ship", ".project/plan/PLAN.md", "owner"),
+            ("gsd-path-plan", ".project/review/FINAL.md", "artifact"),
+        )
+        for owner, artifact, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    discussion = repo / ".project" / "discuss"
+                    self.write_discussion(discussion)
+                    answers = discussion / "ANSWERS.md"
+                    content = (
+                        answers.read_text(encoding="utf-8")
+                        .replace(
+                            "- **Next owner**: none",
+                            "- **Next owner**: gsd-path-plan",
+                        )
+                        .replace(
+                            "- **Target artifact**: none",
+                            "- **Target artifact**: .project/plan/PLAN.md",
+                        )
+                        .replace(
+                            "- **Follow-up**: none", "- **Follow-up**: required"
+                        )
+                    )
+                    answers.write_bytes(
+                        (content
+                        + f"""
+
+## Disposition X001 — 2026-08-01
+
+- **Answer**: A001
+- **Status**: applied
+- **Owner**: {owner}
+- **Artifact**: {artifact}
+- **Evidence**: unrelated review change
+""").encode("utf-8")
+                    )
+
+                    prepare = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "prepare",
+                        "--repo",
+                        str(repo),
+                        "--slug",
+                        "demo",
+                        cwd=PROJECT_ROOT,
+                    )
+
+                    self.assertNotEqual(prepare.returncode, 0)
+                    self.assertIn(expected_error, prepare.stderr)
+
+    def test_prepare_rejects_unknown_discussion_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            for name in ("DIALOGUE.md", "ANSWERS.md"):
+                path = discussion / name
+                path.write_bytes(path.read_text(encoding="utf-8").replace("ship/active", "bogus/active").encode("utf-8"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("phase", prepare.stderr.lower())
+
+    def test_prepare_recovers_half_written_discussion_reconciliation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion, final=False)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            original_replace = archive_milestone.os.replace
+
+            def fail_answer_replace(source, destination):
+                if Path(destination).name == "ANSWERS.md":
+                    raise OSError("injected second-copy failure")
+                return original_replace(source, destination)
+
+            with mock.patch.object(
+                archive_milestone.os, "replace", side_effect=fail_answer_replace
+            ):
+                with self.assertRaises(OSError):
+                    archive_milestone.reconcile_append_only_discussion(
+                        repo / ".project", archive
+                    )
+
+            resumed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            self.assertFalse(discussion.exists())
+            self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
+
+    @requires_symlink
+    def test_discussion_recovery_rejects_symlinked_archive_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            outside = repo / "outside-discuss"
+            self.write_discussion(outside)
+            before = {
+                name: (outside / name).read_bytes()
+                for name in archive_milestone.DISCUSSION_FILES
+            }
+            shutil.rmtree(archive / "discuss")
+            (archive / "discuss").symlink_to(outside, target_is_directory=True)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text(encoding="utf-8")
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_bytes(
+                (json.dumps(payload) + "\n").encode("utf-8")
+            )
+
+            with self.assertRaises(archive_milestone.ArchiveError):
+                archive_milestone.finish_discussion_reconciliation(
+                    repo / ".project", archive
+                )
+
+            self.assertEqual(
+                {
+                    name: (outside / name).read_bytes()
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+                before,
+            )
+
+    @requires_symlink
+    def test_discussion_recovery_does_not_follow_temporary_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            archive = self.prepare_archive(repo)
+            self.write_discussion(discussion, turn=2)
+            payload = {
+                "schema": "gsd-path/discussion-archive/v1",
+                "archive": str(archive.resolve()),
+                "files": {
+                    name: (discussion / name).read_text(encoding="utf-8")
+                    for name in archive_milestone.DISCUSSION_FILES
+                },
+            }
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_bytes(
+                (json.dumps(payload) + "\n").encode("utf-8")
+            )
+            outside = repo / "outside-record.md"
+            outside.write_bytes("outside sentinel\n".encode("utf-8"))
+            temporary = archive / "discuss" / ".DIALOGUE.md.gsd-path-tmp"
+            temporary.symlink_to(outside)
+
+            archive_milestone.finish_discussion_reconciliation(
+                repo / ".project", archive
+            )
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "outside sentinel\n")
+            self.assertFalse((archive / "discuss" / "DIALOGUE.md").is_symlink())
+            self.assertIn(
+                "### D002", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8")
+            )
+
+    def test_ship_accepts_active_lessons_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            (repo / ".project" / "LESSONS.md").write_bytes(
+                "# Lessons\n\n- 001-demo — verify commands must fail on skipped work\n".encode("utf-8")
+            )
+            self.mark_shipped(repo)
+            self.write_manifest(archive)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            self.assertFalse((archive / "LESSONS.md").exists())
+
+    def test_validate_rejects_duplicate_canonical_ship_commits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            first = self.commit_ship(repo, archive)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            duplicate = self.commit_ship(repo, archive, allow_empty=True)
+            self.assertEqual(duplicate.returncode, 0, duplicate.stderr)
+
+            result = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("multiple commits", result.stderr)
+
+    def test_ship_accepts_persistent_program_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            (repo / ".project" / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+            (repo / ".project" / "ROADMAP.md").write_bytes(
+                "# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n".encode("utf-8")
+            )
+            (repo / ".project" / "SYNTHESIS.md").write_bytes(
+                "# Synthesis\n\n## Settled\n\n- program decision\n".encode("utf-8")
+            )
+            self.mark_shipped(repo)
+            self.write_manifest(archive)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            for persistent in ("CHARTER.md", "ROADMAP.md", "SYNTHESIS.md"):
+                self.assertTrue((repo / ".project" / persistent).is_file())
+                self.assertFalse((archive / persistent).exists())
+
+    def test_validate_rejects_missing_unchanged_or_wrong_program_roadmap(self) -> None:
+        for case in ("missing", "unchanged", "wrong"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                project = repo / ".project"
+                (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+                if case == "unchanged":
+                    (project / "ROADMAP.md").write_bytes("# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n".encode("utf-8"))
+                    self.git(repo, "add", ".project/CHARTER.md", ".project/ROADMAP.md")
+                    self.git(repo, "commit", "-q", "-m", "program metadata")
+                    self.restamp_final_review(repo)
+                archive = self.prepare_archive(repo)
+                if case != "missing" and not (project / "ROADMAP.md").exists():
+                    pointer = ".project/archive/999-wrong" if case == "wrong" else ".project/archive/001-demo"
+                    (project / "ROADMAP.md").write_bytes(f"# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: {pointer}\n".encode("utf-8"))
+                self.mark_shipped(repo)
+                self.write_manifest(archive)
+                self.git(repo, "add", ".project")
+                ship = self.commit_ship(repo, archive)
+                self.assertEqual(ship.returncode, 0, ship.stderr)
+
+                validate = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "validate", "--repo", str(repo), cwd=PROJECT_ROOT)
+
+                self.assertNotEqual(validate.returncode, 0)
+                self.assertIn("ROADMAP", validate.stderr)
+
+    def test_preflight_accepts_persistent_repository_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "REPOSITORY.md").write_bytes(
+                "# Repository Binding\n\nKind: new-github\n".encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_prunes_ignored_empty_host_claude_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            with (repo / ".git" / "info" / "exclude").open("a") as exclude:
+                exclude.write("**/.claude/.cc-writes/\n")
+            (repo / ".project" / "research" / ".claude" / ".cc-writes").mkdir(parents=True)
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            (archive / "research" / ".claude" / ".cc-writes").mkdir(parents=True, exist_ok=True)
+            (repo / ".project" / ".claude" / ".cc-writes").mkdir(parents=True)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertFalse((archive / "research" / ".claude").exists())
+            self.assertFalse((repo / ".project" / ".claude").exists())
+
+    def test_prepare_prunes_empty_host_claude_dir_in_discussion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            (discussion / ".claude" / ".cc-writes").mkdir(parents=True)
+
+            archive = self.prepare_archive(repo)
+
+            self.assertEqual(sorted(path.name for path in (archive / "discuss").iterdir()),
+                             ["ANSWERS.md", "DIALOGUE.md"])
+
+    def test_prepare_recovers_an_interrupted_carry_forward_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+
+            active_research = repo / ".project" / "research"
+            (active_research / "DOCS-AUDIT.md").unlink()
+            (active_research / ".DOCS-AUDIT.md.gsd-path-tmp").write_bytes("partial\n".encode("utf-8"))
+
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertTrue((active_research / "DOCS-AUDIT.md").is_file())
+            self.assertFalse((active_research / ".DOCS-AUDIT.md.gsd-path-tmp").exists())
+
+    def test_prepare_rejects_an_incomplete_active_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "plan" / "PLAN.md").unlink()
+            (repo / ".project" / "plan").rmdir()
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("missing both active and archived plan", prepare.stderr)
+            self.assertIn(
+                "archive: null",
+                (repo / ".project" / "STATE.md").read_text(encoding="utf-8"),
+            )
+            self.assertFalse((repo / ".project" / "archive").exists())
+
+    def test_prepare_rejects_state_owned_by_another_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("pipeline: gsd-path/v2", "pipeline: legacy/v1").encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("pipeline must be gsd-path/v2", prepare.stderr)
+
+    def test_prepare_rejects_wrong_phase_without_moving_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: build").encode("utf-8"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("phase", prepare.stderr)
+            self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+
+    @requires_symlink
+    def test_prepare_rejects_symlinked_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "repo"
+            repo.mkdir()
+            self.make_repo(repo)
+            outside = root / "outside"
+            outside.mkdir()
+            (repo / ".project" / "archive").symlink_to(outside, target_is_directory=True)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("symlink", prepare.stderr)
+            self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+            self.assertFalse(list(outside.iterdir()))
+
+    def test_validate_rejects_product_code_in_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
+            self.write_manifest(archive)
+            (repo / "product.txt").write_bytes("must not ship in the archive commit\n".encode("utf-8"))
+            self.git(repo, "add", ".project", "product.txt")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("outside .project", validate.stderr)
+
+    def test_validate_rejects_an_incomplete_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
+            (archive / "MANIFEST.md").write_bytes("# Archive — 001-demo\n".encode("utf-8"))
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("manifest", validate.stderr.lower())
+
+    def test_preflight_rejects_missing_canonical_artifact_and_extra_active_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            (archive / "intent" / "INTENT.md").unlink()
+            self.write_manifest(archive)
+            (repo / ".project" / "EXTRA.md").write_bytes("unexpected\n".encode("utf-8"))
+
+            preflight = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("canonical", preflight.stderr)
+
+            (archive / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\n## Success criteria\n\n1. demo works\n".encode("utf-8")
+            )
+            self.write_manifest(archive)
+            extra_only = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(extra_only.returncode, 0)
+            self.assertIn("unexpected active", extra_only.stderr)
+
+    def test_preflight_validates_manifest_metadata_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            self.write_manifest(archive)
+
+            valid = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            manifest = archive / "MANIFEST.md"
+            manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("Milestone: demo", "Milestone: wrong").encode("utf-8"))
+            invalid = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "preflight",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("milestone", invalid.stderr.lower())
+
+    def test_validate_rejects_mutation_of_an_older_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo, branch="gsd-path/M002")
+            older = repo / ".project" / "archive" / "001-older" / "locked.md"
+            older.parent.mkdir(parents=True)
+            older.write_bytes("read only\n".encode("utf-8"))
+            self.git(repo, "add", str(older.relative_to(repo)))
+            prior = self.git(repo, "commit", "-q", "-m", "older archive")
+            self.assertEqual(prior.returncode, 0, prior.stderr)
+            self.restamp_final_review(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(prepare.returncode, 0, prepare.stderr)
+            archive = repo / json.loads(prepare.stdout)["archive"]
+            state_path = repo / ".project" / "STATE.md"
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
+            self.write_manifest(archive)
+            older.write_bytes("mutated during ship\n".encode("utf-8"))
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("older archive", validate.stderr)
+
+    def test_validate_requires_a_single_parent_ship_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(repo, "commit", "-q", "-m", "stage archive transaction")
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            baseline = self.git(repo, "rev-parse", "HEAD^").stdout.strip()
+            tree = self.git(repo, "rev-parse", f"{baseline}^{{tree}}").stdout.strip()
+            side = self.git(repo, "commit-tree", tree, "-p", baseline, "-m", "side").stdout.strip()
+            merge = self.git(
+                repo,
+                "merge",
+                "--no-ff",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    archive.relative_to(repo).as_posix(), baseline
+                ),
+                side,
+            )
+            self.assertEqual(merge.returncode, 0, merge.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("exactly one parent", validate.stderr)
+
+    def test_preflight_allows_uncommitted_shipped_state_and_prepare_rejects_committed_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+
+            before_commit = self.preflight(repo)
+            self.assertEqual(before_commit.returncode, 0, before_commit.stderr)
+
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            manifest_before = (archive / "MANIFEST.md").read_bytes()
+            state_temporary = repo / ".project" / ".STATE.md.gsd-path-tmp"
+            state_temporary.write_bytes("preserve on refusal\n".encode("utf-8"))
+
+            committed_preflight = self.preflight(repo)
+            self.assertNotEqual(committed_preflight.returncode, 0)
+            self.assertIn("validate", committed_preflight.stderr)
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("validate", retry.stderr)
+            self.assertEqual((archive / "MANIFEST.md").read_bytes(), manifest_before)
+            self.assertEqual(state_temporary.read_text(encoding="utf-8"), "preserve on refusal\n")
+
+    def test_committed_target_commands_do_not_recreate_a_deleted_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            archive_root = repo / ".project" / "archive"
+            for command in ("prepare", "preflight", "validate"):
+                with self.subTest(command=command):
+                    if archive_root.exists():
+                        shutil.rmtree(archive_root)
+                    before = self.snapshot_worktree(repo)
+                    arguments = [
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        command,
+                        "--repo",
+                        str(repo),
+                    ]
+                    if command == "prepare":
+                        arguments.extend(("--slug", "demo"))
+                    result = self.run_command(*arguments, cwd=PROJECT_ROOT)
+
+                    self.assertNotEqual(result.returncode, 0)
+                    if command != "validate":
+                        self.assertIn("validate", result.stderr)
+                    self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_preflight_rejects_dirty_older_archives_including_ignored_files(self) -> None:
+        for status_kind in ("tracked", "untracked", "ignored"):
+            with self.subTest(status_kind=status_kind), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo, branch="gsd-path/M002")
+                older = repo / ".project" / "archive" / "001-older" / "locked.md"
+                older.parent.mkdir(parents=True)
+                if status_kind == "tracked":
+                    older.write_bytes("original\n".encode("utf-8"))
+                    self.git(repo, "add", str(older.relative_to(repo)))
+                    commit = self.git(repo, "commit", "-q", "-m", "older archive")
+                    self.assertEqual(commit.returncode, 0, commit.stderr)
+                    reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+                    final = repo / ".project" / "review" / "FINAL.md"
+                    final_content = final.read_text(encoding="utf-8")
+                    final.write_bytes(
+                        final_content.replace(
+                            final_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
+                            reviewed_head,
+                        ).encode("utf-8")
+                    )
+                    gap = repo / ".project" / "review" / "final-gap-1.md"
+                    gap_content = gap.read_text(encoding="utf-8")
+                    gap.write_bytes(
+                        gap_content.replace(
+                            gap_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
+                            reviewed_head,
+                        ).encode("utf-8")
+                    )
+
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                if status_kind == "ignored":
+                    (repo / ".git" / "info" / "exclude").write_bytes(
+                        ".project/archive/001-older/\n".encode("utf-8")
+                    )
+                older.write_bytes(f"{status_kind} mutation\n".encode("utf-8"))
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("older archive", preflight.stderr)
+
+    def test_ignored_ds_store_in_milestone_dirs_does_not_block_ship(self) -> None:
+        for directory in ("intent", "research", "plan", "tasks", "review", "discuss", "archive"):
+            with self.subTest(directory=directory), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                if directory == "discuss":
+                    self.write_discussion(repo / ".project" / "discuss")
+                (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
+                (repo / ".project" / directory).mkdir(exist_ok=True)
+                (repo / ".project" / directory / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
+
+                archive = self.prepare_archive(repo)
+                rendered = self.render_manifest(repo)
+                self.assertEqual(rendered.returncode, 0, rendered.stderr)
+                self.assertNotIn(".DS_Store", (archive / "MANIFEST.md").read_text(encoding="utf-8"))
+                preflight = self.preflight(repo)
+                self.assertEqual(preflight.returncode, 0, preflight.stderr)
+                self.mark_shipped(repo)
+                self.git(repo, "add", ".project")
+                ship = self.commit_ship(repo, archive)
+                self.assertEqual(ship.returncode, 0, ship.stderr)
+                validate = self.run_command(
+                    sys.executable, str(ARCHIVE_SCRIPT), "validate", "--repo", str(repo), cwd=PROJECT_ROOT
+                )
+                self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_tracked_ds_store_moved_into_archive_is_listed_and_must_be_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
+            original = repo / ".project" / "intent" / ".DS_Store"
+            original.write_bytes("tracked Finder data\n".encode("utf-8"))
+            self.assertEqual(self.git(repo, "add", "-f", str(original)).returncode, 0)
+
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            archived = archive / "intent" / ".DS_Store"
+            self.assertTrue(archived.is_file())
+            self.assertIn("- intent/.DS_Store", (archive / "MANIFEST.md").read_text(encoding="utf-8"))
+            unstaged = self.preflight(repo)
+            self.assertNotEqual(unstaged.returncode, 0)
+            self.assertIn("ignored current archive paths", unstaged.stderr)
+            self.assertEqual(self.git(repo, "add", "-f", str(archived)).returncode, 0)
+            staged = self.preflight(repo)
+            self.assertEqual(staged.returncode, 0, staged.stderr)
+
+    def test_is_ignored_junk_requires_an_ignored_untracked_junk_name(self) -> None:
+        from scripts import _common
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            outside = Path(temporary_directory) / "outside"
+            outside.mkdir()
+            (outside / ".DS_Store").write_bytes("x".encode("utf-8"))
+            self.assertFalse(_common.is_ignored_junk(outside / ".DS_Store"))  # not a repository
+
+            repo = Path(temporary_directory) / "repo"
+            repo.mkdir()
+            self.git(repo, "init", "-q")
+            junk = repo / ".DS_Store"
+            junk.write_bytes("x".encode("utf-8"))
+            self.assertFalse(_common.is_ignored_junk(junk))  # not ignored
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\nnotes.md\n".encode("utf-8"))
+            self.assertTrue(_common.is_ignored_junk(junk))
+            (repo / "notes.md").write_bytes("x".encode("utf-8"))
+            self.assertFalse(_common.is_ignored_junk(repo / "notes.md"))  # ignored, but not junk
+            self.git(repo, "add", "-f", ".DS_Store")
+            self.assertFalse(_common.is_ignored_junk(junk))  # tracked copies ship
+
+    def test_preflight_rejects_ignored_files_in_the_current_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            relative_archive = archive.relative_to(repo).as_posix()
+            (repo / ".git" / "info" / "exclude").write_bytes(f"{relative_archive}/review/FINAL.md\n".encode("utf-8"))
+
+            preflight = self.preflight(repo)
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("ignored current archive", preflight.stderr)
+
+    def test_ignored_untracked_carry_forward_fails_preflight_and_committed_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            carry_path = ".project/research/DOCS-AUDIT.md"
+            untrack = self.git(repo, "rm", "--cached", "-q", carry_path)
+            self.assertEqual(untrack.returncode, 0, untrack.stderr)
+            commit = self.git(repo, "commit", "-q", "-m", "untrack carry queue")
+            self.assertEqual(commit.returncode, 0, commit.stderr)
+
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            for name in ("FINAL.md", "final-gap-1.md"):
+                artifact = repo / ".project" / "review" / name
+                content = artifact.read_text(encoding="utf-8")
+                old_head = content.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                artifact.write_bytes(content.replace(old_head, reviewed_head).encode("utf-8"))
+            (repo / ".git" / "info" / "exclude").write_bytes(f"/{carry_path}\n".encode("utf-8"))
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("ignored active carry-forward", preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("committed carry-forward", validate.stderr)
+
+    def test_validate_rejects_a_committed_carry_forward_with_different_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            active_audit = repo / ".project" / "research" / "DOCS-AUDIT.md"
+            archived_audit = archive / "research" / "DOCS-AUDIT.md"
+            active_audit.write_bytes("different committed queue\n".encode("utf-8"))
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            active_audit.write_bytes(archived_audit.read_bytes())
+            assume_unchanged = self.git(
+                repo,
+                "update-index",
+                "--assume-unchanged",
+                ".project/research/DOCS-AUDIT.md",
+            )
+            self.assertEqual(assume_unchanged.returncode, 0, assume_unchanged.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn("committed carry-forward differs", validate.stderr)
+
+    def test_prepare_requires_normalized_milestone_slug_without_persisting_a_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo", "milestone: demo-app").encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("slug", prepare.stderr)
+            self.assertIn("archive: null", state_path.read_text(encoding="utf-8"))
+
+    def test_prepare_normalizes_cli_slug_against_canonical_state_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo", "milestone: demo-app").encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo, "Demo App")
+            self.assertEqual(archive.name, "001-demo-app")
+
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo-app", "milestone: other").encode("utf-8")
+            )
+            retry = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "Other",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("archive does not match milestone", retry.stderr)
+
+    @requires_symlink
+    def test_prepare_rejects_symlinked_canonical_files_and_malformed_wave_names(self) -> None:
+        cases = ("singleton", "task", "malformed-wave")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                project = repo / ".project"
+                if case == "singleton":
+                    intent = project / "intent" / "INTENT.md"
+                    intent.unlink()
+                    (project / "intent" / "actual.md").write_bytes("# Intent\n".encode("utf-8"))
+                    intent.symlink_to("actual.md")
+                elif case == "task":
+                    task = project / "tasks" / "T001-demo.md"
+                    task.unlink()
+                    (project / "tasks" / "actual.md").write_bytes("# Task\n".encode("utf-8"))
+                    task.symlink_to("actual.md")
+                else:
+                    (project / "review" / "wave-1cycle2.md").write_bytes("Wave verdict: pass\n".encode("utf-8"))
+
+                prepare = self.run_command(
+                    sys.executable,
+                    str(ARCHIVE_SCRIPT),
+                    "prepare",
+                    "--repo",
+                    str(repo),
+                    "--slug",
+                    "demo",
+                    cwd=PROJECT_ROOT,
+                )
+                self.assertNotEqual(prepare.returncode, 0)
+                self.assertIn("canonical", prepare.stderr)
+
+    def test_prepare_ignores_wave_review_notes_without_a_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            notes = ("wave-1.t001-checkpoint.md", "wave-1.lifecycle-notes.md")
+            for name in notes:
+                (repo / ".project" / "review" / name).write_bytes("# Note\n\nVerdict: PASS\n".encode("utf-8"))
+
+            archive = self.prepare_archive(repo)
+
+            for name in notes:
+                self.assertTrue((archive / "review" / name).is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.md").is_file())
+
+    def test_archive_accepts_deep_review_lens_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            self.write_deep_review_cycle(repo)
+
+            archive = self.prepare_archive(repo)
+
+            self.assertTrue((archive / "review" / "wave-1.cycle1.contract.md").is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.adversarial.md").is_file())
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_archive_accepts_skeptic_files_as_auxiliary_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            self.write_deep_review_cycle(repo)
+            skeptic = self.write_skeptic(repo)
+            skeptic_text = skeptic.read_text(encoding="utf-8")
+
+            archive = self.prepare_archive(repo)
+            archived_skeptic = archive / "review" / skeptic.name
+            self.assertEqual(
+                archived_skeptic.read_text(encoding="utf-8"), skeptic_text
+            )
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_wave_classifier_accepts_repair_receipts_as_auxiliary_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            review = Path(temporary_directory)
+            receipt = review / "wave-1.cycle1.repair-T002.json"
+            receipt.write_bytes(
+                (json.dumps(
+                    {
+                        "command": "repair-evidence",
+                        "repair": {"task": "T002"},
+                        "source": {"cycle": 1, "wave": 1},
+                        "status": "ok",
+                    }
+                )
+                + "\n").encode("utf-8"),
+            )
+
+            self.assertEqual(archive_milestone.canonical_wave_files(review), [])
+            artifacts = archive_milestone.canonical_wave_repair_files(review)
+            self.assertEqual(
+                [(item.wave, item.cycle, item.task) for item in artifacts],
+                [(1, 1, "T002")],
+            )
+
+            receipt.write_bytes(
+                receipt.read_text(encoding="utf-8").replace('"wave": 1', '"wave": 2').encode("utf-8"),
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "identity does not match"
+            ):
+                archive_milestone.canonical_wave_repair_files(review)
+
+    def test_repair_task_joins_its_wave_after_the_source_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            original = project / "tasks/T001-demo.md"
+            repair = project / "tasks/T002-repair.md"
+            repair.write_bytes(
+                original.read_text(encoding="utf-8")
+                .replace("id: T001", "id: T002")
+                .replace("title: demo", "title: repair")
+                .replace("# T001 — demo", "# T002 — repair")
+                .replace(
+                    "## Log",
+                    "## Review findings\n\n### sc1\nCriterion: demo works\n"
+                    "Observation 1 — canonical: failed before repair\n\n## Log",
+                ).encode("utf-8"),
+            )
+            review = project / "review"
+            cycle_one = review / "wave-1.cycle1.md"
+            cycle_one.write_bytes(
+                cycle_one.read_text(encoding="utf-8")
+                .replace("Wave verdict: pass", "Wave verdict: blocked")
+                .replace("T001 — demo: pass", "T001 — demo: fail")
+                .replace("- ✅ demo works", "- ❌ demo works").encode("utf-8"),
+            )
+            (review / "wave-1.cycle1.repair-T002.json").write_bytes(
+                (json.dumps(
+                    {
+                        "command": "repair-evidence",
+                        "repair": {"task": "T002"},
+                        "source": {"cycle": 1, "wave": 1},
+                        "status": "ok",
+                    }
+                )
+                + "\n").encode("utf-8"),
+            )
+            (review / "wave-1.cycle2.md").write_bytes(
+                """# Review — wave 1, cycle 2
+
+Wave verdict: pass
+Cycle: 2
+Depth: full
+Tasks reviewed: 2
+
+## T001 — demo: pass
+
+- ✅ demo works — original task passes after repair
+
+## T002 — repair: pass
+
+- ✅ repair closes the recorded finding
+
+## Intent coverage
+
+### SC1 — demo works: pass
+
+- ✅ focused Verify passed after repair
+""".encode("utf-8"),
+            )
+
+            self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
+
+            (review / "wave-1.cycle2.md").unlink()
+            cycle_one.write_bytes(
+                cycle_one.read_text(encoding="utf-8")
+                .replace("Wave verdict: blocked", "Wave verdict: pass")
+                .replace("T001 — demo: fail", "T001 — demo: pass")
+                .replace("- ❌ demo works", "- ✅ demo works").encode("utf-8"),
+            )
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError, "requires a later review cycle"
+            ):
+                discussion_validate.review_cycle_counts(project)
+
+    def test_prepare_rejects_orphan_skeptic_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            skeptic = self.write_skeptic(repo)
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn(
+                "does not match a canonical deep review cycle", prepare.stderr
+            )
+            self.assertTrue(skeptic.is_file())
+
+    def test_prepare_rejects_invalid_skeptic_locator(self) -> None:
+        for locator in ("", "sc1"):
+            with self.subTest(locator=locator):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    repo = Path(temporary_directory)
+                    self.make_repo(repo)
+                    self.write_deep_review_cycle(repo)
+                    self.write_skeptic(repo, recorded_locator=locator)
+
+                    prepare = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "prepare",
+                        "--repo",
+                        str(repo),
+                        "--slug",
+                        "demo",
+                        cwd=PROJECT_ROOT,
+                    )
+
+                    self.assertNotEqual(prepare.returncode, 0)
+                    self.assertIn("Criterion locator", prepare.stderr)
+
+    def test_skeptic_file_cannot_replace_canonical_wave_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.md").unlink()
+            (review / "wave-1.cycle1.skeptic-t001_ac1.md").write_bytes(
+                "# Skeptic — wave 1, cycle 1\n\n## Verdict\n\nrefuted\n".encode("utf-8"),
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("review/wave-N.cycleC.md", prepare.stderr)
+
+    def test_preflight_rejects_base_review_for_deep_plan_wave(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_bytes(
+                plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep").encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("deep", preflight.stderr)
+            self.assertIn("contract and adversarial", preflight.stderr)
+
+    def test_preflight_accepts_verify_only_review_declared_by_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            plan = project / "plan" / "PLAN.md"
+            plan.write_bytes(
+                plan.read_text(encoding="utf-8").replace(
+                    "Review depth: full", "Review depth: verify-only"
+                ).encode("utf-8")
+            )
+            review = project / "review" / "wave-1.cycle1.md"
+            review.write_bytes(
+                review.read_text(encoding="utf-8").replace("Depth: full", "Depth: verify-only").encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_accepts_optional_panel_when_review_panel_is_off(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_bytes(
+                "# Panel — wave 1, cycle 1\n".encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_requires_panel_when_review_panel_is_on(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("PLAN-PANEL.md", prepare.stderr)
+
+    def test_prepare_fails_closed_on_duplicate_review_panel_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_bytes(
+                (plan.read_text(encoding="utf-8")
+                + "\n## Config\n- review_panel: off\n- review_panel: off\n").encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("multiple review_panel values", prepare.stderr)
+
+    def test_preflight_accepts_canonical_skipped_panel_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            plan = project / "plan" / "PLAN.md"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+            review = project / "review"
+            self.write_panel_skip_receipt(review / "PLAN-PANEL.skipped.json")
+            self.write_panel_skip_receipt(
+                review / "wave-1.cycle1.panel.skipped.json"
+            )
+
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertTrue(
+                (archive / "review" / "PLAN-PANEL.skipped.json").is_file()
+            )
+            self.assertTrue(
+                (
+                    archive
+                    / "review"
+                    / "wave-1.cycle1.panel.skipped.json"
+                ).is_file()
+            )
+
+    def test_prepare_rejects_a_noncanonical_skipped_panel_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            project = repo / ".project"
+            plan = project / "plan" / "PLAN.md"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+            (project / "review" / "PLAN-PANEL.skipped.json").write_bytes(
+                '{"status": "skipped"}\n'.encode("utf-8")
+            )
+
+            prepare = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(prepare.returncode, 0)
+            self.assertIn("canonical skipped-panel receipt", prepare.stderr)
+
+    def test_preflight_accepts_enabled_review_panel_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            plan = repo / ".project" / "plan" / "PLAN.md"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+            (repo / ".project" / "review" / "PLAN-PANEL.md").write_bytes(
+                "# Plan panel\n\nActionable: 0\n".encode("utf-8")
+            )
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_bytes(
+                "# Panel — wave 1, cycle 1\n".encode("utf-8")
+            )
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertTrue((archive / "review" / "PLAN-PANEL.md").is_file())
+            self.assertTrue((archive / "review" / "wave-1.cycle1.panel.md").is_file())
+
+    def test_deep_review_lens_content_is_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = Path(temporary_directory)
+            (archive / "plan").mkdir()
+            (archive / "tasks").mkdir()
+            (archive / "review").mkdir()
+            (archive / "plan" / "PLAN.md").write_bytes(
+                """# Plan
+
+## Wave 1 — demo
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | demo | — | demo.py |
+
+Review depth: deep
+""".encode("utf-8")
+            )
+            (archive / "tasks" / "T001-demo.md").write_bytes(
+                "---\nid: T001\ntitle: demo\nwave: 1\n---\n# Task\n".encode("utf-8")
+            )
+            (archive / "review" / "wave-1.cycle1.contract.md").write_bytes(
+                """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Lens: contract
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — contract evidence passed
+""".encode("utf-8")
+            )
+            (archive / "review" / "wave-1.cycle1.adversarial.md").write_bytes(
+                """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: deep
+Lens: adversarial
+Tasks reviewed: 1
+
+## T001 — demo: pass
+
+- ✅ demo works — adversarial evidence passed
+""".encode("utf-8")
+            )
+
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, "review depth"):
+                archive_milestone.review_cycle_counts(archive)
+
+    def test_wave_review_cannot_substitute_another_plan_waves_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            archive = Path(temporary_directory)
+            (archive / "plan").mkdir()
+            (archive / "tasks").mkdir()
+            (archive / "review").mkdir()
+            (archive / "plan" / "PLAN.md").write_bytes(
+                """# Plan
+
+## Wave 1 — first
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T001 | first task | — | first.py |
+
+## Wave 2 — second
+
+| Task | Title | Deps | Files |
+|------|-------|------|-------|
+| T002 | second task | T001 | second.py |
+""".encode("utf-8")
+            )
+            (archive / "tasks" / "T001-first.md").write_bytes(
+                "---\nid: T001\ntitle: first task\nwave: 1\n---\n".encode("utf-8")
+            )
+            (archive / "tasks" / "T002-second.md").write_bytes(
+                "---\nid: T002\ntitle: second task\nwave: 2\n---\n".encode("utf-8")
+            )
+            for wave in (1, 2):
+                (archive / "review" / f"wave-{wave}.cycle1.md").write_bytes(
+                    f"""# Review — wave {wave}, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T002 — second task: pass
+
+- ✅ second task works — focused evidence passed
+""".encode("utf-8")
+                )
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                "tasks and titles do not match its wave task files in order",
+            ):
+                archive_milestone.review_cycle_counts(archive)
+
+    def test_preflight_derives_contiguous_cycles_and_requires_the_last_to_pass(self) -> None:
+        for case in ("manifest-count", "cycle-gap", "last-blocked", "wrong-heading", "wrong-cycle"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                wave = archive / "review" / "wave-1.cycle1.md"
+                if case == "cycle-gap":
+                    cycle_two = archive / "review" / "wave-1.cycle2.md"
+                    wave.rename(cycle_two)
+                    cycle_two.write_bytes(
+                        "# Review — wave 1, cycle 2\n\nWave verdict: pass\nCycle: 2\n".encode("utf-8")
+                    )
+                elif case == "last-blocked":
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("Wave verdict: pass", "Wave verdict: blocked").encode("utf-8"))
+                elif case == "wrong-heading":
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("wave 1, cycle 1", "wave 2, cycle 1").encode("utf-8"))
+                elif case == "wrong-cycle":
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("Cycle: 1", "Cycle: 2").encode("utf-8"))
+                self.write_manifest(archive)
+                if case in {"manifest-count", "cycle-gap"}:
+                    manifest = archive / "MANIFEST.md"
+                    manifest.write_bytes(
+                        manifest.read_text(encoding="utf-8").replace("Review cycles used: 1", "Review cycles used: 2").encode("utf-8")
+                    )
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("cycle", preflight.stderr.lower())
+
+    def test_preflight_requires_final_pass_matching_criteria_and_complete_notes(self) -> None:
+        for case in (
+            "blocked-final",
+            "wrong-evidence",
+            "empty-notes",
+            "placeholder-note",
+            "manifest-placeholder",
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                manifest = archive / "MANIFEST.md"
+                final = archive / "review" / "FINAL.md"
+                if case == "blocked-final":
+                    final.write_bytes(final.read_text(encoding="utf-8").replace("Overall verdict: pass", "Overall verdict: blocked").encode("utf-8"))
+                elif case == "wrong-evidence":
+                    manifest.write_bytes(
+                        manifest.read_text(encoding="utf-8").replace(
+                            "| demo works | met | tests |",
+                            "| demo works | met | wrong |",
+                        ).encode("utf-8")
+                    )
+                elif case == "empty-notes":
+                    manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("\n- none\n", "\n").encode("utf-8"))
+                elif case == "placeholder-note":
+                    manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("- none", "- <note>").encode("utf-8"))
+                else:
+                    manifest.write_bytes((manifest.read_text(encoding="utf-8") + "\n<!-- <unfinished> -->\n").encode("utf-8"))
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                expected = "final" if case == "blocked-final" else "criteria" if case == "wrong-evidence" else "notes"
+                if case in {"placeholder-note", "manifest-placeholder"}:
+                    expected = "placeholder"
+                self.assertIn(expected, preflight.stderr.lower())
+
+    @requires_symlink
+    def test_preflight_requires_contiguous_passing_gap_reviews_at_the_reviewed_head(self) -> None:
+        for case in (
+            "missing",
+            "symlink",
+            "number",
+            "heading",
+            "head",
+            "risk",
+            "waves",
+            "fix",
+            "blocked",
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                gap = archive / "review" / "final-gap-1.md"
+                if case == "missing":
+                    gap.unlink()
+                elif case == "symlink":
+                    content = gap.read_text(encoding="utf-8")
+                    gap.unlink()
+                    (archive / "review" / "gap-target.md").write_bytes(content.encode("utf-8"))
+                    gap.symlink_to("gap-target.md")
+                elif case == "number":
+                    gap.rename(archive / "review" / "final-gap-2.md")
+                elif case == "heading":
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Gap Review — 1", "Gap Review — 2").encode("utf-8"))
+                elif case == "head":
+                    reviewed = gap.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace(reviewed, "0" * 40).encode("utf-8"))
+                elif case == "risk":
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Risk: project Verify command", "Risk: <risk>").encode("utf-8"))
+                elif case == "waves":
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Waves checked: 1\n", "").encode("utf-8"))
+                elif case == "fix":
+                    gap.write_bytes(
+                        gap.read_text(encoding="utf-8").replace(
+                            "- **Fix direction**: none",
+                            "- **Fix direction**: change the implementation",
+                        ).encode("utf-8")
+                    )
+                else:
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Gap verdict: pass", "Gap verdict: blocked").encode("utf-8"))
+                self.write_manifest(archive)
+
+                preflight = self.preflight(repo)
+                self.assertNotEqual(preflight.returncode, 0)
+                self.assertIn("gap", preflight.stderr.lower())
+
+    def test_preflight_rejects_an_evidence_free_passing_gap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            gap = archive / "review" / "final-gap-1.md"
+            reviewed_head = gap.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+            gap.write_bytes(
+                f"""# Gap Review — 1: project Verify command
+
+Reviewed HEAD: {reviewed_head}
+Gap verdict: pass
+Risk: project Verify command
+Waves checked: 1
+
+## Checked evidence
+
+- **Check**: none
+- **Observed**: none
+- **Reference**: none
+
+## Finding
+
+- **Found**: No checked result was recorded.
+- **Fix direction**: none
+""".encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("evidence", preflight.stderr.lower())
+
+    def test_archive_accepts_embedded_surface_evidence_but_not_placeholders(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            intent = repo / ".project/intent/INTENT.md"
+            intent.write_bytes(intent.read_text(encoding="utf-8").replace("# Intent", "# Intent\n\nSurfaces: Demo CLI — `run.py`").encode("utf-8"))
+            archive = self.prepare_archive(repo)
+            final = archive / "review/FINAL.md"
+            original = final.read_text(encoding="utf-8")
+            observed = next(line for line in original.splitlines() if line.startswith("- **Observed**:"))
+            evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI — `run.py')
+            final.write_bytes(evidence.encode("utf-8"))
+            rendered = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            for value in ("<record observation>", "`<record observation>`", "'null'"):
+                with self.subTest(value=value):
+                    final.write_bytes(evidence.replace('stderr contained "injected <stage> failure"; all recorded cases passed.', value).encode("utf-8"))
+                    rejected = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertIn("surface Observed", rejected.stderr)
+
+    def test_parse_final_review_accepts_multiline_observed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            final = archive / "review/FINAL.md"
+            text = final.read_text(encoding="utf-8")
+            text = text.replace(
+                "- **Observed**: focused tests passed",
+                """- **Observed**:
+  - Both deactivations notified.
+  - In the DB, rows stayed listed.""",
+                1,
+            )
+            final.write_text(text, encoding="utf-8")
+
+            reviewed_head, criteria = discussion_validate.parse_final_review(archive)
+
+            self.assertTrue(reviewed_head)
+            self.assertEqual(len(criteria), 1)
+            sc1_lines = text.split("### SC1 — demo works", 1)[1].splitlines()
+            observed = discussion_validate.completed_bullet_field(sc1_lines, "Observed", "FINAL.md")
+            self.assertIn("Both deactivations notified.", observed)
+            self.assertIn("In the DB, rows stayed listed.", observed)
+
+    def test_preflight_rejects_a_gap_heading_risk_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            gap = archive / "review" / "final-gap-1.md"
+            gap.write_bytes(
+                gap.read_text(encoding="utf-8").replace(
+                    "Risk: project Verify command", "Risk: release packaging"
+                ).encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("heading risk does not match Risk field", preflight.stderr)
+
+    def test_preflight_rejects_a_post_review_stray_task_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            (archive / "tasks" / "review-notes.md").write_bytes(
+                "not a task artifact\n".encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("canonical task artifacts", preflight.stderr)
+
+    def test_preflight_rejects_a_passing_wave_without_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(
+                """# Review — wave 1, cycle 1
+
+Wave verdict: pass
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: pass
+""".encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("evidence", preflight.stderr.lower())
+
+    def test_preflight_rejects_none_as_passing_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
+                    "- ✅ demo works — focused Verify passed", "- ✅ none"
+                ).encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("non-placeholder evidence", preflight.stderr)
+
+    def test_review_evidence_distinguishes_generics_from_placeholders(self) -> None:
+        for observation in (
+            "validated Result<T> serialization",
+            "validated Result< T> serialization",
+            "validated Result<Vec<T>> serialization",
+            "completed in 120ms < 200ms",
+            "`Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`",
+            "`Queues unavailable: <stored reason>`",
+        ):
+            with self.subTest(observation=observation):
+                self.assertTrue(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+        for observation in (
+            "<T>",
+            "<record observation>",
+            "`<record observation>`",
+            "validated Result<T>: <record observation>",
+            "none",
+        ):
+            with self.subTest(observation=observation):
+                self.assertFalse(discussion_validate.meaningful_review_evidence(
+                    [f"- ✅ {observation}"], "✅"
+                ))
+
+    def test_contains_placeholder_skips_code_spans_not_whole_quoted_tokens(self) -> None:
+        self.assertFalse(
+            archive_milestone.contains_placeholder(
+                "`Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`"
+            )
+        )
+        self.assertFalse(
+            archive_milestone.contains_placeholder("`Queues unavailable: <stored reason>`")
+        )
+        self.assertTrue(archive_milestone.contains_placeholder("<record observation>"))
+        self.assertTrue(archive_milestone.contains_placeholder("`<record observation>`"))
+        self.assertTrue(
+            archive_milestone.contains_placeholder("Queues unavailable: <stored reason>")
+        )
+
+    def test_placeholder_scan_matches_complete_backtick_runs(self) -> None:
+        for value in (
+            "``Queues unavailable: <stored reason>``",
+            "```Queues `unavailable`: <stored reason>```",
+            "``Queues ` unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertFalse(archive_milestone.contains_placeholder(value))
+                self.assertTrue(archive_milestone.contains_placeholder(value + " <record observation>"))
+        for value in (
+            "``<record observation>``",
+            "```<record observation>```",
+            "``Queues unavailable: <stored reason>`",
+            "`Queues unavailable: <stored reason>``",
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(archive_milestone.contains_placeholder(value))
+
+    def test_preflight_accepts_angle_brackets_in_concrete_task_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
+                    "- ✅ demo works — focused Verify passed",
+                    "- ✅ demo works — validated Result<T> in 120ms < 200ms",
+                ).encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_accepts_quoted_generics_and_stored_reason_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            final = repo / ".project/review/FINAL.md"
+            final.write_bytes(
+                final.read_text(encoding="utf-8").replace(
+                    "- **Observed**: focused tests passed",
+                    "- **Observed**: `Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`",
+                ).encode("utf-8")
+            )
+            wave = repo / ".project/review/wave-1.cycle1.md"
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
+                    "- ✅ demo works — focused Verify passed",
+                    "- ✅ demo works — `Queues unavailable: <stored reason>`",
+                ).encode("utf-8")
+            )
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_preflight_rejects_owned_sc_without_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace("- ✅ focused Verify passed in tests\n", "").encode("utf-8")
+            )
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("SC1 lacks non-placeholder evidence", preflight.stderr)
+
+    def test_preflight_rejects_a_passing_wave_for_an_unknown_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            wave = archive / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(wave.read_text(encoding="utf-8").replace("T001 — demo", "T999 — demo").encode("utf-8"))
+            self.write_manifest(archive)
+
+            preflight = self.preflight(repo)
+
+            self.assertNotEqual(preflight.returncode, 0)
+            self.assertIn("task", preflight.stderr.lower())
+
+    def test_manifest_evidence_falls_back_from_final_reference_to_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            final = archive / "review" / "FINAL.md"
+            final.write_bytes(final.read_text(encoding="utf-8").replace("**Reference**: tests", "**Reference**: none").encode("utf-8"))
+            self.write_manifest(archive)
+            manifest = archive / "MANIFEST.md"
+            manifest.write_bytes(
+                manifest.read_text(encoding="utf-8").replace(
+                    "| demo works | met | tests |",
+                    "| demo works | met | python -m unittest |",
+                ).encode("utf-8")
+            )
+
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+    def test_render_manifest_scans_matching_final_evidence_as_written(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            check = (
+                "`git diff --stat a1b2c3d e4f5a6b` then `cmp` of each fixture against "
+                "`tests/fixtures/<same basename>`; `npm run check:contract` in a sidecar"
+            )
+            archive = self.prepare_archive(repo)
+            final = archive / "review" / "FINAL.md"
+            final_text = final.read_text(encoding="utf-8")
+            self.assertIn("- **Check**: `python -m unittest`", final_text)
+            final.write_text(
+                final_text.replace("- **Check**: `python -m unittest`", f"- **Check**: {check}")
+                .replace("- **Reference**: tests", "- **Reference**: none"),
+                encoding="utf-8",
+            )
+            gap = archive / "review" / "final-gap-1.md"
+            gap_text = gap.read_text(encoding="utf-8")
+            self.assertIn("- **Check**: `python -m unittest`", gap_text)
+            gap.write_text(
+                gap_text.replace("- **Check**: `python -m unittest`", f"- **Check**: {check}")
+                .replace(
+                    "- **Reference**: `tests/test_archive_milestone.py`",
+                    "- **Reference**: none",
+                ),
+                encoding="utf-8",
+            )
+
+            rendered = self.render_manifest(repo)
+
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            manifest = archive / "MANIFEST.md"
+            manifest_text = manifest.read_text(encoding="utf-8")
+            stored_evidence = check.strip("`")
+            expected_row = f"| demo works | met | {stored_evidence} |"
+            self.assertIn(expected_row, manifest_text)
+            valid = self.preflight(repo)
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+
+            manifest.write_text(
+                manifest_text.replace(expected_row, "| demo works | met | changed evidence |"),
+                encoding="utf-8",
+            )
+            rejected = self.preflight(repo)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn(
+                "manifest success criteria do not match FINAL.md evidence in order",
+                rejected.stderr,
+            )
+
+    def test_reviewed_head_must_match_preflight_head_and_ship_parent(self) -> None:
+        for command in ("preflight", "validate"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                # prepare refuses a stale review, so drift the archived copy afterwards.
+                archive = self.prepare_archive(repo)
+                final = archive / "review" / "FINAL.md"
+                reviewed_head = final.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                final.write_bytes(final.read_text(encoding="utf-8").replace(reviewed_head, "0" * 40).encode("utf-8"))
+                self.write_manifest(archive)
+                if command == "preflight":
+                    result = self.preflight(repo)
+                else:
+                    self.mark_shipped(repo)
+                    self.git(repo, "add", ".project")
+                    ship = self.commit_ship(repo, archive)
+                    self.assertEqual(ship.returncode, 0, ship.stderr)
+                    result = self.run_command(
+                        sys.executable,
+                        str(ARCHIVE_SCRIPT),
+                        "validate",
+                        "--repo",
+                        str(repo),
+                        cwd=PROJECT_ROOT,
+                    )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("reviewed head", result.stderr.lower())
+
+    def test_validate_accepts_product_commits_after_shipping(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            (repo / "feature.py").write_bytes("print('product work')\n".encode("utf-8"))
+            self.git(repo, "add", "feature.py")
+            product = self.git(repo, "commit", "-q", "-m", "product work after shipping")
+            self.assertEqual(product.returncode, 0, product.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+            self.assertEqual(
+                json.loads(validate.stdout)["commit"],
+                self.git(repo, "rev-parse", "HEAD~1").stdout.strip(),
+            )
+
+    def test_validate_rejects_project_history_changes_after_shipping(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            plan = archive / "plan" / "PLAN.md"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\nPost-ship edit.\n").encode("utf-8"))
+            self.git(repo, "add", ".project")
+            tamper = self.git(repo, "commit", "-q", "-m", "edit archived plan")
+            self.assertEqual(tamper.returncode, 0, tamper.stderr)
+
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertNotEqual(validate.returncode, 0)
+            self.assertIn(
+                ".project changed in history after the ship commit: "
+                ".project/archive/001-demo/plan/PLAN.md",
+                validate.stderr,
+            )
+
+    def test_evidence_allows_comparison_operators_and_escaped_pipes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".project" / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\n## Success criteria\n\n1. latency budget\n".encode("utf-8")
+            )
+            wave = repo / ".project" / "review" / "wave-1.cycle1.md"
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
+                    "### SC1 — demo works: pass",
+                    "### SC1 — latency budget: pass",
+                ).encode("utf-8")
+            )
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            (repo / ".project" / "review" / "FINAL.md").write_bytes(
+                f"""# Final Review — demo
+
+Reviewed HEAD: {reviewed_head}
+Overall verdict: pass
+
+## Success criteria
+
+### SC1 — latency budget
+
+- **Verdict**: met
+- **Check**: `grep p95 bench.log | awk '{{print $2}}'`
+- **Observed**: p95 120ms < 200ms target
+- **Reference**: none
+- **Finding**: none
+- **Fix direction**: none
+""".encode("utf-8")
+            )
+            archive = self.prepare_archive(repo)
+            contents = sorted(
+                path.relative_to(archive).as_posix()
+                for path in archive.rglob("*")
+                if path.is_file() and path.name != "MANIFEST.md"
+            )
+            listed_contents = "\n".join(f"- {path}" for path in contents)
+            (archive / "MANIFEST.md").write_bytes(
+                f"""# Archive — {archive.name}
+
+Milestone: demo
+Shipped: 2026-08-01
+Final verdict: all criteria met; project verify passed
+Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1
+Carried forward: 1 DOCS-AUDIT ruling(s)
+
+## Success criteria at ship
+
+| Criterion | Verdict | Evidence |
+|-----------|---------|----------|
+| latency budget | met | grep p95 bench.log \\| awk '{{print $2}}' |
+
+## Contents
+
+{listed_contents}
+
+## Notes
+
+- none
+""".encode("utf-8")
+            )
+
+            preflight = self.preflight(repo)
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(repo, archive)
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            validate = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def make_bound_repo(self, root: Path, branch: str = "gsd-path/M001") -> None:
+        self.make_repo(root)
+        baseline = self.git(root, "rev-parse", "HEAD").stdout.strip()
+        local_main = self.git(root, "update-ref", "refs/heads/main", baseline)
+        self.assertEqual(local_main.returncode, 0, local_main.stderr)
+        updated = self.git(root, "update-ref", "refs/remotes/origin/main", baseline)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        linked = self.git(
+            root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"
+        )
+        self.assertEqual(linked.returncode, 0, linked.stderr)
+        if branch != "gsd-path/M001":
+            checkout = self.git(root, "checkout", "-q", "-b", branch)
+            self.assertEqual(checkout.returncode, 0, checkout.stderr)
+        state_path = root / ".project" / "STATE.md"
+        state_path.write_bytes(
+            state_path.read_text(encoding="utf-8").replace("branch: gsd-path/M001", f"branch: {branch}").encode("utf-8")
+        )
+
+    def make_publishable_bound_repo(self, root: Path, remote: Path) -> None:
+        created = self.run_command(
+            "git",
+            "init",
+            "--bare",
+            "-q",
+            "-b",
+            "main",
+            str(remote),
+            cwd=root.parent,
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        self.make_repo(root, branch="main")
+        added = self.git(root, "remote", "add", "origin", str(remote))
+        self.assertEqual(added.returncode, 0, added.stderr)
+        pushed = self.git(root, "push", "-q", "-u", "origin", "main")
+        self.assertEqual(pushed.returncode, 0, pushed.stderr)
+        linked = self.git(root, "remote", "set-head", "origin", "--auto")
+        self.assertEqual(linked.returncode, 0, linked.stderr)
+        checkout = self.git(root, "checkout", "-q", "-b", "gsd-path/M001")
+        self.assertEqual(checkout.returncode, 0, checkout.stderr)
+        state_path = root / ".project" / "STATE.md"
+        state_path.write_bytes(
+            state_path.read_text(encoding="utf-8").replace("branch: main", "branch: gsd-path/M001").encode("utf-8")
+        )
+
+    def ship_bound(self, repo: Path) -> tuple:
+        archive = self.prepare_archive(repo)
+        self.write_manifest(archive)
+        self.mark_shipped(repo)
+        self.git(repo, "add", ".project")
+        ship = self.commit_ship(repo, archive)
+        self.assertEqual(ship.returncode, 0, ship.stderr)
+        ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        return archive.name, ship_sha
+
+    def ship_canonical_bound(self, repo: Path) -> tuple[str, str]:
+        archive = self.prepare_archive(repo)
+        rendered = self.render_manifest(repo)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        checked = self.preflight(repo)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        self.mark_shipped(repo)
+        self.git(repo, "add", ".project")
+        ship = self.git(
+            repo,
+            "commit",
+            "-q",
+            "-m",
+            pipeline_git.ship_subject(archive.name),
+            "-m",
+            pipeline_git.ship_commit_body(
+                archive.relative_to(repo).as_posix(), reviewed_head
+            ),
+        )
+        self.assertEqual(ship.returncode, 0, ship.stderr)
+        return archive.name, self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+    def integrate(self, repo: Path) -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "integrate",
+            "--repo",
+            str(repo),
+            "--slug",
+            "demo",
+            cwd=PROJECT_ROOT,
+        )
+
+    def enable_pull_request_integration(self, repo: Path) -> None:
+        state = repo / ".project" / "STATE.md"
+        state.write_bytes(
+            state.read_text(encoding="utf-8").replace(
+                "archive: null\n",
+                "archive: null\n"
+                "integration_default: pull-request\n"
+                "integration: pull-request\n",
+            ).encode("utf-8"),
+        )
+
+    def enable_external_landing_integration(self, repo: Path) -> None:
+        state = repo / ".project" / "STATE.md"
+        state.write_bytes(
+            state.read_text(encoding="utf-8")
+            .replace(
+                "archive: null\n",
+                "archive: null\n"
+                "integration_default: external-landing\n"
+                "integration: external-landing\n",
+            )
+            .encode("utf-8")
+        )
+
+    def is_associated_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
+        return (
+            len(arguments) >= 5
+            and arguments[:4] == ("gh", "api", "--hostname", "github.com")
+            and arguments[4].casefold().startswith("repos/open-gsd/demo/commits/")
+            and arguments[4].casefold().endswith("/pulls")
+        )
+
+    def is_canonical_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
+        return (
+            len(arguments) >= 5
+            and arguments[:4] == ("gh", "api", "--hostname", "github.com")
+            and arguments[4].casefold() == "repos/open-gsd/demo/pulls"
+            and "GET" in arguments
+        )
+
+    def is_github_authentication(self, arguments: tuple[str, ...]) -> bool:
+        return arguments == (
+            "gh",
+            "auth",
+            "status",
+            "--hostname",
+            "github.com",
+        )
+
+    def is_github_api(self, arguments: tuple[str, ...], path: str) -> bool:
+        return arguments[:5] == (
+            "gh",
+            "api",
+            "--hostname",
+            "github.com",
+            path,
+        )
+
+    def test_github_commands_pin_github_com(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+            calls.append(arguments)
+            return subprocess.CompletedProcess(arguments, 0, "{}", "")
+
+        with mock.patch.object(integration, "run_command", side_effect=run):
+            integration.require_github_authentication()
+            self.assertEqual(
+                integration.github_api_json("repos/open-gsd/demo/pulls"),
+                {},
+            )
+
+        self.assertEqual(
+            calls,
+            [
+                ("gh", "auth", "status", "--hostname", "github.com"),
+                (
+                    "gh",
+                    "api",
+                    "--hostname",
+                    "github.com",
+                    "repos/open-gsd/demo/pulls",
+                ),
+            ],
+        )
+
+    def test_pull_request_discovery_ignores_unrelated_fork_branch(self) -> None:
+        pull = {
+            "number": 7,
+            "state": "open",
+            "html_url": "https://github.com/someone/demo/pull/7",
+            "merged_at": None,
+            "merge_commit_sha": None,
+            "base": {"ref": "main"},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": "a" * 40,
+                "repo": {"full_name": "someone/demo"},
+            },
+        }
+        with mock.patch.object(
+            integration,
+            "github_api_json",
+            return_value=[[pull]],
+        ):
+            result = integration.find_pull_request(
+                "open-gsd/demo",
+                "gsd-path/M001",
+                "b" * 40,
+            )
+
+        self.assertIsNone(result)
+
+    def github_api(self, pulls, merge_actor: str = "User"):
+        def run(*arguments: str) -> subprocess.CompletedProcess[str]:
+            if self.is_github_authentication(arguments):
+                return subprocess.CompletedProcess(arguments, 0, "", "")
+            if self.is_github_api(arguments, "graphql"):
+                merge_sha = next(
+                    (
+                        pull.get("merge_commit_sha")
+                        for pull in pulls
+                        if pull.get("merged_at") is not None
+                    ),
+                    None,
+                )
+                merge_nodes = (
+                    [
+                        {
+                            "__typename": "MergedEvent",
+                            "actor": {
+                                "__typename": merge_actor,
+                                "login": "merge-user",
+                            },
+                            "commit": {"oid": merge_sha},
+                        }
+                    ]
+                    if isinstance(merge_sha, str)
+                    else []
+                )
+                payload = {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "mergeQueue": {"nodes": []},
+                                "autoMerge": {"nodes": []},
+                                "mergeAction": {"nodes": merge_nodes},
+                            }
+                        }
+                    }
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(payload), ""
+                )
+            if self.is_associated_pull_request_query(arguments):
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps([pulls]), ""
+                )
+            if self.is_canonical_pull_request_query(arguments):
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps([pulls]), ""
+                )
+            if self.is_github_api(arguments, "repos/open-gsd/demo/pulls"):
+                created = {
+                    "number": 7,
+                    "state": "open",
+                    "html_url": "https://github.com/open-gsd/demo/pull/7",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                    "base": {"ref": "main"},
+                    "head": {
+                        "ref": "gsd-path/M001",
+                        "sha": pulls[0]["head"]["sha"],
+                        "repo": {"full_name": "open-gsd/demo"},
+                    }
+                    if pulls
+                    else {
+                        "ref": "gsd-path/M001",
+                        "sha": "created-by-github",
+                        "repo": {"full_name": "open-gsd/demo"},
+                    },
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(created), ""
+                )
+            return subprocess.CompletedProcess(arguments, 1, "", "unexpected command")
+
+        return run
+
+    def merged_pull_request(self, ship_sha: str, merge_sha: str) -> dict:
+        return {
+            "number": 7,
+            "state": "closed",
+            "html_url": "https://github.com/open-gsd/demo/pull/7",
+            "merged_at": "2026-08-29T12:00:00Z",
+            "merge_commit_sha": merge_sha,
+            "base": {"ref": "main"},
+            "head": {
+                "ref": "gsd-path/M001",
+                "sha": ship_sha,
+                "repo": {"full_name": "open-gsd/demo"},
+            },
+            "body": integration.PR_CREDIT_LINE,
+        }
+
+    def test_external_landing_publishes_bound_branch_and_waits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["commit"], ship_sha)
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), baseline)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(self.git(remote, "show-ref", "--tags", "--quiet").returncode, 0)
+
+    def test_external_landing_resume_after_external_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+
+            waiting = integration.integrate(repo, "demo")
+            self.assertEqual(waiting["status"], "awaiting-merge")
+
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha, tag=False)
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["landing"], merge_sha)
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            message = self.git(
+                repo,
+                "for-each-ref",
+                "--format=%(contents)",
+                f"refs/tags/milestone/{archive_name}",
+            ).stdout
+            self.assertIn("Mode: external-landing", message)
+            self.assertIn(f"Ship: {ship_sha}", message)
+            self.assertIn(f"Landing: {merge_sha}", message)
+
+            validated = integration.validate_integrated(repo, "demo")
+            self.assertEqual(validated["landing"], merge_sha)
+
+    def test_external_landing_rejects_noncanonical_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="integrate: wrong subject",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                pipeline_git.integrate_subject(archive_name, "main"),
+            ):
+                integration.integrate(repo, "demo")
+
+    def test_pull_request_integration_creates_pr_after_publishing_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
+                if not self.is_github_api(
+                    arguments,
+                    "repos/open-gsd/demo/pulls",
+                ):
+                    return subprocess.CompletedProcess(
+                        arguments, 1, "", "unexpected command"
+                    )
+                created = {
+                    "number": 7,
+                    "state": "open",
+                    "html_url": "https://github.com/open-gsd/demo/pull/7",
+                    "merged_at": None,
+                    "merge_commit_sha": None,
+                    "base": {"ref": "main"},
+                    "head": {
+                        "ref": "gsd-path/M001",
+                        "sha": ship_sha,
+                        "repo": {"full_name": "open-gsd/demo"},
+                    },
+                }
+                return subprocess.CompletedProcess(
+                    arguments, 0, json.dumps(created), ""
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            post = next(arguments for arguments in requests if "POST" in arguments)
+            self.assertIn(
+                f"title={pipeline_git.integrate_subject(archive_name, 'main')}",
+                post,
+            )
+            self.assertIn("base=main", post)
+            self.assertIn("head=gsd-path/M001", post)
+            body = next(argument for argument in post if argument.startswith("body="))
+            self.assertTrue(
+                body.endswith(f"\n\n---\n{integration.PR_CREDIT_LINE}")
+            )
+
+    def test_pull_request_integration_waits_without_touching_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="Open-GSD/Demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(result["pull_request"], open_pull["html_url"])
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), baseline)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_competing_pr_for_ship_commit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            canonical_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+            competing_pull = {
+                **canonical_pull,
+                "number": 8,
+                "html_url": "https://github.com/open-gsd/demo/pull/8",
+                "head": {
+                    "ref": "alternate-closeout",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+            }
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_canonical_pull_request_query(arguments):
+                    pulls = (
+                        [canonical_pull]
+                        if any(argument.startswith("head=") for argument in arguments)
+                        else [canonical_pull, competing_pull]
+                    )
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([pulls]), ""
+                    )
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments,
+                        0,
+                        json.dumps([[canonical_pull], [competing_pull]]),
+                        "",
+                    )
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "multiple pull requests",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertFalse(any("POST" in arguments for arguments in requests))
+            self.assertNotEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_fork_head_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            fork_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "someone/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_canonical_pull_request_query(arguments):
+                    pulls = (
+                        []
+                        if any(argument.startswith("head=") for argument in arguments)
+                        else [fork_pull]
+                    )
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([pulls]), ""
+                    )
+                if self.is_associated_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[fork_pull]]), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "head repository",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "rev-parse", "refs/heads/gsd-path/M001").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_closed_competing_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            closed_pull = {
+                "number": 7,
+                "state": "closed",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "alternate-closeout",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_canonical_pull_request_query(arguments):
+                    pulls = (
+                        []
+                        if any(argument.startswith("head=") for argument in arguments)
+                        else [closed_pull]
+                    )
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([pulls]), ""
+                    )
+                if self.is_associated_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls"):
+                    created = {
+                        **closed_pull,
+                        "number": 8,
+                        "state": "open",
+                        "html_url": "https://github.com/open-gsd/demo/pull/8",
+                        "head": {
+                            "ref": "gsd-path/M001",
+                            "sha": ship_sha,
+                            "repo": {"full_name": "open-gsd/demo"},
+                        },
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(created), ""
+                    )
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "head is not the bound branch|closed without merging",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertFalse(any("POST" in arguments for arguments in requests))
+
+    def test_pull_request_integration_repairs_reused_pr_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": "",
+            }
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[open_pull]]), ""
+                    )
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls/7"):
+                    body = next(
+                        argument.removeprefix("body=")
+                        for argument in arguments
+                        if argument.startswith("body=")
+                    )
+                    return subprocess.CompletedProcess(
+                        arguments,
+                        0,
+                        json.dumps({**open_pull, "body": body}),
+                        "",
+                    )
+                return subprocess.CompletedProcess(
+                    arguments,
+                    1,
+                    "",
+                    "unexpected command",
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            patch = next(arguments for arguments in requests if "PATCH" in arguments)
+            body = next(argument for argument in patch if argument.startswith("body="))
+            self.assertTrue(
+                body.endswith(f"\n\n---\n{integration.PR_CREDIT_LINE}")
+            )
+
+    def test_pull_request_integration_rejects_closed_pr_without_editing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            closed_pull = {
+                "number": 7,
+                "state": "closed",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": "",
+            }
+            requests = []
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[closed_pull]]), ""
+                    )
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "[[]]", "")
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "closed without merging",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertFalse(any("PATCH" in arguments for arguments in requests))
+
+    def test_pull_request_integration_rejects_open_pr_auto_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": "https://github.com/open-gsd/demo/pull/7",
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[open_pull]]), ""
+                    )
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {
+                                        "nodes": [
+                                            {"__typename": "AutoMergeEnabledEvent"}
+                                        ]
+                                    },
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "auto-merge",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_accepts_merge_and_deleted_head_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+            self.git(repo, "config", "tag.gpgSign", "true")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "pull-request")
+            self.assertEqual(result["landing"], merge_sha)
+            self.assertEqual(result["base"], merge_sha)
+            self.assertEqual(result["pull_request"], pull["html_url"])
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                validated = integration.validate_integrated(repo, "demo")
+                refs = self.git(repo, "show-ref").stdout
+                with mock.patch.object(integration, "refresh_origin", side_effect=AssertionError("status fetched")):
+                    observed = integration.validate_integrated(repo, "demo", refresh=False)
+                self.assertEqual(observed, validated)
+                self.assertEqual(self.git(repo, "show-ref").stdout, refs)
+            self.assertEqual(validated["landing"], merge_sha)
+
+    def test_validate_integrated_rejects_open_tagged_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull_url = "https://github.com/open-gsd/demo/pull/7"
+            self.git(
+                repo,
+                "tag",
+                "--no-sign",
+                "-a",
+                "-m",
+                integration.pull_request_tag_message(
+                    archive_name,
+                    pull_url,
+                    ship_sha,
+                    merge_sha,
+                ),
+                f"milestone/{archive_name}",
+                merge_sha,
+            )
+            self.git(repo, "push", "-q", "origin", f"milestone/{archive_name}")
+            open_pull = {
+                "number": 7,
+                "state": "open",
+                "html_url": pull_url,
+                "merged_at": None,
+                "merge_commit_sha": None,
+                "base": {"ref": "main"},
+                "head": {
+                    "ref": "gsd-path/M001",
+                    "sha": ship_sha,
+                    "repo": {"full_name": "open-gsd/demo"},
+                },
+                "body": integration.PR_CREDIT_LINE,
+            }
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([open_pull]),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "not merged at the tagged landing",
+                ):
+                    integration.validate_integrated(repo, "demo")
+
+    def test_validate_integrated_refreshes_pull_request_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                integration.integrate(repo, "demo")
+
+            self.git(remote, "update-ref", "refs/heads/main", baseline)
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                merge_sha,
+            )
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "first-parent history",
+                ):
+                    integration.validate_integrated(repo, "demo")
+
+    def test_pull_request_integration_republishes_deleted_remote_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                integration.integrate(repo, "demo")
+
+            remote_tag = f"refs/tags/milestone/{archive_name}"
+            tracking_tag = f"refs/remotes/origin/tags/milestone/{archive_name}"
+            self.git(remote, "update-ref", "-d", remote_tag)
+            self.assertEqual(
+                self.git(repo, "rev-parse", tracking_tag).returncode,
+                0,
+            )
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "missing published milestone tag",
+                ):
+                    integration.validate_integrated(repo, "demo")
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull]),
+                ),
+            ):
+                integration.integrate(repo, "demo")
+
+            self.assertEqual(
+                self.git(remote, "rev-parse", f"{remote_tag}^{{commit}}").stdout.strip(),
+                merge_sha,
+            )
+
+    def test_pull_request_integration_rejects_indirect_merge_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+            normal_api = self.github_api([pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {"nodes": []},
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return normal_api(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "not merged by a GitHub merge action",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_merge_queue_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[pull]]), ""
+                    )
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {
+                                        "nodes": [
+                                            {"__typename": "AddedToMergeQueueEvent"}
+                                        ]
+                                    },
+                                    "autoMerge": {"nodes": []},
+                                    "mergeAction": {
+                                        "nodes": [
+                                            {
+                                                "__typename": "MergedEvent",
+                                                "actor": {
+                                                    "__typename": "User",
+                                                    "login": "merge-user",
+                                                },
+                                                "commit": {"oid": merge_sha},
+                                            }
+                                        ]
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "merge queue",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_auto_merge_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                if self.is_github_authentication(arguments):
+                    return subprocess.CompletedProcess(arguments, 0, "", "")
+                if self.is_associated_pull_request_query(
+                    arguments
+                ) or self.is_canonical_pull_request_query(arguments):
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps([[pull]]), ""
+                    )
+                if self.is_github_api(arguments, "graphql"):
+                    payload = {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "mergeQueue": {"nodes": []},
+                                    "autoMerge": {
+                                        "nodes": [
+                                            {"__typename": "AutoMergeEnabledEvent"}
+                                        ]
+                                    },
+                                    "mergeAction": {
+                                        "nodes": [
+                                            {
+                                                "__typename": "MergedEvent",
+                                                "actor": {
+                                                    "__typename": "User",
+                                                    "login": "merge-user",
+                                                },
+                                                "commit": {"oid": merge_sha},
+                                            }
+                                        ]
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    return subprocess.CompletedProcess(
+                        arguments, 0, json.dumps(payload), ""
+                    )
+                return subprocess.CompletedProcess(
+                    arguments, 1, "", "unexpected command"
+                )
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "auto-merge",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_bot_merge_before_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="Merge pull request #7 from open-gsd/gsd-path/M001",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, merge_sha)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=self.github_api([pull], merge_actor="Bot"),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "human GitHub user",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertNotEqual(
+                self.git(remote, "show-ref", "--tags", "--quiet").returncode,
+                0,
+            )
+
+    def test_pull_request_integration_rejects_non_merge_landing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_pull_request_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", f"{ship_sha}:refs/heads/main")
+            pull = self.merged_pull_request(ship_sha, ship_sha)
+            pull["body"] = ""
+            requests = []
+            normal_api = self.github_api([pull])
+
+            def github_api(*arguments: str) -> subprocess.CompletedProcess[str]:
+                requests.append(arguments)
+                if self.is_github_api(arguments, "repos/open-gsd/demo/pulls/7"):
+                    return subprocess.CompletedProcess(
+                        arguments,
+                        0,
+                        json.dumps({**pull, "body": integration.PR_CREDIT_LINE}),
+                        "",
+                    )
+                return normal_api(*arguments)
+
+            with (
+                mock.patch.object(
+                    integration,
+                    "github_repository",
+                    return_value="open-gsd/demo",
+                ),
+                mock.patch.object(
+                    integration,
+                    "run_command",
+                    side_effect=github_api,
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError,
+                    "must use a two-parent merge commit",
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertFalse(any("PATCH" in arguments for arguments in requests))
+
+    def reject_remote_ref(self, remote: Path, ref: str) -> Path:
+        hook = remote / "hooks" / "pre-receive"
+        hook.write_bytes(
+            "#!/bin/sh\n"
+            "while read old new updated_ref; do\n"
+            f'  if [ "$updated_ref" = "{ref}" ]; then\n'
+            "    echo rejected-for-test >&2\n"
+            "    exit 1\n"
+            "  fi\n"
+            "done\n".encode("utf-8")
+        )
+        hook.chmod(0o755)
+        return hook
+
+    def install_commit_guard(self, repo: Path) -> None:
+        hook = repo / ".git" / "hooks" / "commit-msg"
+        hook.write_bytes(
+            "#!/bin/sh\n"
+            f'exec "{sys.executable}" "{GIT_GUARD_SCRIPT}" commit-msg "$1"\n'.encode("utf-8")
+        )
+        hook.chmod(0o755)
+
+    def test_installed_hooks_allow_product_integration_but_reject_forged_subject(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "primary"
+            repo.mkdir()
+            self.make_publishable_bound_repo(repo, root / "origin.git")
+            (repo / "src/demo.py").write_bytes("value = 'integration'\n".encode("utf-8"))
+            self.git(repo, "add", "src/demo.py")
+            changed = self.git(repo, "commit", "-qm", "fixture product change")
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            self.restamp_final_review(repo)
+            with mock.patch.dict(os.environ, {"HOME": str(root / "home"), "USERPROFILE": str(root / "home")}):
+                installed = self.run_command(
+                    sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
+                    "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)
+                self.assertEqual(installed.returncode, 0, installed.stderr)
+                self.git(repo, "add", "-A")
+                setup = self.git(repo, "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture installed hooks")
+                self.assertEqual(setup.returncode, 0, setup.stderr)
+                self.restamp_final_review(repo)
+                archive_name, ship_sha = self.ship_canonical_bound(repo)
+                result = self.integrate(repo)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                merge = json.loads(result.stdout)["integrate"]
+                self.assertEqual(self.git(repo, "show", f"{merge}:src/demo.py").stdout,
+                                 "value = 'integration'\n")
+                self.git(repo, "checkout", "-qb", "ordinary", ship_sha)
+                (repo / "src/demo.py").write_bytes("value = 'forged'\n".encode("utf-8"))
+                self.git(repo, "add", "src/demo.py")
+                forged = self.git(repo, "commit", "-qm",
+                                  pipeline_git.integrate_subject(archive_name, "main"))
+                self.assertNotEqual(forged.returncode, 0)
+                self.assertIn("integration is unverified", forged.stderr)
+
+    def test_integrate_publishes_and_completed_retry_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.install_commit_guard(repo)
+
+            first = self.integrate(repo)
+            retry = self.integrate(repo)
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            first_payload = json.loads(first.stdout)
+            retry_payload = json.loads(retry.stdout)
+            self.assertEqual(retry_payload, first_payload)
+            merge_sha = first_payload["integrate"]
+            self.assertEqual(first_payload["commit"], ship_sha)
+            self.assertEqual(first_payload["tag"], f"milestone/{archive_name}")
+            self.assertEqual(
+                self.git(remote, "rev-parse", "main").stdout.strip(), merge_sha
+            )
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(), ship_sha
+            )
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            self.assertEqual(
+                self.git(
+                    remote, "cat-file", "-t", f"refs/tags/milestone/{archive_name}"
+                ).stdout.strip(),
+                "tag",
+            )
+            self.assertEqual(
+                self.git(repo, "branch", "--list", "gsd-path-integrate/M001").stdout.strip(),
+                "",
+            )
+            self.assertNotIn(
+                "refs/heads/gsd-path-integrate/M001",
+                self.git(repo, "worktree", "list", "--porcelain").stdout,
+            )
+            self.assertFalse((repo / ".git" / "origin").exists())
+            self.assertEqual(
+                self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                merge_sha,
+            )
+
+    def test_integrate_resumes_a_merge_that_has_no_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            integration_branch = "gsd-path-integrate/M001"
+            partial_worktree = root / "partial-integration"
+            added = self.git(
+                repo,
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                integration_branch,
+                str(partial_worktree),
+                "origin/main",
+            )
+            self.assertEqual(added.returncode, 0, added.stderr)
+            merged = self.git(
+                partial_worktree,
+                "merge",
+                "--no-ff",
+                "-m",
+                pipeline_git.integrate_subject(archive_name, "main"),
+                "-m",
+                pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive_name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+                ship_sha,
+            )
+            self.assertEqual(merged.returncode, 0, merged.stderr)
+            merge_sha = self.git(partial_worktree, "rev-parse", "HEAD").stdout.strip()
+            removed = self.git(repo, "worktree", "remove", str(partial_worktree))
+            self.assertEqual(removed.returncode, 0, removed.stderr)
+
+            result = self.integrate(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["integrate"], merge_sha)
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+
+    def test_integrate_resumes_ordered_push_failures(self) -> None:
+        rejected_refs = (
+            "refs/heads/main",
+            "refs/tags/milestone/001-demo",
+        )
+        for rejected_ref in rejected_refs:
+            with (
+                self.subTest(rejected_ref=rejected_ref),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                repo = root / "primary"
+                repo.mkdir()
+                remote = root / "origin.git"
+                self.make_publishable_bound_repo(repo, remote)
+                archive_name, ship_sha = self.ship_canonical_bound(repo)
+                baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+                hook = self.reject_remote_ref(remote, rejected_ref)
+
+                partial = self.integrate(repo)
+
+                self.assertNotEqual(partial.returncode, 0)
+                self.assertIn("push", partial.stderr)
+                self.assertEqual(
+                    self.git(
+                        repo,
+                        "cat-file",
+                        "-t",
+                        f"refs/tags/milestone/{archive_name}",
+                    ).stdout.strip(),
+                    "tag",
+                )
+                self.assertNotIn(
+                    "refs/heads/gsd-path-integrate/M001",
+                    self.git(repo, "worktree", "list", "--porcelain").stdout,
+                )
+                if rejected_ref == "refs/heads/main":
+                    self.assertEqual(
+                        self.git(remote, "rev-parse", "main").stdout.strip(), baseline
+                    )
+                    self.assertNotEqual(
+                        self.git(
+                            remote,
+                            "show-ref",
+                            "--verify",
+                            "refs/heads/gsd-path/M001",
+                        ).returncode,
+                        0,
+                    )
+                else:
+                    self.assertNotEqual(
+                        self.git(remote, "rev-parse", "main").stdout.strip(), baseline
+                    )
+                    self.assertEqual(
+                        self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(), ship_sha
+                    )
+                    self.assertNotEqual(
+                        self.git(remote, "show-ref", "--verify", rejected_ref).returncode,
+                        0,
+                    )
+
+                hook.unlink()
+                retry = self.integrate(repo)
+
+                self.assertEqual(retry.returncode, 0, retry.stderr)
+                self.assertEqual(json.loads(retry.stdout)["commit"], ship_sha)
+                self.assertEqual(
+                    self.git(
+                        remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                    ).returncode,
+                    0,
+                )
+
+    def test_integrate_refuses_a_live_bound_branch_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            ancestor = self.git(repo, "rev-parse", f"{ship_sha}^").stdout.strip()
+            published = self.git(
+                repo,
+                "push",
+                "-q",
+                "origin",
+                f"{ancestor}:refs/heads/gsd-path/M001",
+            )
+            self.assertEqual(published.returncode, 0, published.stderr)
+
+            first = self.integrate(repo)
+            retry = self.integrate(repo)
+
+            self.assertNotEqual(first.returncode, 0)
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("moved or collides", first.stderr)
+            self.assertIn("moved or collides", retry.stderr)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ancestor,
+            )
+
+    def test_integrate_rebuilds_an_unpublished_merge_after_main_advances(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            other = root / "other"
+            cloned = self.run_command(
+                "git", "clone", "-q", str(remote), str(other), cwd=root
+            )
+            self.assertEqual(cloned.returncode, 0, cloned.stderr)
+            self.git(other, "config", "user.name", "Validation")
+            self.git(other, "config", "user.email", "validation@example.invalid")
+            original_run_git = integration.run_git
+            advanced_main = None
+
+            def race_main(project: Path, *arguments: str) -> subprocess.CompletedProcess:
+                nonlocal advanced_main
+                if (
+                    advanced_main is None
+                    and len(arguments) >= 3
+                    and arguments[0:2] == ("push", "origin")
+                    and arguments[-1].endswith(":refs/heads/main")
+                ):
+                    (other / "remote-only.txt").write_bytes("advanced\n".encode("utf-8"))
+                    self.git(other, "add", "remote-only.txt")
+                    committed = self.git(other, "commit", "-q", "-m", "advance main")
+                    self.assertEqual(committed.returncode, 0, committed.stderr)
+                    pushed = self.git(other, "push", "-q", "origin", "main")
+                    self.assertEqual(pushed.returncode, 0, pushed.stderr)
+                    advanced_main = self.git(remote, "rev-parse", "main").stdout.strip()
+                return original_run_git(project, *arguments)
+
+            with mock.patch.object(
+                integration, "run_git", side_effect=race_main
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError, "push integration merge"
+                ):
+                    integration.integrate(repo, "demo")
+
+            self.assertIsNotNone(advanced_main)
+            self.assertNotEqual(
+                self.git(
+                    remote, "show-ref", "--verify", "refs/heads/gsd-path/M001"
+                ).returncode,
+                0,
+            )
+            self.assertNotEqual(
+                self.git(
+                    remote,
+                    "show-ref",
+                    "--verify",
+                    f"refs/tags/milestone/{archive_name}",
+                ).returncode,
+                0,
+            )
+
+            retry = self.integrate(repo)
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            payload = json.loads(retry.stdout)
+            parents = self.git(
+                repo, "rev-list", "--parents", "-n", "1", payload["integrate"]
+            ).stdout.split()
+            self.assertEqual(parents[1], advanced_main)
+            self.assertEqual(parents[2], ship_sha)
+
+    def test_integrate_aborts_conflicts_without_touching_the_bound_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            other = root / "other"
+            cloned = self.run_command(
+                "git", "clone", "-q", str(remote), str(other), cwd=root
+            )
+            self.assertEqual(cloned.returncode, 0, cloned.stderr)
+            self.git(other, "config", "user.name", "Validation")
+            self.git(other, "config", "user.email", "validation@example.invalid")
+            (other / ".project" / "STATE.md").write_bytes("remote-only state\n".encode("utf-8"))
+            self.git(other, "add", ".project/STATE.md")
+            committed = self.git(other, "commit", "-q", "-m", "diverge main")
+            self.assertEqual(committed.returncode, 0, committed.stderr)
+            pushed = self.git(other, "push", "-q", "origin", "main")
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            remote_main = self.git(remote, "rev-parse", "main").stdout.strip()
+
+            result = self.integrate(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("conflict", result.stderr.casefold())
+            self.assertIn("without resolving files: .project/STATE.md;", result.stderr)
+            self.assertIn("closed milestone remains unchanged", result.stderr)
+            self.assertIn("gsd-path-forensics", result.stderr)
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), remote_main)
+            self.assertEqual(self.git(repo, "rev-parse", "HEAD").stdout.strip(), ship_sha)
+            self.assertEqual(self.git(repo, "status", "--porcelain").stdout, "")
+            self.assertEqual(
+                self.git(repo, "branch", "--list", "gsd-path-integrate/M001").stdout.strip(),
+                "",
+            )
+            self.assertNotIn(
+                "refs/heads/gsd-path-integrate/M001",
+                self.git(repo, "worktree", "list", "--porcelain").stdout,
+            )
+
+    def integrate_bound(
+        self,
+        repo: Path,
+        archive_name: str,
+        merged_sha: str,
+        branch: str = "gsd-path/M001",
+        tag: bool = True,
+        tag_sha=None,
+        update_origin: bool = True,
+        subject: Optional[str] = None,
+        body: Optional[str] = None,
+        default_branch: str = "main",
+    ) -> str:
+        remote_ref = f"refs/remotes/origin/{default_branch}"
+        remote_default = self.git(repo, "rev-parse", remote_ref).stdout.strip()
+        detach = self.git(repo, "checkout", "-q", "--detach", remote_default)
+        self.assertEqual(detach.returncode, 0, detach.stderr)
+        arguments = [
+            "merge",
+            "--no-ff",
+            "-m",
+            subject or pipeline_git.integrate_subject(archive_name, default_branch),
+            "-m",
+            body
+            or pipeline_git.integrate_commit_body(
+                f".project/archive/{archive_name}",
+                merged_sha,
+                default_branch,
+                branch,
+            ),
+        ]
+        merge = self.git(repo, *arguments, merged_sha)
+        self.assertEqual(merge.returncode, 0, merge.stderr)
+        merge_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+        back = self.git(repo, "checkout", "-q", branch)
+        self.assertEqual(back.returncode, 0, back.stderr)
+        if tag:
+            tagged = self.git(
+                repo,
+                "tag",
+                "-a",
+                "-m",
+                f"milestone {archive_name}",
+                f"milestone/{archive_name}",
+                tag_sha or merge_sha,
+            )
+            self.assertEqual(tagged.returncode, 0, tagged.stderr)
+        if update_origin:
+            updated = self.git(repo, "update-ref", remote_ref, merge_sha)
+            self.assertEqual(updated.returncode, 0, updated.stderr)
+            published_branch = self.git(
+                repo, "update-ref", f"refs/remotes/origin/{branch}", merged_sha
+            )
+            self.assertEqual(published_branch.returncode, 0, published_branch.stderr)
+            if tag:
+                tag_object = self.git(
+                    repo, "rev-parse", f"refs/tags/milestone/{archive_name}"
+                ).stdout.strip()
+                published_tag = self.git(
+                    repo,
+                    "update-ref",
+                    f"refs/remotes/origin/tags/milestone/{archive_name}",
+                    tag_object,
+                )
+                self.assertEqual(published_tag.returncode, 0, published_tag.stderr)
+        return merge_sha
+
+    def validate_integrated(self, repo: Path, slug: str = "demo") -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "validate-integrated",
+            "--repo",
+            str(repo),
+            "--slug",
+            slug,
+            cwd=PROJECT_ROOT,
+        )
+
+    def test_validate_integrated_accepts_integrated_ship(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha)
+
+            result = self.validate_integrated(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["archive"], f".project/archive/{archive_name}")
+            self.assertEqual(payload["commit"], ship_sha)
+            self.assertEqual(payload["integrate"], merge_sha)
+            self.assertEqual(payload["tag"], f"milestone/{archive_name}")
+
+    def test_completed_milestone_releases_ordinary_work_only_with_proof(self):
+        from scripts import pipeline_state
+        from tests.test_guard_hook import guard_hook, run_guard
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha)
+            self.assertEqual(pipeline_state.status_state(repo)["completion"]["status"], "verified")
+            self.git(repo, "checkout", "-q", "-b", "feature/ordinary", merge_sha)
+            self.git(repo, "branch", "-D", "gsd-path/M001")
+            self.git(repo, "update-ref", "-d", "refs/remotes/origin/gsd-path/M001")
+            installed = self.run_command(
+                sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
+                "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            (repo / "ordinary.txt").write_bytes("manual change\n".encode("utf-8"))
+            self.git(repo, "add", "ordinary.txt")
+
+            def check(expected):
+                status = pipeline_state.status_state(repo)
+                self.assertEqual(status["completion"]["status"], expected, status["completion"])
+                with (mock.patch.object(guard_hook, "repository_root", return_value=repo),
+                      mock.patch.object(guard_hook, "__file__", str(repo / ".gsd-path" / "guard_hook.py"))):
+                    code, output, error = run_guard({"tool_name": "Edit", "tool_input": {
+                        "file_path": str(repo / "ordinary.txt")}})
+                self.assertEqual(code, 0 if expected == "verified" else 2, output + error)
+                result = self.run_command(sys.executable, "-B", str(GIT_GUARD_SCRIPT),
+                                          "pre-commit", cwd=repo)
+                self.assertEqual(result.returncode, 0 if expected == "verified" else 1,
+                                 result.stderr)
+
+            check("verified")
+            # The strict ship gate still requires its original branch and clean tree.
+            self.assertNotEqual(self.validate_integrated(repo).returncode, 0)
+            # Normal clones need not have the integration helper's cached tag ref.
+            remote = repo / "remote.git"
+            created = self.git(repo, "init", "--bare", "-q", str(remote))
+            self.assertEqual(created.returncode, 0, created.stderr)
+            self.git(repo, "remote", "add", "origin", str(remote))
+            published = self.git(repo, "-c", "core.hooksPath=/dev/null", "push", "origin",
+                                 f"{merge_sha}:refs/heads/main", f"refs/tags/milestone/{archive_name}")
+            self.assertEqual(published.returncode, 0, published.stderr)
+            self.git(repo, "update-ref", "-d", f"refs/remotes/origin/tags/milestone/{archive_name}")
+            check("verified")
+            tag = f"refs/tags/milestone/{archive_name}"
+            tag_object = self.git(repo, "rev-parse", tag).stdout.strip()
+            self.git(repo, "update-ref", "-d", tag)
+            check("unverified")
+            self.git(repo, "update-ref", tag, tag_object)
+            manifest = repo / ".project" / "archive" / archive_name / "MANIFEST.md"
+            manifest.write_bytes((manifest.read_text(encoding="utf-8") + "\nmanual archive change\n").encode("utf-8"))
+            check("unverified")
+
+    def test_validate_integrated_rejects_duplicate_canonical_merges(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            first = self.integrate_bound(repo, archive_name, ship_sha)
+            tree = self.git(repo, "rev-parse", f"{first}^{{tree}}").stdout.strip()
+            duplicate = self.git(
+                repo,
+                "commit-tree",
+                tree,
+                "-p",
+                first,
+                "-p",
+                ship_sha,
+                "-m",
+                pipeline_git.integrate_subject(archive_name, "main"),
+                "-m",
+                pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive_name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+            ).stdout.strip()
+            updated = self.git(
+                repo, "update-ref", "refs/remotes/origin/main", duplicate
+            )
+            self.assertEqual(updated.returncode, 0, updated.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("multiple commits", result.stderr)
+
+    def test_validate_integrated_rejects_a_missing_merge_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, _ = self.ship_bound(repo)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            expected = pipeline_git.integrate_subject(archive_name, "main")
+            self.assertIn(f"no commit with exact subject {expected!r}", result.stderr)
+
+    def test_validate_integrated_rejects_a_missing_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(repo, archive_name, ship_sha, tag=False)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"missing milestone tag: milestone/{archive_name}", result.stderr)
+
+    def test_validate_integrated_rejects_a_tag_pointing_elsewhere(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            baseline = self.git(repo, "rev-parse", "main").stdout.strip()
+            self.integrate_bound(repo, archive_name, ship_sha, tag_sha=baseline)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not point at the integration merge", result.stderr)
+
+    def test_validate_integrated_rejects_a_wrong_second_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            base = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+            self.git(repo, "checkout", "-q", "-b", "decoy", base)
+            (repo / "decoy.txt").write_bytes("decoy\n".encode("utf-8"))
+            self.git(repo, "add", "decoy.txt")
+            decoy = self.git(repo, "commit", "-q", "-m", "decoy product work")
+            self.assertEqual(decoy.returncode, 0, decoy.stderr)
+            decoy_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            back = self.git(repo, "checkout", "-q", "gsd-path/M001")
+            self.assertEqual(back.returncode, 0, back.stderr)
+            self.integrate_bound(repo, archive_name, decoy_sha)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("integration merge second parent is not the ship commit", result.stderr)
+
+    def test_validate_integrated_rejects_a_merge_not_on_the_remote_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(repo, archive_name, ship_sha, update_origin=False)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            expected = pipeline_git.integrate_subject(archive_name, "main")
+            self.assertIn(
+                f"no commit with exact subject {expected!r} "
+                "in origin/main first-parent history",
+                result.stderr,
+            )
+
+    def test_find_ship_commit_uses_first_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.git(repo, "init", "-q", "-b", "gsd-path/demo")
+            self.git(repo, "config", "user.name", "Validation")
+            self.git(repo, "config", "user.email", "validation@example.invalid")
+
+            def dated_commit(filename: str, message: str, date: str) -> str:
+                (repo / filename).write_bytes(f"{message}\n".encode("utf-8"))
+                self.git(repo, "add", filename)
+                env = dict(os.environ, GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
+                committed = subprocess.run(
+                    ("git", "commit", "-q", "-m", message),
+                    cwd=repo,
+                    env=env,
+                    encoding="utf-8",
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(committed.returncode, 0, committed.stderr)
+                return self.git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            dated_commit("base.txt", "base", "2026-07-01T00:00:00")
+            subject = pipeline_git.ship_subject("001-demo")
+            ship_sha = dated_commit("ship.txt", subject, "2026-08-01T00:00:00")
+            self.git(repo, "checkout", "-q", "-b", "side", "HEAD~1")
+            decoy_sha = dated_commit("decoy.txt", subject, "2026-08-03T00:00:00")
+            self.git(repo, "checkout", "-q", "gsd-path/demo")
+            env = dict(
+                os.environ,
+                GIT_AUTHOR_DATE="2026-08-04T00:00:00",
+                GIT_COMMITTER_DATE="2026-08-04T00:00:00",
+            )
+            merged = subprocess.run(
+                ("git", "merge", "--no-ff", "-m", "merge side", "side"),
+                cwd=repo,
+                env=env,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(merged.returncode, 0, merged.stderr)
+            self.assertNotEqual(ship_sha, decoy_sha)
+
+            found = archive_milestone.find_ship_commit(repo.resolve(), "001-demo")
+            self.assertEqual(found, ship_sha)
+
+    def test_validate_integrated_accepts_m00n_subjects(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                "ship: M001 — demo",
+                "-m",
+                f"Archive: .project/archive/001-demo\nReviewed-HEAD: {reviewed_head}",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            merge_sha = self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject="integrate: M001 — merge gsd-path/M001 into main",
+                body=(
+                    "Archive: .project/archive/001-demo\n"
+                    f"Ship: {ship_sha}\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["commit"], ship_sha)
+            self.assertEqual(payload["integrate"], merge_sha)
+
+    def test_validate_rejects_canonical_ship_without_required_field_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                "Notes: not the required ship fields",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            result = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ship commit body", result.stderr)
+
+    def test_validate_strict_loads_committed_state(self) -> None:
+        mutations = (
+            (
+                "duplicate",
+                lambda text: text.replace("status: done\n", "status: done\nstatus: done\n"),
+                "repeats frontmatter field: status",
+            ),
+            (
+                "extra",
+                lambda text: text.replace("archive:", "unexpected: value\narchive:"),
+                "unknown fields: unexpected",
+            ),
+        )
+        for label, mutate, expected in mutations:
+            with (
+                self.subTest(label=label),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                archive = self.prepare_archive(repo)
+                self.write_manifest(archive)
+                self.mark_shipped(repo)
+                state_path = repo / ".project" / "STATE.md"
+                state_path.write_bytes(mutate(state_path.read_text(encoding="utf-8")).encode("utf-8"))
+                self.git(repo, "add", ".project")
+                ship = self.commit_ship(repo, archive)
+                self.assertEqual(ship.returncode, 0, ship.stderr)
+
+                result = self.run_command(
+                    sys.executable,
+                    str(ARCHIVE_SCRIPT),
+                    "validate",
+                    "--repo",
+                    str(repo),
+                    cwd=PROJECT_ROOT,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("STATE.md is invalid", result.stderr)
+                self.assertIn(expected, result.stderr)
+
+    def test_validate_rejects_legacy_ship_subject_for_current_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.commit_ship(
+                repo,
+                archive,
+                subject=pipeline_git.legacy_ship_subject(archive.name),
+                body="arbitrary legacy body",
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+
+            result = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "validate",
+                "--repo",
+                str(repo),
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(pipeline_git.ship_subject(archive.name), result.stderr)
+
+    def test_validate_integrated_rejects_canonical_merge_without_required_field_body(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    self.git(repo, "rev-parse", "HEAD").stdout.strip(),
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=(
+                    "Archive: wrong\n"
+                    "Ship: wrong\n"
+                    "Default: main\n"
+                    "Branch: gsd-path/M001"
+                ),
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("integration commit body", result.stderr)
+
+    def test_validate_integrated_rejects_legacy_merge_for_current_milestone(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                subject=pipeline_git.legacy_integrate_subject(archive_name),
+                body="arbitrary legacy body",
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                pipeline_git.integrate_subject(archive_name, "main"), result.stderr
+            )
+
+    def test_validate_integrated_rejects_bound_branch_as_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive_name, ship_sha = self.ship_bound(repo)
+            pointed = self.git(
+                repo, "update-ref", "refs/remotes/origin/gsd-path/M001", ship_sha
+            )
+            self.assertEqual(pointed.returncode, 0, pointed.stderr)
+            linked = self.git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/gsd-path/M001",
+            )
+            self.assertEqual(linked.returncode, 0, linked.stderr)
+
+            result = self.validate_integrated(repo)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("is the remote default", result.stderr)
+
+    def test_validate_integrated_rejects_remote_default_other_than_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            default_sha = self.git(
+                repo, "rev-parse", "refs/remotes/origin/main"
+            ).stdout.strip()
+            pointed = self.git(
+                repo, "update-ref", "refs/remotes/origin/master", default_sha
+            )
+            self.assertEqual(pointed.returncode, 0, pointed.stderr)
+            linked = self.git(
+                repo,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/master",
+            )
+            self.assertEqual(linked.returncode, 0, linked.stderr)
+            archive_name, ship_sha = self.ship_bound(repo)
+            self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive_name, "master"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive_name}",
+                    ship_sha,
+                    "master",
+                    "gsd-path/M001",
+                ),
+                default_branch="master",
+            )
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("remote default must be main", result.stderr)
+
+    def test_prepare_rejects_noncanonical_bound_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="feature/not-a-bound-branch")
+            result = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "prepare",
+                "--repo",
+                str(repo),
+                "--slug",
+                "demo",
+                cwd=PROJECT_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("STATE.md is invalid", result.stderr)
+
+    def test_validate_integrated_rejects_unpublished_bound_branch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    reviewed_head,
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive.name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+            )
+            deleted = self.git(
+                repo, "update-ref", "-d", "refs/remotes/origin/gsd-path/M001"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing published bound branch", result.stderr)
+
+    def test_validate_integrated_rejects_unpublished_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_bound_repo(repo, branch="gsd-path/M001")
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            self.mark_shipped(repo)
+            reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.git(repo, "add", ".project")
+            ship = self.git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                pipeline_git.ship_subject(archive.name),
+                "-m",
+                pipeline_git.ship_commit_body(
+                    f".project/archive/{archive.name}",
+                    reviewed_head,
+                ),
+            )
+            self.assertEqual(ship.returncode, 0, ship.stderr)
+            ship_sha = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            self.integrate_bound(
+                repo,
+                archive.name,
+                ship_sha,
+                branch="gsd-path/M001",
+                subject=pipeline_git.integrate_subject(archive.name, "main"),
+                body=pipeline_git.integrate_commit_body(
+                    f".project/archive/{archive.name}",
+                    ship_sha,
+                    "main",
+                    "gsd-path/M001",
+                ),
+            )
+            deleted = self.git(
+                repo, "update-ref", "-d", "refs/remotes/origin/tags/milestone/001-demo"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing published milestone tag", result.stderr)
+
+    def test_archive_validation_does_not_load_integration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory) / "primary"
+            repo.mkdir()
+            self.make_publishable_bound_repo(repo, Path(temporary_directory) / "origin.git")
+            archive, ship = self.ship_canonical_bound(repo)
+            code = """
+import importlib.abc
+import sys
+
+class NoIntegration(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname.rsplit(".", 1)[-1] == "integration":
+            raise ModuleNotFoundError("archive validation loaded Integration", name=fullname)
+
+sys.meta_path.insert(0, NoIntegration())
+from scripts import archive_milestone
+raise SystemExit(archive_milestone.main(["validate", "--repo", sys.argv[1]]))
+"""
+            result = self.run_command(sys.executable, "-B", "-c", code, str(repo), cwd=PROJECT_ROOT)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {
+                "archive": f".project/archive/{archive}", "commit": ship,
+            })
+
+    def test_validate_integrated_refreshes_direct_mode_milestone_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            archive_name, _ship_sha = self.ship_canonical_bound(repo)
+            integrated = self.integrate(repo)
+            self.assertEqual(integrated.returncode, 0, integrated.stderr)
+            deleted = self.git(
+                repo, "update-ref", "-d", f"refs/remotes/origin/tags/milestone/{archive_name}"
+            )
+            self.assertEqual(deleted.returncode, 0, deleted.stderr)
+
+            result = self.validate_integrated(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_refresh_origin_updates_stale_origin_head(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            remote = root / "remote.git"
+            remote.mkdir()
+            self.git(remote, "init", "-q", "--bare", "-b", "main")
+            clone = root / "clone"
+            cloned = self.run_command(
+                "git", "clone", "-q", str(remote), str(clone), cwd=root
+            )
+            self.assertEqual(cloned.returncode, 0, cloned.stderr)
+            self.git(clone, "config", "user.name", "Validation")
+            self.git(clone, "config", "user.email", "validation@example.invalid")
+            (clone / "README").write_bytes("main\n".encode("utf-8"))
+            self.git(clone, "add", "README")
+            self.git(clone, "commit", "-q", "-m", "seed main")
+            pushed = self.git(clone, "push", "-q", "-u", "origin", "main")
+            self.assertEqual(pushed.returncode, 0, pushed.stderr)
+            self.git(clone, "checkout", "-q", "-b", "gsd-path/M001")
+            (clone / "work.txt").write_bytes("work\n".encode("utf-8"))
+            self.git(clone, "add", "work.txt")
+            self.git(clone, "commit", "-q", "-m", "bound work")
+            self.git(clone, "push", "-q", "-u", "origin", "gsd-path/M001")
+            defaulted = self.run_command(
+                "git",
+                "--git-dir",
+                str(remote),
+                "symbolic-ref",
+                "HEAD",
+                "refs/heads/gsd-path/M001",
+                cwd=root,
+            )
+            self.assertEqual(defaulted.returncode, 0, defaulted.stderr)
+            fetched = self.git(clone, "fetch", "-q", "origin")
+            self.assertEqual(fetched.returncode, 0, fetched.stderr)
+            stale = self.git(
+                clone,
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            )
+            self.assertEqual(stale.returncode, 0, stale.stderr)
+            self.assertEqual(
+                self.git(clone, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/main",
+            )
+
+            refreshed = self.run_command(
+                sys.executable,
+                str(ARCHIVE_SCRIPT),
+                "refresh-origin",
+                "--repo",
+                str(clone),
+                cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+            self.assertEqual(
+                json.loads(refreshed.stdout)["remote_default"],
+                "origin/gsd-path/M001",
+            )
+            self.assertEqual(
+                self.git(clone, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                .stdout.strip(),
+                "origin/gsd-path/M001",
+            )
+
+    def make_build_repo(self, root: Path, status: str = "blocked") -> None:
+        self.git(root, "init", "-q", "-b", "gsd-path/M001")
+        self.git(root, "config", "user.name", "Validation")
+        self.git(root, "config", "user.email", "validation@example.invalid")
+
+        project = root / ".project"
+        for directory in ("intent", "research", "plan", "tasks", "review"):
+            (project / directory).mkdir(parents=True, exist_ok=True)
+
+        (project / "STATE.md").write_bytes(
+            f"""---
+pipeline: gsd-path/v2
+project: demo
+milestone: demo
+phase: build
+status: {status}
+branch: gsd-path/M001
+archive: null
+---
+
+# Project State
+
+## Log
+- 2026-08-01 — build — wave 1 {status}
+""".encode("utf-8")
+        )
+        (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+        (project / "ROADMAP.md").write_bytes(
+            "# Roadmap\n\n### M001 — demo\n\nStatus: active\n".encode("utf-8")
+        )
+        (project / "intent" / "INTENT.md").write_bytes("# Intent\n".encode("utf-8"))
+        (project / "research" / "SYNTHESIS.md").write_bytes("# Synthesis\n".encode("utf-8"))
+        (project / "plan" / "PLAN.md").write_bytes("# Plan\n\n## Wave 1 — demo\n".encode("utf-8"))
+        (project / "tasks" / "T001-demo.md").write_bytes("# Task\n".encode("utf-8"))
+        (project / "review" / "wave-1.cycle1.md").write_bytes(
+            """# Review — wave 1, cycle 1
+
+Wave verdict: blocked
+Cycle: 1
+Depth: full
+Tasks reviewed: 1
+
+## T001 — demo: fail
+
+- ❌ demo broken — focused Verify failed
+""".encode("utf-8")
+        )
+
+        self.git(root, "add", ".project")
+        baseline = self.git(root, "commit", "-q", "-m", "baseline")
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+
+    def run_abandon(
+        self, repo: Path, slug: str = "demo", reason: str = "User ruled: stop"
+    ) -> subprocess.CompletedProcess[str]:
+        return self.run_command(
+            sys.executable,
+            str(ARCHIVE_SCRIPT),
+            "abandon",
+            "--repo",
+            str(repo),
+            "--slug",
+            slug,
+            "--reason",
+            reason,
+            cwd=PROJECT_ROOT,
+        )
+
+    def test_abandon_archives_partial_build_milestone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            project = repo / ".project"
+            self.write_discussion(project / "discuss", phase_status="build/blocked")
+
+            result = self.run_abandon(repo, reason="User ruled: stop this milestone")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["archive"], ".project/archive/001-demo")
+            self.assertEqual(
+                self.git(repo, "rev-parse", "HEAD").stdout.strip(), payload["commit"]
+            )
+            archive = project / "archive" / "001-demo"
+            for relative in (
+                "intent/INTENT.md",
+                "research/SYNTHESIS.md",
+                "plan/PLAN.md",
+                "tasks/T001-demo.md",
+                "review/wave-1.cycle1.md",
+                "discuss/DIALOGUE.md",
+                "discuss/ANSWERS.md",
+            ):
+                self.assertTrue((archive / relative).is_file(), relative)
+            self.assertFalse((archive / "review" / "FINAL.md").exists())
+            self.assertFalse((project / "discuss").exists())
+
+            manifest = (archive / "MANIFEST.md").read_text(encoding="utf-8")
+            self.assertIn("# Archive — 001-demo", manifest)
+            self.assertIn("Milestone: demo", manifest)
+            self.assertRegex(manifest, r"(?m)^Abandoned: \d{4}-\d{2}-\d{2}$")
+            self.assertIn("Reason: User ruled: stop this milestone", manifest)
+            for ship_field in ("Shipped:", "Final verdict:", "Waves:", "Carried forward:"):
+                self.assertNotIn(ship_field, manifest)
+            self.assertIn("## Contents", manifest)
+            self.assertIn("## Notes", manifest)
+            self.assertIn("- intent/INTENT.md", manifest)
+            self.assertIn("- review/wave-1.cycle1.md", manifest)
+
+            active = sorted(path.name for path in project.iterdir())
+            self.assertEqual(
+                active,
+                ["CHARTER.md", "LESSONS.md", "ROADMAP.md", "STATE.md", "archive"],
+            )
+            state = (project / "STATE.md").read_text(encoding="utf-8")
+            self.assertIn("phase: roadmap", state)
+            self.assertIn("status: active", state)
+            self.assertIn("milestone: null", state)
+            self.assertIn("archive: null", state)
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
+            self.assertIn("Status: abandoned", roadmap)
+            self.assertIn("Archive: .project/archive/001-demo", roadmap)
+            self.assertIn(
+                "- 001-demo — abandoned: User ruled: stop this milestone",
+                (project / "LESSONS.md").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                self.git(repo, "log", "-1", "--format=%s").stdout.strip(),
+                "build: abandon milestone demo",
+            )
+            self.assertEqual(
+                self.git(repo, "log", "-1", "--format=%b").stdout.strip(),
+                "Why: User ruled: stop this milestone",
+            )
+
+    def test_abandon_accepts_deep_review_lens_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            review = repo / ".project" / "review"
+            (review / "wave-1.cycle1.adversarial.md").write_bytes("# Adversarial lens\n".encode("utf-8"))
+
+            result = self.run_abandon(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            archive = repo / ".project" / "archive" / "001-demo"
+            self.assertTrue(
+                (archive / "review" / "wave-1.cycle1.adversarial.md").is_file()
+            )
+
+    def test_abandon_accepts_active_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo, status="active")
+
+            result = self.run_abandon(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["archive"], ".project/archive/001-demo"
+            )
+
+    def test_abandon_completed_retry_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+
+            first = self.run_abandon(repo)
+            retry = self.run_abandon(repo)
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            first_payload = json.loads(first.stdout)
+            retry_payload = json.loads(retry.stdout)
+            self.assertEqual(retry_payload["commit"], first_payload["commit"])
+            self.assertEqual(retry_payload["archive"], first_payload["archive"])
+            self.assertEqual(retry_payload["status"], "already-complete")
+
+    def test_abandon_resume_completes_interrupted_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            project = repo / ".project"
+            archive = project / "archive" / "001-demo"
+            archive.mkdir(parents=True)
+            shutil.move(str(project / "intent"), str(archive / "intent"))
+            state_path = project / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace(
+                    "archive: null", "archive: .project/archive/001-demo"
+                ).encode("utf-8")
+            )
+
+            result = self.run_abandon(repo)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["archive"], ".project/archive/001-demo"
+            )
+            self.assertEqual(
+                [path.name for path in (project / "archive").iterdir()], ["001-demo"]
+            )
+            self.assertTrue((archive / "intent" / "INTENT.md").is_file())
+            self.assertTrue((archive / "plan" / "PLAN.md").is_file())
+            self.assertTrue((archive / "MANIFEST.md").is_file())
+            self.assertFalse((project / "plan").exists())
+            self.assertIn("phase: roadmap", state_path.read_text(encoding="utf-8"))
+            self.assertIn("archive: null", state_path.read_text(encoding="utf-8"))
+
+    def test_abandon_resumes_after_archive_before_state_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            with mock.patch.object(
+                archive_milestone,
+                "transition_state",
+                side_effect=archive_milestone.PipelineStateError("injected crash"),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError, "injected crash"
+                ):
+                    archive_milestone.abandon(repo, "demo", "User ruled: stop")
+
+            journal = archive_milestone.abandon_journal_path(repo)
+            self.assertTrue(journal.is_file())
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+            self.assertIn("phase: build", state)
+            self.assertIn("archive: .project/archive/001-demo", state)
+
+            retry = self.run_abandon(repo)
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertFalse(journal.exists())
+            self.assertIn("phase: roadmap", (repo / ".project" / "STATE.md").read_text(encoding="utf-8"))
+
+    def test_abandon_resumes_after_state_transition_before_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            with mock.patch.object(
+                archive_milestone,
+                "isolation_checkpoint",
+                side_effect=archive_milestone.IsolationError("injected crash"),
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError, "injected crash"
+                ):
+                    archive_milestone.abandon(repo, "demo", "User ruled: stop")
+
+            journal = archive_milestone.abandon_journal_path(repo)
+            self.assertTrue(journal.is_file())
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
+            self.assertIn("phase: roadmap", state)
+            self.assertIn("archive: null", state)
+
+            retry = self.run_abandon(repo)
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertFalse(journal.exists())
+
+    def test_abandon_resume_rejects_a_different_ruling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            with mock.patch.object(
+                archive_milestone,
+                "transition_state",
+                side_effect=archive_milestone.PipelineStateError("injected crash"),
+            ):
+                with self.assertRaises(archive_milestone.ArchiveError):
+                    archive_milestone.abandon(repo, "demo", "User ruled: stop")
+
+            retry = self.run_abandon(repo, reason="User ruled: continue")
+
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("differs from journal", retry.stderr)
+
+    def test_abandon_checkpoint_recovery_rejects_manifest_reason_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            with mock.patch.object(
+                archive_milestone,
+                "isolation_checkpoint",
+                side_effect=archive_milestone.IsolationError("injected crash"),
+            ):
+                with self.assertRaises(archive_milestone.ArchiveError):
+                    archive_milestone.abandon(repo, "demo", "User ruled: stop")
+            manifest = repo / ".project" / "archive" / "001-demo" / "MANIFEST.md"
+            manifest.write_bytes(
+                manifest.read_text(encoding="utf-8").replace(
+                    "Reason: User ruled: stop", "Reason: different ruling"
+                ).encode("utf-8")
+            )
+
+            retry = self.run_abandon(repo)
+
+            self.assertNotEqual(retry.returncode, 0)
+            self.assertIn("manifest Reason:", retry.stderr)
+
+    def test_abandon_resumes_after_checkpoint_before_journal_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            original_checkpoint = archive_milestone.isolation_checkpoint
+
+            def commit_then_crash(*args, **kwargs):
+                original_checkpoint(*args, **kwargs)
+                raise archive_milestone.IsolationError("injected post-commit crash")
+
+            with mock.patch.object(
+                archive_milestone,
+                "isolation_checkpoint",
+                side_effect=commit_then_crash,
+            ):
+                with self.assertRaisesRegex(
+                    archive_milestone.ArchiveError, "post-commit crash"
+                ):
+                    archive_milestone.abandon(repo, "demo", "User ruled: stop")
+
+            committed = self.git(repo, "rev-parse", "HEAD").stdout.strip()
+            journal = archive_milestone.abandon_journal_path(repo)
+            self.assertTrue(journal.is_file())
+
+            retry = self.run_abandon(repo)
+
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertEqual(json.loads(retry.stdout)["status"], "already-complete")
+            self.assertEqual(self.git(repo, "rev-parse", "HEAD").stdout.strip(), committed)
+            self.assertFalse(journal.exists())
+
+    def test_abandon_rejects_missing_roadmap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            (repo / ".project" / "ROADMAP.md").unlink()
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ROADMAP", result.stderr)
+            self.assertTrue((repo / ".project" / "plan" / "PLAN.md").is_file())
+
+    def test_abandon_rejects_m000_roadmap_entry_without_project_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            roadmap = repo / ".project" / "ROADMAP.md"
+            roadmap.write_bytes(
+                (roadmap.read_text(encoding="utf-8")
+                + "\n### M000 — invalid\n\nStatus: pending\nArchive: null\n").encode("utf-8")
+            )
+            before = self.snapshot_worktree(repo)
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ROADMAP milestone number must be >= 1", result.stderr)
+            self.assertEqual(self.snapshot_worktree(repo), before)
+
+    def test_abandon_rejects_non_build_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("phase: build", "phase: plan").encode("utf-8")
+            )
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("phase", result.stderr)
+            self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
+
+    def test_abandon_rejects_missing_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            (repo / ".project" / "plan" / "PLAN.md").unlink()
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("plan/PLAN.md", result.stderr)
+
+    def test_abandon_rejects_missing_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            (repo / ".project" / "intent" / "INTENT.md").unlink()
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("intent/INTENT.md", result.stderr)
+
+    def test_abandon_rejects_mismatched_persisted_slug(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+            state_path = repo / ".project" / "STATE.md"
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace(
+                    "archive: null", "archive: .project/archive/001-other"
+                ).encode("utf-8")
+            )
+
+            result = self.run_abandon(repo)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("archive does not match milestone", result.stderr)
+
+    def test_abandon_collapses_multiline_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_build_repo(repo)
+
+            result = self.run_abandon(repo, reason="stop this\nmilestone now")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = (
+                repo / ".project" / "archive" / "001-demo" / "MANIFEST.md"
+            ).read_text(encoding="utf-8")
+            reason_lines = [
+                line for line in manifest.splitlines() if line.startswith("Reason:")
+            ]
+            self.assertEqual(reason_lines, ["Reason: stop this milestone now"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,45 @@
+name: Release trust evidence
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-trust-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-release-evidence:
+    runs-on: ubuntu-latest
+    env:
+      # Detached automatic gc and maintenance race temporary-repository cleanup
+      # in the tests ("Directory not empty"); scripts/dev/py.mjs appends to these.
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: gc.autoDetach
+      GIT_CONFIG_VALUE_0: "false"
+      GIT_CONFIG_KEY_1: maintenance.autoDetach
+      GIT_CONFIG_VALUE_1: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: npm ci
+      - name: Check prerequisites
+        run: npm run check:prereqs
+      - name: Verify trust gate
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            npm run verify:release
+          else
+            python3 -m unittest tests.test_trust_evidence
+          fi
