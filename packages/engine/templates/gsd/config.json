@@ -1,0 +1,12 @@
+<!-- Adapted from vendor/gsd-core/gsd-core/templates/config.json. MIT. Vendored commit: 13d37238ba08377929e4850fd6ae4b8db49a22ca. Do not edit vendor copies. -->
+
+{
+  "model": null,
+  "effort": null,
+  "budgets": {},
+  "gates": {},
+  "deployTarget": null,
+  "voiceEngine": null,
+  "interviewDepth": null,
+  "sessionIdMode": "unknown"
+}

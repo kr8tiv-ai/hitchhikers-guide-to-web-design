@@ -11,3 +11,9 @@ vendor/gsd-core
   Commit: 13d37238ba08377929e4850fd6ae4b8db49a22ca
   License: MIT License
   gsd-core is vendored source for templates. It is not an npm dependency.
+
+packages/engine/templates/gsd/ holds ten spine templates adapted from
+vendor/gsd-core/gsd-core/templates/ (project, requirements, roadmap, state,
+config, context, phase-prompt, summary, verification-report, spec) at the
+commit above. Upstream license: MIT. They are rewritten so a Guide project
+uses .hitchhiker/ and /hh-* commands. gsd-core is not imported at runtime.
