@@ -12,3 +12,5 @@ hh-build-plan/_grok-run.*
 .hh-driver/BLOCKED.md
 .hh-driver/*.out
 .hh-driver/*.err
+.hh-driver/empty-stdin.txt
+.hh-driver/driver.pid
