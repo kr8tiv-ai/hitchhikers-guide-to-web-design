@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/engine" },
+    { "path": "./packages/orchestrator" },
+    { "path": "./packages/grok-plugin" },
+    { "path": "./packages/app" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/voice" },
+    { "path": "./packages/crawler" },
+    { "path": "./packages/assets" },
+    { "path": "./packages/qa" },
+    { "path": "./packages/deploy" },
+    { "path": "./packages/knowledge" },
+    { "path": "./packages/templates" }
+  ]
+}

@@ -15,6 +15,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@hitchhiker/engine": "workspace:*"
+  },
   "scripts": {
     "test": "node -e \"process.exit(0)\""
   }

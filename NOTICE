@@ -17,3 +17,17 @@ vendor/gsd-core/gsd-core/templates/ (project, requirements, roadmap, state,
 config, context, phase-prompt, summary, verification-report, spec) at the
 commit above. Upstream license: MIT. They are rewritten so a Guide project
 uses .hitchhiker/ and /hh-* commands. gsd-core is not imported at runtime.
+
+Dev toolchain (not runtime dependencies)
+---------------------------------------
+
+typescript 5.9.3
+  Registry: https://www.npmjs.com/package/typescript
+  Repository: https://github.com/microsoft/TypeScript
+  License: Apache-2.0
+
+@types/node 22.20.5
+  Registry: https://www.npmjs.com/package/@types/node
+  Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+  License: MIT
+
