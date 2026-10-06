@@ -1,0 +1,24 @@
+{
+  "name": "hitchhikers-guide",
+  "version": "0.0.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design#readme",
+  "bugs": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "hh": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node -e \"process.exit(0)\""
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "hitchhikers-guide",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "homepage": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design#readme",
+  "bugs": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design.git"
+  }
+}

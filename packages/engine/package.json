@@ -1,0 +1,21 @@
+{
+  "name": "@hitchhiker/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design#readme",
+  "bugs": "https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design.git",
+    "directory": "packages/engine"
+  },
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+  }
+}

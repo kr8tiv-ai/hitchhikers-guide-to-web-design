@@ -1,0 +1,33 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/app: {}
+
+  packages/assets: {}
+
+  packages/cli: {}
+
+  packages/crawler: {}
+
+  packages/deploy: {}
+
+  packages/engine: {}
+
+  packages/grok-plugin: {}
+
+  packages/knowledge: {}
+
+  packages/orchestrator: {}
+
+  packages/qa: {}
+
+  packages/templates: {}
+
+  packages/voice: {}

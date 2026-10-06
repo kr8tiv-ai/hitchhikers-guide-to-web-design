@@ -1,0 +1,13 @@
+The Hitchhiker's Guide to Web Design
+Copyright (c) 2026 The Hitchhiker's Guide to Web Design contributors
+
+This project is licensed under the MIT License. See the LICENSE file.
+
+Third-party attribution
+-----------------------
+
+vendor/gsd-core
+  Upstream: https://github.com/open-gsd/gsd-core
+  Commit: 13d37238ba08377929e4850fd6ae4b8db49a22ca
+  License: MIT License
+  gsd-core is vendored source for templates. It is not an npm dependency.

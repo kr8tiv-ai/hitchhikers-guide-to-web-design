@@ -1,6 +1,17 @@
 node_modules/
 dist/
+.env
+.env.local
 .env*
+
+# Local dev scratch. Summaries here are not source.
+.hitchhiker-dev/
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
 
 # Grok run logs (plan generation and build driver)
 hh-build-plan/_grok-run.*
