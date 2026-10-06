@@ -147,6 +147,12 @@ function button(
   return `<button class="hh-btn hh-btn--${variant}" type="button" data-action="${action}"${flag}>${escapeHtml(label)}</button>`;
 }
 
+/** Hold fills the draft. It does not submit. Typing in the field still works. */
+function talkButton(disabled: boolean): string {
+  const flag = disabled ? " disabled" : "";
+  return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold"${flag}>Hold to talk</button>`;
+}
+
 function heading(title: string, why: string, done: boolean): string {
   const marker = done ? ' data-done="true"' : "";
   return `<article class="hh-qcard"${marker} aria-labelledby="hh-card-ask">
@@ -183,6 +189,7 @@ ${pushLine}  <label class="hh-qcard__field">
   </label>
   <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
   <div class="hh-qcard__actions">
+    ${talkButton(state.pending)}
     ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}
     ${button("suggest", "Suggest for me", "secondary", state.pending)}
     ${button("skip", "Skip", "ghost", state.pending)}

@@ -96,7 +96,9 @@ test("the card shows one question and the three exact actions", () => {
   assert.match(html, /<p class="hh-qcard__why">The logo anchors color, type, and tone\.<\/p>/);
   assert.equal(html.match(/data-question-id=/g)?.length, 1);
   assert.match(html, /data-question-id="DP-1\.1"/);
-  assert.equal(html.match(/<button\b/g)?.length, 3);
+  assert.equal(html.match(/<button\b/g)?.length, 4);
+  assert.match(html, /<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold">Hold to talk<\/button>/);
+  assert.doesNotMatch(html, /style=/);
   assert.match(buttonTag(html, "answer"), /type="button"/);
   assert.match(buttonTag(html, "answer"), /\sdisabled(?:\s|>)/);
   assert.match(html, /data-action="answer"[^>]*>Answer<\/button>/);
