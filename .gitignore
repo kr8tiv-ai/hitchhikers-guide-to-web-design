@@ -26,3 +26,9 @@ hh-build-plan/_grok-run.*
 .hh-driver/*.err
 .hh-driver/empty-stdin.txt
 .hh-driver/driver.pid
+
+# Playwright shots and traces. The e2e spec writes these locally.
+packages/app/e2e/screens/
+packages/app/e2e/.artifacts/
+packages/app/test-results/
+packages/app/playwright-report/

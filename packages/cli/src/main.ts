@@ -2,6 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
+import { closeActiveApp, runApp } from "./commands/app.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
 
 const HELP = "hh doctor [--project <dir>]";
@@ -152,6 +153,7 @@ export async function runCli(
   runner?: CommandRunner,
 ): Promise<{ exitCode: number; stdout: string }> {
   const command = argv[0];
+  if (command === "app") return runApp(argv.slice(1));
   if (command === "progress" || command === "pause" || command === "resume") {
     return runStateCommand(argv);
   }
@@ -172,9 +174,20 @@ function isDirectRun(): boolean {
 }
 
 if (isDirectRun()) {
-  runCli(process.argv.slice(2))
+  const argv = process.argv.slice(2);
+  runCli(argv)
     .then((outcome) => {
       process.stdout.write(outcome.stdout);
+      if (argv[0] === "app" && outcome.exitCode === 0) {
+        const stop = (): void => {
+          void closeActiveApp().finally(() => {
+            process.exit(0);
+          });
+        };
+        process.on("SIGINT", stop);
+        process.on("SIGTERM", stop);
+        return;
+      }
       process.exitCode = outcome.exitCode;
     })
     .catch((error: unknown) => {

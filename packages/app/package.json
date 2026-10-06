@@ -21,6 +21,7 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "e2e": "playwright test",
     "write-html": "node --experimental-strip-types scripts/write-html.ts"
   },
   "devDependencies": {

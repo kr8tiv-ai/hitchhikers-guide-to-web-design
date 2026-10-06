@@ -1,0 +1,917 @@
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { stripTypeScriptTypes } from "node:module";
+import path from "node:path";
+import {
+  InterviewError,
+  loadConfig,
+  loadState,
+  loadTree,
+  openInterview,
+  questionsForDepth,
+  type AnswerRecord,
+  type GuideState,
+  type InterviewSession,
+  type Question,
+} from "@hitchhiker/engine";
+import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import { renderGuideMap, renderMap } from "../map.ts";
+import { renderShell } from "../shell.ts";
+import { issueToken, tokensMatch } from "./csrf.ts";
+import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
+import {
+  MAX_UPLOAD_BYTES,
+  acceptAudio,
+  acceptUpload,
+  audioFilename,
+  contentLengthExceeds,
+  parseMultipart,
+  readCapped,
+} from "./uploads.ts";
+
+export type TurnHandler = (input: {
+  kind: "answer" | "suggest" | "skip";
+  questionId: string;
+  text?: string;
+}) => Promise<{ next: unknown; events: unknown[] }>;
+
+export interface DeskProgress {
+  answered: number;
+  suggested: number;
+  skipped: number;
+  soft: number;
+  imported: number;
+  phase: string;
+  promptId: string;
+  nextAction: string;
+}
+
+export interface DeskSession {
+  question: Question | null;
+  pushback: string | null;
+  done: boolean;
+  progress: DeskProgress;
+  mapHtml: string;
+  guideHtml: string;
+  transcriptHtml: string;
+  statusHtml: string;
+  cardHtml: string;
+}
+
+export interface DeskApp {
+  handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
+  close(): void;
+  readonly token: string;
+}
+
+const JSON_LIMIT = 1024 * 1024;
+const SRC_ROOT = path.resolve(import.meta.dirname, "..");
+const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
+const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
+const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+
+const STATIC_TYPES: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".woff2": "font/woff2",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+};
+
+const SAFE = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "cache-control": "no-store",
+  "content-security-policy":
+    "default-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  "cross-origin-resource-policy": "same-origin",
+} as const;
+
+type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard";
+
+const moduleCache = new Map<string, string>();
+
+/**
+ * Interview session for one desk process. `turnHandler` defaults to the
+ * engine from 018. A later prompt replaces that function; this file keeps
+ * the HTTP shape.
+ */
+export async function createDeskApp(opts: {
+  projectDir: string;
+  turnHandler?: TurnHandler;
+}): Promise<DeskApp> {
+  const projectDir = path.resolve(opts.projectDir);
+  const depth = loadConfig(projectDir).interviewDepth;
+  const questions = questionsForDepth(loadTree(treeFile(projectDir)), depth);
+  const session = await openInterview(projectDir, depth);
+  const turn = opts.turnHandler ?? createEngineTurn(session);
+  const token = issueToken();
+  const hub = createSseHub();
+  let tail: Promise<void> = Promise.resolve();
+
+  const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = tail.then(task, task);
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
+  const view = (): DeskSession => buildSession(projectDir, session, questions);
+
+  return {
+    token,
+    close() {
+      hub.close();
+    },
+    async handle(req, res) {
+      const method = req.method ?? "GET";
+      const pathname = normalizePath(req.url ?? "/");
+      if (pathname === null) {
+        sendJson(req, res, 400, { error: "The address could not be read." });
+        return;
+      }
+      if (method !== "GET" && method !== "HEAD" && method !== "POST") {
+        sendJson(req, res, 405, { error: "That method is not used here." });
+        return;
+      }
+      if (method === "POST") {
+        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue);
+        return;
+      }
+      await handleGet(req, res, pathname, token, view, hub);
+    },
+  };
+}
+
+function createEngineTurn(session: InterviewSession): TurnHandler {
+  return async (input) => {
+    const current = session.next();
+    if (current === null) {
+      throw new InterviewError("finished", "The interview is finished.");
+    }
+    if (current.id !== input.questionId) {
+      throw new InterviewError("command", "That question is no longer on the desk.");
+    }
+    if (input.kind === "answer") {
+      await session.command({ type: "answer", text: input.text ?? "" });
+    } else if (input.kind === "suggest") {
+      await session.command({ type: "suggest" });
+    } else {
+      await session.command({ type: "skip" });
+    }
+    const next = session.next();
+    return {
+      next,
+      events: [
+        { type: "turn", kind: input.kind, questionId: input.questionId },
+        { type: "session", questionId: next === null ? null : next.id },
+      ],
+    };
+  };
+}
+
+async function handlePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  token: string,
+  projectDir: string,
+  turn: TurnHandler,
+  view: () => DeskSession,
+  hub: SseHub,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const header = req.headers["x-hh-csrf"];
+  if (typeof header !== "string" || !tokensMatch(token, header)) {
+    sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
+    return;
+  }
+  if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
+    await handleTurn(req, res, pathname, turn, view, hub, enqueue);
+    return;
+  }
+  if (pathname === "/api/upload") {
+    await handleUpload(req, res, projectDir);
+    return;
+  }
+  if (pathname === "/api/audio") {
+    await handleAudio(req, res, projectDir);
+    return;
+  }
+  sendJson(req, res, 404, { error: "That route is not on the desk." });
+}
+
+async function handleTurn(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  turn: TurnHandler,
+  view: () => DeskSession,
+  hub: SseHub,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const kind = pathname === "/api/answer" ? "answer" : pathname === "/api/suggest" ? "suggest" : "skip";
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const parsed = parseTurnBody(capped.body.toString("utf8"), kind);
+  if ("error" in parsed) {
+    sendJson(req, res, 400, { error: parsed.error });
+    return;
+  }
+  try {
+    const result = await enqueue(async () => {
+      const output = asTurnResult(
+        await turn({
+          kind,
+          questionId: parsed.questionId,
+          ...(parsed.text === undefined ? {} : { text: parsed.text }),
+        }),
+      );
+      const session = view();
+      hub.publish("session", session);
+      for (const event of output.events) hub.publish("update", event);
+      return { next: output.next, events: output.events, session };
+    });
+    sendJson(req, res, 200, result);
+  } catch (error: unknown) {
+    const mapped = turnError(error);
+    if (mapped.status >= 500) {
+      const detail = error instanceof Error ? error.message : "turn failed";
+      process.stderr.write(`Desk error: ${detail}\n`);
+    }
+    sendJson(req, res, mapped.status, { error: mapped.message });
+  }
+}
+
+async function handleUpload(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+): Promise<void> {
+  const loaded = await readUploadBody(req, res);
+  if (loaded === null) return;
+  const contentType = headerOne(req.headers["content-type"]);
+  const part = parseMultipart(loaded, contentType);
+  if ("error" in part) {
+    sendJson(req, res, 400, { error: part.error });
+    return;
+  }
+  const decision = acceptUpload({
+    filename: part.filename,
+    mime: part.mime,
+    bytes: part.data.length,
+  });
+  if (!decision.ok) {
+    sendJson(req, res, 415, { error: decision.reason });
+    return;
+  }
+  await storeUpload(projectDir, decision.safeName, part.data);
+  sendJson(req, res, 201, { ok: true, safeName: decision.safeName, bytes: part.data.length });
+}
+
+async function handleAudio(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+): Promise<void> {
+  // Prompt 041 transcribes the file. This package cannot depend on the voice
+  // package, so the blob is only stored for that later step.
+  const loaded = await readUploadBody(req, res);
+  if (loaded === null) return;
+  const contentType = headerOne(req.headers["content-type"]);
+  if (contentType.startsWith("multipart/")) {
+    const part = parseMultipart(loaded, contentType);
+    if ("error" in part) {
+      sendJson(req, res, 400, { error: part.error });
+      return;
+    }
+    await storeAudio(req, res, projectDir, part.filename, part.mime, part.data);
+    return;
+  }
+  const named = headerOne(req.headers["x-hh-filename"]);
+  const filename = audioFilename(contentType, named.length === 0 ? undefined : named);
+  await storeAudio(req, res, projectDir, filename, contentType, loaded);
+}
+
+async function storeAudio(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  filename: string,
+  mime: string,
+  data: Buffer,
+): Promise<void> {
+  const decision = acceptAudio({ filename, mime, bytes: data.length });
+  if (!decision.ok) {
+    sendJson(req, res, 415, { error: decision.reason });
+    return;
+  }
+  await storeUpload(projectDir, decision.safeName, data);
+  sendJson(req, res, 201, {
+    ok: true,
+    safeName: decision.safeName,
+    bytes: data.length,
+    stored: true,
+  });
+}
+
+async function readUploadBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<Buffer | null> {
+  if (contentLengthExceeds(req.headers["content-length"], MAX_UPLOAD_BYTES)) {
+    sendJson(req, res, 413, { error: "Upload is over 25 MB." });
+    dropRequest(req);
+    return null;
+  }
+  const capped = await readCapped(req, MAX_UPLOAD_BYTES);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "Upload is over 25 MB." });
+    dropRequest(req);
+    return null;
+  }
+  return capped.body;
+}
+
+/** Let the status line flush, then stop reading a body we will not keep. */
+function dropRequest(req: IncomingMessage): void {
+  setImmediate(() => {
+    if (!req.destroyed) req.destroy();
+  });
+}
+
+async function handleGet(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  token: string,
+  view: () => DeskSession,
+  hub: SseHub,
+): Promise<void> {
+  if (pathname === "/") {
+    const session = view();
+    sendHtml(req, res, 200, renderDesk(token, session));
+    return;
+  }
+  if (pathname === "/brand") {
+    sendHtml(req, res, 200, renderBrand(token));
+    return;
+  }
+  if (pathname === "/approve") {
+    sendHtml(req, res, 200, renderApprove(token));
+    return;
+  }
+  if (pathname === "/hh-dashboard") {
+    sendHtml(req, res, 200, renderDashboard(token));
+    return;
+  }
+  if (pathname === "/api/session") {
+    sendJson(req, res, 200, view());
+    return;
+  }
+  if (pathname === "/api/events") {
+    streamEvents(req, res, view, hub);
+    return;
+  }
+  if (pathname === "/client/desk.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/card.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(CARD_SOURCE)));
+    return;
+  }
+  if (pathname.startsWith("/src/") || pathname.startsWith("/public/")) {
+    const root = pathname.startsWith("/src/") ? SRC_ROOT : PUBLIC_ROOT;
+    const prefix = pathname.startsWith("/src/") ? "/src/" : "/public/";
+    const ext = path.extname(pathname).toLowerCase();
+    const type = STATIC_TYPES[ext];
+    if (type === undefined) {
+      sendHtml(req, res, 404, renderMissing(token));
+      return;
+    }
+    const body = await readInside(root, pathname.slice(prefix.length));
+    if (body === null) {
+      sendHtml(req, res, 404, renderMissing(token));
+      return;
+    }
+    sendBytes(req, res, 200, type, body);
+    return;
+  }
+  if (pathname.startsWith("/api/")) {
+    sendJson(req, res, 404, { error: "That route is not on the desk." });
+    return;
+  }
+  sendHtml(req, res, 404, renderMissing(token));
+}
+
+function streamEvents(
+  req: IncomingMessage,
+  res: ServerResponse,
+  view: () => DeskSession,
+  hub: SseHub,
+): void {
+  const session = view();
+  const sink: SseSink = {
+    write(chunk) {
+      if (res.writableEnded || res.destroyed) return false;
+      res.write(chunk);
+      return true;
+    },
+    end() {
+      if (!res.writableEnded) res.end();
+    },
+  };
+  req.socket?.setNoDelay(true);
+  req.socket?.setTimeout(0);
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-store",
+    connection: "keep-alive",
+    "x-content-type-options": "nosniff",
+  });
+  hub.add(sink);
+  sink.write(`: connected\n\n${encodeSse("session", session)}`);
+  req.on("close", () => {
+    hub.remove(sink);
+  });
+}
+
+function buildSession(
+  projectDir: string,
+  session: InterviewSession,
+  questions: readonly Question[],
+): DeskSession {
+  const question = session.next();
+  const saved = loadState(projectDir);
+  const promptId = question === null ? "interview:done" : `interview:${question.id}`;
+  const nextAction = question === null ? "Approve the Site Brief." : `Answer ${question.id}.`;
+  const state: GuideState = saved ?? {
+    phase: "Don't Panic",
+    slice: "The Guide",
+    promptId,
+    lastGoodCommit: "",
+    blockers: [],
+    nextAction,
+    updatedAt: "1970-01-01T00:00:00.000Z",
+  };
+  const coverage = session.coverage();
+  const answers = readAnswers(projectDir);
+  const pushback = session.lastPushback;
+  const done = question === null;
+  const card: CardState = {
+    question,
+    draft: "",
+    pushback,
+    error: null,
+    done,
+    pending: false,
+  };
+  let mapHtml: string;
+  try {
+    mapHtml = renderMap(state);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "The map could not be drawn.";
+    mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
+  }
+  const status =
+    state.nextAction.trim().length > 0 ? state.nextAction : "Ready.";
+  return {
+    question,
+    pushback,
+    done,
+    progress: {
+      answered: coverage.answered,
+      suggested: coverage.suggested,
+      skipped: coverage.skipped,
+      soft: coverage.soft,
+      imported: coverage.imported,
+      phase: state.phase,
+      promptId: state.promptId,
+      nextAction: state.nextAction,
+    },
+    mapHtml,
+    guideHtml: renderGuideMap(answers, [...questions]),
+    transcriptHtml: renderTranscript(questions, answers, question),
+    statusHtml: `<span>${escapeHtml(status)}</span>`,
+    cardHtml: renderCard(card),
+  };
+}
+
+function renderTranscript(
+  tree: readonly Question[],
+  answers: readonly AnswerRecord[],
+  current: Question | null,
+): string {
+  const asks = new Map(tree.map((question) => [question.id, question.ask]));
+  const lines: string[] = [];
+  for (const answer of answers) {
+    const ask = asks.get(answer.id);
+    if (ask !== undefined) lines.push(turnLine("Guide", ask, false));
+    lines.push(turnLine("You", answer.value, true));
+  }
+  if (current !== null) lines.push(turnLine("Guide", current.ask, false));
+  if (lines.length === 0) {
+    return turnLine("Guide", "The desk is clear. Nothing has been asked yet.", false);
+  }
+  return lines.join("\n");
+}
+
+function turnLine(who: string, text: string, you: boolean): string {
+  const cls = you ? "hh-turn hh-turn--you" : "hh-turn";
+  return `<p class="${cls}"><span class="hh-turn__who">${escapeHtml(who)}</span> ${escapeHtml(text)}</p>`;
+}
+
+function renderDesk(token: string, session: DeskSession): string {
+  let html = renderShell();
+  const dek = `<p class="hh-dek">Don't Panic. One question at a time. The work saves on this machine.</p>`;
+  html = mustReplace(
+    html,
+    '<meta charset="utf-8" />',
+    `<meta charset="utf-8" />\n    <meta name="hh-csrf" content="${escapeHtml(token)}" />`,
+    "charset",
+  );
+  html = mustReplace(
+    html,
+    dek,
+    `${dek}\n        ${routeNav("/")}`,
+    "dek",
+  );
+  html = mustReplace(
+    html,
+    '<link rel="stylesheet" href="src/shell.css" />',
+    '<link rel="stylesheet" href="src/shell.css" />\n    <link rel="stylesheet" href="src/card.css" />',
+    "shell css",
+  );
+  html = html.replaceAll('href="src/', 'href="/src/');
+  html = replaceBlock(
+    html,
+    /<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" aria-label="Transcript">[\s\S]*?<\/section>/,
+    `<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" aria-label="Transcript">\n            ${session.transcriptHtml}\n          </section>`,
+    "transcript",
+  );
+  html = replaceBlock(
+    html,
+    /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
+    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${session.cardHtml}\n          </section>`,
+    "question",
+  );
+  html = replaceBlock(
+    html,
+    /<nav class="hh-rise hh-rise--4" aria-label="Guide map">[\s\S]*?<\/nav>/,
+    `<nav class="hh-rise hh-rise--4" data-region="map" aria-label="Guide map">\n          ${session.mapHtml}\n        </nav>`,
+    "map",
+  );
+  html = replaceBlock(
+    html,
+    /<footer class="hh-status" data-region="status">[\s\S]*?<\/footer>/,
+    `<footer class="hh-status" data-region="status">\n        ${session.statusHtml}\n      </footer>`,
+    "status",
+  );
+  return html.replace("</body>", `    <script type="module" src="/client/desk.js"></script>\n  </body>`);
+}
+
+function renderBrand(token: string): string {
+  return renderPanel({
+    token,
+    title: "Brand kit",
+    current: "/brand",
+    kicker: "Brand kit",
+    status: "The kit waits on the brief.",
+    main: `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
+        <p class="hh-kicker" id="brand-title">Type</p>
+        <p class="hh-specimen__display">The kit is not printed yet.</p>
+        <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>
+      </section>
+      <div class="hh-empty hh-rise hh-rise--3">
+        <h1 class="hh-empty__title">No kit on the desk</h1>
+        <p>The interview is still the work.</p>
+        <p class="hh-empty__next">Finish the questions, then open this plate again.</p>
+      </div>`,
+  });
+}
+
+function renderApprove(token: string): string {
+  return renderPanel({
+    token,
+    title: "Approvals",
+    current: "/approve",
+    kicker: "Approvals",
+    status: "Nothing is waiting for a yes.",
+    main: `<div class="hh-empty hh-rise hh-rise--2">
+        <h1 class="hh-empty__title">Nothing is waiting for a yes</h1>
+        <p>No plate is ready for a decision.</p>
+        <p class="hh-empty__next">When a plate is ready, Approve and Redo sit here.</p>
+      </div>
+      <div class="hh-approval hh-rise hh-rise--3">
+        <button class="hh-btn hh-btn--primary" type="button" aria-disabled="true">Approve</button>
+        <button class="hh-btn hh-btn--secondary" type="button" aria-disabled="true">Redo</button>
+        <p class="hh-approval__note">Happy with this stays the question. Nothing is queued yet.</p>
+      </div>`,
+  });
+}
+
+function renderDashboard(token: string): string {
+  return renderPanel({
+    token,
+    title: "/hh-dashboard",
+    current: "/hh-dashboard",
+    kicker: "Local queue",
+    status: "The queue is empty.",
+    main: `<h1 class="hh-headline">/hh-dashboard</h1>
+      <p class="hh-dek">The Guide's queue, on this machine.</p>
+      <div class="hh-dash">
+        <section class="hh-rise hh-rise--2" aria-labelledby="queue-title">
+          <h2 class="hh-title" id="queue-title">Prompt queue</h2>
+          <div class="hh-empty">
+            <h2 class="hh-empty__title">The queue is empty</h2>
+            <p>No prompt is running, paused, or waiting.</p>
+            <p class="hh-empty__next">Rows show up here when the build starts.</p>
+          </div>
+        </section>
+        <aside class="hh-side hh-rise hh-rise--3">
+          <div class="hh-phase-mark">
+            <p class="hh-phase-mark__num">01</p>
+            <p class="hh-kicker">Don't Panic</p>
+            <p class="hh-dek">The interview is open. The queue waits.</p>
+          </div>
+        </aside>
+      </div>`,
+  });
+}
+
+function renderMissing(token: string): string {
+  return renderPanel({
+    token,
+    title: "Not on the desk",
+    current: "/",
+    kicker: "Missing",
+    status: "This address is not a route.",
+    main: `<div class="hh-empty">
+        <h1 class="hh-empty__title">This page is not on the desk</h1>
+        <p>The address does not match a route.</p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--secondary" href="/">Back to the desk</a></p>
+      </div>`,
+  });
+}
+
+function renderPanel(opts: {
+  token: string;
+  title: string;
+  current: RouteName;
+  kicker: string;
+  main: string;
+  status: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="hh-csrf" content="${escapeHtml(opts.token)}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(opts.title)}</title>
+    <link rel="stylesheet" href="/src/design/tokens.css" />
+    <link rel="stylesheet" href="/src/design/type.css" />
+    <link rel="stylesheet" href="/src/design/components.css" />
+    <link rel="stylesheet" href="/src/shell.css" />
+    <link rel="stylesheet" href="/src/card.css" />
+  </head>
+  <body>
+    <a class="hh-skip" href="#main">Skip to the panel</a>
+    <div class="hh-shell">
+      <header class="hh-mast hh-rise">
+        <div class="hh-mast__row">
+          <p class="hh-kicker">${escapeHtml(opts.kicker)}</p>
+          <p class="hh-kicker">Local desk</p>
+        </div>
+        <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
+        ${routeNav(opts.current)}
+      </header>
+      <main id="main" class="hh-read">
+        ${opts.main}
+      </main>
+      <footer class="hh-status">
+        <span>${escapeHtml(opts.status)}</span>
+      </footer>
+    </div>
+  </body>
+</html>
+`;
+}
+
+function routeNav(current: RouteName): string {
+  const items = [
+    ["/", "Desk"],
+    ["/brand", "Brand kit"],
+    ["/approve", "Approvals"],
+    ["/hh-dashboard", "/hh-dashboard"],
+  ] as const;
+  const links = items.map(([href, label]) => {
+    const on = href === current;
+    const variant = on ? "secondary" : "ghost";
+    const currentAttr = on ? ' aria-current="page"' : "";
+    return `<a class="hh-btn hh-btn--${variant}" href="${href}"${currentAttr}>${escapeHtml(label)}</a>`;
+  });
+  return `<nav class="hh-qcard__actions" aria-label="Desk routes">${links.join("")}</nav>`;
+}
+
+function browserModule(filePath: string): string {
+  const cached = moduleCache.get(filePath);
+  if (cached !== undefined) return cached;
+  const source = readFileSync(filePath, "utf8");
+  const stripped = stripTypeScriptTypes(source, { mode: "strip" });
+  const js = stripped.replace(
+    /from\s+["']\.\.\/card\.ts["']/g,
+    'from "/client/card.js"',
+  );
+  moduleCache.set(filePath, js);
+  return js;
+}
+
+function treeFile(projectDir: string): string {
+  const local = path.join(projectDir, "interview", "tree.yaml");
+  if (existsSync(local)) return local;
+  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+}
+
+function readAnswers(projectDir: string): AnswerRecord[] {
+  const file = path.join(projectDir, ".hitchhiker", "interview.json");
+  if (!existsSync(file)) return [];
+  const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+  const list = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.answers)
+      ? value.answers
+      : [];
+  const answers: AnswerRecord[] = [];
+  for (const item of list) {
+    if (!isAnswer(item)) continue;
+    answers.push({ id: item.id, status: item.status, value: item.value });
+  }
+  return answers;
+}
+
+function isAnswer(value: unknown): value is AnswerRecord {
+  if (!isRecord(value)) return false;
+  const { id, status, value: text } = value;
+  return (
+    typeof id === "string" &&
+    typeof text === "string" &&
+    (status === "ANSWERED" ||
+      status === "SUGGESTED" ||
+      status === "SKIPPED" ||
+      status === "SOFT" ||
+      status === "IMPORTED")
+  );
+}
+
+async function storeUpload(projectDir: string, safeName: string, data: Buffer): Promise<void> {
+  const dir = path.join(projectDir, ".hitchhiker", "uploads");
+  await mkdir(dir, { recursive: true });
+  const target = path.resolve(dir, safeName);
+  const rel = path.relative(dir, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("Upload path escaped the desk folder.");
+  }
+  await writeFile(target, data);
+}
+
+async function readInside(root: string, relPath: string): Promise<Buffer | null> {
+  if (relPath.includes("\0") || relPath.includes("..")) return null;
+  const target = path.resolve(root, relPath);
+  const rel = path.relative(root, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  try {
+    const realRoot = await realpath(root);
+    const realTarget = await realpath(target);
+    const realRel = path.relative(realRoot, realTarget);
+    if (realRel.startsWith("..") || path.isAbsolute(realRel)) return null;
+    return await readFile(realTarget);
+  } catch {
+    return null;
+  }
+}
+
+function normalizePath(url: string): string | null {
+  const pathname = url.split("?")[0] ?? "/";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  if (!decoded.startsWith("/") || decoded.includes("\0")) return null;
+  if (decoded.length > 1 && decoded.endsWith("/")) return decoded.slice(0, -1);
+  return decoded;
+}
+
+function parseTurnBody(
+  raw: string,
+  kind: "answer" | "suggest" | "skip",
+): { questionId: string; text?: string } | { error: string } {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { error: "The desk could not read that request." };
+  }
+  if (!isRecord(value)) return { error: "The desk could not read that request." };
+  const { questionId, text } = value;
+  if (typeof questionId !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(questionId)) {
+    return { error: "The question id is not valid." };
+  }
+  if (text !== undefined && (typeof text !== "string" || text.length > 20_000)) {
+    return { error: "That answer is too long." };
+  }
+  if (kind === "answer" && typeof text !== "string") {
+    return { error: "Write an answer or skip." };
+  }
+  const body: { questionId: string; text?: string } = { questionId };
+  if (typeof text === "string") body.text = text;
+  return body;
+}
+
+function asTurnResult(value: unknown): { next: unknown; events: unknown[] } {
+  if (!isRecord(value) || !Array.isArray(value.events)) {
+    throw new Error("Turn handler returned an unexpected result.");
+  }
+  return { next: value.next ?? null, events: value.events };
+}
+
+function turnError(error: unknown): { status: number; message: string } {
+  if (error instanceof InterviewError) {
+    if (error.code === "empty-answer") return { status: 400, message: error.message };
+    if (error.code === "busy") {
+      return { status: 409, message: "The desk is saving another answer. Try again." };
+    }
+    if (error.code === "finished" || error.code === "command") {
+      return { status: 409, message: error.message };
+    }
+    return { status: 500, message: "The interview file could not be read." };
+  }
+  return { status: 500, message: "The answer did not save. Try again, or skip." };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function headerOne(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw ?? "";
+}
+
+function mustReplace(html: string, from: string, to: string, label: string): string {
+  if (!html.includes(from)) throw new Error(`Desk shell is missing ${label}.`);
+  return html.replace(from, to);
+}
+
+function replaceBlock(html: string, pattern: RegExp, to: string, label: string): string {
+  if (!pattern.test(html)) throw new Error(`Desk shell is missing ${label}.`);
+  return html.replace(pattern, to);
+}
+
+function sendJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+): void {
+  sendBytes(req, res, status, "application/json; charset=utf-8", Buffer.from(JSON.stringify(body)));
+}
+
+function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string): void {
+  sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(html));
+}
+
+function sendBytes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  type: string,
+  body: Buffer,
+): void {
+  res.writeHead(status, {
+    ...SAFE,
+    "content-type": type,
+    "content-length": body.length,
+  });
+  if (req.method === "HEAD") res.end();
+  else res.end(body);
+}
