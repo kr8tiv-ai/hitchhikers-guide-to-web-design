@@ -150,3 +150,12 @@ export {
   writeReferences,
 } from "./gallery-walk.ts";
 export type { Deal, Verdict, VerdictInput, WalkQuery, WalkState } from "./gallery-walk.ts";
+export {
+  X_AUTHORIZE_HOST,
+  X_AUTHORIZE_PATH,
+  X_SCOPES,
+  XOAuthError,
+  buildAuthorizeUrl,
+  createPkce,
+} from "./x-oauth.ts";
+export type { PkcePair, XOAuthField } from "./x-oauth.ts";
