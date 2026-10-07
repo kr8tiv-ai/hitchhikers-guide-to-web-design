@@ -5,8 +5,12 @@
  * the injected spawn, with one argument per flag, so a Windows path
  * that contains spaces stays one argument.
  *
- * The ncnn binary defaults to the anime video model. Photographs use
- * realesrgan-x4plus, which ships in the official portable archive.
+ * The ncnn binary defaults to realesr-animevideov3 and appends -x2, -x3,
+ * or -x4 only for that name. realesrgan-x4plus is the photo model and it
+ * is 4x. Passing -s 2 with it still loads the 4x network and sizes the
+ * output at 2x, which the v0.2.5.0 binary does not reconcile. Scale 2
+ * therefore uses realesr-animevideov3, the archive's native 2x weights.
+ * Scale 4 uses realesrgan-x4plus.
  */
 
 import { assertGradeFacts, type GradeFacts } from "./grade.ts";
@@ -15,6 +19,8 @@ export const DEFAULT_TARGET_LONG_SIDE = 1920;
 /** Shown with the before and after. The upscale is the same photo. */
 export const UPSCALE_REVIEW_LINE = "happy with this?";
 export const REALESRGAN_PHOTO_MODEL = "realesrgan-x4plus";
+/** Native 2x weights in the v0.2.5.0 portable archive. */
+export const REALESRGAN_SCALE2_MODEL = "realesr-animevideov3";
 export const ALREADY_LARGE_REASON = "already large enough";
 
 const SHARP_ENOUGH = 0.3;
@@ -39,6 +45,11 @@ function replacementAllowed(facts: GradeFacts, yes: boolean): boolean {
 function scaleFor(longSide: number, target: number): 2 | 4 {
   if (longSide * 2 >= target) return 2;
   return 4;
+}
+
+/** Model name the portable binary can run at this scale. */
+export function realesrganModelForScale(scale: 2 | 4): string {
+  return scale === 2 ? REALESRGAN_SCALE2_MODEL : REALESRGAN_PHOTO_MODEL;
 }
 
 /**
@@ -116,7 +127,7 @@ export async function runUpscale(
     "-m",
     deps.modelDir,
     "-n",
-    REALESRGAN_PHOTO_MODEL,
+    realesrganModelForScale(scale),
   ];
   const result = await deps.spawnImpl(deps.runner, args);
   if (result.code !== 0) {

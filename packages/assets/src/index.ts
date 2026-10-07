@@ -10,7 +10,9 @@ export {
   ALREADY_LARGE_REASON,
   DEFAULT_TARGET_LONG_SIDE,
   REALESRGAN_PHOTO_MODEL,
+  REALESRGAN_SCALE2_MODEL,
   UPSCALE_REVIEW_LINE,
+  realesrganModelForScale,
   runUpscale,
   upscalePlan,
 } from "./upscale.ts";

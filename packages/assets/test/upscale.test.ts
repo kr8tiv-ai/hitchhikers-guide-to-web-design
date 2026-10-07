@@ -19,7 +19,9 @@ import {
 import {
   ALREADY_LARGE_REASON,
   REALESRGAN_PHOTO_MODEL,
+  REALESRGAN_SCALE2_MODEL,
   UPSCALE_REVIEW_LINE,
+  realesrganModelForScale,
   runUpscale,
   upscalePlan,
 } from "../src/upscale.ts";
@@ -372,8 +374,25 @@ test("runUpscale passes separate args and throws the runner stderr", async () =>
   assert.equal(seen.args[seen.args.indexOf("-s") + 1], "4");
   assert.equal(seen.args[seen.args.indexOf("-m") + 1], modelDir);
   assert.equal(seen.args[seen.args.indexOf("-n") + 1], REALESRGAN_PHOTO_MODEL);
+  assert.equal(seen.args[seen.args.indexOf("-n") + 1], realesrganModelForScale(4));
   assert.equal(seen.args.includes(input), true);
   assert.equal(seen.args.some((arg) => arg.includes(" -")), false);
+
+  let scaleTwo: string[] = [];
+  await runUpscale(input, output, 2, {
+    runner,
+    modelDir,
+    spawnImpl: async (_cmd, args) => {
+      scaleTwo = args;
+      return { code: 0, stderr: "" };
+    },
+  });
+  assert.equal(scaleTwo[scaleTwo.indexOf("-s") + 1], "2");
+  assert.equal(scaleTwo[scaleTwo.indexOf("-n") + 1], REALESRGAN_SCALE2_MODEL);
+  assert.equal(scaleTwo[scaleTwo.indexOf("-n") + 1], realesrganModelForScale(2));
+  assert.notEqual(scaleTwo[scaleTwo.indexOf("-n") + 1], REALESRGAN_PHOTO_MODEL);
+  assert.equal(scaleTwo[scaleTwo.indexOf("-i") + 1], input);
+  assert.equal(scaleTwo[scaleTwo.indexOf("-m") + 1], modelDir);
 
   await assert.rejects(
     () =>
