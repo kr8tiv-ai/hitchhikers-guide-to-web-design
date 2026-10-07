@@ -109,7 +109,11 @@ importers:
         specifier: workspace:*
         version: link:../engine
 
-  packages/templates: {}
+  packages/templates:
+    dependencies:
+      '@hitchhiker/engine':
+        specifier: workspace:*
+        version: link:../engine
 
   packages/voice: {}
 

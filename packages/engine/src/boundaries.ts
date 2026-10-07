@@ -15,7 +15,8 @@ export interface PackageBoundary {
  * from a later prompt (gsap on the app, prompt 010; the motion toolkit
  * on the app, prompt 038; pdfjs-dist on the engine, prompt 025;
  * opentype.js, @visioncortex/vtracer, and svgo on assets, prompt 055;
- * @resvg/resvg-js and pdf-lib on assets, prompt 063).
+ * @resvg/resvg-js and pdf-lib on assets, prompt 063;
+ * templates on engine for the brand truth gate, prompt 065).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
@@ -37,7 +38,7 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/qa", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/knowledge", allowDeps: [] },
-  { name: "@hitchhiker/templates", allowDeps: [] },
+  { name: "@hitchhiker/templates", allowDeps: ["@hitchhiker/engine"] },
 ];
 
 const DEEP_IMPORT = /@hitchhiker\/[a-z-]+\//g;
