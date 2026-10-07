@@ -32,3 +32,9 @@ packages/app/e2e/screens/
 packages/app/e2e/.artifacts/
 packages/app/test-results/
 packages/app/playwright-report/
+
+# Real-ESRGAN weights and runners. First use downloads them into the home cache (D-007).
+*.pth
+*.onnx
+*.param
+*.bin
