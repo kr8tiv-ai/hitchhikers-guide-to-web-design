@@ -2,6 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
+import { runAssetsCommand } from "./commands/assets.ts";
 import { closeActiveApp, runApp } from "./commands/app.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
 
@@ -154,6 +155,7 @@ export async function runCli(
 ): Promise<{ exitCode: number; stdout: string }> {
   const command = argv[0];
   if (command === "app") return runApp(argv.slice(1));
+  if (command === "assets") return runAssetsCommand(argv.slice(1));
   if (command === "progress" || command === "pause" || command === "resume") {
     return runStateCommand(argv);
   }
