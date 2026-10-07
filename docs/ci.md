@@ -86,7 +86,7 @@ Read the JSON for `GPL` and `AGPL` until `auditDeps` is in the tree. After promp
 
 Job `secret-scan` checks out full history (`fetch-depth: 0`) and runs the free gitleaks CLI. It does not use `gitleaks/gitleaks-action`. It does not read a repository secret.
 
-The scan step downloads gitleaks 8.30.1 for `linux_x64` from the pinned GitHub release, checks the SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, and runs `gitleaks detect --source . --redact`. That command scans git history. When `.gitleaks.toml` or `.gitleaksignore` is in the repo, gitleaks loads it. This repo has neither, so the scan uses the built-in rules. The CLI does not ask for a licence key, including when the repository owner is a GitHub organization.
+The scan step downloads gitleaks 8.30.1 for `linux_x64` from the pinned GitHub release, checks the SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, and runs `gitleaks detect --source . --redact`. That command scans git history. When `.gitleaks.toml` or `.gitleaksignore` is in the repo, gitleaks loads it. This repo ships `.gitleaks.toml` with an allowlist for replay cassettes and test fixtures (hash keys that trip `generic-api-key`). Built-in rules still apply everywhere else. The CLI does not ask for a licence key, including when the repository owner is a GitHub organization.
 
 ### Local equivalent (Windows PowerShell)
 

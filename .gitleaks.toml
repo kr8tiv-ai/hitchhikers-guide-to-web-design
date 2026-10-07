@@ -1,0 +1,11 @@
+# Secret scan config for Audit workflow (free gitleaks CLI).
+# Replay cassettes store request fingerprints / fixture payloads that look like
+# API keys to the generic-api-key rule. They are not live credentials.
+title = "hitchhikers-guide-to-web-design"
+
+[allowlist]
+description = "Test fixtures and replay cassettes"
+paths = [
+  '''packages/.*/test/cassettes/.*''',
+  '''packages/.*/test/fixtures/.*''',
+]

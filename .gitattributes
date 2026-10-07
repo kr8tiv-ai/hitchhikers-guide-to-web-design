@@ -1,0 +1,21 @@
+# Keep text files LF so Windows CI checkout matches Linux/macOS and the
+# engine template tests (assert no CR) stay green.
+* text=auto eol=lf
+*.{cmd,bat,ps1} text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.glb binary
+*.gltf binary
+*.mp3 binary
+*.wav binary
+*.mp4 binary
+*.webm binary
