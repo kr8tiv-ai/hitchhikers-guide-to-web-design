@@ -61,8 +61,19 @@ function stripDigitCommas(value: string): string {
   return value.replace(/(\d),(?=\d)/g, "$1");
 }
 
+/**
+ * A minus is a negative number when it is not stuck to a word.
+ * `page-2` is a page id from DP-2.4. ` -5` and `-5` are refused.
+ */
 function hasNegativeNumber(stripped: string): boolean {
-  return /(?<!\d)[\u2212-](?=\d)/.test(stripped);
+  return /(?<![A-Za-z\d])[\u2212-](?=\d)/.test(stripped);
+}
+
+/** `page-2` and `about-us` are ids. Their digits are not measurements. */
+function blankHyphenatedWords(text: string): string {
+  return text.replace(/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+/g, (token) =>
+    " ".repeat(token.length),
+  );
 }
 
 function collectSpans(answer: string): PercentSpan[] {
@@ -173,7 +184,7 @@ export function renderKpis(input: { siteType: string; answerText: string }): str
   }
 
   const spans = collectSpans(answer);
-  const working = stripDigitCommas(blankSpans(answer, spans));
+  const working = blankHyphenatedWords(stripDigitCommas(blankSpans(answer, spans)));
   const hits = findIntegers(working);
   const pair = labelPair(working, hits);
   const mentions = mentionTokens(working);

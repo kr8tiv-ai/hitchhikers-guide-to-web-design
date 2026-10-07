@@ -118,6 +118,23 @@ test("negative numbers throw", () => {
   }
 });
 
+test("a hyphenated page id is not a negative number and is not a baseline", () => {
+  const labeled = renderKpis({
+    siteType: "local",
+    answerText: "current 10 goal 20 on page-2",
+  });
+  assert.match(labeled, /^Current: 10$/m);
+  assert.match(labeled, /^Goal: 20$/m);
+  assert.doesNotMatch(labeled, /Numbers mentioned/);
+  assert.equal(labeled.includes("%"), false);
+
+  const slug = renderKpis({ siteType: "local", answerText: "page-2 carries it" });
+  assert.equal(slug.includes(KPI_REFUSAL), true);
+  assert.equal(slug.includes("Calls and direction requests"), true);
+  assert.equal(/\d/.test(slug), false);
+  assert.equal(slug.includes("%"), false);
+});
+
 test("a percent is copied from the user and no other percent appears", () => {
   const answerText = "hold at 2.5% and not a made-up rate";
   const markdown = renderKpis({ siteType: "sign-ups", answerText });
