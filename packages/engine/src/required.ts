@@ -15,6 +15,15 @@ export interface AnswerRecord {
 /** Site why, one visitor, one action, vibe and anti-vibe, motion level, hosting. */
 const REQUIRED_IDS = ["DP-2.1", "DP-2.6", "DP-2.2", "DP-5.3", "DP-6.2", "DP-9.2"] as const;
 
+/**
+ * Required minimum from v2 section 8.4, in that order.
+ * Why the site exists, one visitor, one action, vibe and anti-vibe,
+ * motion level, and hosting. DP-7.2 is not in this list.
+ */
+export function requiredIds(): readonly string[] {
+  return REQUIRED_IDS;
+}
+
 const BRIEF_SECTIONS: ReadonlyArray<{ heading: string; id: string }> = [
   { heading: "Goal", id: "DP-2.1" },
   { heading: "Visitor", id: "DP-2.6" },
@@ -37,7 +46,7 @@ type AnswerStatus = (typeof STATUSES)[number];
 export function missingRequired(answers: AnswerRecord[]): string[] {
   const latest = latestById(answers);
   const missing: string[] = [];
-  for (const id of REQUIRED_IDS) {
+  for (const id of requiredIds()) {
     if (!isPresent(latest.get(id))) missing.push(id);
   }
   return missing;
