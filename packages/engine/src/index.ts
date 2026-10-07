@@ -176,3 +176,4 @@ export type { TeardownInput } from "./brand/index.ts";
 export { lintClaims as lintBrandClaims } from "./brand/truth.ts";
 export type { Evidence } from "./brand/truth.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
+export { formatCost } from "./cost.ts";

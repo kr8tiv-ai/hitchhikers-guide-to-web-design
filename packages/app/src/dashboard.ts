@@ -3,9 +3,10 @@
  *
  * Reads a queue object and returns HTML. It does not fetch, read disk,
  * or open a model session. Pause is one control for the whole drive.
- * Cost stays a placeholder until a later meter fills it.
+ * Cost is a subscription count. Imagine prices stay in the Imagine client.
  */
 
+import { formatCost } from "@hitchhiker/engine";
 import { escapeHtml } from "./card.ts";
 
 export class DashboardError extends Error {
@@ -16,9 +17,6 @@ export class DashboardError extends Error {
 }
 
 const MAX_ROWS = 200;
-
-/** Replaced when a measured count is available. No dollar figure belongs here. */
-const COST_PLACEHOLDER = "Cost is not measured on this desk yet.";
 
 const STATUSES = ["queued", "running", "passed", "fixing", "escalated", "paused"] as const;
 
@@ -223,6 +221,19 @@ function watchdog(items: readonly DriveItem[]): string {
   return `<ul class="hh-drive__log">${lines.join("")}</ul>`;
 }
 
+/** A prompt has run once it leaves the queue. An empty queue has no total to ratio. */
+function costLine(items: readonly DriveItem[]): string {
+  const promptsRun = items.filter((item) => item.status !== "queued").length;
+  if (items.length === 0) {
+    return "No prompts on this queue.";
+  }
+  return formatCost({
+    mode: "subscription",
+    promptsRun,
+    promptsTotal: items.length,
+  });
+}
+
 function documentFor(items: readonly DriveItem[]): string {
   const empty = items.length === 0;
   return `<!DOCTYPE html>
@@ -308,8 +319,8 @@ function documentFor(items: readonly DriveItem[]): string {
           </section>
           <section data-region="cost" aria-labelledby="cost-title">
             <h2 class="hh-title" id="cost-title">Cost</h2>
-            <p class="hh-kicker">Imagine and API</p>
-            <p data-cost-placeholder>${escapeHtml(COST_PLACEHOLDER)}</p>
+            <p class="hh-kicker">Subscription</p>
+            <p data-cost-line>${escapeHtml(costLine(items))}</p>
           </section>
         </div>
       </div>

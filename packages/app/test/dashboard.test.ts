@@ -56,7 +56,10 @@ test("rows stay in order, escape ids, and expose status", () => {
   assert.match(html, /href="src\/dashboard\.css"/);
   assert.match(html, /href="src\/design\/tokens\.css"/);
   assert.match(html, /data-region="cost"/);
-  assert.match(html, /Cost is not measured on this desk yet\./);
+  assert.match(html, /data-cost-line/);
+  assert.match(html, /Prompts 2 of 3\./);
+  assert.doesNotMatch(html, /\$/);
+  assert.doesNotMatch(html, /Cost is not measured on this desk yet/);
   assert.match(html, /data-action="approve"/);
   assert.match(html, /data-action="elevate"/);
   assert.match(html, /data-action="deploy"/);
@@ -103,6 +106,9 @@ test("an empty queue keeps Pause and disables it", () => {
   assert.match(html, /No Zaphod verdict is on this queue\./);
   assert.match(html, /Phone Lighthouse has not run\./);
   assert.match(html, /No session tail is on this queue\./);
+  assert.match(html, /No prompts on this queue\./);
+  assert.doesNotMatch(html, /\$/);
+  assert.doesNotMatch(html, /Cost is not measured on this desk yet/);
   assert.doesNotMatch(html, /data-id=/);
   assert.equal(copy(html).includes("!"), false);
   assert.doesNotMatch(html, /grok dashboard/i);
@@ -149,7 +155,10 @@ test("css uses shell variables, a max-width, and no indigo or fixed width", () =
   assert.doesNotMatch(css, /1440px|width:\s*1440/);
   assert.doesNotMatch(css, /rounded-full|bg-indigo|magnetic|!important/);
   const source = readFileSync(sourcePath, "utf8");
+  assert.match(source, /formatCost\(/);
   assert.doesNotMatch(source, /\bfetch\s*\(/);
   assert.doesNotMatch(source, /grok dashboard/i);
   assert.doesNotMatch(source, /XMLHttpRequest/);
+  assert.doesNotMatch(source, /\$10-20/);
+  assert.doesNotMatch(source, /Cost is not measured on this desk yet/);
 });
