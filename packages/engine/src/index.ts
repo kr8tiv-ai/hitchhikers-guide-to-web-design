@@ -159,3 +159,5 @@ export {
   createPkce,
 } from "./x-oauth.ts";
 export type { PkcePair, XOAuthField } from "./x-oauth.ts";
+export { WhyError, compileWhy } from "./brand/index.ts";
+export type { WhyDraft } from "./brand/index.ts";
