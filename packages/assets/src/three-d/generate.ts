@@ -44,7 +44,10 @@ const TRIPO_MODEL = "v3.1-20260211";
 const MESHY_MODEL = "meshy-7.1";
 const FACE_LIMIT = 50_000;
 const MESHY_POLYCOUNT = 30_000;
-const MAX_POLLS = 8;
+/** Same ceiling as Imagine video polls. A model job does not finish in milliseconds. */
+export const POLL_INTERVAL_MS = 2_000;
+export const POLL_BUDGET_MS = 10 * 60 * 1000;
+const MAX_POLLS = Math.ceil(POLL_BUDGET_MS / POLL_INTERVAL_MS);
 const KEYTAR_SPECIFIER = "keytar";
 
 export interface GenerateRequest {
@@ -292,9 +295,11 @@ async function poll(
     const state = classify(body);
     if (state === "done") return body;
     if (state === "fail") throw new GenerationFailedError(failMessage(body));
-    await delay(20);
+    await delay(POLL_INTERVAL_MS);
   }
-  throw new GenerationFailedError("The provider did not finish in time.");
+  throw new GenerationFailedError(
+    "The provider accepted the job and did not finish within 10 minutes. Check the provider account before trying again",
+  );
 }
 
 async function postJson(input: JobInput, url: string, body: unknown): Promise<unknown> {

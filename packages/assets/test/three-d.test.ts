@@ -31,6 +31,8 @@ import {
   GenerationFailedError,
   MESHY_IMAGE_URL,
   MESHY_TEXT_URL,
+  POLL_BUDGET_MS,
+  POLL_INTERVAL_MS,
   TRIPO_IMAGE_URL,
   TRIPO_TEXT_URL,
   generate3d,
@@ -515,6 +517,12 @@ test("credits append and the options stay in plain words", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("generation keeps polling for the Imagine ten-minute budget", () => {
+  assert.equal(POLL_INTERVAL_MS, 2_000);
+  assert.equal(POLL_BUDGET_MS, 10 * 60 * 1000);
+  assert.ok(POLL_INTERVAL_MS * Math.ceil(POLL_BUDGET_MS / POLL_INTERVAL_MS) >= POLL_BUDGET_MS);
 });
 
 test("generation quotes, refuses the cap, and waits for a yes", async () => {
