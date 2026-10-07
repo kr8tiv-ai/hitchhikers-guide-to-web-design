@@ -39,6 +39,15 @@ export interface ApprovalItem {
   style?: string;
 }
 
+/** A line before it is stored. recordDraftItems forces status to pending. */
+export interface ApprovalDraft {
+  itemId: string;
+  kind: string;
+  text: string;
+  note?: string;
+  style?: string;
+}
+
 export interface ApprovalFile {
   version: 1;
   items: ApprovalItem[];
@@ -59,12 +68,12 @@ export async function readApprovals(projectDir: string): Promise<ApprovalFile> {
   return readFileBody(approvalsPath(projectDir));
 }
 
-export async function recordDraftItems(projectDir: string, items: readonly ApprovalItem[]): Promise<void> {
+export async function recordDraftItems(projectDir: string, items: readonly ApprovalDraft[]): Promise<void> {
   await withStateLock(projectDir, async () => {
     const current = await readFileBody(approvalsPath(projectDir));
     const next = [...current.items];
     for (const item of items) {
-      const clean = normalizeItem({ ...item, status: item.status });
+      const clean = normalizeItem(item);
       const index = next.findIndex((saved) => saved.itemId === clean.itemId);
       if (index < 0) {
         next.push({ ...clean, status: "pending" });
@@ -217,7 +226,7 @@ function parseRedraft(value: unknown): string | null {
   }
 }
 
-function normalizeItem(item: ApprovalItem): ApprovalItem {
+function normalizeItem(item: ApprovalDraft): ApprovalItem {
   const itemId = item.itemId.trim();
   if (itemId === "" || itemId.includes("\n")) throw new ApprovalError("Approval item id is empty.");
   const text = item.text.trim();

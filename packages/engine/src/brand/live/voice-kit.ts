@@ -11,7 +11,7 @@ import { positioningLine } from "../story.ts";
 import { evidenceFromAnswers } from "../truth.ts";
 import { compileWhy } from "../why.ts";
 import { BANNED_WORDS, renderVoice } from "../voice.ts";
-import { recordDraftItems, type ApprovalItem } from "./approve.ts";
+import { recordDraftItems, type ApprovalDraft } from "./approve.ts";
 import {
   BRAND_VOICE_TASK,
   LiveShapeError,
@@ -99,7 +99,7 @@ function shape(brand: BrandFacts, model: VoiceModel): VoiceKit {
   };
 }
 
-function itemsFrom(kit: VoiceKit): ApprovalItem[] {
+function itemsFrom(kit: VoiceKit): ApprovalDraft[] {
   return [
     ...kit.traits.map((trait, index) => ({
       itemId: `voice:trait:${index + 1}`,

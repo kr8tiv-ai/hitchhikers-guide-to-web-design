@@ -160,7 +160,7 @@ function briefOk(brief: BriefFields, answers: readonly AnswerRecord[]): boolean 
     ]) {
       assertCleanProse("discovery", field);
     }
-    assertClaims(renderBrief(brief, answers, ""), evidenceFromAnswers(answers));
+    assertClaims(renderBrief(brief, answers, ""), evidenceFromAnswers([...answers]));
     return true;
   } catch {
     return false;

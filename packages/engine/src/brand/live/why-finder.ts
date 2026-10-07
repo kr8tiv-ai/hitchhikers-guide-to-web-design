@@ -135,7 +135,7 @@ function tryShape(answers: readonly AnswerRecord[], compiled: WhyCompile): WhyCo
     assertCleanProse("what", shaped.what);
     if (!/^to\b.+\bso that\b/i.test(shaped.why)) return null;
     if (principleCount(shaped.how) < 3) return null;
-    assertClaims([shaped.why, shaped.how, shaped.what].join("\n"), evidenceFromAnswers(answers));
+    assertClaims([shaped.why, shaped.how, shaped.what].join("\n"), evidenceFromAnswers([...answers]));
     return shaped;
   } catch {
     return null;

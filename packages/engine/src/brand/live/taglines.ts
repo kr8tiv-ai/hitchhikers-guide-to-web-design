@@ -10,7 +10,7 @@ import type { think } from "../../ai/think.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { evidenceFromAnswers } from "../truth.ts";
 import { selectTaglines } from "../voice.ts";
-import { recordDraftItems, type ApprovalItem } from "./approve.ts";
+import { recordDraftItems, type ApprovalDraft } from "./approve.ts";
 import {
   BRAND_TAGLINE_RANK_TASK,
   BRAND_TAGLINES_TASK,
@@ -166,8 +166,8 @@ function rankProblem(ranked: Ranked[] | null, all: readonly TaglineLine[], brand
   return null;
 }
 
-function itemsFrom(all: readonly TaglineLine[], top5: readonly Ranked[]): ApprovalItem[] {
-  const lines: ApprovalItem[] = all.map((line) => ({
+function itemsFrom(all: readonly TaglineLine[], top5: readonly Ranked[]): ApprovalDraft[] {
+  const lines: ApprovalDraft[] = all.map((line) => ({
     itemId: taglineItemId(line.style, indexInStyle(all, line)),
     kind: "tagline",
     text: line.text,
