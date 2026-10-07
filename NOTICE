@@ -312,3 +312,58 @@ pdf-lib 1.17.1
 
 ICO files are written in ico.ts from PNG bytes. png-to-ico is not installed.
 
+@hitchhiker/assets 3D pipeline (prompt 085)
+  Checked against the registry on 2026-10-07. Direct dependencies:
+
+  @gltf-transform/core 4.5.1
+    Registry: https://www.npmjs.com/package/@gltf-transform/core
+    Repository: github:donmccurdy/glTF-Transform
+      (https://github.com/donmccurdy/glTF-Transform)
+    License field: MIT
+    The project is glTF Transform, the glTF 2.0 SDK. optimize.ts reads and
+    writes GLB files with NodeIO.
+
+  @gltf-transform/functions 4.5.1
+    Registry: https://www.npmjs.com/package/@gltf-transform/functions
+    Repository: github:donmccurdy/glTF-Transform
+    License field: MIT
+    Same project. inspect, dedup, prune, draco, meshopt, and textureCompress.
+
+  @gltf-transform/extensions 4.5.1
+    Registry: https://www.npmjs.com/package/@gltf-transform/extensions
+    Repository: github:donmccurdy/glTF-Transform
+    License field: MIT
+    Same project. Registers KHR_draco_mesh_compression,
+    EXT_meshopt_compression, and KHR_mesh_quantization. Direct because
+    optimize.ts imports those classes.
+
+  meshoptimizer 1.3.0
+    Registry: https://www.npmjs.com/package/meshoptimizer
+    Repository: https://github.com/zeux/meshoptimizer
+    License field: MIT
+    The project is Arseny Kapoulkine's meshoptimizer. This is the encoder
+    and decoder for EXT_meshopt_compression. The earlier NOTICE line for
+    meshoptimizer 1.1.1 is a transitive of @types/three, not this pin.
+
+  draco3dgltf 1.5.7
+    Registry: https://www.npmjs.com/package/draco3dgltf
+    Repository: https://github.com/google/draco
+    License field: Apache-2.0
+    The glTF build of Google Draco. Apache-2.0 is allowed. draco3d (the
+    non-glTF build) is not installed.
+
+  Transitive dependencies of that pipeline, permissive, not GPL or AGPL:
+    property-graph 4.1.0, MIT, https://github.com/donmccurdy/property-graph
+    ktx-parse 1.1.0, MIT, https://github.com/donmccurdy/ktx-parse
+    ndarray 1.1.1, MIT, https://github.com/mikolalysenko/ndarray
+    ndarray-ops 1.2.2, MIT, https://github.com/mikolalysenko/ndarray-ops
+    ndarray-lanczos 0.3.0, MIT, https://github.com/donmccurdy/ndarray-lanczos
+    ndarray-pixels 5.2.0, MIT, https://github.com/donmccurdy/ndarray-pixels
+    sharp 0.35.5, Apache-2.0, https://github.com/lovell/sharp
+      sharp is not a direct dependency. ndarray-pixels pulls it in, and
+      textureCompress uses it when a texture is resized. Apache-2.0 is allowed.
+
+  The test fixture packages/assets/test/fixtures/three-d/triangle.glb is an
+  original one-triangle GLB written for this repo. Licence CC0-1.0. It is
+  not a downloaded model.
+
