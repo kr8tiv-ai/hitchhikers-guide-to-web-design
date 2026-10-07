@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "@types/three": "0.186.0",
     "opentype.js": "2.0.0"
   }
 }

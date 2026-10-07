@@ -6,7 +6,8 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts"],
   "references": [{ "path": "../engine" }]

@@ -39,7 +39,7 @@ pnpm -r run --if-present eval
 
 ## e2e.yml
 
-Job `e2e` runs on `ubuntu-latest` only. It installs dependencies the same way as `ci.yml`, installs Playwright's Chromium build when the `playwright` package is present, and runs `pnpm -r run --if-present e2e`. While no package defines `e2e`, that step is a no-op.
+Job `e2e` runs on `ubuntu-latest` only. It installs dependencies the same way as `ci.yml`, restores a Playwright browser cache keyed on the lockfile and `packages/app/package.json`, installs Chromium from `@hitchhiker/app` (the package that depends on `@playwright/test`), and runs `pnpm -r run --if-present e2e`. While no package defines `e2e`, that step is a no-op.
 
 ### Local equivalent (Windows PowerShell)
 
@@ -50,11 +50,11 @@ if (Test-Path pnpm-lock.yaml) {
   Write-Warning "No pnpm-lock.yaml yet. Falling back to pnpm install."
   pnpm install
 }
-pnpm exec playwright install chromium
+pnpm --filter @hitchhiker/app exec playwright install chromium
 pnpm -r run --if-present e2e
 ```
 
-`playwright install` downloads Chromium. On the Ubuntu runner the workflow also passes `--with-deps` so the OS libraries Chromium needs are present. Skip that flag on Windows. If `pnpm exec playwright` fails because the package is not installed yet, there is nothing to run.
+`playwright install` downloads Chromium into the Playwright cache. On the Ubuntu runner the workflow also passes `--with-deps` so the OS libraries Chromium needs are present. Skip that flag on Windows. Run the install through `@hitchhiker/app`, because a root `pnpm exec playwright` does not see that package's binary. If the filtered command fails because Playwright is not installed yet, there is nothing to run.
 
 ## audit.yml
 
@@ -84,9 +84,9 @@ Read the JSON for `GPL` and `AGPL` until `auditDeps` is in the tree. After promp
 
 ### Secret scan
 
-Job `secret-scan` checks out full history and runs `gitleaks/gitleaks-action` at v3.0.0, pinned by commit SHA. The step receives the automatic job token as `github.token`. It does not read a repository secret, and it does not set `GITLEAKS_LICENSE`.
+Job `secret-scan` checks out full history (`fetch-depth: 0`) and runs the free gitleaks CLI. It does not use `gitleaks/gitleaks-action`. It does not read a repository secret.
 
-That action asks for a licence key when the repository owner is a GitHub organization. This workflow leaves the key unset on purpose. If a future run stops for that reason, the fix is a steward decision outside this file. Do not add a secret reference here.
+The scan step downloads gitleaks 8.30.1 for `linux_x64` from the pinned GitHub release, checks the SHA-256 `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`, and runs `gitleaks detect --source . --redact`. That command scans git history. When `.gitleaks.toml` or `.gitleaksignore` is in the repo, gitleaks loads it. This repo has neither, so the scan uses the built-in rules. The CLI does not ask for a licence key, including when the repository owner is a GitHub organization.
 
 ### Local equivalent (Windows PowerShell)
 
@@ -94,4 +94,4 @@ That action asks for a licence key when the repository owner is a GitHub organiz
 gitleaks detect --source . --redact
 ```
 
-That is the same scanner the action installs. If `gitleaks` is not on `PATH`, download the Windows zip from the gitleaks releases page and run the binary in the repo root. No package manager is required.
+Use gitleaks 8.30.1 so the local scan matches CI. If `gitleaks` is not on `PATH`, download `gitleaks_8.30.1_windows_x64.zip` from the gitleaks releases page, check it against `gitleaks_8.30.1_checksums.txt` (SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`), and run the binary in the repo root. No package manager is required.

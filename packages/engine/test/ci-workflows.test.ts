@@ -131,11 +131,12 @@ test("audit workflow calls the prompt 156 licence audit and scans with pinned gi
   assert.match(licenceRun, /AGPL/);
   assert.match(licenceRun, /GPL/);
 
-  const uses = collectUses(doc);
-  assert.ok(uses.includes("gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e"));
+  const scanRuns = stepRuns(scan.steps).join("\n");
+  assert.match(scanRuns, /gitleaks detect|gitleaks git/);
+  assert.equal(raw.includes("gitleaks/gitleaks-action"), false);
+  assert.equal(raw.includes("GITLEAKS_LICENSE"), false);
   assertPinnedUses(raw, doc);
   assertNoSecretsOrRelease(raw, doc);
-  assert.equal(raw.includes("GITLEAKS_LICENSE"), false);
 });
 
 test("the workflow reader keeps mappings, flow lists, and block scalars", () => {

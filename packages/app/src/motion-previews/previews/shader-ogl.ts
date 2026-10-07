@@ -10,6 +10,39 @@ import {
   runWhenVisible,
 } from "../slider.ts";
 
+// ogl 1.0.11 ships Renderer, Triangle, Program, and Mesh as named exports.
+// The published types re-export them without a .js suffix, so under
+// moduleResolution nodenext only Texture3D.js stays visible. These
+// declarations match the constructors this preview calls.
+declare module "ogl" {
+  export class Renderer {
+    readonly gl: (WebGLRenderingContext | WebGL2RenderingContext) & { canvas: HTMLCanvasElement };
+    constructor(options?: { dpr?: number; alpha?: boolean; antialias?: boolean });
+    setSize(width: number, height: number): void;
+    render(options: { scene: Mesh }): void;
+  }
+
+  export class Triangle {
+    constructor(gl: Renderer["gl"]);
+  }
+
+  export class Program {
+    uniforms: { uTime: { value: number } };
+    constructor(
+      gl: Renderer["gl"],
+      options: {
+        vertex: string;
+        fragment: string;
+        uniforms: { uTime: { value: number } };
+      },
+    );
+  }
+
+  export class Mesh {
+    constructor(gl: Renderer["gl"], options: { geometry: Triangle; program: Program });
+  }
+}
+
 const WEBGL_ID = "shader";
 
 const VERTEX = `
@@ -41,9 +74,9 @@ export function mountPreview(el: HTMLElement): Promise<() => void> {
     }
     await ensureSharedTicker();
     try {
-      const ogl = await import("ogl");
+      const { Renderer, Triangle, Program, Mesh } = await import("ogl");
       const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
-      const renderer = new ogl.Renderer({ dpr, alpha: false, antialias: false });
+      const renderer = new Renderer({ dpr, alpha: false, antialias: false });
       const gl = renderer.gl;
       const canvas = gl.canvas;
       canvas.className = "hh-motion__gl";
@@ -51,13 +84,13 @@ export function mountPreview(el: HTMLElement): Promise<() => void> {
       const width = Math.max(320, el.clientWidth);
       const height = Math.max(200, el.clientHeight);
       renderer.setSize(width, height);
-      const geometry = new ogl.Triangle(gl);
-      const program = new ogl.Program(gl, {
+      const geometry = new Triangle(gl);
+      const program = new Program(gl, {
         vertex: VERTEX,
         fragment: FRAGMENT,
         uniforms: { uTime: { value: 0 } },
       });
-      const mesh = new ogl.Mesh(gl, { geometry, program });
+      const mesh = new Mesh(gl, { geometry, program });
       markLive(el);
       el.dataset.webglLive = "true";
       const off = onSharedTick((time) => {

@@ -35,13 +35,19 @@ jobs:
             pnpm install
           fi
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml', 'packages/app/package.json') }}
+
       - name: Install Playwright Chromium
         shell: bash
         run: |
-          if pnpm exec playwright --version; then
-            pnpm exec playwright install --with-deps chromium
+          if pnpm --filter @hitchhiker/app exec playwright --version; then
+            pnpm --filter @hitchhiker/app exec playwright install --with-deps chromium
           else
-            echo "::warning::Playwright is not installed in this workspace yet. Skipping the Chromium download."
+            echo "::warning::Playwright is not installed in @hitchhiker/app yet. Skipping the Chromium download."
           fi
 
       - name: End-to-end tests

@@ -107,9 +107,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Free CLI. A pinned linux_x64 release, checksum-checked, then a full-history scan.
+      # gitleaks loads .gitleaks.toml or .gitleaksignore from the repo when one is present.
       - name: Scan for secrets
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          # Automatic job token. Not a repository secret.
-          GITHUB_TOKEN: ${{ github.token }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="8.30.1"
+          asset="gitleaks_${version}_linux_x64.tar.gz"
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/${asset}" -o "${asset}"
+          printf '%s  %s\n' "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" "${asset}" | sha256sum -c -
+          tar -xzf "${asset}" gitleaks
+          chmod +x gitleaks
+          ./gitleaks detect --source . --redact
+          rm -f "${asset}" gitleaks

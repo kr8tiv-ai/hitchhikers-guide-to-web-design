@@ -80,25 +80,7 @@ export const THEATRE_PREVIEW_STATE: TheatrePreviewState = {
   revisionHistory: ["hh-motion-preview"],
 };
 
-interface TheatreApi {
-  getProject: (id: string, config?: { state?: object }) => TheatreProject;
-  createRafDriver: (conf: { name?: string; start?: () => void; stop?: () => void }) => { tick: (time: number) => void };
-}
-
-interface TheatreProject {
-  sheet: (name: string) => TheatreSheet;
-}
-
-interface TheatreSheet {
-  object: (name: string, props: { x: number }) => {
-    onValuesChange: (fn: (values: { x: number }) => void) => () => void;
-  };
-  sequence: {
-    play: (opts: { rafDriver: { tick: (time: number) => void }; iterationCount: number; range: [number, number] }) => Promise<unknown>;
-    pause?: () => void;
-    position: number;
-  };
-}
+type TheatreCore = Pick<typeof import("@theatre/core"), "getProject" | "createRafDriver">;
 
 function isState(value: unknown): value is TheatrePreviewState {
   if (value === null || typeof value !== "object") return false;
@@ -106,7 +88,7 @@ function isState(value: unknown): value is TheatrePreviewState {
   return record.definitionVersion === "0.4.0" && typeof record.sheetsById === "object" && record.sheetsById !== null;
 }
 
-function readApi(loaded: { default?: TheatreApi; getProject?: TheatreApi["getProject"]; createRafDriver?: TheatreApi["createRafDriver"] }): TheatreApi {
+function readApi(loaded: TheatreCore & { default?: TheatreCore }): TheatreCore {
   if (loaded.default !== undefined && typeof loaded.default.getProject === "function") return loaded.default;
   if (typeof loaded.getProject === "function" && typeof loaded.createRafDriver === "function") {
     return { getProject: loaded.getProject, createRafDriver: loaded.createRafDriver };
