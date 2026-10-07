@@ -149,6 +149,8 @@ test("a lenis plan wires ScrollTrigger on gsap.ticker and skips the css timeline
   assert.ok(start.indexOf("prefersReducedMotion") < start.indexOf("new Lenis"));
   const bind = source.slice(functionSpan(source, "bindGsap").start, functionSpan(source, "bindGsap").end);
   assert.ok(bind.indexOf("prefersReducedMotion") < bind.indexOf("scrub"));
+  const gate = source.slice(functionSpan(source, "onThisPage").start, functionSpan(source, "onThisPage").end);
+  assert.match(gate, /return current\.length === 0 \|\| current === page;/);
   const imports = staticImports(source).join("\n");
   assert.equal(imports.includes('from "three"'), false);
   assert.equal(imports.includes('from "ogl"'), false);
@@ -341,6 +343,11 @@ test("lenis and native pages can share a module without sharing a scroller", () 
   assert.equal(source.includes('data-hh-motion="stage"'), false);
   assert.match(source, /\["home"\]\.some\(\(page\) => onThisPage\(page\)\)\) startLenis\(\)/);
   assert.match(source, /\["about"\]\.some\(\(page\) => onThisPage\(page\)\)\) installNativeTimeline\(\)/);
+  const gate = source.slice(functionSpan(source, "onThisPage").start, functionSpan(source, "onThisPage").end);
+  assert.match(gate, /An unset page must not start both scroll owners/);
+  assert.match(gate, /if \(page\.length === 0\) return false;/);
+  assert.match(gate, /return current === page;/);
+  assert.equal(gate.includes("current.length === 0"), false);
   assertSingleTicker(source, true);
 });
 

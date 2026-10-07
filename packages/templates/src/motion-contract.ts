@@ -286,6 +286,34 @@ function bootWhenAny(pages: readonly string[], statement: string): string {
   return `  if (${JSON.stringify(list)}.some((page) => onThisPage(page))) ${statement}`;
 }
 
+function scrollOwnersConflict(plan: MotionPlan): boolean {
+  const owners = new Set(Object.values(plan.scrollOwner));
+  return owners.has("lenis+scrolltrigger") && owners.has("native");
+}
+
+function onThisPageLines(plan: MotionPlan): string[] {
+  if (scrollOwnersConflict(plan)) {
+    return [
+      "function onThisPage(page: string): boolean {",
+      "  // An unset page must not start both scroll owners.",
+      "  if (page.length === 0) return false;",
+      "  const current = document.documentElement.dataset.page ?? \"\";",
+      "  return current === page;",
+      "}",
+      "",
+    ];
+  }
+  return [
+    "// Set documentElement.dataset.page to the MOTION.md page name.",
+    "function onThisPage(page: string): boolean {",
+    "  if (page.length === 0) return true;",
+    "  const current = document.documentElement.dataset.page ?? \"\";",
+    "  return current.length === 0 || current === page;",
+    "}",
+    "",
+  ];
+}
+
 function renderMotionModule(plan: MotionPlan): string {
   assertExclusive(plan);
   const effects = effectsOf(plan);
@@ -411,15 +439,7 @@ function renderMotionModule(plan: MotionPlan): string {
   const boot: string[] = [];
   const needsPageGate = effects.length > 0 || lenisOn || nativeOn;
   if (needsPageGate) {
-    lines.push(
-      "// Set documentElement.dataset.page to the MOTION.md page name.",
-      "function onThisPage(page: string): boolean {",
-      "  if (page.length === 0) return true;",
-      "  const current = document.documentElement.dataset.page ?? \"\";",
-      "  return current.length === 0 || current === page;",
-      "}",
-      "",
-    );
+    lines.push(...onThisPageLines(plan));
   }
 
   if (lenisOn) {
