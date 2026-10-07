@@ -62,6 +62,21 @@ test("a tagline of 5 stars with empty evidence throws", () => {
   );
 });
 
+test("a sale, a follower count, or a multi-digit rating cannot be claimed", () => {
+  const base = {
+    name: "North Glass",
+    tagline: "Glass, cut slow.",
+    palette,
+    evidence: empty,
+  };
+  assert.throws(() => renderSocial({ ...base, offer: "panes on sale this week" }), /claims a sale/);
+  assert.throws(() => renderSocial({ ...base, offer: "sheets for sale" }), /claims a sale/);
+  assert.throws(() => renderSocial({ ...base, tagline: "Glass, cut slow.", offer: "12000 followers and a shop" }), /follower count/);
+  assert.throws(() => renderSocial({ ...base, offer: "12k followers" }), /follower count/);
+  assert.throws(() => renderSocial({ ...base, tagline: "10 stars", offer: "hand-cut glass" }), /star rating/);
+  assert.throws(() => renderSocial({ ...base, tagline: "five stars", offer: "hand-cut glass" }), /star rating/);
+});
+
 test("an exclamation mark is rejected and a hashtag in the offer is stripped", () => {
   assert.throws(
     () =>

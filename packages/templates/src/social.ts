@@ -26,6 +26,11 @@ export interface SocialFrame {
 const WORD_CAP = 39;
 const NAME_CAP = 24;
 
+/** Ratings and counts the brand truth gate does not spell out. Digit-plus-star still goes through lintClaims first. */
+const SALE_CLAIM = /\b(?:on sale|for sale|flash sale|half off)\b/i;
+const FOLLOWER_CLAIM = /\b\d[\d,.]*\s*[kmb]?\s*followers?\b|\bfollower counts?\b/i;
+const STAR_CLAIM = /\b\d[\d.]*\s+stars?\b|\b(?:one|two|three|four|five|ten)\s+stars?\b/i;
+
 const HEX = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export function renderSocial(input: SocialInput): SocialFrame {
@@ -45,6 +50,9 @@ export function renderSocial(input: SocialInput): SocialFrame {
   if (!lint.ok) {
     const detail = lint.hits.map((hit) => hit.pattern).join(", ");
     throw new Error(`Social captions failed the truth gate: ${detail}.`);
+  }
+  for (const caption of captions) {
+    assertUnclaimed(caption);
   }
   return { captions, svg: frame(clipChars(stripHashes(input.name).trim(), NAME_CAP), palette) };
 }
@@ -74,6 +82,12 @@ function buildCaptions(name: string, tagline: string, offer: string): string[] {
     sentence(work === "" ? `${line}. From ${who}` : `${who}. ${work}`),
     sentence(work === "" ? `${who}. ${line}` : `${line}. ${work}`),
   ];
+}
+
+function assertUnclaimed(caption: string): void {
+  if (SALE_CLAIM.test(caption)) throw new Error("A social caption claims a sale.");
+  if (FOLLOWER_CLAIM.test(caption)) throw new Error("A social caption claims a follower count.");
+  if (STAR_CLAIM.test(caption)) throw new Error("A social caption claims a star rating.");
 }
 
 function assertVoice(caption: string): void {
