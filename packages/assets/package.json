@@ -16,7 +16,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hitchhiker/engine": "workspace:*"
+    "@hitchhiker/engine": "workspace:*",
+    "@visioncortex/vtracer": "1.0.0-alpha.4",
+    "opentype.js": "2.0.0",
+    "svgo": "4.1.0"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts"

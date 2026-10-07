@@ -107,8 +107,11 @@ opentype.js 2.0.0
   Registry: https://www.npmjs.com/package/opentype.js
   Repository: https://github.com/opentypejs/opentype.js
   License: MIT
-  Dev-only. Used to outline the display face into wordmark.svg.
-  Not imported by the app at runtime.
+  Dev dependency of @hitchhiker/app. Used to outline the display face
+  into wordmark.svg. Not imported by the app at runtime.
+  @hitchhiker/assets depends on the same pin at runtime for logo wordmarks.
+  Version 2.0.0 loadSync only prints a deprecation line. The wordmark
+  reads the font bytes and calls parse.
 
 @types/three 0.186.0
   Registry: https://www.npmjs.com/package/@types/three
@@ -206,4 +209,66 @@ from the network. Estimates must be recomputed if the card changes.
 SuperGrok is not a billing source for these API jobs. DIY mode sends no
 request. API mode uses the caller's own key and stops when the estimate
 is above the remaining dollar cap.
+
+@hitchhiker/assets logo pipeline
+--------------------------------
+
+opentype.js 2.0.0
+  See the entry above. Runtime dependency of @hitchhiker/assets.
+  License field on the installed package: MIT.
+  Repository: https://github.com/opentypejs/opentype.js
+  The project is opentype.js. Wordmark outlines call parse on the font
+  bytes. Imagine rasters are not traced into the wordmark.
+
+@visioncortex/vtracer 1.0.0-alpha.4
+  Registry: https://www.npmjs.com/package/@visioncortex/vtracer
+  Repository: https://github.com/visioncortex/vtracer
+  Directory: nodejs
+  License field: MIT OR Apache-2.0
+  Installed package.json license field matches. Repo LICENSE is MIT,
+  copyright 2024 TSANG, Hao Fung.
+  https://github.com/visioncortex/vtracer/blob/master/LICENSE
+  Pinned. The registry versions are alpha.1 through alpha.4 only.
+  There is no newer stable of this package name. The unscoped package
+  vtracer 1.0.8 (ISC, https://github.com/vessp/vtracer) is a different
+  project and is not installed. Potrace is not installed.
+  Call used: convertBuffer(png, { preset: "bw", mode: "spline" }).
+  It returns an SVG string. No native addon.
+
+svgo 4.1.0
+  Registry: https://www.npmjs.com/package/svgo
+  Repository: https://github.com/svg/svgo
+  License field: MIT
+  The project is SVGO. svgoOptimize calls optimize from this package.
+  Transitive dependencies, all permissive, none GPL or AGPL:
+    commander 11.1.0 MIT
+    css-select 6.0.0 BSD-2-Clause
+    css-tree 3.2.1 MIT, and css-tree 2.2.1 MIT via csso
+    css-what 7.0.0 BSD-2-Clause
+    csso 5.0.5 MIT
+    picocolors 1.1.1 ISC
+    sax 1.6.1 BlueOak-1.0.0 (permissive model license, not GPL, not AGPL)
+    boolbase 1.0.0 ISC
+    domhandler 5.0.3 BSD-2-Clause
+    domutils 3.2.2 BSD-2-Clause
+    dom-serializer 2.0.0 MIT
+    domelementtype 2.3.0 BSD-2-Clause
+    entities 4.5.0 BSD-2-Clause
+    nth-check 2.1.1 BSD-2-Clause
+    mdn-data 2.27.1 and 2.0.28 CC0-1.0
+    source-map-js 1.2.2 BSD-3-Clause
+
+VT323 (logo wordmark test fixture)
+  Copyright 2011, The VT323 Project Authors (peter.hull@oikoi.com)
+  Designer: Peter Hull
+  License: SIL Open Font License 1.1. This is not MIT. The font stays
+  under the OFL when redistributed. Documents set in the font are not
+  covered by that requirement.
+  License file: packages/assets/test/fixtures/fonts/OFL.txt
+  Font file: packages/assets/test/fixtures/fonts/VT323-Regular.ttf
+  Upstream: https://github.com/google/fonts/tree/main/ofl/vt323
+  Name-table license URL: http://scripts.sil.org/OFL
+  One weight, used only so wordmark tests can shape real glyphs.
+  Production wordmarks use the type pair approved for the brand, with
+  that licence recorded when the file is downloaded.
 

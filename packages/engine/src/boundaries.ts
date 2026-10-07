@@ -13,7 +13,8 @@ export interface PackageBoundary {
  * Nothing may depend on the cli package. grok-plugin stays isolated.
  * allowDeps values are workspace:*. allowExternal names a pinned package
  * from a later prompt (gsap on the app, prompt 010; the motion toolkit
- * on the app, prompt 038; pdfjs-dist on the engine, prompt 025).
+ * on the app, prompt 038; pdfjs-dist on the engine, prompt 025;
+ * opentype.js, @visioncortex/vtracer, and svgo on assets, prompt 055).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
@@ -27,7 +28,11 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "hitchhikers-guide", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/voice", allowDeps: [] },
   { name: "@hitchhiker/crawler", allowDeps: [] },
-  { name: "@hitchhiker/assets", allowDeps: ["@hitchhiker/engine"] },
+  {
+    name: "@hitchhiker/assets",
+    allowDeps: ["@hitchhiker/engine"],
+    allowExternal: ["@visioncortex/vtracer", "opentype.js", "svgo"],
+  },
   { name: "@hitchhiker/qa", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/knowledge", allowDeps: [] },
