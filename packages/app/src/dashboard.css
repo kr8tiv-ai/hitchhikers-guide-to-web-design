@@ -1,0 +1,163 @@
+/* Drive desk. Colour, type, and chrome come from the shell tokens. */
+
+.hh-drive {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hh-drive .hh-headline,
+.hh-drive .hh-title,
+.hh-drive .hh-empty__title,
+.hh-drive .hh-error__title {
+  margin: 0;
+  text-wrap: balance;
+}
+
+.hh-drive .hh-dek,
+.hh-drive .hh-small,
+.hh-drive p,
+.hh-drive figcaption {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.hh-drive__main,
+.hh-drive__rest {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hh-drive__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hh-drive .hh-approval .hh-btn {
+  max-width: 100%;
+}
+
+.hh-drive .hh-approval__note {
+  flex: 1 1 100%;
+}
+
+.hh-drive button[aria-disabled="true"] {
+  color: var(--color-muted);
+  border-color: color-mix(in srgb, var(--color-ink) 18%, transparent);
+  background: transparent;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hh-drive .hh-table-wrap,
+.hh-drive .hh-table {
+  max-width: 100%;
+}
+
+.hh-drive .hh-table th,
+.hh-drive .hh-table td,
+.hh-drive__id {
+  overflow-wrap: anywhere;
+}
+
+.hh-drive__status {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.hh-drive__status--passed {
+  color: var(--color-success);
+}
+
+.hh-drive .hh-phase-mark__num {
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-drive__frames {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.hh-drive__frame {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--space-9);
+  display: grid;
+  align-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed color-mix(in srgb, var(--color-ink) 28%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+
+.hh-drive__log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hh-drive__verdict {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.hh-drive__log a {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  overflow-wrap: break-word;
+  text-underline-offset: 0.18em;
+}
+
+.hh-drive__ledger {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.hh-drive__ledger div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+
+.hh-drive__ledger dt,
+.hh-drive__ledger dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.hh-drive__ledger dt {
+  color: var(--color-muted);
+}
+
+.hh-drive__rest section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+
+@media (min-width: 768px) {
+  .hh-drive__frames {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
