@@ -161,3 +161,13 @@ export {
 export type { PkcePair, XOAuthField } from "./x-oauth.ts";
 export { WhyError, compileWhy } from "./brand/index.ts";
 export type { WhyDraft } from "./brand/index.ts";
+export {
+  ARCHETYPES,
+  StoryError,
+  buildStory,
+  countWords,
+  expandOnly,
+  pickArchetype,
+  positioningLine,
+} from "./brand/index.ts";
+export type { ArchetypePick, StoryPack } from "./brand/index.ts";
