@@ -171,3 +171,5 @@ export {
   positioningLine,
 } from "./brand/index.ts";
 export type { ArchetypePick, StoryPack } from "./brand/index.ts";
+export { buildTeardown } from "./brand/index.ts";
+export type { TeardownInput } from "./brand/index.ts";
