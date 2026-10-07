@@ -19,6 +19,6 @@
     "@hitchhiker/engine": "workspace:*"
   },
   "scripts": {
-    "test": "node -e \"process.exit(0)\""
+    "test": "node --experimental-strip-types --test test/**/*.test.ts"
   }
 }

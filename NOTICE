@@ -194,3 +194,16 @@ not fetch Godly or Awwwards, and it does not assume a Godly API. Site of
 the Day is not labeled Site of the Year. A live refresh runs only when a
 caller passes a fetcher and a non-empty allow list.
 
+Imagine price card (2026-09-29)
+-------------------------------
+
+packages/assets/src/prices.ts holds Imagine output prices from the official
+xAI card dated 2026-09-29:
+https://docs.x.ai/developers/pricing
+
+The table is a snapshot, not a live feed. The package does not read prices
+from the network. Estimates must be recomputed if the card changes.
+SuperGrok is not a billing source for these API jobs. DIY mode sends no
+request. API mode uses the caller's own key and stops when the estimate
+is above the remaining dollar cap.
+
