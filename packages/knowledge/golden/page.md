@@ -8,6 +8,7 @@ Build one section. Fill the real copy slots with lines from the brand. Ban lorem
 
 - src/components/[SectionName].astro
 - [page], placed after [previous section]
+- Slots: {{library}} {{element}} {{page}} {{section}} {{anchor}} {{files}}
 
 Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not paste that file into this prompt, so the rules cannot drift.
 
@@ -51,5 +52,40 @@ prohibitions:
 # Verify
 
 Load [page]. Read the headline and the copy. Confirm both are real, the section follows [previous section], and nothing animates.
+
+<objective>
+Add one section with real copy and layout. Motion comes later.
+</objective>
+
+<read_first>
+@.hitchhiker/CONTEXT.md#{{anchor}}
+</read_first>
+
+<task>
+Build the {{section}} section on {{page}} in {{files}}. Headline "[headline]", copy "[copy]". Use only brand fonts and colors. Mobile first, then desktop. No effects yet; motion comes in a later prompt. Do not import {{library}} onto {{element}}.
+</task>
+
+<must_haves>
+truths:
+- The section has one job, a real headline, and real copy.
+artifacts:
+- {{files}}
+key_links:
+- {{section}} is added to {{page}} and to no other route in this prompt.
+prohibitions:
+- Do not write lorem ipsum or placeholder copy.
+</must_haves>
+
+<verify>
+Load {{page}}. Read the headline and the copy. Confirm both are real and nothing animates.
+</verify>
+
+<report_back>
+At most 150 words. Name the files, what changed, and anything assumed.
+</report_back>
+
+<commit>
+feat(site): {{section}}
+</commit>
 
 Method and prompt wording from Matt Haynes's AntiHero guides (antihero.community), used with permission.

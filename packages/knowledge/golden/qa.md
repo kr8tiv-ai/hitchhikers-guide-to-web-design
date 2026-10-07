@@ -6,6 +6,7 @@ Open every page in a real browser and catch what broke. Pass Lighthouse mobile 9
 
 - tests/qa.spec.ts
 - /qa/screenshots
+- Slots: {{library}} {{element}} {{page}} {{section}} {{anchor}} {{files}}
 
 Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not paste that file into this prompt, so the rules cannot drift.
 
@@ -49,5 +50,40 @@ prohibitions:
 # Verify
 
 Run npm run build, the Playwright tests, axe, and Lighthouse on real mobile. All four scores are at least 90. Console errors are zero at 375 and at 1440. Protected files are unchanged in git diff.
+
+<objective>
+Open every page in a real browser and catch what broke.
+</objective>
+
+<read_first>
+@.hitchhiker/CONTEXT.md#{{anchor}}
+</read_first>
+
+<task>
+Install Playwright as a dev dependency. Write {{files}} so every {{page}} at 375, 768, 1440, and 1920 fails on any console error or 404. Check {{section}} and {{element}}. Do not import {{library}} as a second effect library. Lighthouse mobile 90 in all four categories on real mobile runs. Zero console errors.
+</task>
+
+<must_haves>
+truths:
+- Every page loads at 375 and at 1440 with zero console errors.
+artifacts:
+- {{files}}
+key_links:
+- The suite walks 375 and 1440 for every page.
+prohibitions:
+- Do not ship with console errors.
+</must_haves>
+
+<verify>
+Run npm run build, the Playwright tests, axe, and Lighthouse on real mobile.
+</verify>
+
+<report_back>
+At most 150 words. Name the files, what changed, and anything assumed.
+</report_back>
+
+<commit>
+feat(site): {{section}}
+</commit>
 
 Method and prompt wording from Matt Haynes's AntiHero guides (antihero.community), used with permission.

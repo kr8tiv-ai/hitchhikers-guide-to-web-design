@@ -8,6 +8,7 @@ Add one effect on {{element}} by importing only {{library}}.
 
 - The component or script that renders {{element}}
 - src/scripts/motion.ts, for shared eases, durations, and the prefers-reduced-motion check
+- Slots: {{library}} {{element}} {{page}} {{section}} {{anchor}} {{files}}
 
 Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not paste that file into this prompt, so the rules cannot drift.
 
@@ -54,5 +55,40 @@ prohibitions:
 # Verify
 
 Scroll {{element}} into view, then repeat with prefers-reduced-motion. Confirm the import list adds only {{library}}, the effect plays once, and reduced motion is simply visible.
+
+<objective>
+Add one effect on {{element}} by importing only {{library}}.
+</objective>
+
+<read_first>
+@.hitchhiker/CONTEXT.md#{{anchor}}
+</read_first>
+
+<task>
+On {{page}}, in {{section}}, edit {{files}}. Import only {{library}} for {{element}}. Do not also bind this element with another library. Motion must feel confident and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and opacity. Reduced motion: everything is simply visible.
+</task>
+
+<must_haves>
+truths:
+- {{element}} has one effect, and that effect imports only {{library}}.
+artifacts:
+- {{files}}
+key_links:
+- The new import for {{element}} is {{library}} and no other MotionLib.
+prohibitions:
+- Do not import a motion library other than {{library}}.
+</must_haves>
+
+<verify>
+Scroll {{element}} into view, then repeat with prefers-reduced-motion. Confirm the import list adds only {{library}}.
+</verify>
+
+<report_back>
+At most 150 words. Name the files, what changed, and anything assumed.
+</report_back>
+
+<commit>
+feat(site): {{section}}
+</commit>
 
 Method and prompt wording from Matt Haynes's AntiHero guides (antihero.community), used with permission.
