@@ -16,7 +16,9 @@ export interface PackageBoundary {
  * on the app, prompt 038; pdfjs-dist on the engine, prompt 025;
  * opentype.js, @visioncortex/vtracer, and svgo on assets, prompt 055;
  * @resvg/resvg-js and pdf-lib on assets, prompt 063;
- * templates on engine for the brand truth gate, prompt 065).
+ * templates on engine for the brand truth gate, prompt 065;
+ * @gltf-transform/core, @gltf-transform/extensions, @gltf-transform/functions,
+ * draco3dgltf, and meshoptimizer on assets for 3D optimization, prompt 085).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
@@ -33,7 +35,18 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   {
     name: "@hitchhiker/assets",
     allowDeps: ["@hitchhiker/engine"],
-    allowExternal: ["@resvg/resvg-js", "@visioncortex/vtracer", "opentype.js", "pdf-lib", "svgo"],
+    allowExternal: [
+      "@gltf-transform/core",
+      "@gltf-transform/extensions",
+      "@gltf-transform/functions",
+      "@resvg/resvg-js",
+      "@visioncortex/vtracer",
+      "draco3dgltf",
+      "meshoptimizer",
+      "opentype.js",
+      "pdf-lib",
+      "svgo",
+    ],
   },
   { name: "@hitchhiker/qa", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },

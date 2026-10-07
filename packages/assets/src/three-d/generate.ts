@@ -140,7 +140,11 @@ export async function generate3d(
     throw new GenerationFailedError("The prompt is longer than 1024 characters. Nothing was sent.");
   }
 
-  const quote = quoteGeneration({ ...req, prompt: prompt ?? undefined, image: image ?? undefined });
+  const quote = quoteGeneration({
+    provider: req.provider,
+    ...(prompt === null ? {} : { prompt }),
+    ...(image === null ? {} : { image }),
+  });
   if (!Number.isFinite(deps.cap) || deps.cap < 0) {
     throw new GenerationFailedError("The dollar cap must be a finite number of zero or more.");
   }
