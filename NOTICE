@@ -367,3 +367,111 @@ ICO files are written in ico.ts from PNG bytes. png-to-ico is not installed.
   original one-triangle GLB written for this repo. Licence CC0-1.0. It is
   not a downloaded model.
 
+Generated-site starters (prompt 086)
+------------------------------------
+
+Checked against the registry on 2026-10-07. These packages are dependencies
+of packages/templates/astro-default, packages/templates/next-app, and
+packages/templates/vite-react-world. They are not dependencies of the Guide
+workspace. @theatre/studio (AGPL-3.0) is not installed and is not fetched.
+The blank page does not import the motion libraries. Each effect file
+imports only the library that effect uses.
+
+Pins already recorded above, same registry project and licence, used here
+at the same version unless a line says otherwise:
+
+  gsap 3.15.0. License field: Standard 'no charge' license:
+    https://gsap.com/standard-license
+    Repository: https://github.com/greensock/GSAP
+  lenis 1.3.26. MIT. https://github.com/darkroomengineering/lenis
+  ogl 1.0.11. Unlicense. https://github.com/oframe/ogl
+    Registry repository field: git+https://gordonnl@github.com/oframe/ogl.git
+  motion 14.0.0. MIT. https://github.com/motiondivision/motion
+  animejs 4.5.0. MIT. https://github.com/juliangarnier/anime
+  @theatre/core 0.7.2. Apache-2.0. https://github.com/AriaMinaei/theatre
+  sharp 0.35.5. Apache-2.0. https://github.com/lovell/sharp
+    Direct dependency of each starter so optimize-media can write AVIF
+    and WebP. The Guide assets pipeline also pulls this version in.
+  typescript 5.9.3. Apache-2.0. https://github.com/microsoft/TypeScript
+    The registry also publishes 7.0.2. Starters stay on 5.9.3, the
+    toolchain this repo already uses.
+  @types/node 22.20.5. MIT. DefinitelyTyped.
+  @playwright/test 1.63.0. Apache-2.0. https://github.com/microsoft/playwright
+    Not installed in the starters. tests/qa.spec.ts imports it. Install
+    this pin to run the phone checks. It is not part of the blank bundle.
+
+three 0.186.1
+  Registry: https://www.npmjs.com/package/three
+  Repository: https://github.com/mrdoob/three.js
+  License field: MIT
+  The project is three.js. The Guide app stays on three 0.186.0. The
+  starters use 0.186.1. That build's package exports do not point at a
+  declaration file, so the starters also install the types below.
+
+@types/three 0.186.0
+  Registry: https://www.npmjs.com/package/@types/three
+  Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+  Directory: types/three
+  License field: MIT
+  There is no 0.186.1 types package. 0.186.0 is the matching types line.
+  Dev dependency only. The blank page does not import it.
+
+astro 7.3.6
+  Registry: https://www.npmjs.com/package/astro
+  Repository: https://github.com/withastro/astro
+  License field: MIT
+  Direct dependency of hh-starter-astro only.
+
+@astrojs/react 7.0.1
+  Registry: https://www.npmjs.com/package/@astrojs/react
+  Repository: https://github.com/withastro/astro
+  License field: MIT
+  Same project as astro. Direct dependency of hh-starter-astro only.
+
+next 16.4.0
+  Registry: https://www.npmjs.com/package/next
+  Repository: https://github.com/vercel/next.js
+  License field: MIT
+  Direct dependency of hh-starter-next only.
+
+vite 8.3.3
+  Registry: https://www.npmjs.com/package/vite
+  Repository: https://github.com/vitejs/vite
+  License field: MIT
+  Dev dependency of hh-starter-vite only.
+
+@vitejs/plugin-react 6.1.2
+  Registry: https://www.npmjs.com/package/@vitejs/plugin-react
+  Repository: https://github.com/vitejs/vite-plugin-react
+  License field: MIT
+  Dev dependency of hh-starter-vite only.
+
+react 19.3.0 and react-dom 19.3.0
+  Registry: https://www.npmjs.com/package/react
+  Repository: https://github.com/react/react
+  License field: MIT
+  react-dom is the same repository and MIT. Both are direct dependencies
+  of all three starters.
+
+@types/react 19.3.0 and @types/react-dom 19.3.0
+  Registry: https://www.npmjs.com/package/@types/react
+  Repository: https://github.com/DefinitelyTyped/DefinitelyTyped
+  License field: MIT
+  Dev dependencies. @types/react-dom is the same repository and MIT.
+
+@keystatic/core 0.6.9
+  Registry: https://www.npmjs.com/package/@keystatic/core
+  Repository: https://github.com/Thinkmill/keystatic
+  License field: MIT
+  Not installed. The blog recipe documents this pin for the optional
+  editor. The recipe builds a config object and does not import the
+  package. Install it only when the editor is wanted.
+
+@lhci/cli 0.15.1 and lighthouse 13.5.0
+  Used to measure the blank pages. Not installed as dependencies.
+  @lhci/cli: Apache-2.0, https://github.com/GoogleChrome/lighthouse-ci
+  lighthouse: Apache-2.0, https://github.com/GoogleChrome/lighthouse
+
+Starter pages ship no font files and no borrowed media. CREDITS.json
+starts empty. fetch-assets accepts CC0 and CC-BY-4.0 only.
+

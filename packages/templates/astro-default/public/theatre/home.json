@@ -1,0 +1,17 @@
+{
+  "sheetsById": {
+    "Hero": {
+      "staticOverrides": {
+        "byObject": {}
+      },
+      "sequence": {
+        "type": "PositionalSequence",
+        "length": 2,
+        "subUnitsPerUnit": 30,
+        "tracksByObject": {}
+      }
+    }
+  },
+  "revisionHistory": ["hh-starter-1"],
+  "definitionVersion": "0.4.0"
+}

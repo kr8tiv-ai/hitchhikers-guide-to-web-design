@@ -1,0 +1,31 @@
+---
+import credits from "../data/credits.json";
+import Base from "../layouts/Base.astro";
+
+const title = "Credits";
+const description = "Borrowed media for this starter. The list matches CREDITS.json.";
+---
+
+<Base title={title} description={description} canonical="https://example.com/credits">
+  <header class="top">
+    <p class="mark">Starter</p>
+    <a class="credits" href="/">Home</a>
+  </header>
+  <main id="content">
+    <p class="kicker">Credits</p>
+    <h1>Borrowed media.</h1>
+    {
+      credits.assets.length === 0 ? (
+        <p class="dek">No borrowed media is checked in.</p>
+      ) : (
+        <ul class="credits-list">
+          {credits.assets.map((asset) => (
+            <li>
+              {asset.file}. {asset.author}. {asset.license}. {asset.source}.
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </main>
+</Base>

@@ -1,0 +1,21 @@
+---
+import Base from "../layouts/Base.astro";
+
+const title = "Astro starter";
+const description = "A blank Astro page. The motion toolkit is installed and this page loads none of it.";
+---
+
+<Base title={title} description={description} canonical="https://example.com/">
+  <header class="top">
+    <p class="mark">Starter</p>
+    <a class="credits" href="/credits">Credits</a>
+  </header>
+  <main id="content">
+    <p class="kicker">Astro</p>
+    <h1>A quiet page.</h1>
+    <p class="dek">The toolkit is installed. This page loads none of it. Import one effect when a section needs it.</p>
+  </main>
+  <footer>
+    <p>GSAP, Lenis, Three, OGL, Motion, anime.js, Theatre core, CSS scroll, and vanilla helpers ship as separate imports.</p>
+  </footer>
+</Base>

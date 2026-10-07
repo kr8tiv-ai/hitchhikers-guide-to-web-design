@@ -1,0 +1,30 @@
+---
+interface Props {
+  provider: "plausible" | "umami" | "ga4";
+  domain?: string;
+  websiteId?: string;
+  scriptSrc?: string;
+  measurementId?: string;
+}
+const { provider, domain, websiteId, scriptSrc, measurementId } = Astro.props;
+---
+
+{
+  provider === "plausible" && domain ? (
+    <script defer data-domain={domain} src="https://plausible.io/js/script.js"></script>
+  ) : null
+}
+{
+  provider === "umami" && websiteId && scriptSrc ? (
+    <script defer src={scriptSrc} data-website-id={websiteId}></script>
+  ) : null
+}
+{
+  provider === "ga4" ? (
+    <div class="hh-consent" data-measurement={measurementId ?? ""}>
+      <p>This site can record visits with Google Analytics. Nothing is sent until you allow it.</p>
+      <button type="button" data-consent="granted">Allow</button>
+      <button type="button" data-consent="denied">Refuse</button>
+    </div>
+  ) : null
+}

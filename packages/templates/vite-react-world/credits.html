@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Credits</title>
+    <meta name="description" content="Borrowed media for this starter. The list matches CREDITS.json." />
+    <link rel="canonical" href="https://example.com/credits.html" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#f3ecdf" />
+    <link rel="stylesheet" href="/src/styles/blank.css" />
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="top">
+      <p class="mark">Starter</p>
+      <a class="credits" href="/">Home</a>
+    </header>
+    <main id="content">
+      <p class="kicker">Credits</p>
+      <h1>Borrowed media.</h1>
+      <p class="dek" id="credits-copy">No borrowed media is checked in.</p>
+      <ul class="credits-list" id="credits-list"></ul>
+    </main>
+    <script>
+      fetch("/credits/CREDITS.json")
+        .then((response) => response.json())
+        .then((data) => {
+          const assets = Array.isArray(data.assets) ? data.assets : [];
+          const copy = document.getElementById("credits-copy");
+          const list = document.getElementById("credits-list");
+          if (!(copy instanceof HTMLElement) || !(list instanceof HTMLElement)) return;
+          if (assets.length === 0) return;
+          copy.hidden = true;
+          for (const asset of assets) {
+            const item = document.createElement("li");
+            item.textContent = `${asset.file}. ${asset.author}. ${asset.license}. ${asset.source}.`;
+            list.append(item);
+          }
+        })
+        .catch(() => {
+          const copy = document.getElementById("credits-copy");
+          if (copy instanceof HTMLElement) copy.textContent = "Credits could not be read.";
+        });
+    </script>
+  </body>
+</html>

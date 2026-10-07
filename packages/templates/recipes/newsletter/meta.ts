@@ -1,0 +1,21 @@
+export const meta = {
+  id: "newsletter",
+  stacks: ["astro-default", "next-app", "vite-react-world"] as const,
+  env: [
+    "KIT_API_KEY",
+    "KIT_FORM_ID",
+    "MAILCHIMP_API_KEY",
+    "MAILCHIMP_AUDIENCE_ID",
+    "MAILCHIMP_SERVER_PREFIX",
+    "MAILERLITE_API_KEY",
+    "MAILERLITE_GROUP_ID",
+    "BEEHIIV_API_KEY",
+    "BEEHIIV_PUBLICATION_ID",
+    "BREVO_API_KEY",
+    "BREVO_LIST_ID",
+    "KLAVIYO_API_KEY",
+    "KLAVIYO_LIST_ID",
+    "HOSTINGER_REACH_API_TOKEN",
+  ],
+  licence: "MIT",
+};
