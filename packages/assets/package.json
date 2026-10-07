@@ -17,8 +17,10 @@
   },
   "dependencies": {
     "@hitchhiker/engine": "workspace:*",
+    "@resvg/resvg-js": "2.6.2",
     "@visioncortex/vtracer": "1.0.0-alpha.4",
     "opentype.js": "2.0.0",
+    "pdf-lib": "1.17.1",
     "svgo": "4.1.0"
   },
   "scripts": {

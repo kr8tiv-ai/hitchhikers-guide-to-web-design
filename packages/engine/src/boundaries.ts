@@ -14,7 +14,8 @@ export interface PackageBoundary {
  * allowDeps values are workspace:*. allowExternal names a pinned package
  * from a later prompt (gsap on the app, prompt 010; the motion toolkit
  * on the app, prompt 038; pdfjs-dist on the engine, prompt 025;
- * opentype.js, @visioncortex/vtracer, and svgo on assets, prompt 055).
+ * opentype.js, @visioncortex/vtracer, and svgo on assets, prompt 055;
+ * @resvg/resvg-js and pdf-lib on assets, prompt 063).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
@@ -31,7 +32,7 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   {
     name: "@hitchhiker/assets",
     allowDeps: ["@hitchhiker/engine"],
-    allowExternal: ["@visioncortex/vtracer", "opentype.js", "svgo"],
+    allowExternal: ["@resvg/resvg-js", "@visioncortex/vtracer", "opentype.js", "pdf-lib", "svgo"],
   },
   { name: "@hitchhiker/qa", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },

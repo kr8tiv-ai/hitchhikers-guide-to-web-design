@@ -272,3 +272,43 @@ VT323 (logo wordmark test fixture)
   Production wordmarks use the type pair approved for the brand, with
   that licence recorded when the file is downloaded.
 
+@resvg/resvg-js 2.6.2
+  Registry: https://www.npmjs.com/package/@resvg/resvg-js
+  Repository: https://github.com/yisibl/resvg-js
+  License field: MPL-2.0
+  Installed package.json license field matches. The project is resvg-js
+  (Rust resvg, Node binding). File-level MPL-2.0: the licence covers the
+  resvg-js files themselves. It is not applied to the Guide. The Guide
+  does not copy those files into its source. checkLogo and the export
+  rasters call Resvg. No GPL or LGPL renderer is installed.
+  Optional platform packages, same version and MPL-2.0, same repository:
+    @resvg/resvg-js-win32-x64-msvc
+    @resvg/resvg-js-win32-arm64-msvc
+    @resvg/resvg-js-win32-ia32-msvc
+    @resvg/resvg-js-darwin-x64
+    @resvg/resvg-js-darwin-arm64
+    @resvg/resvg-js-linux-x64-gnu
+    @resvg/resvg-js-linux-x64-musl
+    @resvg/resvg-js-linux-arm64-gnu
+    @resvg/resvg-js-linux-arm64-musl
+    @resvg/resvg-js-linux-arm-gnueabihf
+    @resvg/resvg-js-android-arm64
+    @resvg/resvg-js-android-arm-eabi
+  pnpm installs the package for the current OS. The others stay optional.
+
+pdf-lib 1.17.1
+  Registry: https://www.npmjs.com/package/pdf-lib
+  Repository: https://github.com/Hopding/pdf-lib
+  License field: MIT
+  The project is pdf-lib. The print logo calls drawSvgPath.
+  Transitive dependencies:
+    @pdf-lib/standard-fonts 1.0.0, MIT,
+      https://github.com/Hopding/standard-fonts
+    @pdf-lib/upng 1.0.1, MIT, https://github.com/Hopding/upng
+    pako 1.0.11, license field (MIT AND Zlib), https://github.com/nodeca/pako
+      MIT and Zlib are both allowed. pako is not GPL or AGPL.
+    tslib 1.14.1, 0BSD, https://github.com/Microsoft/tslib
+      0BSD is a BSD-family permissive licence.
+
+ICO files are written in ico.ts from PNG bytes. png-to-ico is not installed.
+
