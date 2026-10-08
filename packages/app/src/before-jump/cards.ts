@@ -19,6 +19,7 @@ import {
   type ThinkResult,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard } from "../card.ts";
+import { documentHeadExtras } from "../design/document-head.ts";
 
 const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 32_768;
@@ -242,6 +243,20 @@ async function handle(server: Server, session: Session, req: IncomingMessage, re
     send(res, 200, "text/css; charset=utf-8", readCss(rel));
     return;
   }
+  if (req.method === "GET" && (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico")) {
+    send(res, 200, "image/svg+xml", readFileSync(path.resolve(appSrc, "design", "favicon.svg")));
+    return;
+  }
+  if (req.method === "GET" && url.pathname.startsWith("/public/fonts/")) {
+    const name = url.pathname.slice("/public/fonts/".length);
+    const font = readFont(name);
+    if (font === null) {
+      send(res, 404, "text/plain; charset=utf-8", "This page is not on the desk.");
+      return;
+    }
+    send(res, 200, "font/woff2", font);
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/answer") {
     await postAnswer(session, req, res);
     return;
@@ -394,6 +409,7 @@ function renderPage(session: Session): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+${documentHeadExtras("Anything to add before we jump?")}
     <title>Before we jump</title>
     <link rel="stylesheet" href="/src/design/tokens.css" />
     <link rel="stylesheet" href="/src/design/type.css" />
@@ -406,7 +422,7 @@ function renderPage(session: Session): string {
     <div class="hh-shell">
       <header class="hh-mast">
         <div class="hh-mast__row">
-          <p class="hh-kicker">Before we jump</p>
+          <h1 class="hh-kicker">Before we jump</h1>
           <p class="hh-kicker">${escapeHtml(phaseName)}</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
@@ -458,16 +474,26 @@ function renderQuestion(card: BeforeJumpCard, draft: string, error: string | nul
   });
 }
 
+const PHASE_NOTES: Record<string, string> = {
+  "dont-panic": "The interview.",
+  "babel-fish": "Brand kit, after the brief is approved.",
+  "deep-thought": "Spec, prompts, and the stack.",
+  "improbability-drive": "The build, one prompt at a time.",
+  "mostly-harmless": "Gates, then another pass if you want one.",
+  "so-long": "Deploy, only after a yes.",
+};
+
 function phaseMap(current: string): string {
   const items = PHASES.map((item, index) => {
     const on = item.id === current;
     const marker = on ? " hh-map__item--current" : "";
     const currentAttr = on ? ' aria-current="step"' : "";
     const number = String(index + 1).padStart(2, "0");
+    const note = on ? "Before we jump" : (PHASE_NOTES[item.id] ?? item.name);
     return `<li class="hh-map__item${marker}"${currentAttr}>
       <span class="hh-map__index">${number}</span>
       <span class="hh-map__name">${escapeHtml(item.name)}</span>
-      <span class="hh-map__note">${on ? "Before we jump" : "Phase"}</span>
+      <span class="hh-map__note">${escapeHtml(note)}</span>
     </li>`;
   });
   return `<nav aria-label="Phases"><ol class="hh-map">${items.join("")}</ol></nav>`;
@@ -517,6 +543,19 @@ const PAGE_SCRIPT = `
 })();
 `;
 
+function readFont(name: string): Buffer | null {
+  if (!/^[A-Za-z0-9.-]+\.woff2$/.test(name) || name !== path.basename(name)) return null;
+  const publicDir = path.resolve(appSrc, "..", "public", "fonts");
+  const file = path.resolve(publicDir, name);
+  const root = publicDir.endsWith(path.sep) ? publicDir : `${publicDir}${path.sep}`;
+  if (!file.startsWith(root)) return null;
+  try {
+    return readFileSync(file);
+  } catch {
+    return null;
+  }
+}
+
 function readCss(rel: string): string {
   const cached = cssCache.get(rel);
   if (cached !== undefined) return cached;
@@ -556,12 +595,14 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function send(res: ServerResponse, status: number, type: string, body: string): void {
+function send(res: ServerResponse, status: number, type: string, body: string | Buffer): void {
   if (res.headersSent) return;
+  const payload = typeof body === "string" ? Buffer.from(body) : body;
   res.writeHead(status, {
     "content-type": type,
+    "content-length": payload.length,
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
   });
-  res.end(body);
+  res.end(payload);
 }

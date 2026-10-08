@@ -100,6 +100,7 @@ export function renderApproval(input: ApprovalInput): string {
         <h1 class="hh-headline" id="prd-title">${escapeHtml(heading)}</h1>
         <p class="hh-dek">Improbability Drive stays off until PRD.md, CONTEXT.md, and the prompt package each carry a yes.</p>
       </header>
+      <main id="main">
       <section class="hh-rise hh-rise--2" aria-labelledby="gates-title">
         <div class="hh-phase-mark">
           <p class="hh-kicker">Context</p>
@@ -122,6 +123,7 @@ export function renderApproval(input: ApprovalInput): string {
         <p class="hh-dek">${promptDek(titles.length)}</p>
         ${promptList(titles, tiers)}
       </section>
+      </main>
       <footer class="hh-status">
         <span>Deep Thought</span>
         <span>Approval gate</span>

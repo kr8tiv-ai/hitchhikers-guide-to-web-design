@@ -54,6 +54,8 @@
 
 .hh-motion__links a {
   color: var(--color-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 .hh-motion__still {
@@ -237,6 +239,10 @@
   .hh-motion__grid,
   .hh-motion__split {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .hh-motion__frame {
+    max-width: none;
   }
 }
 

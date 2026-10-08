@@ -40,6 +40,7 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import { documentHeadExtras } from "../design/document-head.ts";
 import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
@@ -107,6 +108,7 @@ const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
 const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
 const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
@@ -644,12 +646,30 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
     return;
   }
+  if (pathname === "/client/theme.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(THEME_SOURCE)));
+    return;
+  }
+  if (pathname === "/favicon.ico" || pathname === "/favicon.svg") {
+    sendBytes(req, res, 200, "image/svg+xml", readFileSync(path.resolve(SRC_ROOT, "design", "favicon.svg")));
+    return;
+  }
   if (pathname === "/client/drive.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_SOURCE)));
     return;
   }
   if (pathname === "/client/drive-markup.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_MARKUP_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/document-head.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "design", "document-head.ts"))),
+    );
     return;
   }
   if (pathname === "/client/card.js") {
@@ -832,6 +852,12 @@ function renderDesk(token: string, session: DeskSession): string {
   );
   html = mustReplace(
     html,
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `<meta name="viewport" content="width=device-width, initial-scale=1" />\n${documentHeadExtras("Don't Panic. One question at a time. The work saves on this machine.")}`,
+    "viewport",
+  );
+  html = mustReplace(
+    html,
     dek,
     `${dek}\n        ${routeNav("/")}`,
     "dek",
@@ -867,9 +893,13 @@ function renderDesk(token: string, session: DeskSession): string {
     `<footer class="hh-status" data-region="status">\n        ${session.statusHtml}\n      </footer>`,
     "status",
   );
+  const motion =
+    session.question?.id.startsWith("DP-6.") === true
+      ? `    <script type="module" src="/client/motion.js"></script>\n`
+      : "";
   return html.replace(
     "</body>",
-    `    <script type="module" src="/client/desk.js"></script>\n    <script type="module" src="/client/motion.js"></script>\n  </body>`,
+    `    <script type="module" src="/client/desk.js"></script>\n${motion}  </body>`,
   );
 }
 
@@ -877,6 +907,7 @@ function renderBrand(token: string): string {
   return renderPanel({
     token,
     title: "Brand kit",
+    description: "Palette, letters, and voice land on this plate after the brief is approved.",
     current: "/brand",
     kicker: "Brand kit",
     status: "The kit waits on the brief.",
@@ -897,6 +928,7 @@ function renderApprove(token: string): string {
   return renderPanel({
     token,
     title: "Approvals",
+    description: "Nothing is waiting for a yes.",
     current: "/approve",
     kicker: "Approvals",
     status: "Nothing is waiting for a yes.",
@@ -917,9 +949,11 @@ function renderMotion(token: string): string {
   return renderPanel({
     token,
     title: "Motion",
+    description: "Ten short loops, then a number for how much motion the site should carry.",
     current: "/motion",
     kicker: "Motion",
     status: "Pick a number after the loops.",
+    board: true,
     extraCss: ["/src/motion-previews/motion.css"],
     script: "/client/motion.js",
     main: renderMotionPage(),
@@ -930,6 +964,7 @@ function renderMissing(token: string): string {
   return renderPanel({
     token,
     title: "Not on the desk",
+    description: "This address is not a route.",
     current: "/",
     kicker: "Missing",
     status: "This address is not a route.",
@@ -944,12 +979,14 @@ function renderMissing(token: string): string {
 function renderPanel(opts: {
   token: string;
   title: string;
+  description: string;
   current: RouteName;
   kicker: string;
   main: string;
   status: string;
   extraCss?: readonly string[];
   script?: string;
+  board?: boolean;
 }): string {
   const extra = (opts.extraCss ?? [])
     .map((href) => `    <link rel="stylesheet" href="${escapeHtml(href)}" />`)
@@ -962,6 +999,7 @@ function renderPanel(opts: {
     <meta charset="utf-8" />
     <meta name="hh-csrf" content="${escapeHtml(opts.token)}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+${documentHeadExtras(opts.description)}
     <title>${escapeHtml(opts.title)}</title>
     <link rel="stylesheet" href="/src/design/tokens.css" />
     <link rel="stylesheet" href="/src/design/type.css" />
@@ -981,7 +1019,7 @@ ${extra}
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
         ${routeNav(opts.current)}
       </header>
-      <main id="main" class="hh-read">
+      <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}">
         ${opts.main}
       </main>
       <footer class="hh-status">
@@ -998,17 +1036,16 @@ function routeNav(current: RouteName): string {
     ["/", "Desk"],
     ["/brand", "Brand kit"],
     ["/approve", "Approvals"],
-    ["/hh-dashboard", "/hh-dashboard"],
+    ["/hh-dashboard", "Drive"],
     ["/gallery", "Gallery"],
     ["/motion", "Motion"],
   ] as const;
   const links = items.map(([href, label]) => {
     const on = href === current;
-    const variant = on ? "secondary" : "ghost";
     const currentAttr = on ? ' aria-current="page"' : "";
-    return `<a class="hh-btn hh-btn--${variant}" href="${href}"${currentAttr}>${escapeHtml(label)}</a>`;
+    return `<a href="${href}"${currentAttr}>${escapeHtml(label)}</a>`;
   });
-  return `<nav class="hh-qcard__actions" aria-label="Desk routes">${links.join("")}</nav>`;
+  return `<nav class="hh-routes" aria-label="Desk routes">${links.join("")}</nav>`;
 }
 
 function browserModule(filePath: string): string {
@@ -1019,7 +1056,8 @@ function browserModule(filePath: string): string {
   const js = stripped
     .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
-    .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"');
+    .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
+    .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"');
   moduleCache.set(filePath, js);
   return js;
 }
@@ -1500,9 +1538,11 @@ function renderGallery(token: string, view: GalleryView): string {
   return renderPanel({
     token,
     title: "Gallery walk",
+    description: "A short walk through sites worth keeping.",
     current: "/gallery",
     kicker: "Point of view",
     status: galleryStatus(view),
+    board: true,
     extraCss: ["/src/gallery/gallery.css"],
     script: "/client/walk.js",
     main: renderGalleryBody(view),

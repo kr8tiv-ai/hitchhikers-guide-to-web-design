@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from "./card.ts";
+import { documentHeadExtras } from "./design/document-head.ts";
 
 export const DRIVE_MAX_ROWS = 200;
 
@@ -37,6 +38,8 @@ const KIND_LABEL: Record<DriveKind, string> = {
   build: "Build",
   review: "Review",
 };
+
+const THEME_MODULE = `<script type="module" src="/client/theme.js"></script>`;
 
 const INLINE_THEME = `    <script>
       const root = document.documentElement;
@@ -190,6 +193,7 @@ export function renderDriveDocument(
         <p class="hh-dek">The queue on this machine. Not xAI's agent dashboard.</p>
       </header>
 
+      <main id="drive-main">
       <div class="hh-dash">
         <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue" aria-labelledby="queue-title">
           <div class="hh-drive__toolbar">
@@ -262,6 +266,7 @@ export function renderDriveDocument(
           </section>
         </div>
       </div>
+      </main>
 
       <footer class="hh-status">
         <span>/hh-dashboard</span>
@@ -286,12 +291,14 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">The queue on this machine. Not xAI's agent dashboard.</p>
       </header>
+      <main id="drive-main">
       <article class="hh-error" id="drive-error" role="alert">
         <p class="hh-kicker">Queue file</p>
         <h2 class="hh-error__title">The queue file could not be read.</h2>
         <p>${escapeHtml(message)}</p>
         <p class="hh-error__next">It was left on disk.</p>
       </article>
+      </main>
       <footer class="hh-status">
         <span>/hh-dashboard</span>
         <span>Drive</span>
@@ -309,13 +316,14 @@ function documentShell(
   options: DrivePageOptions | undefined,
   allowModule = true,
 ): string {
-  const moduleTag = allowModule ? moduleScript(options?.scriptUrl) : null;
+  const moduleTag = allowModule ? moduleScript(options?.scriptUrl) : THEME_MODULE;
   const tail = moduleTag === null ? `${INLINE_THEME}\n` : `    ${moduleTag}\n`;
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />${csrfMeta(options?.token)}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+${documentHeadExtras("The queue on this machine. Not xAI's agent dashboard.")}
     <title>${escapeHtml(title)}</title>
     <link rel="stylesheet" href="src/design/tokens.css" />
     <link rel="stylesheet" href="src/design/type.css" />

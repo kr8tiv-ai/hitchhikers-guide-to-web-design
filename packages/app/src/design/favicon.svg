@@ -1,0 +1,8 @@
+<!-- Accent #8e2f1a matches --color-accent-light. Surface #f3ebdd matches --color-surface-light. Ink #1c1612 matches --color-ink-light. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" fill="#f3ebdd"/>
+  <rect width="4" height="32" fill="#8e2f1a"/>
+  <rect x="10" y="9" width="16" height="3" fill="#8e2f1a"/>
+  <rect x="10" y="16" width="11" height="2" fill="#1c1612"/>
+  <rect x="10" y="21" width="8" height="2" fill="#1c1612"/>
+</svg>

@@ -37,6 +37,8 @@ Class prefix `hh-`. Block, element, modifier.
 | Class | Role |
 | --- | --- |
 | `hh-shell`, `hh-mast`, `hh-kicker`, `hh-dek`, `hh-wordmark` | Page frame, mast, label, lede, masked wordmark |
+| `hh-routes` | Desk route row. Uppercase links, current page underlined in the accent. Not a button row |
+| `hh-read`, `hh-read--board` | Reading measure, and the wider board for gallery and motion |
 | `hh-wordmark--plate`, `hh-wordmark--quiet` | Reveal size, and the smaller stamp on the dashboard |
 | `hh-log`, `hh-turn`, `hh-turn__who`, `hh-turn--you` | Transcript. The visitor's line is italic, not a chat bubble |
 | `hh-qcard`, `hh-qcard__title`, `hh-qcard__why`, `hh-qcard__body`, `hh-qcard__actions` | Question card. Body wraps, including long German |
@@ -46,14 +48,14 @@ Class prefix `hh-`. Block, element, modifier.
 | `hh-btn`, `hh-btn--primary`, `hh-btn--secondary`, `hh-btn--ghost` | Buttons. Minimum 44px, focus ring on `:focus-visible` |
 | `hh-approval` | Approve and Redo |
 | `hh-table`, `hh-table-wrap` | Dashboard table. Stacks under 640px via `data-label` |
-| `hh-empty`, `hh-error` | Empty and error. Each has a next step |
+| `hh-empty`, `hh-error` | Empty and error. A left spine, not a dashed box. Each has a next step |
 | `hh-swatch`, `hh-specimen`, `hh-voice` | Brand-kit plate |
 
 ## Motion
 
 `motion.ts` is a small layer over GSAP core. `enter`, `confirmPulse`, `mapProgress`, and `toast` import `gsap` inside the function so an unused call can tree-shake. `prefersReducedMotion()` reads `prefers-reduced-motion: reduce`. When it matches, each function settles the element and resolves on the same turn, and does not import GSAP. If `matchMedia` is missing, motion is allowed. That is the Node default. Tests stub the media query.
 
-GSAP core does not take a CSS `cubic-bezier()` without CustomEase, so the tweens use built-in eases that match the tokens: `power3.out`, `power2.inOut`, and `back.out(1.4)`. CSS transitions use the cubic-bezier custom properties. The comps' entrance (`hh-rise`) is CSS, gated by `prefers-reduced-motion: no-preference`, with no `!important`.
+GSAP core does not take a CSS `cubic-bezier()` without CustomEase, so the tweens use built-in eases that match the tokens: `power3.out`, `power2.inOut`, and `back.out(1.4)`. CSS transitions use the cubic-bezier custom properties. The comps' entrance (`hh-rise`) is a short translate, gated by `prefers-reduced-motion: no-preference`, with no `!important`. The type stays visible on the first frame.
 
 ## Wordmark
 

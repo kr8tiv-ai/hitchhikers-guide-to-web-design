@@ -43,10 +43,16 @@ interface DeskEvent {
   preventDefault(): void;
 }
 
+interface DeskParent {
+  appendChild(node: DeskElement): void;
+}
+
 interface DeskDocument {
   querySelector(selector: string): DeskElement | null;
   addEventListener(type: string, listener: (event: DeskEvent) => void): void;
   removeEventListener(type: string, listener: (event: DeskEvent) => void): void;
+  createElement?(tag: string): DeskElement;
+  body?: DeskParent;
 }
 
 interface DeskMessage {
@@ -280,7 +286,20 @@ export function mountDesk(env: DeskEnv): () => void {
     if (transcript !== null && view !== null) transcript.innerHTML = view.transcriptHtml;
     const status = env.document.querySelector('[data-region="status"]');
     if (status !== null && view !== null) status.innerHTML = view.statusHtml;
+    ensureMotion(env.document, view?.question?.id);
   }
+}
+
+function ensureMotion(document: DeskDocument, questionId: string | undefined): void {
+  if (questionId === undefined || !questionId.startsWith("DP-6.")) return;
+  if (document.querySelector('script[src="/client/motion.js"]') !== null) return;
+  const create = document.createElement;
+  const parent = document.body;
+  if (typeof create !== "function" || parent === undefined) return;
+  const script = create("script");
+  script.setAttribute("type", "module");
+  script.setAttribute("src", "/client/motion.js");
+  parent.appendChild(script);
 }
 
 function signature(session: SessionView): string {

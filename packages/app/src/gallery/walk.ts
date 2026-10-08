@@ -42,7 +42,8 @@ export function galleryStatus(view: GalleryView): string {
 }
 
 export function renderGalleryBody(view: GalleryView): string {
-  const open = `<section id="hh-gallery" data-phase="${escapeHtml(view.phase)}" data-loves="${view.loves}" data-round="${view.round}">`;
+  const open = `<h1 class="hh-headline">Gallery walk</h1>
+<section id="hh-gallery" data-phase="${escapeHtml(view.phase)}" data-loves="${view.loves}" data-round="${view.round}">`;
   if (view.phase === "done") return `${open}\n${renderDone(view)}\n</section>`;
   if (view.phase === "narrowing") return `${open}\n${renderNarrow(view)}\n</section>`;
   return `${open}\n${renderWalking(view)}\n</section>`;
