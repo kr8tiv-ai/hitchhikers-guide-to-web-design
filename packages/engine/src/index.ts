@@ -184,3 +184,5 @@ export {
   saveQueue,
 } from "./queue-file.ts";
 export type { QueueFile, QueueStatus } from "./queue-file.ts";
+export { onPhaseStart, savePartial } from "./phases/before-jump-hook.ts";
+export type { BeforeJumpAnswer, BeforeJumpCard, BeforeJumpPhase } from "./phases/before-jump-hook.ts";
