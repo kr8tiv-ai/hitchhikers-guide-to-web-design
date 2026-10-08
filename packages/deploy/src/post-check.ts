@@ -32,7 +32,7 @@ export interface PostCheckResult {
 
 function titleText(body: string): string {
   const match = /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(body);
-  if (match === null) return "";
+  if (match === null || match[1] === undefined) return "";
   return match[1].replace(/\s+/g, " ").trim();
 }
 

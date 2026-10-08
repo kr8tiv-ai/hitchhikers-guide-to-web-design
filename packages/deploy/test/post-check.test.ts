@@ -81,6 +81,17 @@ test("200 without the site name is not ok", async () => {
   assert.equal(result.reason, "site name missing");
 });
 
+test("a multiline title is collapsed and still counts", async () => {
+  const result = await postCheck({
+    state: "completed",
+    url: "https://milliways.example/",
+    siteName: "Milliways",
+    fetchImpl: () =>
+      Promise.resolve(page({ body: "<title>\n  Milliways\n</title><p>Milliways</p>" })),
+  });
+  assert.deepEqual(result, { skipped: false, ok: true, reason: "ok" });
+});
+
 test("a title that is only whitespace fails", async () => {
   const result = await postCheck({
     state: "completed",
