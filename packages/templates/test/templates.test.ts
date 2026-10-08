@@ -24,6 +24,7 @@ import { reportBlankBundle } from "../shared/bundle-report.ts";
 import { cssScrollFor } from "../shared/css-scroll.ts";
 import { FFMPEG_MISSING, planImages, planVideo, optimizeMedia } from "../shared/optimize-media.ts";
 import { fetchAssets } from "../shared/fetch-assets.ts";
+import { creditLine, parseCredits } from "../shared/credits-file.ts";
 import { bootNamed, registerEffect, resetEffects, wireLenis } from "../shared/motion.ts";
 import { parseState, playState, type TheatreCoreLike } from "../shared/theatre-loader.ts";
 import { fadeTargetOpacity } from "../shared/vanilla.ts";
@@ -278,6 +279,37 @@ test("fetch-assets writes a permitted file and refuses a forbidden licence", asy
     assert.equal(written.length, 1);
     const bytes = await readFile(written[0] ?? "");
     assert.equal(bytes[0], 60);
+    const cc0 = parseCredits(await readFile(creditsPath, "utf8"));
+    assert.equal(cc0.entries[0]?.publicDomain, true);
+    assert.equal(cc0.entries[0]?.license, "CC0");
+    assert.equal(cc0.entries[0]?.file, "mark.svg");
+    assert.equal(cc0.entries[0]?.author, "Desk");
+    assert.equal(cc0.entries[0]?.source, "https://example.com/mark.svg");
+    if (cc0.entries[0] === undefined) throw new Error("assets row missing");
+    assert.equal(creditLine(cc0.entries[0]), "mark.svg. Desk. CC0. https://example.com/mark.svg.");
+    await writeFile(
+      creditsPath,
+      JSON.stringify({
+        assets: [
+          {
+            file: "mark-hd.svg",
+            source: "https://example.com/mark-hd.svg",
+            license: "CC0-1.0",
+            author: "Desk",
+            url: "https://example.com/mark-hd.svg",
+          },
+        ],
+      }),
+    );
+    const hd = await fetchAssets({
+      creditsPath,
+      outDir: path.join(dir, "media"),
+      fetchImpl: async () => new Response(new Uint8Array([60, 115, 118, 103])),
+    });
+    assert.equal(hd.length, 1);
+    const hdModel = parseCredits(await readFile(creditsPath, "utf8"));
+    assert.equal(hdModel.entries[0]?.publicDomain, true);
+    assert.equal(hdModel.entries[0]?.license, "CC0-1.0");
     await writeFile(
       creditsPath,
       JSON.stringify({
@@ -298,6 +330,82 @@ test("fetch-assets writes a permitted file and refuses a forbidden licence", asy
       () => fetchAssets({ creditsPath, outDir: path.join(dir, "media"), fetchImpl: async () => new Response("no") }),
       /escapes the output directory/,
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a 3D array renders on the credits page and an entries file parses", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "hh-credits-shapes-"));
+  try {
+    const creditsPath = path.join(dir, "CREDITS.json");
+    const array = [
+      {
+        name: "Test triangle",
+        author: "Hitchhiker Guide test fixture",
+        license: "CC0-1.0",
+        link: "https://example.com/triangle",
+        usedFor: "optimizer fixture",
+        category: "3D models",
+      },
+    ];
+    await writeFile(creditsPath, JSON.stringify(array));
+    const page = parseCredits(await readFile(creditsPath, "utf8"));
+    const model = page.entries[0];
+    if (model === undefined) throw new Error("3D row missing from the page model");
+    assert.equal(model.publicDomain, true);
+    assert.equal(model.license, "CC0-1.0");
+    assert.equal(model.name, "Test triangle");
+    assert.equal(model.author, "Hitchhiker Guide test fixture");
+    assert.equal(model.link, "https://example.com/triangle");
+    assert.equal(model.usedFor, "optimizer fixture");
+    assert.equal(model.category, "3D models");
+    assert.equal(
+      creditLine(model),
+      "Test triangle. Hitchhiker Guide test fixture. CC0-1.0. https://example.com/triangle. Used for optimizer fixture. 3D models.",
+    );
+    const skipped = await fetchAssets({
+      creditsPath,
+      outDir: path.join(dir, "media"),
+      fetchImpl: async () => {
+        throw new Error("a 3D credit link is not a download");
+      },
+    });
+    assert.deepEqual(skipped, []);
+
+    await writeFile(
+      creditsPath,
+      JSON.stringify({
+        entries: [
+          {
+            name: "realesrgan-ncnn-vulkan.exe",
+            url: "https://example.test/runner",
+            sha256: "abc123",
+            licence: "MIT",
+            category: "Code and libraries",
+          },
+        ],
+      }),
+    );
+    const tools = parseCredits(await readFile(creditsPath, "utf8"));
+    const tool = tools.entries[0];
+    if (tool === undefined) throw new Error("entries row missing");
+    assert.equal(tool.origin, "entries");
+    assert.equal(tool.publicDomain, false);
+    assert.equal(tool.name, "realesrgan-ncnn-vulkan.exe");
+    assert.equal(tool.url, "https://example.test/runner");
+    assert.equal(tool.sha256, "abc123");
+    assert.equal(tool.licence, "MIT");
+    assert.equal(tool.category, "Code and libraries");
+    assert.match(creditLine(tool), /sha256 abc123/);
+    const notMedia = await fetchAssets({
+      creditsPath,
+      outDir: path.join(dir, "media"),
+      fetchImpl: async () => {
+        throw new Error("an entries url is not starter media");
+      },
+    });
+    assert.deepEqual(notMedia, []);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -426,6 +534,9 @@ test("qa spec covers console, failed requests, three widths, and reduced motion"
 });
 
 test("shared modules are copied into each starter and the blank page does not import them", async () => {
+  const engineCredits = await readFile(path.join(packageRoot, "..", "engine", "src", "credits-file.ts"), "utf8");
+  const sharedCredits = await readFile(path.join(packageRoot, "shared", "credits-file.ts"), "utf8");
+  assert.equal(sharedCredits, engineCredits, "shared credits parser matches the engine source");
   const copies = [
     ["motion.ts", path.join("src", "hh", "motion.ts")],
     ["webgl.ts", path.join("src", "hh", "webgl.ts")],
@@ -435,6 +546,7 @@ test("shared modules are copied into each starter and the blank page does not im
     ["vanilla.ts", path.join("src", "hh", "vanilla.ts")],
     ["optimize-media.ts", path.join("scripts", "optimize-media.ts")],
     ["fetch-assets.ts", path.join("scripts", "fetch-assets.ts")],
+    ["credits-file.ts", path.join("scripts", "credits-file.ts")],
     ["qa.spec.ts", path.join("tests", "qa.spec.ts")],
   ] as const;
   for (const template of listTemplates()) {
@@ -455,6 +567,23 @@ test("shared modules are copied into each starter and the blank page does not im
   const nextPage = await readFile(path.join(packageRoot, "next-app", "src", "app", "page.tsx"), "utf8");
   assert.equal(nextPage.includes("MotionRoot"), false);
   assert.equal(nextPage.includes("hh/effects"), false);
+  const astroCredits = await readFile(path.join(packageRoot, "astro-default", "src", "pages", "credits.astro"), "utf8");
+  const nextCredits = await readFile(path.join(packageRoot, "next-app", "src", "app", "credits", "page.tsx"), "utf8");
+  const viteCredits = await readFile(path.join(packageRoot, "vite-react-world", "credits.html"), "utf8");
+  const viteBoot = await readFile(path.join(packageRoot, "vite-react-world", "src", "credits-page.ts"), "utf8");
+  assert.match(astroCredits, /parseCreditsValue/);
+  assert.match(astroCredits, /creditLine/);
+  assert.match(astroCredits, /credits-file\.ts/);
+  assert.match(astroCredits, /No borrowed media is checked in/);
+  assert.match(nextCredits, /parseCreditsValue/);
+  assert.match(nextCredits, /creditLine/);
+  assert.match(nextCredits, /credits-file\.ts/);
+  assert.match(nextCredits, /No borrowed media is checked in/);
+  assert.match(viteCredits, /credits-page\.ts/);
+  assert.match(viteCredits, /No borrowed media is checked in/);
+  assert.match(viteBoot, /parseCreditsValue/);
+  assert.match(viteBoot, /creditLine/);
+  assert.match(viteBoot, /credits-file\.ts/);
   const viteIndex = await readFile(path.join(packageRoot, "vite-react-world", "index.html"), "utf8");
   assert.equal(viteIndex.includes("main.tsx"), false);
   const world = await readFile(path.join(packageRoot, "vite-react-world", "world.html"), "utf8");

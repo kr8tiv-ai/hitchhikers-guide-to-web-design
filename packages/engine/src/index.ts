@@ -186,3 +186,17 @@ export {
 export type { QueueFile, QueueStatus } from "./queue-file.ts";
 export { onPhaseStart, savePartial } from "./phases/before-jump-hook.ts";
 export type { BeforeJumpAnswer, BeforeJumpCard, BeforeJumpPhase } from "./phases/before-jump-hook.ts";
+export {
+  ALLOWED_LICENSES,
+  assertMediaLicense,
+  creditLine,
+  isPublicDomain,
+  parseCredits,
+  parseCreditsValue,
+} from "./credits-file.ts";
+export type {
+  AllowedLicense,
+  CreditPageEntry,
+  CreditsOrigin,
+  CreditsPageModel,
+} from "./credits-file.ts";

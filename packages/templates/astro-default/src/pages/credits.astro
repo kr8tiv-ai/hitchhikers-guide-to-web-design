@@ -1,9 +1,11 @@
 ---
 import credits from "../data/credits.json";
+import { creditLine, parseCreditsValue } from "../../scripts/credits-file.ts";
 import Base from "../layouts/Base.astro";
 
 const title = "Credits";
 const description = "Borrowed media for this starter. The list matches CREDITS.json.";
+const page = parseCreditsValue(credits);
 ---
 
 <Base title={title} description={description} canonical="https://example.com/credits">
@@ -15,14 +17,12 @@ const description = "Borrowed media for this starter. The list matches CREDITS.j
     <p class="kicker">Credits</p>
     <h1>Borrowed media.</h1>
     {
-      credits.assets.length === 0 ? (
+      page.entries.length === 0 ? (
         <p class="dek">No borrowed media is checked in.</p>
       ) : (
         <ul class="credits-list">
-          {credits.assets.map((asset) => (
-            <li>
-              {asset.file}. {asset.author}. {asset.license}. {asset.source}.
-            </li>
+          {page.entries.map((entry) => (
+            <li>{creditLine(entry)}</li>
           ))}
         </ul>
       )

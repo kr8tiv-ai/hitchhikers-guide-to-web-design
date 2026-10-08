@@ -9,7 +9,7 @@ import { Document, NodeIO } from "@gltf-transform/core";
 import { EXTMeshoptCompression, KHRMeshQuantization } from "@gltf-transform/extensions";
 import { inspect } from "@gltf-transform/functions";
 import { MeshoptDecoder } from "meshoptimizer";
-import { BANNED_PHRASES, BANNED_WORDS } from "@hitchhiker/engine";
+import { BANNED_PHRASES, BANNED_WORDS, creditLine, parseCredits } from "@hitchhiker/engine";
 import {
   PHONE_GLB_BYTES,
   PHONE_TEXTURE_MB,
@@ -499,6 +499,36 @@ test("credits append and the options stay in plain words", async () => {
     assert.match(snippet, /CC0-1\.0/);
     assert.match(snippet, /Credit is required/);
     assert.match(snippet, /Bo &amp; Co/);
+    const page = parseCredits(await readFile(creditsPath, "utf8"));
+    assert.equal(page.entries.length, 2);
+    const cc0 = page.entries[0];
+    const by = page.entries[1];
+    if (cc0 === undefined || by === undefined) throw new Error("credits page model dropped a row");
+    assert.equal(cc0.origin, "array");
+    assert.equal(cc0.publicDomain, true);
+    assert.equal(cc0.name, "Test triangle");
+    assert.equal(cc0.author, fixtureCredit.author);
+    assert.equal(cc0.license, "CC0-1.0");
+    assert.equal(cc0.licence, "CC0-1.0");
+    assert.equal(cc0.link, fixtureCredit.link);
+    assert.equal(cc0.usedFor, "still the fixture");
+    assert.equal(cc0.category, "3D models");
+    assert.match(creditLine(cc0), /Test triangle/);
+    assert.match(creditLine(cc0), /CC0-1\.0/);
+    assert.match(creditLine(cc0), /still the fixture/);
+    assert.match(creditLine(cc0), /3D models/);
+    assert.match(creditLine(cc0), /https:\/\/example\.com\/triangle/);
+    assert.equal(by.publicDomain, false);
+    assert.equal(by.license, "CC-BY-4.0");
+    assert.equal(by.name, "Scifi Chair");
+    assert.equal(by.author, "Bo & Co");
+    assert.equal(by.link, byCredit.link);
+    assert.equal(by.usedFor, "hero");
+    assert.equal(by.category, "3D models");
+    assert.match(creditLine(by), /Scifi Chair/);
+    assert.match(creditLine(by), /Bo & Co/);
+    assert.match(creditLine(by), /CC-BY-4\.0/);
+    assert.match(creditLine(by), /Used for hero/);
     const low = explainOptions(6);
     const high = explainOptions(8);
     assert.deepEqual(low.map((card) => card.id), ["a", "b", "c", "d", "e", "f"]);

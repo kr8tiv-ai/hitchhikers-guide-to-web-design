@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import credits from "../../data/credits.json";
+import { creditLine, parseCreditsValue } from "../../../scripts/credits-file.ts";
 
-interface CreditAsset {
-  file: string;
-  source: string;
-  license: string;
-  author: string;
-}
-
-const assets = credits.assets as CreditAsset[];
+const page = parseCreditsValue(credits);
 
 export const metadata: Metadata = {
   title: "Credits",
@@ -37,13 +31,13 @@ export default function CreditsPage(): ReactNode {
       <main id="content">
         <p className="kicker">Credits</p>
         <h1>Borrowed media.</h1>
-        {assets.length === 0 ? (
+        {page.entries.length === 0 ? (
           <p className="dek">No borrowed media is checked in.</p>
         ) : (
           <ul className="credits-list">
-            {assets.map((asset) => (
-              <li key={asset.file}>
-                {asset.file}. {asset.author}. {asset.license}. {asset.source}.
+            {page.entries.map((entry, index) => (
+              <li key={`${entry.origin}-${index}`}>
+                {creditLine(entry)}
               </li>
             ))}
           </ul>

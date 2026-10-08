@@ -7,6 +7,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { crc32, deflateRawSync } from "node:zlib";
+import { parseCredits } from "@hitchhiker/engine";
 import type { GradeFacts } from "../src/grade.ts";
 import {
   UPSCALER_MANIFEST,
@@ -234,10 +235,24 @@ test("ensureUpscaler downloads each file for this platform once, then reuses the
     const licence = await readFile(`${first.runner}.licence.txt`, "utf8");
     assert.match(licence, /BSD-3-Clause/);
     const credits = JSON.parse(await readFile(path.join(root, "CREDITS.json"), "utf8")) as {
-      entries: { name: string; licence: string; sha256: string }[];
+      entries: { name: string; url: string; licence: string; sha256: string; category: string }[];
     };
     assert.equal(credits.entries.length, 3);
     assert.match(credits.entries[0]?.licence ?? "", /MIT/);
+    const page = parseCredits(await readFile(path.join(root, "CREDITS.json"), "utf8"));
+    assert.equal(page.entries.length, credits.entries.length);
+    for (let index = 0; index < credits.entries.length; index += 1) {
+      const written = credits.entries[index];
+      const read = page.entries[index];
+      assert.equal(read?.origin, "entries");
+      assert.equal(read?.publicDomain, false);
+      assert.equal(read?.name, written?.name);
+      assert.equal(read?.url, written?.url);
+      assert.equal(read?.sha256, written?.sha256);
+      assert.equal(read?.licence, written?.licence);
+      assert.equal(read?.license, written?.licence);
+      assert.equal(read?.category, written?.category);
+    }
 
     online = false;
     const second = await ensureUpscaler({ cacheDir, platform: "win32", fetchImpl, manifest });

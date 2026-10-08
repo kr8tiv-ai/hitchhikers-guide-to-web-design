@@ -1,57 +1,23 @@
 /**
  * Downloads media named in CREDITS.json.
- * Allowed licenses are CC0 and CC-BY-4.0. Other licenses are refused.
+ * Allowed media licenses are CC0, CC0-1.0, and CC-BY-4.0.
+ * CC0 and CC0-1.0 both mean public domain.
+ * A 3D array and an { entries } file parse onto the credits page and are not downloaded here.
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertMediaLicense, parseCredits } from "./credits-file.ts";
 
-export const ALLOWED_LICENSES = ["CC0", "CC-BY-4.0"] as const;
-export type AllowedLicense = (typeof ALLOWED_LICENSES)[number];
-
-export interface CreditAsset {
-  file: string;
-  source: string;
-  license: string;
-  author: string;
-  url?: string;
-}
-
-export interface CreditsFile {
-  assets: CreditAsset[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-export function parseCredits(text: string): CreditsFile {
-  const parsed: unknown = JSON.parse(text);
-  if (!isRecord(parsed) || !Array.isArray(parsed.assets)) {
-    throw new Error("CREDITS.json needs an assets array.");
-  }
-  const assets: CreditAsset[] = [];
-  for (const entry of parsed.assets) {
-    if (!isRecord(entry)) throw new Error("A credit entry is not an object.");
-    const file = entry.file;
-    const source = entry.source;
-    const license = entry.license;
-    const author = entry.author;
-    const url = entry.url;
-    if (typeof file !== "string" || typeof source !== "string" || typeof license !== "string" || typeof author !== "string") {
-      throw new Error("A credit entry needs file, source, license, and author.");
-    }
-    if (typeof url !== "undefined" && typeof url !== "string") throw new Error("A credit url must be a string.");
-    assets.push(url === undefined ? { file, source, license, author } : { file, source, license, author, url });
-  }
-  return { assets };
-}
-
-export function assertLicense(license: string, file: string): asserts license is AllowedLicense {
-  if (!(ALLOWED_LICENSES as readonly string[]).includes(license)) {
-    throw new Error(`Refusing ${license} for ${file}. Allowed licenses are CC0 and CC-BY-4.0.`);
-  }
-}
+export {
+  ALLOWED_LICENSES,
+  assertMediaLicense as assertLicense,
+  creditLine,
+  isPublicDomain,
+  parseCredits,
+  parseCreditsValue,
+} from "./credits-file.ts";
+export type { AllowedLicense, CreditPageEntry, CreditsOrigin, CreditsPageModel } from "./credits-file.ts";
 
 export function safeDestination(outDir: string, file: string): string {
   if (file.length === 0 || file.includes("\0")) throw new Error("Asset file name is empty.");
@@ -73,9 +39,10 @@ export async function fetchAssets(options: {
   const credits = parseCredits(text);
   const fetchImpl = options.fetchImpl ?? fetch;
   const written: string[] = [];
-  for (const asset of credits.assets) {
-    assertLicense(asset.license, asset.file);
-    if (asset.url === undefined || asset.url.length === 0) continue;
+  for (const asset of credits.entries) {
+    if (asset.origin !== "assets") continue;
+    assertMediaLicense(asset.license, asset.file);
+    if (asset.url.length === 0) continue;
     const destination = safeDestination(options.outDir, asset.file);
     const response = await fetchImpl(asset.url);
     if (!response.ok) throw new Error(`Asset download failed for ${asset.file}: ${response.status}`);

@@ -22,26 +22,6 @@
       <p class="dek" id="credits-copy">No borrowed media is checked in.</p>
       <ul class="credits-list" id="credits-list"></ul>
     </main>
-    <script>
-      fetch("/credits/CREDITS.json")
-        .then((response) => response.json())
-        .then((data) => {
-          const assets = Array.isArray(data.assets) ? data.assets : [];
-          const copy = document.getElementById("credits-copy");
-          const list = document.getElementById("credits-list");
-          if (!(copy instanceof HTMLElement) || !(list instanceof HTMLElement)) return;
-          if (assets.length === 0) return;
-          copy.hidden = true;
-          for (const asset of assets) {
-            const item = document.createElement("li");
-            item.textContent = `${asset.file}. ${asset.author}. ${asset.license}. ${asset.source}.`;
-            list.append(item);
-          }
-        })
-        .catch(() => {
-          const copy = document.getElementById("credits-copy");
-          if (copy instanceof HTMLElement) copy.textContent = "Credits could not be read.";
-        });
-    </script>
+    <script type="module" src="/src/credits-page.ts"></script>
   </body>
 </html>
