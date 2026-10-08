@@ -348,7 +348,7 @@ async function writeAssumed(
   text: string,
   jump: Record<string, unknown>,
 ): Promise<string> {
-  const data = { ...jump, version: 1 };
+  const data: Record<string, unknown> = { ...jump, version: 1 };
   data.assumed = upsertAssumed(data.assumed, { status: "ASSUMED", kind: "reply", note: text });
   const file = jumpPath(projectDir);
   await replaceViaTemp(file, `${JSON.stringify(data, null, 2)}\n`);

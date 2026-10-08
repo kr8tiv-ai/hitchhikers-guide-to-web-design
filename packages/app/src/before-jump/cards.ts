@@ -287,7 +287,7 @@ async function postAnswer(session: Session, req: IncomingMessage, res: ServerRes
       return;
     }
     await applyAction(session, card, action, text);
-    if (session.screen === "settling") await waitForChange(session);
+    await waitForChange(session);
     send(res, 204, "text/plain; charset=utf-8", "");
   } catch {
     send(res, 400, "application/json; charset=utf-8", `${JSON.stringify({ error: "The answer did not save." })}\n`);
