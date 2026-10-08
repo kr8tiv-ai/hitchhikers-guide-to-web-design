@@ -887,10 +887,10 @@ See §10.4. The decision record must include the pick, why, alternatives, trade-
 | 5–7 | + ScrollTrigger pin/scrub, scroll video, Flip, Rive/Lottie (optional), OGL shader backgrounds |
 | 8–10 | + Three.js/R3F, drei, postprocessing, Rapier (physics) |
 
-Stale libraries to avoid by default: Theatre.js, Barba and Matter.js have no npm publish since 2024 (`research/06`).
+Stale libraries to avoid by default: Barba and Matter.js have no npm publish since 2024 (`research/06`).
 
-### 15.4 GSAP license caveat
-Generated client sites using GSAP are clearly permitted. The *tool* must never become "a tool that allows users to build visual animations without code" competing with Webflow (GSAP Standard License, Prohibited Uses). Our app writes code into the user's repo and doesn't bundle GSAP in its own UI. Because it's free and open source, the "end users not charged a fee" clause is less of a concern. **Still get a legal read** and keep the MIT fallback switch (Motion, anime.js 4, CSS scroll-driven animations, Lenis). Details: `research/06` §GSAP license risk.
+### 15.4 GSAP
+D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
 
 ### 15.5 Mobile standard (Matt Q18)
 Every heavy effect gets a calm phone version (poster or still instead of scrub/3D, shorter pins, no cursor effects). Touch targets ≥ 44 px. `inputmode`/`autocomplete` on forms. Fluid type with `clamp()`. Test real-device widths 375/390/430. Budgets per `research/06` mobile table. The motion gate respects `prefers-reduced-motion`.
@@ -1057,7 +1057,7 @@ hitchhikers-guide-to-web-design/
 
 ## 21. Risks, open questions and things to verify
 
-1. **GSAP license** for an AI site-generator tool (§15.4). Get a legal read; keep the MIT fallback.
+1. D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
 2. **Imagine access**: does the SuperGrok login used by Grok Build allow Imagine API calls, or is an `XAI_API_KEY` with console credits required? Design for both, with DIY as the fallback.
 3. **Grok Voice for STT inside our app** needs an API key (billed separately). Local Whisper is the default.
 4. **X API**: pay-per-use pricing and media upload auth (v2 OAuth 2.0 vs claims that v1.1/OAuth 1.0a is still needed). Test before v2 posting.
@@ -1082,7 +1082,7 @@ hitchhikers-guide-to-web-design/
 - `03-awwwards-anatomy.md`: scoring, 36 sites by style
 - `04-motion-taxonomy.md`: A1–H3 + 1–10 appetite
 - `05-inspiration-galleries.md`: galleries and how to use them
-- `06-library-stack.md`: frameworks, packages, versions, GSAP license, mobile budgets
+- `06-library-stack.md`: frameworks, packages, versions, mobile budgets
 - `07-3d-assets-open-source.md`: Poly Haven, ambientCG, Kenney, Quaternius, Sketchfab, fonts, Tripo/Meshy
 - `08-brand-intake-frameworks.md`: frameworks + Matt's 18 brand prompts
 - `09-antihero-guides-inventory.md`: all AntiHero guides, prompts, videos, FB-group needs

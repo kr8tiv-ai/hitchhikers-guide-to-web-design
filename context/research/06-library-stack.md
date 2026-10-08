@@ -17,19 +17,20 @@ Research date: 2026-10-05. Versions are `latest` on the npm registry today. Lice
 
 | Package | Version | License | Role | Notes |
 |---|---|---|---|---|
-| `gsap` | 3.15.0 | GSAP Standard "no charge" | Core timelines plus **all plugins**: ScrollTrigger, SplitText, MorphSVG, DrawSVG, Flip, Observer, ScrollSmoother, Draggable, Inertia, MotionPath, ScrambleText, Physics2D… | [gsap.com/pricing](https://gsap.com/pricing/): "GSAP is now 100% free for all users, thanks to Webflow's support." Plugins ship in the main package. **⚠ See license risk below** |
+| `gsap` | 3.15.0 | GSAP Standard "no charge" | Core timelines plus **all plugins**: ScrollTrigger, SplitText, MorphSVG, DrawSVG, Flip, Observer, ScrollSmoother, Draggable, Inertia, MotionPath, ScrambleText, Physics2D… | [gsap.com/pricing](https://gsap.com/pricing/): "GSAP is now 100% free for all users, thanks to Webflow's support." Plugins ship in the main package. GSAP stays the base engine. |
 | `@gsap/react` | 2.1.2 | GSAP Standard | `useGSAP()` hook with cleanup | |
 | `lenis` | 1.3.26 | MIT | Smooth scroll | Use `lenis`, **not** the deprecated `@studio-freight/lenis` (last published 2024-03). Wire it to ScrollTrigger (`lenis.on('scroll', ScrollTrigger.update)`, drive it from `gsap.ticker`), as in Matt's Prompt 13 |
 | `motion` (Motion, formerly Framer Motion) | 14.0.0 | MIT | Declarative React/JS animation, layout animations, `whileInView` | `framer-motion` is the same version. Good inside React islands; GSAP stays primary |
-| `animejs` | 4.5.0 | MIT | Lightweight alternative engine | **MIT fallback** if GSAP licensing becomes a blocker |
+| `animejs` | 4.5.0 | MIT | Scoped DOM and SVG motion | Ships in the toolkit. The picker assigns it per effect. |
 | `@barba/core` | 2.10.3 | MIT | Page transitions for MPAs | Last publish 2024-08; prefer native View Transitions / Astro ClientRouter |
 | `swup` | 4.10.0 | MIT | Page transitions, actively maintained | Fallback for non-Astro builds |
 | `lottie-web` / `@lottiefiles/dotlottie-web` | 5.13.0 / 0.80.0 | MIT | After Effects animations | dotLottie is smaller and more modern |
 | `@rive-app/canvas` / `@rive-app/react-canvas` | 2.44.0 / 4.36.0 | MIT | Interactive state-machine vectors | |
-| `@theatre/core` | 0.7.2 | Apache-2.0 | Keyframed camera paths and sequencing with a studio UI | **Last publish 2024-05.** Optional; GSAP timelines usually suffice |
+| `@theatre/core` | 0.7.2 | Apache-2.0 | Keyframed camera paths and sequencing with a studio UI | **Last publish 2024-05.** `@theatre/core` ships in the toolkit. |
 
-### ⚠ GSAP license risk (important for *this* product)
-The GSAP Standard License defines **Prohibited Uses** as "any implementation and/or use of GSAP Products in tools that allow users to build visual animations without code that encourages, induces, or materially assists in creating a solution that competes with Webflow's visual animation building capabilities". Its plain-English summary also says the free license covers products as long as "end users are not charged a fee… to use your product". An AI website builder that generates GSAP-animated sites for paying users could fall within this language. Using GSAP on the *generated client sites* is clearly a Permitted Use (the site, not the tool, is the product). **Get a legal read and/or written consent from GSAP/Webflow before launch.** Mitigations: (a) the app never bundles or runs GSAP in its own UI; it only writes code into the user's repo, (b) keep an MIT path (Motion + anime.js + native CSS scroll timelines + Lenis) behind a switch.
+### GSAP
+
+D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
 
 ## 3. 3D and graphics
 

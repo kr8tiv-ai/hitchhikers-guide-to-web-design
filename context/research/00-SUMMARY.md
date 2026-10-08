@@ -24,7 +24,7 @@
 - **3D at motion level 8+:** Three.js r186 (+ R3F 9/drei 10 only when React is needed), lazy-loaded, desktop-first with mobile stills.
 - **Assets:** Poly Haven, Kenney, Quaternius and ambientCG (CC0) for free 3D and textures; Fontshare and Google Fonts; Imagine for stills and video; vtracer + SVGO for SVG.
 - **Framework choice is explained:** Grok proposes Astro, Next.js or SvelteKit with trade-offs, and the user can override.
-- **GSAP license:** generated *sites* using GSAP are fine. The *tool* must not become a no-code animation builder competing with Webflow (Standard License "Prohibited Uses"). Being free and open source reduces the "charging end users" concern, but a legal read is still advised. Keep an MIT fallback (Motion, anime.js, CSS scroll-timeline).
+- D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
 
 ## 3. Interview structure (Don't Panic + Babel Fish)
 Built from the Miro skeleton plus Matt's prompts (08, 09). Every question is skippable and has a **"Suggest for me"** option, and the interviewer pushes back on vague answers.
@@ -49,7 +49,6 @@ Babel Fish then runs Matt's 18 brand prompts as optional modules and produces th
 5. The user owns the code and can deploy anywhere, Hostinger first. Free and MIT.
 
 ## 5. Biggest risks
-- The GSAP license clause.
 - Imagine API billing vs SuperGrok limits (DIY fallback).
 - X API media/OAuth details and pay-per-use costs.
 - gsd-core isn't Grok-native, so we port its formats rather than depend on it.

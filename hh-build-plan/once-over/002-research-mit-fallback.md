@@ -1,6 +1,6 @@
 # 002. Research still plans a GSAP fallback
 
-Status: **proposed**. Not applied. Do not add a fallback project.
+Status: **applied** in the post-159 pass.
 
 ## Miss
 
