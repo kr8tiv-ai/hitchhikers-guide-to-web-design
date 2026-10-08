@@ -125,6 +125,7 @@ test("a missing grok is a warning and the probe is skipped", async () => {
   assert.equal(outcome.report.gitOk, true);
   assert.equal(outcome.report.grokOnPath, false);
   assert.equal(outcome.report.grokVersion, null);
+  assert.equal(outcome.report.auth, "skipped");
   assert.equal(outcome.report.sessionIdMode, "unknown");
   assert.equal(outcome.report.effortFlag, false);
   assert.ok(outcome.report.warnings.includes("session probe skipped"));
@@ -135,6 +136,7 @@ test("a missing grok is a warning and the probe is skipped", async () => {
   assert.match(text, /^node: 22\.0\.0 ok$/m);
   assert.match(text, /^git: ok$/m);
   assert.match(text, /^grok: not on PATH$/m);
+  assert.match(text, /^auth: skipped$/m);
   assert.match(text, /^session-id: unknown$/m);
   assert.match(text, /^playwright: not installed$/m);
   assert.match(text, /^whisper: not installed$/m);
@@ -181,6 +183,7 @@ test("grok --help that exits non-zero still classifies stdout and stderr", async
   assert.equal(outcome.report.grokVersion, null);
   assert.equal(outcome.report.sessionIdMode, "uuid");
   assert.equal(outcome.report.effortFlag, false);
+  assert.equal(outcome.report.auth, "no-flag");
   assert.ok(outcome.report.warnings.includes("grok --help exited non-zero"));
   assert.match(formatDoctor(outcome.report), /^grok: on PATH$/m);
 });
@@ -303,6 +306,113 @@ test("hh doctor is the only successful command", async () => {
   assert.equal(run.calls.includes("pdftotext -v"), true);
 });
 
+const NO_AUTH_HELP = [
+  "Usage: grok [OPTIONS] [PROMPT] [COMMAND]",
+  "",
+  "  -s, --session-id <SESSION_ID>",
+  "          Use a specific session UUID for a new conversation.",
+  "",
+  "      --oauth",
+  "          Use OAuth when the welcome screen starts authentication",
+  "",
+  "      --reasoning-effort <EFFORT>",
+  "          Reasoning effort for reasoning models",
+  "",
+  "          [aliases: --effort]",
+  "",
+  "Commands:",
+  "  login          Sign in to Grok",
+  "  logout         Sign out and clear cached credentials",
+  "  doctor         Check terminal, clipboard, color, and input support without starting Grok",
+  "  models         List available models and exit",
+].join("\n");
+
+const AUTH_STATUS_HELP = [
+  "Usage: grok [OPTIONS] [COMMAND]",
+  "",
+  "  -s, --session-id <UUID>",
+  "          Use a UUID for a new session.",
+  "",
+  "      --auth-status",
+  "          Show the current authentication state and exit.",
+  "",
+  "Commands:",
+  "  login          Sign in to Grok",
+].join("\n");
+
+test("doctor says grok --help has no auth status flag and does not run login", async () => {
+  const projectDir = tempDir();
+  try {
+    const run = scripted({
+      ...gitOk(),
+      "grok --version": command(0, "grok 1.2.3\n"),
+      "grok --help": command(0, NO_AUTH_HELP),
+    });
+    const outcome = await doctor({
+      projectDir,
+      nodeVersion: "v22.0.0",
+      runner: run,
+    });
+    assert.equal(outcome.exitCode, 0);
+    assert.equal(outcome.report.auth, "no-flag");
+    assert.equal(outcome.report.sessionIdMode, "uuid");
+    assert.match(
+      formatDoctor(outcome.report),
+      /^auth: no non-interactive status flag in grok --help$/m,
+    );
+    assert.equal(formatDoctor(outcome.report).includes("!"), false);
+    assert.equal(run.calls.includes("grok login"), false);
+    assert.equal(run.calls.includes("grok logout"), false);
+    assert.equal(run.calls.includes("grok --oauth"), false);
+    assert.equal(run.calls.includes("grok doctor"), false);
+    assert.equal(run.calls.includes("grok models"), false);
+    assert.equal(run.calls.some((call) => call.includes("--session-id")), false);
+    assert.equal(run.calls.some((call) => call.includes(path.basename(projectDir))), false);
+    assert.equal(loadConfig(projectDir).sessionIdMode, "uuid");
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("doctor records signed-out when the status flag output says signed out", async () => {
+  async function probe(output: string, status: number) {
+    const run = scripted({
+      ...gitOk(),
+      "grok --version": command(0, "grok 1.2.3\n"),
+      "grok --help": command(0, AUTH_STATUS_HELP),
+      "grok --auth-status": command(status, output),
+    });
+    const outcome = await doctor({ nodeVersion: "v22.0.0", runner: run });
+    return { run, outcome };
+  }
+
+  const signedOut = await probe("signed out\n", 1);
+  assert.equal(signedOut.outcome.exitCode, 0);
+  assert.equal(signedOut.outcome.report.auth, "signed-out");
+  assert.match(formatDoctor(signedOut.outcome.report), /^auth: signed-out$/m);
+  assert.equal(formatDoctor(signedOut.outcome.report).includes("!"), false);
+  assert.equal(signedOut.run.calls.includes("grok --auth-status"), true);
+  assert.equal(signedOut.run.calls.includes("grok login"), false);
+  assert.equal(signedOut.run.calls.some((call) => call.includes("--session-id")), false);
+  assert.equal(
+    signedOut.outcome.report.warnings.includes(
+      "auth status probe did not say signed-in or signed-out",
+    ),
+    false,
+  );
+
+  const negated = await probe("not signed in\n", 1);
+  assert.equal(negated.outcome.report.auth, "signed-out");
+  assert.equal(negated.run.calls.includes("grok login"), false);
+
+  const signedIn = await probe("signed in\n", 0);
+  assert.equal(signedIn.outcome.exitCode, 0);
+  assert.equal(signedIn.outcome.report.auth, "signed-in");
+  assert.match(formatDoctor(signedIn.outcome.report), /^auth: signed-in$/m);
+  assert.equal(signedIn.run.calls.includes("grok --auth-status"), true);
+  assert.equal(signedIn.run.calls.includes("grok login"), false);
+});
+
 test("doctor does not require whisper, playwright, or pdftotext", () => {
   const sourcePath = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -313,6 +423,7 @@ test("doctor does not require whisper, playwright, or pdftotext", () => {
   const source = readFileSync(sourcePath, "utf8");
   assert.equal(source.includes("always-approve"), false);
   assert.equal(source.includes("api.x.ai"), false);
+  assert.equal(/run\(\s*"grok"\s*,\s*\[\s*"login"/.test(source), false);
   assert.equal(/from ["']playwright["']/.test(source), false);
   assert.equal(/from ["']whisper/.test(source), false);
   assert.equal(/from ["']pdftotext/.test(source), false);

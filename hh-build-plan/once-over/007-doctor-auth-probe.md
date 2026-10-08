@@ -1,6 +1,6 @@
 # 007. hh doctor does not probe auth
 
-Status: **proposed**. Not applied. Do not call `grok login`.
+Status: **applied** in the post-159 pass.
 
 ## Miss
 
@@ -19,3 +19,11 @@ Add a test with a fake runner whose help text has no auth flag, and a second who
 ## Why this pass did not do it
 
 The xAI notes in `context/sources/xai/` document `grok login` and an ACP authenticate call. They do not document a local status flag. Inventing one would invent an API.
+
+## Applied
+
+`hh doctor` reads `grok --help` for a bare auth status flag. The installed help lists login, logout, and `--oauth`, and it has no status flag, so the doctor prints `auth: no non-interactive status flag in grok --help` and does not run a subcommand. When help documents a bare flag such as `--auth-status`, the doctor runs that flag alone and records `signed-in` or `signed-out` from its output. A project directory is not passed as `--session-id`. Exit 1 stays reserved for node older than 22.
+
+Files: `packages/cli/src/session-probe.ts`, `packages/cli/src/doctor.ts`, `packages/cli/test/doctor.test.ts`.
+
+Tests: `doctor says grok --help has no auth status flag and does not run login`, `doctor records signed-out when the status flag output says signed out`.

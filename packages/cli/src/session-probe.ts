@@ -7,10 +7,13 @@
  * Alias: the word `name` within 48 characters of `session` in such a paragraph,
  * and no uuid signal anywhere in the help. Both signals, or neither, return `unknown`.
  * `effortFlag` is true only when the text contains `--effort`.
+ * `authStatusFlag` is a bare auth status flag the help documents, or null.
+ * `login`, `logout`, and `--oauth` are never that flag. A missing flag is not a guess.
  */
 export function classifyHelp(helpText: string): {
   sessionIdMode: "unknown" | "uuid" | "alias";
   effortFlag: boolean;
+  authStatusFlag: string | null;
 } {
   let sawUuid = false;
   let sawAlias = false;
@@ -23,7 +26,110 @@ export function classifyHelp(helpText: string): {
   let sessionIdMode: "unknown" | "uuid" | "alias" = "unknown";
   if (sawUuid && !sawAlias) sessionIdMode = "uuid";
   else if (sawAlias && !sawUuid) sessionIdMode = "alias";
-  return { sessionIdMode, effortFlag: helpText.includes("--effort") };
+  return {
+    sessionIdMode,
+    effortFlag: helpText.includes("--effort"),
+    authStatusFlag: findAuthStatusFlag(helpText),
+  };
+}
+
+/**
+ * Read a status-flag stdout and stderr. Signed-out is tested first so
+ * "not signed in" is not read as signed-in. Anything else is unknown.
+ */
+export function classifyAuthStatus(text: string): "signed-in" | "signed-out" | "unknown" {
+  const readable = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  if (signedOut(readable)) return "signed-out";
+  if (signedIn(readable)) return "signed-in";
+  return "unknown";
+}
+
+/**
+ * The first bare auth status flag in help. `--auth-status` qualifies by name.
+ * Any other `*-status` flag qualifies only when that paragraph states a signed
+ * or logged state. Two status flags in one paragraph are ambiguous and are skipped.
+ */
+function findAuthStatusFlag(helpText: string): string | null {
+  for (const paragraph of paragraphsOf(helpText)) {
+    const hits = uniqueFlags(
+      bareLongFlags(paragraph).filter((flag) => isAuthStatusFlag(flag, paragraph)),
+    );
+    const hit = hits[0];
+    if (hit === undefined || hits.length !== 1) continue;
+    return hit;
+  }
+  return null;
+}
+
+function uniqueFlags(flags: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const flag of flags) {
+    const key = flag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(flag);
+  }
+  return unique;
+}
+
+function bareLongFlags(paragraph: string): string[] {
+  const flags: string[] = [];
+  for (const match of paragraph.matchAll(/--[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g)) {
+    const flag = match[0];
+    const index = match.index;
+    if (index === undefined) continue;
+    const before = index === 0 ? "" : paragraph.charAt(index - 1);
+    if (before !== "" && !/[\s|,`(]/.test(before)) continue;
+    const after = paragraph.slice(index + flag.length);
+    if (!isBareFlagEnd(after)) continue;
+    flags.push(flag);
+  }
+  return flags;
+}
+
+function isBareFlagEnd(after: string): boolean {
+  if (after.length === 0) return true;
+  const first = after.charAt(0);
+  if (!/[\s|,`)\]]/.test(first)) return false;
+  const rest = after.trimStart();
+  return !rest.startsWith("<") && !rest.startsWith("[") && !rest.startsWith("=");
+}
+
+function isAuthStatusFlag(flag: string, paragraph: string): boolean {
+  const name = flag.toLowerCase();
+  if (name === "--oauth" || name === "--login" || name === "--logout") return false;
+  if (/^--auth(?:-[a-z0-9]+)*-status$/.test(name)) return true;
+  if (name !== "--status" && !name.endsWith("-status")) return false;
+  return mentionsSignedState(paragraph);
+}
+
+function mentionsSignedState(paragraph: string): boolean {
+  return (
+    /\bsigned[- ](?:in|out)\b/i.test(paragraph) ||
+    /\blogged[- ](?:in|out)\b/i.test(paragraph) ||
+    /\bauthenticated\b/i.test(paragraph) ||
+    /\bunauthenticated\b/i.test(paragraph)
+  );
+}
+
+function signedOut(text: string): boolean {
+  return (
+    /\bnot signed[- ]in\b/i.test(text) ||
+    /\bsigned[- ]out\b/i.test(text) ||
+    /\bnot logged[- ]in\b/i.test(text) ||
+    /\blogged[- ]out\b/i.test(text) ||
+    /\bnot authenticated\b/i.test(text) ||
+    /\bunauthenticated\b/i.test(text)
+  );
+}
+
+function signedIn(text: string): boolean {
+  return (
+    /\bsigned[- ]in\b/i.test(text) ||
+    /\blogged[- ]in\b/i.test(text) ||
+    /\bauthenticated\b/i.test(text)
+  );
 }
 
 function paragraphsOf(helpText: string): string[] {

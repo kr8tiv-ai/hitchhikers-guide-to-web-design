@@ -9,7 +9,9 @@ import {
   type GuideConfig,
   type SessionIdMode,
 } from "@hitchhiker/engine";
-import { classifyHelp } from "./session-probe.ts";
+import { classifyAuthStatus, classifyHelp } from "./session-probe.ts";
+
+export type AuthProbe = "skipped" | "no-flag" | "signed-in" | "signed-out" | "unknown";
 
 export interface DoctorReport {
   nodeOk: boolean;
@@ -17,6 +19,7 @@ export interface DoctorReport {
   gitOk: boolean;
   grokOnPath: boolean;
   grokVersion: string | null;
+  auth: AuthProbe;
   sessionIdMode: "unknown" | "uuid" | "alias";
   effortFlag: boolean;
   warnings: string[];
@@ -58,6 +61,7 @@ export function formatDoctor(report: DoctorReport): string {
     report.grokOnPath
       ? `grok: ${report.grokVersion ?? "on PATH"}`
       : "grok: not on PATH",
+    formatAuth(report.auth),
     `session-id: ${report.sessionIdMode}`,
     `effort: ${report.effortFlag ? "present" : "absent"}`,
   ];
@@ -70,7 +74,8 @@ export function formatDoctor(report: DoctorReport): string {
 
 /**
  * Check node, git, and grok, then classify session-id help.
- * grok is spawned for `--version` and `--help` only. No prompt and no network call.
+ * grok is spawned for `--version`, `--help`, and a bare auth status flag when
+ * help documents one. No login, no subcommand guess, and stdin is ignored.
  * Missing git, grok, playwright, whisper, or pdftotext are warnings.
  * Exit 1 only when the node version is older than 22.
  */
@@ -90,6 +95,7 @@ export async function doctor(
   const grokProbe = probeGrok(runner);
   let sessionIdMode: SessionIdMode = "unknown";
   let effortFlag = false;
+  let auth: AuthProbe = "skipped";
   if (!grokProbe.onPath) {
     warnings.push("session probe skipped");
   } else {
@@ -101,6 +107,7 @@ export async function doctor(
     if (sessionIdMode === "unknown") {
       warnings.push("session-id mode is unknown. Pass an explicit flag later.");
     }
+    auth = readAuth(runner, classified.authStatusFlag, warnings);
   }
 
   for (const tool of OPTIONAL_TOOLS) {
@@ -120,6 +127,7 @@ export async function doctor(
     gitOk,
     grokOnPath: grokProbe.onPath,
     grokVersion: grokProbe.version,
+    auth,
     sessionIdMode,
     effortFlag,
     warnings,
@@ -127,7 +135,7 @@ export async function doctor(
   return { report, exitCode: nodeOk ? 0 : 1 };
 }
 
-/** Spawn with shell off and a 10 second timeout. PATH is the process PATH. */
+/** Spawn with shell off, stdin ignored, and a 10 second timeout. PATH is the process PATH. */
 export function spawnCommand(
   command: string,
   args: readonly string[],
@@ -137,6 +145,7 @@ export function spawnCommand(
     timeout: SPAWN_TIMEOUT_MS,
     encoding: "utf8",
     windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
   });
   return {
     status: result.status,
@@ -144,6 +153,43 @@ export function spawnCommand(
     stderr: typeof result.stderr === "string" ? result.stderr : "",
     errorCode: errorCodeOf(result.error),
   };
+}
+
+function formatAuth(auth: AuthProbe): string {
+  switch (auth) {
+    case "skipped":
+      return "auth: skipped";
+    case "no-flag":
+      return "auth: no non-interactive status flag in grok --help";
+    case "signed-in":
+      return "auth: signed-in";
+    case "signed-out":
+      return "auth: signed-out";
+    case "unknown":
+      return "auth: unknown";
+  }
+}
+
+/**
+ * Run the help-documented status flag with no extra arguments.
+ * A null flag is reported. The flag is never `login` and never a project slug.
+ */
+function readAuth(
+  runner: CommandRunner,
+  flag: string | null,
+  warnings: string[],
+): AuthProbe {
+  if (flag === null || !isStatusFlag(flag)) return "no-flag";
+  const status = runner.run("grok", [flag]);
+  const verdict = classifyAuthStatus(`${status.stdout}\n${status.stderr}`);
+  if (verdict === "unknown") {
+    warnings.push("auth status probe did not say signed-in or signed-out");
+  }
+  return verdict;
+}
+
+function isStatusFlag(flag: string): boolean {
+  return /^--[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(flag);
 }
 
 function probeGrok(runner: CommandRunner): { onPath: boolean; version: string | null } {
