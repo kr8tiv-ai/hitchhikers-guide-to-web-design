@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
+import {
+  defaultConfig,
+  think,
+  type SpawnLike,
+  type ThinkRequest,
+  type ThinkResult,
+} from "@hitchhiker/engine";
 import { contrastRatio } from "../src/axe-run.ts";
 import { applyFixLoop } from "../src/fix-prompts.ts";
 import { lhciCollectConfig } from "../src/lhci-run.ts";
@@ -82,6 +88,17 @@ function points(score: number): number {
   return score <= 1 ? score * 100 : score;
 }
 
+const ADAPTER_FLAGS = new Set([
+  "-p",
+  "-m",
+  "--effort",
+  "--json-schema",
+  "--output-format",
+  "--max-turns",
+  "--tools",
+  "--permission-mode",
+]);
+
 describe("live gates", { concurrency: false }, () => {
   test("zaphod passes shots, the diff, and truths to vision", async () => {
     const seen: ThinkRequest<unknown>[] = [];
@@ -102,6 +119,86 @@ describe("live gates", { concurrency: false }, () => {
     const payload = JSON.parse(request.input) as { truths: string[]; diff: string };
     assert.deepEqual(payload.truths, [TRUTH]);
     assert.equal(payload.diff, diff);
+  });
+
+  test("zaphod vision replays a recorded cassette through the adapter", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "hh-zaphod-"));
+    const cassetteDir = path.join(dir, "cassettes");
+    const shot = path.join(dir, "fold.png");
+    const value = reviewValue({});
+    let spawns = 0;
+    let args: readonly string[] = [];
+    const spawnImpl: SpawnLike = async (request) => {
+      spawns += 1;
+      args = request.args;
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          text: JSON.stringify(value),
+          stopReason: "end_turn",
+          usage: { input_tokens: 12, output_tokens: 9 },
+        }),
+        stderr: "",
+        timedOut: false,
+        errorCode: null,
+      };
+    };
+    const seen: ThinkRequest<unknown>[] = [];
+    const recorded: typeof think = (req, deps) => {
+      seen.push(req);
+      return think(req, {
+        ...deps,
+        spawnImpl,
+        projectDir: dir,
+        cassetteDir,
+        config: defaultConfig(),
+        flags: ADAPTER_FLAGS,
+        env: { HH_CASSETTE: "record", PATH: "" },
+      });
+    };
+    try {
+      writeFileSync(shot, "fold", "utf8");
+      const first = await zaphodReview(
+        { prompt: prompt(), shots: [shot], diff: "hero color shifted toward paper" },
+        { think: recorded },
+      );
+      assert.equal(spawns, 1);
+      assert.equal(first.verdict, "PASS");
+      assert.equal(first.truths[0]?.status, "FOUND");
+      assert.equal(seen.length, 1);
+      const request = seen[0];
+      assert.ok(request);
+      assert.equal(request.task, "zaphod-vision");
+      assert.equal(request.schema?.type, "object");
+      assert.ok(request.schema?.required?.includes("truths"));
+      assert.ok(request.schema?.required?.includes("pillars"));
+      assert.ok(request.schema?.required?.includes("jury"));
+      assert.deepEqual(request.images, [shot]);
+      assert.equal(args.includes("--json-schema"), true);
+      assert.equal(args.some((arg) => arg.includes(TRUTH)), true);
+      const replayed: typeof think = (req, deps) =>
+        think(req, {
+          ...deps,
+          spawnImpl: async () => {
+            throw new Error("spawned during replay");
+          },
+          projectDir: dir,
+          cassetteDir,
+          config: defaultConfig(),
+          flags: ADAPTER_FLAGS,
+          env: { HH_CASSETTE: "replay", PATH: "" },
+        });
+      const second = await zaphodReview(
+        { prompt: prompt(), shots: [shot], diff: "hero color shifted toward paper" },
+        { think: replayed },
+      );
+      assert.equal(spawns, 1);
+      assert.equal(second.verdict, "PASS");
+      assert.equal(second.truths[0]?.status, "FOUND");
+      assert.deepEqual(second.jury, first.jury);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("once-over and Forty-Two reviews ask for xhigh", async () => {
