@@ -467,10 +467,34 @@ react 19.3.0 and react-dom 19.3.0
   editor. The recipe builds a config object and does not import the
   package. Install it only when the editor is wanted.
 
-@lhci/cli 0.15.1 and lighthouse 13.5.0
-  Used to measure the blank pages. Not installed as dependencies.
-  @lhci/cli: Apache-2.0, https://github.com/GoogleChrome/lighthouse-ci
-  lighthouse: Apache-2.0, https://github.com/GoogleChrome/lighthouse
+@lhci/cli 0.15.1 and lighthouse
+  @lhci/cli is a devDependency of @hitchhiker/qa (prompt 126).
+  Registry: https://www.npmjs.com/package/@lhci/cli
+  Repository: https://github.com/GoogleChrome/lighthouse-ci
+  License field: Apache-2.0
+  That release depends on lighthouse 12.6.1 (Apache-2.0,
+  https://github.com/GoogleChrome/lighthouse). Research 06 also names
+  lighthouse 13.5.0. Autorun executes the copy @lhci/cli depends on.
+  The phone floor stays 90. chrome-launcher 0.13.4, pulled in by the
+  CLI, is Apache-2.0 (https://github.com/GoogleChrome/chrome-launcher).
+
+playwright 1.63.0
+  Dev dependency of @hitchhiker/qa for the review opener and the phone gates.
+  Registry: https://www.npmjs.com/package/playwright
+  Repository: https://github.com/microsoft/playwright
+  License field: Apache-2.0
+  Same pin and license as @playwright/test on @hitchhiker/app.
+  playwright-core is the same repository and Apache-2.0.
+
+@axe-core/playwright 4.13.0
+  Dev dependency of @hitchhiker/qa.
+  Registry: https://www.npmjs.com/package/@axe-core/playwright
+  Repository: https://github.com/dequelabs/axe-core-npm
+  License field: MPL-2.0 (file-level, not GPL).
+  It depends on axe-core 4.13.x, also MPL-2.0, file-level:
+  https://github.com/dequelabs/axe-core
+  The gate shells out through this package. It does not vendor modified
+  MPL source.
 
 Starter pages ship no font files and no borrowed media. CREDITS.json
 starts empty. fetch-assets accepts CC0 and CC-BY-4.0 only.

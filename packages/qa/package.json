@@ -18,6 +18,11 @@
   "dependencies": {
     "@hitchhiker/engine": "workspace:*"
   },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@lhci/cli": "0.15.1",
+    "playwright": "1.63.0"
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts"
   }
