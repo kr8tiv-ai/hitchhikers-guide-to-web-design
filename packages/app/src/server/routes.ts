@@ -45,6 +45,7 @@ import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLo
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
+import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
   MAX_UPLOAD_BYTES,
@@ -106,6 +107,8 @@ const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
+const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
 const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
 const MOTION_SOURCE = path.resolve(SRC_ROOT, "motion-previews", "index.ts");
 const MOTION_ROOT = path.resolve(SRC_ROOT, "motion-previews");
@@ -383,6 +386,10 @@ async function handlePost(
     await handleGalleryShortlist(req, res, projectDir, enqueue);
     return;
   }
+  if (pathname === "/api/drive/pause") {
+    sendDriveResult(req, res, await pauseDrive(projectDir));
+    return;
+  }
   sendJson(req, res, 404, { error: "That route is not on the desk." });
 }
 
@@ -618,7 +625,11 @@ async function handleGet(
     return;
   }
   if (pathname === "/hh-dashboard") {
-    sendHtml(req, res, 200, renderDashboard(token));
+    sendDriveResult(req, res, await readDashboard(projectDir, token));
+    return;
+  }
+  if (pathname === "/api/drive") {
+    sendDriveResult(req, res, await readDriveJson(projectDir));
     return;
   }
   if (pathname === "/api/session") {
@@ -631,6 +642,14 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/drive.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/drive-markup.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_MARKUP_SOURCE)));
     return;
   }
   if (pathname === "/client/card.js") {
@@ -894,35 +913,6 @@ function renderApprove(token: string): string {
   });
 }
 
-function renderDashboard(token: string): string {
-  return renderPanel({
-    token,
-    title: "/hh-dashboard",
-    current: "/hh-dashboard",
-    kicker: "Local queue",
-    status: "The queue is empty.",
-    main: `<h1 class="hh-headline">/hh-dashboard</h1>
-      <p class="hh-dek">The Guide's queue, on this machine.</p>
-      <div class="hh-dash">
-        <section class="hh-rise hh-rise--2" aria-labelledby="queue-title">
-          <h2 class="hh-title" id="queue-title">Prompt queue</h2>
-          <div class="hh-empty">
-            <h2 class="hh-empty__title">The queue is empty</h2>
-            <p>No prompt is running, paused, or waiting.</p>
-            <p class="hh-empty__next">Rows show up here when the build starts.</p>
-          </div>
-        </section>
-        <aside class="hh-side hh-rise hh-rise--3">
-          <div class="hh-phase-mark">
-            <p class="hh-phase-mark__num">01</p>
-            <p class="hh-kicker">Don't Panic</p>
-            <p class="hh-dek">The interview is open. The queue waits.</p>
-          </div>
-        </aside>
-      </div>`,
-  });
-}
-
 function renderMotion(token: string): string {
   return renderPanel({
     token,
@@ -1026,10 +1016,10 @@ function browserModule(filePath: string): string {
   if (cached !== undefined) return cached;
   const source = readFileSync(filePath, "utf8");
   const stripped = stripTypeScriptTypes(source, { mode: "strip" });
-  const js = stripped.replace(
-    /from\s+["']\.\.\/card\.ts["']/g,
-    'from "/client/card.js"',
-  );
+  const js = stripped
+    .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
+    .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
+    .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"');
   moduleCache.set(filePath, js);
   return js;
 }
@@ -1857,6 +1847,14 @@ function mustReplace(html: string, from: string, to: string, label: string): str
 function replaceBlock(html: string, pattern: RegExp, to: string, label: string): string {
   if (!pattern.test(html)) throw new Error(`Desk shell is missing ${label}.`);
   return html.replace(pattern, to);
+}
+
+function sendDriveResult(req: IncomingMessage, res: ServerResponse, result: DriveResult): void {
+  if (result.kind === "html") {
+    sendHtml(req, res, result.status, result.html);
+    return;
+  }
+  sendJson(req, res, result.status, result.body);
 }
 
 function sendJson(

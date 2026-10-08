@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -294,6 +294,159 @@ test("route slots, static files, and the browser modules are served", async () =
   });
 });
 
+test("the drive page reads queue.json and the pause route writes paused rows", async () => {
+  await withDesk({}, async (handle, dir) => {
+    const queue = {
+      items: [
+        { id: "001", kind: "build", status: "passed" },
+        { id: "002", kind: "build", status: "running" },
+        { id: "003", kind: "review", status: "queued" },
+      ],
+    };
+    const file = writeQueue(dir, `${JSON.stringify(queue, null, 2)}\n`);
+    const before = readFileSync(file);
+
+    const page = await fetch(new URL("/hh-dashboard", handle.url));
+    const html = await page.text();
+    assert.equal(page.status, 200);
+    assert.match(html, /data-id="001"/);
+    assert.match(html, /data-status="passed"/);
+    assert.match(html, /data-status="running"/);
+    assert.match(html, /data-status="queued"/);
+    assert.match(html, /Prompts 2 of 3\./);
+    assert.match(html, /name="hh-csrf" content="[0-9a-f]{64}"/);
+    assert.match(html, /src="\/client\/drive\.js"/);
+    assert.equal(html.includes("The queue is empty"), false);
+    assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
+
+    const listed = await fetch(new URL("/api/drive", handle.url));
+    assert.equal(listed.status, 200);
+    assert.deepEqual(await listed.json(), queue);
+
+    const missing = await fetch(new URL("/api/drive/pause", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(missing.status, 403);
+    assert.deepEqual(readFileSync(file), before);
+
+    const wrong = await fetch(new URL("/api/drive/pause", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": "0".repeat(64) },
+      body: "{}",
+    });
+    assert.equal(wrong.status, 403);
+    assert.deepEqual(readFileSync(file), before);
+
+    const token = tokenFrom(html);
+    const paused = await fetch(new URL("/api/drive/pause", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: "{}",
+    });
+    assert.equal(paused.status, 200);
+    const saved = JSON.parse(readFileSync(file, "utf8")) as { items: Array<{ id: string; status: string }> };
+    assert.deepEqual(
+      saved.items.map((item) => item.status),
+      ["passed", "paused", "queued"],
+    );
+    assert.deepEqual(await paused.json(), saved);
+
+    const again = await fetch(new URL("/hh-dashboard", handle.url));
+    const next = await again.text();
+    assert.match(next, /data-id="002"[^>]*data-status="paused"/);
+    assert.match(next, /Prompts 2 of 3\./);
+    assert.equal(next.includes("The queue is empty"), false);
+
+    const driveJs = await fetch(new URL("/client/drive.js", handle.url));
+    const source = await driveJs.text();
+    assert.equal(driveJs.status, 200);
+    assert.match(source, /\/api\/drive\/pause/);
+    assert.match(source, /x-hh-csrf/);
+    assert.match(source, /from "\/client\/drive-markup\.js"/);
+    assert.equal(source.includes("@hitchhiker"), false);
+    assert.equal(source.includes("child_process"), false);
+    assertSyntax(source, "hh-drive-check.js");
+    const markup = await fetch(new URL("/client/drive-markup.js", handle.url));
+    const markupJs = await markup.text();
+    assert.match(markupJs, /from "\/client\/card\.js"/);
+    assert.equal(markupJs.includes("@hitchhiker"), false);
+    assertSyntax(markupJs, "hh-drive-markup-check.js");
+  });
+});
+
+test("a missing queue file renders the empty state and pause creates nothing", async () => {
+  await withDesk({}, async (handle, dir) => {
+    const page = await fetch(new URL("/hh-dashboard", handle.url));
+    const html = await page.text();
+    assert.equal(page.status, 200);
+    assert.match(html, /No drive queued\./);
+    assert.match(html, /The drive has not been planned\./);
+    assert.match(html, /No prompts on this queue\./);
+    assert.equal(html.includes("The queue is empty"), false);
+
+    const listed = await fetch(new URL("/api/drive", handle.url));
+    assert.equal(listed.status, 200);
+    assert.deepEqual(await listed.json(), { items: [] });
+
+    const folder = path.join(dir, ".hitchhiker");
+    const queuePath = path.join(folder, "queue.json");
+    assert.equal(existsSync(queuePath), false);
+    const namesBefore = readdirSync(folder).sort();
+    const token = tokenFrom(html);
+    const paused = await fetch(new URL("/api/drive/pause", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: "{}",
+    });
+    assert.equal(paused.status, 409);
+    assert.match(await paused.text(), /No queue file is on disk/);
+    assert.equal(existsSync(queuePath), false);
+    assert.deepEqual(readdirSync(folder).sort(), namesBefore);
+  });
+});
+
+test("a corrupt queue file is a styled 500 and stays on disk", async () => {
+  await withDesk({}, async (handle, dir) => {
+    const raw = "{not json";
+    const file = writeQueue(dir, raw);
+    const page = await fetch(new URL("/hh-dashboard", handle.url));
+    const html = await page.text();
+    assert.equal(page.status, 500);
+    assert.match(html, /The queue file could not be read\./);
+    assert.match(html, /queue\.json is not valid JSON\./);
+    assert.match(html, /It was left on disk\./);
+    assert.match(html, /hh-error/);
+    assert.equal(html.includes("The queue is empty"), false);
+    assert.equal(html.includes(raw), false);
+    assert.equal(readFileSync(file, "utf8"), raw);
+
+    const listed = await fetch(new URL("/api/drive", handle.url));
+    assert.equal(listed.status, 500);
+    assert.equal(readFileSync(file, "utf8"), raw);
+    const body = await listed.text();
+    assert.match(body, /not valid JSON/);
+    assert.equal(body.includes(raw), false);
+  });
+});
+
+test("drive route source does not import a process spawn", () => {
+  const root = path.resolve(here, "..", "src");
+  const files = [
+    "dashboard.ts",
+    "drive-markup.ts",
+    "client/drive.ts",
+    "server/drive.ts",
+    "server/routes.ts",
+  ];
+  const source = files.map((file) => readFileSync(path.join(root, file), "utf8")).join("\n");
+  assert.doesNotMatch(source, /node:child_process/);
+  assert.doesNotMatch(source, /child_process/);
+  assert.doesNotMatch(source, /spawning grok/i);
+  assert.doesNotMatch(source, /spawn\(\s*["']grok/);
+});
+
 test("sse heartbeat is 15 seconds and both sinks close", () => {
   assert.equal(HEARTBEAT_MS, 15_000);
   const left: string[] = [];
@@ -460,6 +613,14 @@ function collect(
   );
   req.on("error", () => undefined);
   return { ready, done };
+}
+
+function writeQueue(dir: string, body: string): string {
+  const folder = path.join(dir, ".hitchhiker");
+  mkdirSync(folder, { recursive: true });
+  const file = path.join(folder, "queue.json");
+  writeFileSync(file, body, "utf8");
+  return file;
 }
 
 function assertSyntax(source: string, name: string): void {

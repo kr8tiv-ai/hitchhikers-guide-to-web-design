@@ -177,3 +177,10 @@ export { lintClaims as lintBrandClaims } from "./brand/truth.ts";
 export type { Evidence } from "./brand/truth.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
 export { formatCost } from "./cost.ts";
+export {
+  QueueFileError,
+  loadQueue,
+  pauseQueue,
+  saveQueue,
+} from "./queue-file.ts";
+export type { QueueFile, QueueStatus } from "./queue-file.ts";

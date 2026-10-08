@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { DashboardError, renderDashboard } from "../src/dashboard.ts";
+import { formatCost } from "@hitchhiker/engine";
+import { DashboardError, renderDashboard, renderQueueReadError } from "../src/dashboard.ts";
+import { costText, progressHtml, queueBodyHtml } from "../src/drive-markup.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cssPath = path.resolve(here, "../src/dashboard.css");
@@ -142,6 +144,59 @@ test("more than 200 rows throws and 200 still renders", () => {
     () => renderDashboard({ items: [...full, { id: "p-200", kind: "build", status: "queued" }] }),
     /more than 200 rows/,
   );
+});
+
+test("a script url adds the token and drops the inline theme script", () => {
+  const token = "ab".repeat(32);
+  const html = renderDashboard(
+    { items: [{ id: "001", kind: "build", status: "queued" }] },
+    { token, scriptUrl: "/client/drive.js" },
+  );
+  assert.match(html, new RegExp(`name="hh-csrf" content="${token}"`));
+  assert.match(html, /src="\/client\/drive\.js"/);
+  assert.doesNotMatch(html, /prefers-color-scheme/);
+  assert.equal(html.match(/data-action="pause"/g)?.length, 1);
+  assert.equal(copy(html).includes("!"), false);
+  assert.throws(
+    () => renderDashboard({ items: [] }, { scriptUrl: "https://example.com/x.js" }),
+    DashboardError,
+  );
+});
+
+test("the default page keeps the inline theme script", () => {
+  const html = renderDashboard({ items: [] });
+  assert.match(html, /prefers-color-scheme/);
+  assert.doesNotMatch(html, /name="hh-csrf"/);
+  assert.doesNotMatch(html, /\/client\/drive\.js/);
+});
+
+test("the subscription line matches formatCost", () => {
+  const items = [
+    { id: "001", kind: "build" as const, status: "passed" as const },
+    { id: "002", kind: "build" as const, status: "running" as const },
+    { id: "003", kind: "review" as const, status: "queued" as const },
+  ];
+  const line = formatCost({ mode: "subscription", promptsRun: 2, promptsTotal: 3 });
+  assert.equal(costText(items), line);
+  const html = renderDashboard({ items });
+  assert.ok(html.includes(line));
+  assert.ok(html.includes(progressHtml(items)));
+  assert.ok(html.includes(queueBodyHtml(items)));
+  assert.doesNotMatch(html, /\$/);
+});
+
+test("a queue read error stays styled and drops markup in the message", () => {
+  const html = renderQueueReadError("queue.json is not valid JSON.");
+  assert.match(html, /The queue file could not be read\./);
+  assert.match(html, /queue\.json is not valid JSON\./);
+  assert.match(html, /It was left on disk\./);
+  assert.match(html, /hh-error/);
+  assert.match(html, /hh-shell/);
+  assert.doesNotMatch(html, /\/client\/drive\.js/);
+  assert.equal(copy(html).includes("!"), false);
+  const hostile = renderQueueReadError("<script>alert(1)</script>");
+  assert.doesNotMatch(hostile, /<script>alert/);
+  assert.match(hostile, /The queue file could not be read\./);
 });
 
 test("css uses shell variables, a max-width, and no indigo or fixed width", () => {

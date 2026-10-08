@@ -225,7 +225,7 @@ test("scheduled reviews round-trip as queue rows with statuses", async () => {
 
 test("queue source uses the engine lock and does not start a runner", () => {
   const source = readFileSync(
-    path.join(import.meta.dirname, "..", "src", "queue-file.ts"),
+    path.join(import.meta.dirname, "..", "..", "engine", "src", "queue-file.ts"),
     "utf8",
   );
   assert.match(source, /withStateLock/);
@@ -236,4 +236,15 @@ test("queue source uses the engine lock and does not start a runner", () => {
   assert.doesNotMatch(source, /child_process/);
   assert.doesNotMatch(source, /spawn\(/);
   assert.doesNotMatch(source, /from ["'].*runner/);
+  const barrel = readFileSync(
+    path.join(import.meta.dirname, "..", "src", "queue-file.ts"),
+    "utf8",
+  );
+  assert.match(barrel, /from "@hitchhiker\/engine"/);
+  assert.doesNotMatch(barrel, /function saveQueue/);
+  assert.doesNotMatch(barrel, /function loadQueue/);
+  assert.doesNotMatch(barrel, /function pauseQueue/);
+  assert.doesNotMatch(barrel, /child_process/);
+  assert.doesNotMatch(barrel, /spawn\(/);
+  assert.doesNotMatch(barrel, /from ["'].*runner/);
 });
