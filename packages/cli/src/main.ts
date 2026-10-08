@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { runAssetsCommand } from "./commands/assets.ts";
+import { runElevateCommand } from "./commands/elevate.ts";
 import { runToolsCommand } from "./commands/tools.ts";
 import { closeActiveApp, runApp } from "./commands/app.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
@@ -158,6 +159,7 @@ export async function runCli(
   if (command === "app") return runApp(argv.slice(1));
   if (command === "assets") return runAssetsCommand(argv.slice(1));
   if (command === "tools") return runToolsCommand(argv.slice(1));
+  if (command === "elevate") return runElevateCommand(argv.slice(1));
   if (command === "progress" || command === "pause" || command === "resume") {
     return runStateCommand(argv);
   }
