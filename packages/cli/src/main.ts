@@ -7,6 +7,7 @@ import { runElevateCommand } from "./commands/elevate.ts";
 import { runToolsCommand } from "./commands/tools.ts";
 import { closeActiveApp, runApp } from "./commands/app.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
+import { runInstall } from "./install.ts";
 
 const HELP = "hh doctor [--project <dir>]";
 
@@ -358,11 +359,18 @@ async function routeElevate(argv: readonly string[]): Promise<{ exitCode: number
   return runElevateCommand(forwarded);
 }
 
+/** Bare `hh` is the `npx hitchhikers-guide` entry. It starts the companion app. */
+export function cliEntryArgs(argv: readonly string[]): string[] {
+  if (argv.length === 0) return ["app"];
+  return [...argv];
+}
+
 export async function runCli(
   argv: readonly string[],
   runner?: CommandRunner,
 ): Promise<{ exitCode: number; stdout: string }> {
   const command = argv[0];
+  if (command === "install") return runInstall(argv.slice(1));
   if (command === "app") return runApp(argv.slice(1));
   if (command === "assets") return runAssetsCommand(argv.slice(1));
   if (command === "tools") return runToolsCommand(argv.slice(1));
@@ -388,7 +396,7 @@ function isDirectRun(): boolean {
 }
 
 if (isDirectRun()) {
-  const argv = process.argv.slice(2);
+  const argv = cliEntryArgs(process.argv.slice(2));
   runCli(argv)
     .then((outcome) => {
       process.stdout.write(outcome.stdout);
