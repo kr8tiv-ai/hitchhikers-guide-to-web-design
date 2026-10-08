@@ -111,6 +111,9 @@ test("the release checklist names the audits and the bans", () => {
   assertReleaseDoc(markdown);
   assert.equal(markdown.includes("!"), false);
   assert.deepEqual(scanText(markdown), []);
+  assert.match(markdown, /@theatre\/studio` is not installed/);
+  assert.doesNotMatch(markdown, /does not name GPL/);
+  assert.match(markdown, /does not list a GPL or AGPL package/);
 });
 
 test("assertReleaseDoc allows Do not npm publish and rejects an action", () => {
