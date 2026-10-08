@@ -116,6 +116,42 @@ test("the fixture graph allows the installed permissive set and rejects the know
   assert.match(text, /potrace: banned package name/);
 });
 
+test("lone LGPL-3.0-or-later passes only for sharp libvips binaries", () => {
+  const linux = auditDeps([
+    { name: "@img/sharp-libvips-linux-x64", license: "LGPL-3.0-or-later" },
+  ]);
+  assert.equal(linux.ok, true, linux.problems.join("\n"));
+  assert.deepEqual(linux.problems, []);
+  const darwin = auditDeps([
+    { name: "@img/sharp-libvips-darwin-arm64", license: "LGPL-3.0-or-later" },
+  ]);
+  assert.equal(darwin.ok, true, darwin.problems.join("\n"));
+  assert.deepEqual(darwin.problems, []);
+  const left = auditDeps([{ name: "left-pad", license: "LGPL-3.0-or-later" }]);
+  assert.equal(left.ok, false);
+  assert.match(left.problems.join("\n"), /LGPL-3.0-or-later/);
+  const platform = auditDeps([
+    { name: "@img/sharp-win32-x64", license: "LGPL-3.0-or-later" },
+  ]);
+  assert.equal(platform.ok, false);
+  assert.match(platform.problems.join("\n"), /LGPL-3.0-or-later/);
+  const gpl = auditDeps([
+    { name: "@img/sharp-libvips-linux-x64", license: "GPL-3.0-only" },
+  ]);
+  assert.equal(gpl.ok, false);
+  assert.match(gpl.problems.join("\n"), /GPL-3.0-only/);
+  const older = auditDeps([
+    { name: "@img/sharp-libvips-linux-x64", license: "LGPL-2.1-only" },
+  ]);
+  assert.equal(older.ok, false);
+  assert.match(older.problems.join("\n"), /LGPL-2.1-only/);
+  const agpl = auditDeps([
+    { name: "@img/sharp-libvips-linux-x64", license: "AGPL-3.0-only" },
+  ]);
+  assert.equal(agpl.ok, false);
+  assert.match(agpl.problems.join("\n"), /AGPL-3.0-only/);
+});
+
 test("LGPL alone fails, and a different AND with LGPL fails", () => {
   const alone = auditDeps([{ name: "copyleft-lite", license: "LGPL-3.0-or-later" }]);
   assert.equal(alone.ok, false);

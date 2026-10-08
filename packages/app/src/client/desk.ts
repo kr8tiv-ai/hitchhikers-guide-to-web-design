@@ -296,7 +296,8 @@ function ensureMotion(document: DeskDocument, questionId: string | undefined): v
   const create = document.createElement;
   const parent = document.body;
   if (typeof create !== "function" || parent === undefined) return;
-  const script = create("script");
+  // A detached createElement throws Illegal invocation and skips the answer post.
+  const script = create.call(document, "script");
   script.setAttribute("type", "module");
   script.setAttribute("src", "/client/motion.js");
   parent.appendChild(script);

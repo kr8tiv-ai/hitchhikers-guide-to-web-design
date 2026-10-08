@@ -30,7 +30,7 @@ pnpm licenses list --json
 pnpm --filter @hitchhiker/qa test
 ```
 
-Expected evidence: `auditDeps` in `packages/qa/src/licenses.ts` returns ok true, and the qa tests pass. The `licence` job in `.github/workflows/audit.yml` imports `auditDeps` and fails on any other result. NOTICE has a Third-party section. That section lists the installed licences, including the named exceptions. It does not list a GPL or AGPL package. It states that `@theatre/studio` is not installed.
+Expected evidence: `auditDeps` in `packages/qa/src/licenses.ts` returns ok true, and the qa tests pass. The `licence` job in `.github/workflows/audit.yml` imports `auditDeps` and fails on any other result. NOTICE has a Third-party section. That section lists the installed licences, including the named exceptions. `Apache-2.0 AND LGPL-3.0-or-later` passes only for a name that starts with `@img/sharp-`. The lone identifier `LGPL-3.0-or-later` passes only for a name that starts with `@img/sharp-libvips-`. It does not list a GPL or AGPL package. It states that `@theatre/studio` is not installed.
 
 ## Secret scan
 

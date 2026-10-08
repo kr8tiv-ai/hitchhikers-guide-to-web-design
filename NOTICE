@@ -38,10 +38,17 @@ CC0-1.0:
 BlueOak-1.0.0. Permissive model licence. Not GPL and not AGPL:
   sax 1.6.1
 
-Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. A lone LGPL identifier
-is still refused. The expression passes only for a package whose name
-starts with @img/sharp- (the platform builds). Any other name fails:
+Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. The expression passes
+only for a package whose name starts with @img/sharp- (the platform
+builds). Any other name fails that expression. The lone identifier
+LGPL-3.0-or-later passes only for a package whose name starts with
+@img/sharp-libvips- (sharp's prebuilt, unmodified, dynamically loaded
+libvips binaries). Any other name with that lone identifier fails.
+LGPL-2.1-only fails. GPL and AGPL fail for every name, including sharp
+names:
   @img/sharp-win32-x64 0.35.5
+  @img/sharp-libvips-linux-x64
+  @img/sharp-libvips-darwin-arm64
 
 GSAP registry field, required by D-001. It is not an SPDX identifier, and
 it is not GPL or AGPL:

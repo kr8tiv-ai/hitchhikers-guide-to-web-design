@@ -11,15 +11,18 @@
  * An OR expression passes only when every side is allowed. An AND
  * expression fails when any side is not allowed.
  *
- * Two installed fields are not plain SPDX, and each exception is bound
- * to the package name that ships it. D-001 requires GSAP, whose registry
- * field is the standard no-charge licence. That string passes only for
- * the package named gsap. The sharp platform builds declare
- * Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. That expression
- * passes only for a name that starts with @img/sharp-. Any other name
- * fails it, because AND fails when a side is not allowed. A lone LGPL
- * identifier still fails. @theatre/studio and potrace fail by name even
- * when the licence field would otherwise pass.
+ * Three installed fields are not on the plain allow list, and each
+ * exception is bound to the package name that ships it. D-001 requires
+ * GSAP, whose registry field is the standard no-charge licence. That
+ * string passes only for the package named gsap. The sharp platform
+ * builds declare Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. That
+ * expression passes only for a name that starts with @img/sharp-. Any
+ * other name fails it, because AND fails when a side is not allowed.
+ * sharp's prebuilt libvips binaries declare the lone identifier
+ * LGPL-3.0-or-later. That lone identifier passes only for a name that
+ * starts with @img/sharp-libvips-. Any other lone LGPL fails. GPL and
+ * AGPL fail for every name, including sharp names. @theatre/studio and
+ * potrace fail by name even when the licence field would otherwise pass.
  */
 
 export interface LicenseDep {
@@ -58,6 +61,12 @@ const GSAP_STANDARD = "Standard 'no charge' license: https://gsap.com/standard-l
  * outer parentheses are removed and the whitespace is collapsed.
  */
 const SHARP_PLATFORM = "apache-2.0 and lgpl-3.0-or-later";
+
+/**
+ * Lone licence field on @img/sharp-libvips-* binaries. Same normalization
+ * as the platform expression. Other LGPL identifiers do not match.
+ */
+const SHARP_LIBVIPS = "lgpl-3.0-or-later";
 
 type Token =
   | { kind: "id"; value: string }
@@ -110,6 +119,7 @@ function licenseIssue(name: string, license: string | null): string | null {
   if (prose !== null) return prose;
   if (isGsapStandard(trimmed) && isGsapPackage(name)) return null;
   if (isSharpPlatform(trimmed) && isSharpPlatformPackage(name)) return null;
+  if (isSharpLibvips(trimmed) && isSharpLibvipsPackage(name)) return null;
   const tokens = tokenize(trimmed);
   if (tokens === null) return "license is not allowed";
   const expr = parseExpression(tokens);
@@ -141,19 +151,32 @@ function isSharpPlatformPackage(name: string): boolean {
   return name.trim().toLowerCase().startsWith("@img/sharp-");
 }
 
+/** Prebuilt libvips binaries such as @img/sharp-libvips-linux-x64. */
+function isSharpLibvipsPackage(name: string): boolean {
+  return name.trim().toLowerCase().startsWith("@img/sharp-libvips-");
+}
+
 function isGsapStandard(license: string): boolean {
   const value = collapse(license).replace(/\.+$/u, "");
   return value === GSAP_STANDARD;
 }
 
 function isSharpPlatform(license: string): boolean {
+  return normalizedLicense(license) === SHARP_PLATFORM;
+}
+
+function isSharpLibvips(license: string): boolean {
+  return normalizedLicense(license) === SHARP_LIBVIPS;
+}
+
+function normalizedLicense(license: string): string {
   let value = collapse(license);
   let inner = unwrap(value);
   while (inner !== null) {
     value = collapse(inner);
     inner = unwrap(value);
   }
-  return value.toLowerCase() === SHARP_PLATFORM;
+  return value.toLowerCase();
 }
 
 function unwrap(value: string): string | null {
