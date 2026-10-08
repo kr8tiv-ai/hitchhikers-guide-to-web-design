@@ -11,7 +11,14 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { defaultConfig, think, type SpawnLike, type ThinkRequest } from "@hitchhiker/engine";
-import { COPY_REFINE_TASK, approveCopy, copyCards, proposeCopy, type CopyProposal } from "../src/copy-refine.ts";
+import {
+  COPY_REFINE_SCHEMA,
+  COPY_REFINE_TASK,
+  approveCopy,
+  copyCards,
+  proposeCopy,
+  type CopyProposal,
+} from "../src/copy-refine.ts";
 import { DETAIL_AREAS, detailChecks, writeDetailPrompts } from "../src/detail-pass.ts";
 import { elevateRound, type GateResult } from "../src/elevate-loop.ts";
 import type { ElevateItem } from "../src/elevate.ts";
@@ -491,6 +498,97 @@ test("copy proposals drop banned lines and a write needs approval", async () => 
     rmSync(smuggledDir, { recursive: true, force: true });
   } finally {
     rmSync(approvedDir, { recursive: true, force: true });
+  }
+});
+
+test("copy refinement replays a recorded cassette through the adapter", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-copy-cassette-"));
+  const cassetteDir = path.join(root, "cassettes");
+  const projectDir = path.join(root, "project");
+  const pages = ["Reserve a towel\nCome in when you are ready.\n"];
+  const payload = {
+    rewrites: [
+      { id: "towel", before: "Reserve a towel", after: "Hold a towel", why: "The line stays concrete." },
+      { id: "bang", before: "Reserve a towel", after: "Book a call!", why: "A sharper ask." },
+    ],
+  };
+  let spawns = 0;
+  let replaySpawns = 0;
+  let args: readonly string[] = [];
+  const seen: ThinkRequest<unknown>[] = [];
+  const spawnImpl: SpawnLike = async (request) => {
+    spawns += 1;
+    args = request.args;
+    return {
+      status: 0,
+      stdout: JSON.stringify({
+        text: JSON.stringify(payload),
+        stopReason: "end_turn",
+        usage: { input_tokens: 11, output_tokens: 17 },
+      }),
+      stderr: "",
+      timedOut: false,
+      errorCode: null,
+    };
+  };
+  const recorded: typeof think = (request, deps) => {
+    seen.push(request);
+    return think(request, {
+      ...deps,
+      spawnImpl,
+      projectDir,
+      cassetteDir,
+      config: defaultConfig(),
+      flags: FLAGS,
+      env: { HH_CASSETTE: "record", PATH: "" },
+    });
+  };
+  const replayed: typeof think = (request, deps) =>
+    think(request, {
+      ...deps,
+      spawnImpl: async () => {
+        replaySpawns += 1;
+        throw new Error("spawned during replay");
+      },
+      projectDir,
+      cassetteDir,
+      config: defaultConfig(),
+      flags: FLAGS,
+      env: { HH_CASSETTE: "replay", PATH: "" },
+    });
+
+  try {
+    mkdirSync(projectDir, { recursive: true });
+    const first = await proposeCopy(pages, VOICE, { think: recorded });
+    assert.equal(spawns, 1);
+    assert.deepEqual(first, [
+      { id: "towel", before: "Reserve a towel", after: "Hold a towel", why: "The line stays concrete." },
+    ]);
+    const request = seen[0];
+    assert.ok(request);
+    assert.equal(request.task, COPY_REFINE_TASK);
+    assert.equal(request.task, "copy-refine");
+    assert.equal(request.effort, "xhigh");
+    assert.equal(request.schema, COPY_REFINE_SCHEMA);
+    assert.equal(COPY_REFINE_SCHEMA.properties?.rewrites?.maxItems, 8);
+    assert.equal(request.input.includes(VOICE), true);
+    assert.equal(request.input.includes("Reserve a towel"), true);
+    assert.equal(args.includes("--json-schema"), true);
+    assert.equal(args.includes("--effort"), true);
+    assert.equal(args.includes("xhigh"), true);
+    assert.equal(
+      args.some((arg) => arg.includes("\"rewrites\"")),
+      true,
+    );
+    const saved = readdirSync(path.join(cassetteDir, "copy-refine")).filter((name) => name.endsWith(".json"));
+    assert.equal(saved.length, 1);
+    const second = await proposeCopy(pages, VOICE, { think: replayed });
+    assert.equal(spawns, 1);
+    assert.equal(replaySpawns, 0);
+    assert.deepEqual(second, first);
+    assert.equal(existsSync(path.join(repo, "packages", "qa", "test", "cassettes", "copy-refine")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
