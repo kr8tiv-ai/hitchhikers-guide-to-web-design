@@ -121,6 +121,21 @@ test("LGPL alone fails, and a different AND with LGPL fails", () => {
   assert.equal(alone.ok, false);
   const swapped = auditDeps([{ name: "not-sharp", license: "MIT AND LGPL-3.0-or-later" }]);
   assert.equal(swapped.ok, false);
+  const borrowedSharp = auditDeps([
+    { name: "not-sharp", license: "Apache-2.0 AND LGPL-3.0-or-later" },
+  ]);
+  assert.equal(borrowedSharp.ok, false);
+  assert.match(borrowedSharp.problems.join("\n"), /LGPL-3.0-or-later/);
+  const unscopedSharp = auditDeps([
+    { name: "sharp", license: "Apache-2.0 AND LGPL-3.0-or-later" },
+  ]);
+  assert.equal(unscopedSharp.ok, false);
+  const linuxSharp = auditDeps([
+    { name: "@img/sharp-linux-x64", license: "Apache-2.0 AND LGPL-3.0-or-later" },
+  ]);
+  assert.equal(linuxSharp.ok, true, linuxSharp.problems.join("\n"));
+  const borrowedGsap = auditDeps([{ name: "not-gsap", license: GSAP_LICENSE }]);
+  assert.equal(borrowedGsap.ok, false);
   const gplAnd = auditDeps([{ name: "worse", license: "Apache-2.0 AND GPL-3.0-only" }]);
   assert.equal(gplAnd.ok, false);
   assert.equal(noticeNeedsMention("Apache-2.0 AND LGPL-3.0-or-later"), true);
@@ -139,6 +154,8 @@ test("NOTICE has a Third-party heading and still credits gsd-core", () => {
   assert.match(notice, /License: MIT License/);
   assert.match(notice, /MPL-2\.0/);
   assert.match(notice, /Zlib/);
+  assert.match(notice, /passes only for a package whose name/);
+  assert.match(notice, /@img\/sharp-/);
   assert.match(notice, /gsd-core is vendored source for templates/);
   assert.equal(notice.includes("!"), false);
 });

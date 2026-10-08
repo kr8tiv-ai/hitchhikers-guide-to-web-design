@@ -11,12 +11,15 @@
  * An OR expression passes only when every side is allowed. An AND
  * expression fails when any side is not allowed.
  *
- * Two installed fields are not plain SPDX. D-001 requires GSAP, whose
- * registry field is the standard no-charge licence. The sharp platform
- * package declares Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL.
- * That one expression passes. A lone LGPL identifier still fails.
- * @theatre/studio and potrace fail by name even when the licence field
- * would otherwise pass.
+ * Two installed fields are not plain SPDX, and each exception is bound
+ * to the package name that ships it. D-001 requires GSAP, whose registry
+ * field is the standard no-charge licence. That string passes only for
+ * the package named gsap. The sharp platform builds declare
+ * Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. That expression
+ * passes only for a name that starts with @img/sharp-. Any other name
+ * fails it, because AND fails when a side is not allowed. A lone LGPL
+ * identifier still fails. @theatre/studio and potrace fail by name even
+ * when the licence field would otherwise pass.
  */
 
 export interface LicenseDep {
@@ -74,7 +77,7 @@ export function auditDeps(entries: LicenseDep[]): LicenseAudit {
     const name = entry.name.trim();
     const label = name === "" ? "(unnamed)" : name;
     if (isBannedName(name)) problems.push(`${label}: banned package name`);
-    const licenseProblem = licenseIssue(entry.license);
+    const licenseProblem = licenseIssue(name, entry.license);
     if (licenseProblem !== null) problems.push(`${label}: ${licenseProblem}`);
   }
   return { ok: problems.length === 0, problems };
@@ -99,13 +102,14 @@ function isBannedName(name: string): boolean {
   return BANNED_NAMES.has(name.trim().toLowerCase());
 }
 
-function licenseIssue(license: string | null): string | null {
+function licenseIssue(name: string, license: string | null): string | null {
   if (license === null || license.trim() === "") return "license is missing";
   const trimmed = license.trim();
   if (trimmed.toLowerCase() === "unlicensed") return "UNLICENSED is proprietary";
   const prose = proseDenial(trimmed);
   if (prose !== null) return prose;
-  if (isGsapStandard(trimmed) || isSharpPlatform(trimmed)) return null;
+  if (isGsapStandard(trimmed) && isGsapPackage(name)) return null;
+  if (isSharpPlatform(trimmed) && isSharpPlatformPackage(name)) return null;
   const tokens = tokenize(trimmed);
   if (tokens === null) return "license is not allowed";
   const expr = parseExpression(tokens);
@@ -126,6 +130,15 @@ function proseDenial(license: string): string | null {
     return "GPL is not allowed";
   }
   return null;
+}
+
+function isGsapPackage(name: string): boolean {
+  return name.trim().toLowerCase() === "gsap";
+}
+
+/** Platform builds such as @img/sharp-win32-x64 and @img/sharp-linux-x64. */
+function isSharpPlatformPackage(name: string): boolean {
+  return name.trim().toLowerCase().startsWith("@img/sharp-");
 }
 
 function isGsapStandard(license: string): boolean {
