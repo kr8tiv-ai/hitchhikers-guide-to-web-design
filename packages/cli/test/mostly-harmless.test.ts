@@ -4,8 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { renderQaReport, type QaReportInput } from "../../qa/src/report.ts";
-import { parseArgs, parseCli, parseQaArgs, runCli, runQa } from "../src/main.ts";
+import { parseArgs, parseCli, parseQaArgs, runCli, runQa, type QaReportInput } from "../src/main.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -111,7 +110,11 @@ test("mostly-harmless prints a before-we-jump question and the report", async ()
   assert.equal(outcome.exitCode, 0);
   assert.match(outcome.stdout, /Which towel should the footer name\?/);
   assert.ok(outcome.stdout.includes(path.join(project, ".hitchhiker", "QA-REPORT.md")));
-  assert.ok(outcome.stdout.includes(renderQaReport(input).trimEnd()));
+  // The real qa renderer runs (no render dep). Check its sections without a cross-package import.
+  for (const line of ["## Phone", "- Performance 96", "## Accessibility", "- Keyboard path is present.", "## Weight", "## Jury", "Total: 86.5", "## Overall"]) {
+    assert.ok(outcome.stdout.includes(line), line);
+  }
+  assert.match(outcome.stdout, /## Overall\s+Status: PASS/);
   assert.match(outcome.stdout, /real mobile/);
   assert.equal(outcome.stdout.includes("deploy"), false);
 });
