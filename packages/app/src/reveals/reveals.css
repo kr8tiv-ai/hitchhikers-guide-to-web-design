@@ -1,0 +1,452 @@
+/* Reveal plates and the print sheet for agency PDFs.
+   Colour, type, and motion come from the desk tokens. No second palette. */
+
+.hh-skip {
+  position: absolute;
+  left: var(--space-4);
+  top: 0;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  transform: translateY(-120%);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: var(--color-surface);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-small);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.hh-skip:focus,
+.hh-skip:focus-visible {
+  transform: translateY(var(--space-4));
+}
+
+.rv-page .hh-mast h1,
+.rv-page .rv-step h2,
+.rv-page .rv-copy,
+.rv-page .rv-brief,
+.rv-page .rv-scores,
+.rv-page .rv-note {
+  margin: 0;
+}
+
+.rv-sequence,
+.rv-stage,
+.rv-step,
+.rv-bands,
+.rv-logos,
+.rv-lines,
+.rv-voice {
+  min-width: 0;
+}
+
+.rv-sequence {
+  display: grid;
+  gap: var(--space-7);
+}
+
+.rv-step {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.rv-kicker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.rv-index {
+  color: var(--color-muted);
+}
+
+.rv-bands {
+  display: grid;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.rv-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-4);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.rv-specimen {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+
+.rv-specimen .hh-display,
+.rv-specimen .hh-headline {
+  margin: 0;
+}
+
+.rv-logos {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.rv-logo {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+}
+
+.rv-mark {
+  display: grid;
+  place-items: center;
+  min-height: 7rem;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.rv-mark svg {
+  width: min(100%, 8rem);
+  height: auto;
+}
+
+.rv-mark--reversed {
+  background: var(--color-ink);
+}
+
+.rv-lines,
+.rv-voice {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-line,
+.rv-voice li {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+}
+
+.rv-line {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+}
+
+.rv-stage {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.rv-brief {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.rv-brief div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.rv-brief dt {
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rv-brief dd {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.rv-frame {
+  height: 17.5rem;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+  box-shadow: var(--shadow-md);
+}
+
+.rv-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--color-surface);
+}
+
+.rv-url {
+  overflow-wrap: anywhere;
+  color: var(--color-muted);
+}
+
+.rv-scores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-score:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.rv-score {
+  display: grid;
+  align-content: space-between;
+  gap: var(--space-2);
+  min-height: 6.5rem;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+
+.rv-score strong {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--type-title);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.rv-status--pass {
+  color: var(--color-success);
+}
+
+.rv-status--blocker {
+  color: var(--color-danger);
+}
+
+.rv-notes {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-notes li {
+  overflow-wrap: break-word;
+}
+
+.rv-badge {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.rv-badge__plate {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  box-shadow: var(--shadow-md);
+}
+
+.rv-badge__mark {
+  width: min(100%, 18rem);
+  height: auto;
+}
+
+.rv-badge--held {
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  border-left: var(--spine) solid var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+}
+
+.rv-page .hh-kicker {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 800px) {
+  .rv-scores {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rv-score:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .rv-logos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .rv-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    align-items: start;
+  }
+
+  .rv-scoreboard,
+  .rv-award {
+    grid-column: 1 / -1;
+  }
+
+  .rv-scores {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .rv-frame {
+    height: 28rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rv-step {
+    animation-name: rv-enter;
+    animation-duration: var(--motion-duration-slow);
+    animation-timing-function: var(--motion-easing-out);
+    animation-fill-mode: both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-step {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rv-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pdf-sheet {
+  margin: 0;
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+.pdf-cover {
+  display: grid;
+  align-content: end;
+  gap: var(--space-4);
+  min-height: 62vh;
+}
+
+.pdf-rule {
+  width: 4.5rem;
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: var(--spine) solid var(--color-accent);
+}
+
+.pdf-kicker {
+  margin: 0;
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pdf-dek {
+  max-width: 36rem;
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.pdf-main {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.pdf-section {
+  display: grid;
+  gap: var(--space-3);
+  break-inside: avoid;
+}
+
+.pdf-section h2,
+.pdf-section p,
+.pdf-main > h1,
+.pdf-cover h1,
+.pdf-cover p {
+  margin: 0;
+}
+
+.pdf-section p {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.pdf-footer {
+  margin-top: var(--space-6);
+  color: var(--color-muted);
+}
+
+@media print {
+  .rv-step {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  body.pdf-sheet {
+    background: var(--color-surface);
+    box-shadow: none;
+    min-height: 0;
+  }
+
+  .pdf-cover {
+    break-after: page;
+    page-break-after: always;
+    min-height: 0;
+    padding-top: 30vh;
+  }
+
+  .pdf-kicker {
+    letter-spacing: 0;
+  }
+
+  .pdf-sheet {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
