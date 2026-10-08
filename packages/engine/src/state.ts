@@ -70,9 +70,15 @@ function parseBlockers(body: string): string[] {
   return items;
 }
 
-function parseState(markdown: string): GuideState {
-  const text = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const matches = [...text.matchAll(/^## (.+)$/gm)];
+/**
+ * saveState writes one heading per field. scaffoldProject writes the ported
+ * GSD template, whose same facts are lines under "## Current Position".
+ * A file that already has a short heading stays on that reader.
+ */
+const POSITION_HEADING = "Current Position";
+
+function headingBodies(markdown: string): Map<string, string> {
+  const matches = [...markdown.matchAll(/^## (.+)$/gm)];
   const bodies = new Map<string, string>();
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
@@ -81,10 +87,20 @@ function parseState(markdown: string): GuideState {
     if (title === undefined || title.length === 0) continue;
     const start = match.index + match[0].length;
     const next = matches[index + 1];
-    const end = next?.index ?? text.length;
-    bodies.set(title, unwrap(text.slice(start, end)));
+    const end = next?.index ?? markdown.length;
+    bodies.set(title, unwrap(markdown.slice(start, end)));
   }
+  return bodies;
+}
 
+function isShortDocument(bodies: Map<string, string>): boolean {
+  for (const [heading] of TEXT_FIELDS) {
+    if (bodies.has(heading)) return true;
+  }
+  return bodies.has("Blockers");
+}
+
+function parseShort(bodies: Map<string, string>): GuideState {
   const textValues = {} as Record<TextKey, string>;
   for (const [heading, key] of TEXT_FIELDS) {
     const body = bodies.get(heading);
@@ -109,11 +125,73 @@ function parseState(markdown: string): GuideState {
   };
 }
 
+/** Template empty markers. A real commit or blocker is kept as written. */
+function isUnset(value: string): boolean {
+  return /^(none|none yet\.?|\[[a-z][a-z -]*\])$/i.test(value);
+}
+
+function positionField(body: string, label: string): string | undefined {
+  const prefix = `${label}:`;
+  for (const line of body.split("\n")) {
+    if (!line.startsWith(prefix)) continue;
+    return line.slice(prefix.length).trim();
+  }
+  return undefined;
+}
+
+/**
+ * `Phase: 3 of 6 (Deep Thought)` is the template's position line.
+ * GuideState.phase is the phase name. A plain name is kept as written.
+ */
+function mapPhase(raw: string | undefined): string {
+  if (raw === undefined || raw.length === 0) return "";
+  const named = /^\d+ of \d+ \((.+)\)$/.exec(raw);
+  const name = named?.[1];
+  if (name !== undefined && name.length > 0) return name;
+  return raw;
+}
+
+function mapCommit(raw: string | undefined): string {
+  if (raw === undefined || raw.length === 0 || isUnset(raw)) return "";
+  return raw;
+}
+
+function mapBlockers(raw: string | undefined): string[] {
+  if (raw === undefined || raw.length === 0 || isUnset(raw)) return [];
+  return [raw];
+}
+
+function parsePosition(body: string): GuideState {
+  const updated = positionField(body, "Updated at");
+  return {
+    phase: mapPhase(positionField(body, "Phase")),
+    slice: positionField(body, "Slice") ?? "",
+    promptId: positionField(body, "Prompt id") ?? "",
+    lastGoodCommit: mapCommit(positionField(body, "Last good commit")),
+    blockers: mapBlockers(positionField(body, "Blockers")),
+    nextAction: positionField(body, "Next action") ?? "",
+    updatedAt: updated ?? "",
+  };
+}
+
+function parseState(markdown: string): GuideState {
+  const text = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const bodies = headingBodies(text);
+  if (isShortDocument(bodies)) return parseShort(bodies);
+  const position = bodies.get(POSITION_HEADING);
+  if (position !== undefined) return parsePosition(position);
+  throw new Error("STATE.md is missing heading: Phase");
+}
+
 function statePath(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "STATE.md");
 }
 
-/** Read `.hitchhiker/STATE.md`. A missing file returns null. */
+/**
+ * Read `.hitchhiker/STATE.md`. A missing file returns null.
+ * The short heading document and the scaffolded GSD template both load.
+ * A file that is neither throws `STATE.md is missing heading`.
+ */
 export function loadState(projectDir: string): GuideState | null {
   const filePath = statePath(projectDir);
   if (!existsSync(filePath)) return null;

@@ -1,6 +1,6 @@
 # 003. Scaffolded STATE.md cannot be loaded
 
-Status: **proposed**. Not applied. Do not invent a third state format.
+Status: **applied** in the post-159 pass
 
 ## Miss
 

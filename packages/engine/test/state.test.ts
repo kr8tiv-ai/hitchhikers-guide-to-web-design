@@ -16,7 +16,9 @@ import {
   loadState as loadStateFromIndex,
   saveState as saveStateFromIndex,
 } from "../src/index.ts";
+import { openInterview } from "../src/interview.ts";
 import { LockHeld } from "../src/lock.ts";
+import { scaffoldProject } from "../src/spec/scaffold.ts";
 import { loadState, saveState, type GuideState } from "../src/state.ts";
 
 const DEAD_PID = 2147483646;
@@ -178,6 +180,111 @@ test("the home index dedupes by project path", async () => {
     );
   } finally {
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a scaffolded STATE.md loads and the interview opens on the first question", async () => {
+  const dir = tempDir("hh-state-scaffold-");
+  try {
+    await scaffoldProject(dir, {
+      name: "Night Stall",
+      siteWhy: "The stall exists so regulars can find the tea.",
+      hosting: "Hostinger",
+      now: () => Date.parse("2026-01-15T15:04:05.000Z"),
+    });
+    assert.deepEqual(loadState(dir), {
+      phase: "Deep Thought",
+      slice: "Seven and a Half Million Years",
+      promptId: "scaffold",
+      lastGoodCommit: "",
+      blockers: [],
+      nextAction: "Write the PRD",
+      updatedAt: "",
+    });
+    const raw = readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8");
+    assert.match(raw, /## Current Position/);
+    assert.match(raw, /gsd_state_version/);
+    assert.equal(/^## Phase$/m.test(raw), false);
+    assert.equal(raw.includes(".planning"), false);
+    assert.equal(existsSync(path.join(dir, ".planning")), false);
+
+    const session = await openInterview(dir, "express");
+    const question = session.next();
+    assert.equal(question?.id, "DP-0.1");
+    assert.equal(question?.ask, "Is this site for you, or for a client?");
+    assert.equal(loadState(dir)?.phase, "Deep Thought");
+    const afterOpen = readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8");
+    assert.equal(afterOpen, raw);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a position block defaults fields the template does not carry", () => {
+  const dir = tempDir("hh-state-position-");
+  const filePath = path.join(dir, ".hitchhiker", "STATE.md");
+  try {
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(
+      filePath,
+      [
+        "## Current Position",
+        "",
+        "Phase: 1 of 6 (Don't Panic)",
+        "Slice: Towel Check",
+        "Prompt id: interview:DP-0.2",
+        "Last good commit: abc1234",
+        "Blockers: waiting on the towel",
+        "Next action: Answer DP-0.2.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    assert.deepEqual(loadState(dir), {
+      phase: "Don't Panic",
+      slice: "Towel Check",
+      promptId: "interview:DP-0.2",
+      lastGoodCommit: "abc1234",
+      blockers: ["waiting on the towel"],
+      nextAction: "Answer DP-0.2.",
+      updatedAt: "",
+    });
+
+    writeFileSync(filePath, "## Current Position\n\nPhase: Deep Thought\n", "utf8");
+    assert.deepEqual(loadState(dir), {
+      phase: "Deep Thought",
+      slice: "",
+      promptId: "",
+      lastGoodCommit: "",
+      blockers: [],
+      nextAction: "",
+      updatedAt: "",
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a broken STATE.md throws a missing heading", async () => {
+  const dir = tempDir("hh-state-broken-");
+  const filePath = path.join(dir, ".hitchhiker", "STATE.md");
+  try {
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, "# Notes\n\nNot a state file.\n", "utf8");
+    assert.throws(() => loadState(dir), /STATE\.md is missing heading: Phase/);
+    await assert.rejects(
+      () => openInterview(dir, "express"),
+      /STATE\.md is missing heading: Phase/,
+    );
+
+    writeFileSync(
+      filePath,
+      "# Guide state\n\n## Phase\n\nDon't Panic\n\n## Slice\n\nTowel Check\n",
+      "utf8",
+    );
+    assert.throws(() => loadState(dir), /STATE\.md is missing heading: Prompt id/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
