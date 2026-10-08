@@ -77,9 +77,19 @@ interface ReportLighthouse {
   seo?: number | null;
 }
 
+/** One route from the 126 runner. Status is required. Scores are optional. */
+interface GateLighthouseRow {
+  status: string;
+  scores?: Partial<LighthousePoints> | null;
+  performance?: number | null;
+  accessibility?: number | null;
+  bestPractices?: number | null;
+  seo?: number | null;
+}
+
 /** 126 runners and the 146 phone scores, without inventing a missing number. */
 export function gateSummaryFromReport(report: {
-  lighthouse: ReportLighthouse | ReadonlyArray<{ status: string }>;
+  lighthouse: ReportLighthouse | ReadonlyArray<GateLighthouseRow>;
   axe: { status: string; notes?: readonly string[] };
   console?: { errors: number; failedRequests: number };
   links?: { pass: boolean };
@@ -326,20 +336,21 @@ function delayStyle(index: number): string {
 }
 
 function isLighthouseList(
-  value: ReportLighthouse | ReadonlyArray<{ status: string }>,
-): value is ReadonlyArray<{ status: string }> {
+  value: ReportLighthouse | ReadonlyArray<GateLighthouseRow>,
+): value is ReadonlyArray<GateLighthouseRow> {
   return Array.isArray(value);
 }
 
-function lighthouseFrom(value: ReportLighthouse | ReadonlyArray<{ status: string }>): GateSummary["lighthouse"] {
+function lighthouseFrom(value: ReportLighthouse | ReadonlyArray<GateLighthouseRow>): GateSummary["lighthouse"] {
   if (isLighthouseList(value)) {
     const pass = value.length > 0 && value.every((row) => row.status === "PASS");
+    const bags = value.map((row) => rowScores(row));
     return {
       status: pass ? "PASS" : "BLOCKER",
-      performance: null,
-      accessibility: null,
-      bestPractices: null,
-      seo: null,
+      performance: worstScore(bags, "performance"),
+      accessibility: worstScore(bags, "accessibility"),
+      bestPractices: worstScore(bags, "bestPractices"),
+      seo: worstScore(bags, "seo"),
     };
   }
   const scores = value.scores ?? null;
@@ -350,6 +361,46 @@ function lighthouseFrom(value: ReportLighthouse | ReadonlyArray<{ status: string
     bestPractices: scaleScore(scores?.bestPractices ?? value.bestPractices),
     seo: scaleScore(scores?.seo ?? value.seo),
   };
+}
+
+/** Lowest number across route rows. A list with no numbers stays unrecorded. */
+function worstScore(bags: ReadonlyArray<LighthousePoints | null>, key: keyof LighthousePoints): number | null {
+  let worst: number | null = null;
+  for (const bag of bags) {
+    const value = bag?.[key];
+    if (value === null || value === undefined) continue;
+    if (worst === null || value < worst) worst = value;
+  }
+  return worst;
+}
+
+function rowScores(row: GateLighthouseRow): LighthousePoints | null {
+  const nested = row.scores ?? null;
+  const source = nested ?? row;
+  const performance = optionalScore(source.performance);
+  const accessibility = optionalScore(source.accessibility);
+  const bestPractices = optionalScore(source.bestPractices);
+  const seo = optionalScore(source.seo);
+  if (
+    performance === undefined &&
+    accessibility === undefined &&
+    bestPractices === undefined &&
+    seo === undefined
+  ) {
+    return null;
+  }
+  return {
+    performance: performance ?? null,
+    accessibility: accessibility ?? null,
+    bestPractices: bestPractices ?? null,
+    seo: seo ?? null,
+  };
+}
+
+function optionalScore(value: number | null | undefined): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return scaleScore(value);
 }
 
 function scaleScore(value: number | null | undefined): number | null {

@@ -137,6 +137,28 @@ test("a failed gate withholds the badge and a deploy record picks the live URL",
   });
   expect(fromReport.lighthouse.status).toBe("PASS");
   expect(fromReport.lighthouse.performance).toBeNull();
+  const scoredRows = gateSummaryFromReport({
+    lighthouse: [
+      { status: "PASS", scores: { performance: 0.96, accessibility: 98, bestPractices: 95, seo: 100 } },
+      { status: "PASS", scores: { performance: 0.91, accessibility: 100, bestPractices: 97, seo: 92 } },
+    ],
+    axe: { status: "PASS", notes: [] },
+  });
+  expect(scoredRows.lighthouse.status).toBe("PASS");
+  expect(scoredRows.lighthouse.performance).toBe(91);
+  expect(scoredRows.lighthouse.accessibility).toBe(98);
+  expect(scoredRows.lighthouse.bestPractices).toBe(95);
+  expect(scoredRows.lighthouse.seo).toBe(92);
+  const shown = renderJourneyReveal({
+    brief: brief(),
+    liveUrl: "https://northglass.example/",
+    scores: scoredRows,
+    jury: 70,
+    deployed: true,
+  });
+  expect(shown.includes("<strong>91</strong>")).toBe(true);
+  expect(shown.includes("Not recorded")).toBe(false);
+  expect(shown.includes('data-badge="earned"')).toBe(true);
   const scaled = gateSummaryFromReport({
     lighthouse: { status: "PASS", performance: 0.96, accessibility: 90, bestPractices: null, seo: null },
     axe: { status: "BLOCKER" },
