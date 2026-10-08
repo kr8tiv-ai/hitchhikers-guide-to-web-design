@@ -1,0 +1,42 @@
+{
+  "client": "Towel & Tea",
+  "kind": "fictional loose-leaf shop",
+  "turns": [
+    {
+      "id": "DP-2.1",
+      "ask": "Why are you building this website, in one sentence?",
+      "status": "ANSWERED",
+      "value": "The site exists so Towel & Tea can sell loose leaf in a tin."
+    },
+    {
+      "id": "DP-2.6",
+      "ask": "Who is the visitor? Name one specific person: what they want, what they fear, and what device they are on.",
+      "status": "ANSWERED",
+      "value": "Visitor wants a tin."
+    },
+    {
+      "id": "DP-2.2",
+      "ask": "What do you hope it accomplishes? What is the one action a visitor should take?",
+      "status": "ANSWERED",
+      "value": "buy"
+    },
+    {
+      "id": "DP-5.3",
+      "ask": "Give the vibe in three words, and three words it must never feel like.",
+      "status": "ANSWERED",
+      "value": "earthy. Anti-vibe is neon."
+    },
+    {
+      "id": "DP-6.2",
+      "ask": "Motion appetite from 1 to 10. 1 is a calm brochure. 10 is a world you move through. Pick a whole number in that range.",
+      "status": "SKIPPED",
+      "value": "3. ASSUMED. Polished, not a spectacle."
+    },
+    {
+      "id": "DP-9.2",
+      "ask": "Where should it live? Hostinger is recommended. The other choices are Vercel, Netlify, or Cloudflare, or no idea. Do you own the domain, who is the registrar, and is email on that domain?",
+      "status": "ANSWERED",
+      "value": "no idea"
+    }
+  ]
+}
