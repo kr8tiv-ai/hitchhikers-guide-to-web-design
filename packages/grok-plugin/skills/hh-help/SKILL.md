@@ -1,0 +1,24 @@
+---
+name: hh-help
+description: List the Guide commands and which ones the hh CLI can run today.
+user-invocable: true
+---
+
+There is no `hh help` subcommand. This skill is the help. Commands with no CLI subcommand yet are not implemented.
+
+The hh CLI can run these today:
+
+- `hh install --project <dir>` copies skills, agents, hooks, and rules into `.grok/`.
+- `hh app --project <dir>` opens the local Guide dashboard. Pass `--no-open` or `--port` only when the user asks.
+- `hh assets <plan|run|diy|import> --project <dir>` plans, runs, writes prompts, or imports. `hh assets run` spends only with `--yes` after a yes. `hh assets import` needs `--file <path>`.
+- `hh tools <search|install> --project <dir>` searches or installs. `hh tools install` needs `--yes`.
+- `hh mostly-harmless --project <dir>` runs the gates and the jury. Do not pass `--yes`.
+- `hh elevate --project <dir>` plans one Elevate round. Applying a pick needs `--yes`.
+- `hh progress --project <dir>` shows phase, slice, prompt, and next action.
+- `hh pause --project <dir> --message <text>` saves one next-action line.
+- `hh resume --project <dir>` shows the prompt id to continue from.
+- `hh doctor` or `hh doctor --project <dir>` prints the environment report.
+
+The other /hh commands are skills only. Say that plainly. Do not invent flags.
+
+Never push. Never deploy. Never spend without the user's yes. Never create a GitHub repo.
