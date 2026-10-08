@@ -336,6 +336,35 @@ test("no picks ends the round without gates or prompts", { timeout: 60_000 }, as
   }
 });
 
+test("a second round is numbered and still changes nothing when nothing is picked", async () => {
+  const projectDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-again-"));
+  try {
+    plant(projectDir);
+    const deps = {
+      think: scriptedThink(PLAN_PAYLOAD),
+      pick: async () => [] as ElevateItem[],
+      runPrompt: async () => {
+        throw new Error("a round with no picks must not run a prompt");
+      },
+      gates: async (): Promise<GateResult> => {
+        throw new Error("a round with no picks must not run gates");
+      },
+    };
+    const first = await elevateRound(projectDir, deps);
+    const second = await elevateRound(projectDir, deps);
+    assert.deepEqual(first, { applied: [], refused: [] });
+    assert.deepEqual(second, { applied: [], refused: [] });
+    const folder = path.join(projectDir, ".hitchhiker", "elevate");
+    assert.equal(existsSync(path.join(folder, "ROUND-1.md")), true);
+    const round2 = readFileSync(path.join(folder, "ROUND-2.md"), "utf8");
+    assert.match(round2, /^# Round 2/m);
+    assert.match(round2, /This round changes nothing\./);
+    assert.equal(existsSync(path.join(projectDir, "site.txt")), false);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("every regressing pick is refused and nothing is kept", { timeout: 60_000 }, async () => {
   const projectDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-regress-"));
   let gateCalls = 0;
