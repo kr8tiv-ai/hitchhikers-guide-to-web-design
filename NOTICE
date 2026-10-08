@@ -3,6 +3,55 @@ Copyright (c) 2026 The Hitchhiker's Guide to Web Design contributors
 
 This project is licensed under the MIT License. See the LICENSE file.
 
+Third-party
+-----------
+
+vendor/gsd-core is MIT.
+  Upstream: https://github.com/open-gsd/gsd-core
+  gsd-core is vendored source for templates. It is not an npm dependency.
+  The attribution section below keeps the commit and the template notes.
+
+The licence audit in packages/qa/src/licenses.ts reads declared license
+fields. These are packages that audit saw installed in this tree. Packages
+that are not installed are not listed here.
+
+MPL-2.0, file-level. The licence covers those files. It is not applied to
+the Guide:
+  @axe-core/playwright 4.13.0
+  axe-core 4.13.0 and 4.14.0
+  @resvg/resvg-js 2.6.2
+  @resvg/resvg-js-win32-x64-msvc 2.6.2
+
+Zlib, inside the SPDX expression (MIT AND Zlib). Both sides are allowed:
+  pako 1.0.11
+
+MIT OR Apache-2.0. Both sides are allowed, and the OR expression stays
+on record:
+  @visioncortex/vtracer 1.0.0-alpha.4
+
+0BSD, a BSD-family licence:
+  tslib 1.14.1 and 2.8.1
+
+CC0-1.0:
+  mdn-data 2.0.28 and 2.27.1
+
+BlueOak-1.0.0. Permissive model licence. Not GPL and not AGPL:
+  sax 1.6.1
+
+Apache-2.0 AND LGPL-3.0-or-later. LGPL is not GPL. A lone LGPL identifier
+is still refused. This expression is the platform build of sharp that this
+tree installed:
+  @img/sharp-win32-x64 0.35.5
+
+GSAP registry field, required by D-001. It is not an SPDX identifier, and
+it is not GPL or AGPL:
+  gsap 3.15.0
+  Standard 'no charge' license: https://gsap.com/standard-license
+
+Other installed packages declare MIT, Apache-2.0, BSD, BSD-2-Clause,
+BSD-3-Clause, ISC, or Unlicense. @theatre/studio and potrace are not
+installed.
+
 Third-party attribution
 -----------------------
 
