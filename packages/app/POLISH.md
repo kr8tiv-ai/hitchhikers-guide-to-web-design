@@ -8,7 +8,7 @@ Before PNGs stayed in `e2e/screens/polish-before/` (gitignored). After PNGs are 
 
 Axe, via `@axe-core/playwright` already in `@hitchhiker/qa`: clean on every shot. Serious, critical, and moderate block. Minor does not. The run is `e2e/polish.spec.ts`.
 
-Lighthouse 12.6.1, simulated, Playwright Chromium, one run each. Mobile is the phone gate (all four categories at 90 or more).
+Lighthouse 12.6.1, simulated, Playwright Chromium. Mobile is the phone gate (all four categories at 90 or more). The gate runs three times per route and fails if any run is under 90. Text responses are gzipped. Without that, one simulated run of `/motion` fell under 90 while the observed paint stayed near 200ms.
 
 | Route | Form | Performance | Accessibility | Best practices | SEO |
 | --- | --- | --- | --- | --- | --- |

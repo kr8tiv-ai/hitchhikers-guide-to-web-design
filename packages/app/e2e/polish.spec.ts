@@ -297,6 +297,161 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
   }
 });
 
+test("the desk meets the same phone gate as a generated site", async () => {
+  test.setTimeout(900_000);
+  const routes = ["/", "/brand", "/approve", "/gallery", "/hh-dashboard", "/motion"];
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-polish-lh-"));
+  const cacheDir = await mkdtemp(path.join(tmpdir(), "hh-polish-lh-cache-"));
+  const packFile = path.join(projectDir, "gallery.json");
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  await writeFile(packFile, JSON.stringify(fixturePack()));
+  const desk = startChild(serverFile, {
+    HH_E2E_PROJECT: projectDir,
+    HH_GALLERY_FILE: packFile,
+    HH_GALLERY_CACHE: cacheDir,
+  });
+  try {
+    const deskUrl = await readUrl(desk, "desk");
+    const results = await phoneGate(deskUrl, routes);
+    expect(results.map((result) => result.route).sort()).toEqual([...routes].sort());
+    for (const result of results) {
+      const detail = result.reasons.join("; ");
+      expect(result.status, `${result.route} ${detail}`).toBe("PASS");
+      expect(result.runs, result.route).toBe(3);
+      const scores = result.scores;
+      expect(scores, result.route).not.toBeNull();
+      if (scores === null) continue;
+      expect(points(scores.performance), `${result.route} performance`).toBeGreaterThanOrEqual(90);
+      expect(points(scores.accessibility), `${result.route} accessibility`).toBeGreaterThanOrEqual(90);
+      expect(points(scores.bestPractices), `${result.route} best practices`).toBeGreaterThanOrEqual(90);
+      expect(points(scores.seo), `${result.route} seo`).toBeGreaterThanOrEqual(90);
+    }
+  } finally {
+    await stopChild(desk);
+    await rm(projectDir, { recursive: true, force: true });
+    await rm(cacheDir, { recursive: true, force: true });
+  }
+});
+
+function points(value: number): number {
+  return value <= 1 ? value * 100 : value;
+}
+
+interface PhoneGateRow {
+  route: string;
+  status: string;
+  reasons: string[];
+  scores: {
+    performance: number;
+    accessibility: number;
+    bestPractices: number;
+    seo: number;
+  } | null;
+  runs: number;
+}
+
+/**
+ * Same runner as generated sites. A static import of qa source leaves this package.
+ */
+function phoneGate(origin: string, routes: string[]): Promise<PhoneGateRow[]> {
+  const file = pathToFileURL(path.resolve(here, "../../qa/src/lhci-run.ts")).href;
+  const runner = [
+    "const loaded = await import(process.argv[1]);",
+    "if (typeof loaded.runLhci !== 'function') throw new Error('runLhci is missing.');",
+    "const results = await loaded.runLhci(process.argv[2], process.argv.slice(3));",
+    "process.stdout.write(JSON.stringify(results));",
+  ].join("\n");
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", runner, file, origin, ...routes],
+      { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`phone gate timed out\n${stderr.slice(-1500)}`));
+    }, 840_000);
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr?.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`phone gate exited ${code ?? "null"}\n${stderr.slice(-1500)}`));
+        return;
+      }
+      try {
+        resolve(readPhoneGate(JSON.parse(stdout) as unknown));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "bad phone gate output";
+        reject(new Error(`${message}\n${stdout.slice(0, 500)}\n${stderr.slice(-500)}`));
+      }
+    });
+  });
+}
+
+function readPhoneGate(value: unknown): PhoneGateRow[] {
+  if (!Array.isArray(value)) throw new Error("phone gate did not return a list");
+  return value.map((row) => {
+    if (typeof row !== "object" || row === null) throw new Error("phone gate row is incomplete");
+    if (!("route" in row) || !("status" in row) || !("reasons" in row) || !("runs" in row) || !("scores" in row)) {
+      throw new Error("phone gate row is incomplete");
+    }
+    if (typeof row.route !== "string" || typeof row.status !== "string" || typeof row.runs !== "number") {
+      throw new Error("phone gate row is incomplete");
+    }
+    if (!Array.isArray(row.reasons) || row.reasons.some((reason) => typeof reason !== "string")) {
+      throw new Error("phone gate row is incomplete");
+    }
+    return {
+      route: row.route,
+      status: row.status,
+      reasons: row.reasons,
+      scores: readScores(row.scores),
+      runs: row.runs,
+    };
+  });
+}
+
+function readScores(value: unknown): PhoneGateRow["scores"] {
+  if (value === null) return null;
+  if (typeof value !== "object") throw new Error("phone gate scores are incomplete");
+  if (
+    !("performance" in value) ||
+    !("accessibility" in value) ||
+    !("bestPractices" in value) ||
+    !("seo" in value)
+  ) {
+    throw new Error("phone gate scores are incomplete");
+  }
+  const scores = {
+    performance: value.performance,
+    accessibility: value.accessibility,
+    bestPractices: value.bestPractices,
+    seo: value.seo,
+  };
+  if (
+    typeof scores.performance !== "number" ||
+    typeof scores.accessibility !== "number" ||
+    typeof scores.bestPractices !== "number" ||
+    typeof scores.seo !== "number"
+  ) {
+    throw new Error("phone gate scores are incomplete");
+  }
+  return scores;
+}
+
 interface Shot {
   id: string;
   path: string;

@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises"
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import {
   GrokUnavailableError,
   InterviewError,
@@ -1917,11 +1918,37 @@ function sendBytes(
   type: string,
   body: Buffer,
 ): void {
-  res.writeHead(status, {
+  const payload = gzipBody(req, type, body);
+  const headers: Record<string, string | number> = {
     ...SAFE,
     "content-type": type,
-    "content-length": body.length,
-  });
+    "content-length": payload.length,
+  };
+  if (payload !== body) {
+    headers["content-encoding"] = "gzip";
+    headers.vary = "Accept-Encoding";
+  }
+  res.writeHead(status, headers);
   if (req.method === "HEAD") res.end();
-  else res.end(body);
+  else res.end(payload);
+}
+
+/** Text responses shrink. The phone gate counts uncompressed bytes against the simulated chain. */
+function gzipBody(req: IncomingMessage, type: string, body: Buffer): Buffer {
+  if (body.length < 1024) return body;
+  const accept = req.headers["accept-encoding"];
+  if (typeof accept !== "string" || !/\bgzip\b/.test(accept)) return body;
+  if (!isCompressible(type)) return body;
+  return gzipSync(body);
+}
+
+function isCompressible(type: string): boolean {
+  return (
+    type.startsWith("text/") ||
+    type.startsWith("application/json") ||
+    type.startsWith("application/javascript") ||
+    type.includes("javascript") ||
+    type.includes("json") ||
+    type.includes("svg")
+  );
 }

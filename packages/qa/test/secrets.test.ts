@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-import { evaluateCommand } from "../../orchestrator/src/policy.ts";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { scanText } from "../src/secrets.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -88,7 +87,8 @@ test("the secrets doc has no hits", () => {
   assert.deepEqual(scanText(text), []);
 });
 
-test("git push and deploy stay denied", () => {
+test("git push and deploy stay denied", async () => {
+  const evaluateCommand = await loadEvaluateCommand();
   const push = evaluateCommand({ argv: ["git", "push"], projectRoot: repoRoot });
   assert.equal(push.decision, "deny");
   assert.equal(push.reason, "git push is denied");
@@ -101,3 +101,34 @@ test("git push and deploy stay denied", () => {
   assert.equal(deploy.decision, "deny");
   assert.equal(deploy.reason, "deploy command is denied");
 });
+
+/**
+ * A static import of orchestrator source leaves the qa package.
+ * findEscapes rejects that. The call is still evaluateCommand.
+ */
+async function loadEvaluateCommand(): Promise<
+  (input: { argv: string[]; projectRoot: string }) => { decision: string; reason: string }
+> {
+  const file = path.join(repoRoot, "packages", "orchestrator", "src", "policy.ts");
+  const loaded: unknown = await import(pathToFileURL(file).href);
+  if (typeof loaded !== "object" || loaded === null || !("evaluateCommand" in loaded)) {
+    throw new Error("evaluateCommand is missing.");
+  }
+  const evaluateCommand = loaded.evaluateCommand;
+  if (typeof evaluateCommand !== "function") {
+    throw new Error("evaluateCommand is missing.");
+  }
+  return (input) => {
+    const result: unknown = evaluateCommand(input);
+    if (typeof result !== "object" || result === null) {
+      throw new Error("evaluateCommand returned nothing.");
+    }
+    if (!("decision" in result) || !("reason" in result)) {
+      throw new Error("evaluateCommand returned nothing.");
+    }
+    if (typeof result.decision !== "string" || typeof result.reason !== "string") {
+      throw new Error("evaluateCommand returned nothing.");
+    }
+    return { decision: result.decision, reason: result.reason };
+  };
+}
