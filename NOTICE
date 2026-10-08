@@ -499,3 +499,12 @@ playwright 1.63.0
 Starter pages ship no font files and no borrowed media. CREDITS.json
 starts empty. fetch-assets accepts CC0 and CC-BY-4.0 only.
 
+Hostinger (optional integration)
+--------------------------------
+
+Hostinger is an optional integration and the schema is read at runtime.
+No Hostinger SDK is installed. packages/deploy injects the client and
+does not call the live API. The live method list is read from the
+Hostinger MCP schema at integration time. This repo does not store a
+token.
+
