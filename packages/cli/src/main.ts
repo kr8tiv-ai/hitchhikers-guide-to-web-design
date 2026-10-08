@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
@@ -392,7 +393,23 @@ export async function runCli(
 function isDirectRun(): boolean {
   const entry = process.argv[1];
   if (entry === undefined || entry.length === 0) return false;
-  return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
+  // pnpm's bin shim executes the workspace symlink. argv keeps that link.
+  // import.meta.url is the real file under packages/cli.
+  return sameFile(entry, fileURLToPath(import.meta.url));
+}
+
+function sameFile(left: string, right: string): boolean {
+  if (samePath(path.resolve(left), path.resolve(right))) return true;
+  try {
+    return samePath(realpathSync(left), realpathSync(right));
+  } catch {
+    return false;
+  }
+}
+
+function samePath(left: string, right: string): boolean {
+  if (process.platform === "win32") return left.toLowerCase() === right.toLowerCase();
+  return left === right;
 }
 
 if (isDirectRun()) {
