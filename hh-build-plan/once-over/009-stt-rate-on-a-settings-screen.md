@@ -1,6 +1,6 @@
 # 009. No settings screen shows the speech-to-text rate
 
-Status: **proposed**. Not applied. Do not add a new route in the once-over.
+Status: **applied** in the post-159 pass.
 
 ## Miss
 
@@ -15,3 +15,11 @@ Render the existing `quoteStt` label on the settings surface that already exists
 ## Why this pass did not do it
 
 Adding a settings route would be a new product surface. This pass does not invent one.
+
+## Applied
+
+`/hh-settings` now prints both `quoteStt` labels before xAI speech-to-text can be turned on. Local whisper.cpp stays the default. The rates stay $0.10 per hour REST and $0.20 per hour streaming. No settings route was added.
+
+Files: `packages/grok-plugin/skills/hh-settings/SKILL.md`, `packages/voice/test/settings-rate.test.ts`.
+
+Test: `hh-settings renders quoteStt labels before xAI speech-to-text can be turned on`.
