@@ -46,6 +46,7 @@ import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
+import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
@@ -108,6 +109,8 @@ const JSON_LIMIT = 1024 * 1024;
 const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
+const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
+const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
@@ -393,7 +396,31 @@ async function handlePost(
     sendDriveResult(req, res, await pauseDrive(projectDir));
     return;
   }
+  if (pathname === "/api/brand") {
+    await handleBrandPost(req, res, projectDir);
+    return;
+  }
   sendJson(req, res, 404, { error: "That route is not on the desk." });
+}
+
+async function handleBrandPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const result = await postBrandDecision(projectDir, capped.body.toString("utf8"));
+  sendJson(req, res, result.status, result.body);
 }
 
 async function handleTurn(
@@ -620,7 +647,17 @@ async function handleGet(
     return;
   }
   if (pathname === "/brand") {
-    sendHtml(req, res, 200, renderBrand(token));
+    const loaded = await loadBrandKit(projectDir);
+    if (loaded.kind === "missing") {
+      sendHtml(req, res, 200, renderBrand(token));
+      return;
+    }
+    const nav = routeNav("/brand");
+    if (loaded.kind === "bad") {
+      sendHtml(req, res, 500, renderBrandKitError(token, nav));
+      return;
+    }
+    sendHtml(req, res, 200, dressBrandKit(loaded.html, token, nav), brandKitHeaders());
     return;
   }
   if (pathname === "/approve") {
@@ -645,6 +682,14 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/brand.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(BRAND_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/approve-cards.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(APPROVE_CARDS_SOURCE)));
     return;
   }
   if (pathname === "/client/theme.js") {
@@ -1058,7 +1103,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
-    .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"');
+    .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
+    .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"');
   moduleCache.set(filePath, js);
   return js;
 }
@@ -1907,8 +1953,27 @@ function sendJson(
   sendBytes(req, res, status, "application/json; charset=utf-8", Buffer.from(JSON.stringify(body)));
 }
 
-function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string): void {
-  sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(html));
+function sendHtml(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  html: string,
+  headers?: Record<string, string>,
+): void {
+  sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(html), headers);
+}
+
+/**
+ * The kit sets swatch and specimen styles from checked hex and family names.
+ * The desk's other pages keep style-src 'self'.
+ */
+function brandKitHeaders(): Record<string, string> {
+  return {
+    "content-security-policy": SAFE["content-security-policy"].replace(
+      "style-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+    ),
+  };
 }
 
 function sendBytes(
@@ -1917,10 +1982,12 @@ function sendBytes(
   status: number,
   type: string,
   body: Buffer,
+  extra?: Record<string, string>,
 ): void {
   const payload = gzipBody(req, type, body);
   const headers: Record<string, string | number> = {
     ...SAFE,
+    ...extra,
     "content-type": type,
     "content-length": payload.length,
   };

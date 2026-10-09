@@ -1,6 +1,6 @@
 # 006. The desk does not persist a brand approval
 
-Status: **proposed**. Not applied. Do not add a new approval model.
+Status: **applied**. Do not add a new approval model.
 
 ## Miss
 
@@ -22,3 +22,11 @@ Add a test that a POST flips the status line and that a partial approval stays d
 ## Why this pass did not do it
 
 Wiring the desk to the file gate is a product path, not a local type fix. This pass does not invent that surface.
+
+## Applied
+
+`GET /brand` renders `renderBrandKit` when `.hitchhiker/brand/brand-kit.json` is a brand kit model. If that file is absent and `.hitchhiker/brand/brand-kit.html` is present, the desk serves that HTML. With neither file, the empty plate is unchanged. `/approve` is its own plate, not an alias, and stays as it was.
+
+`POST /api/brand` uses the same CSRF check as the other mutating routes. Approve calls `applyStatus` for `purpose`, `voice`, `tokens`, `imagery`, `logo`, and `neighbors`. Redo calls `redoSection`. Any other section id returns 400. The kit page posts only to this desk. Kit responses allow `style-src 'unsafe-inline'` so the swatches paint. Other routes keep `style-src 'self'`.
+
+Tests: `packages/app/test/brand-desk.test.ts`. `pnpm exec tsc -b` exited 0. With `HH_CASSETTE=replay`, `@hitchhiker/app` exited 0 (129 pass) and `@hitchhiker/engine` exited 0 (603 pass, 1 skipped live smoke).

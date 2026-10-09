@@ -58,21 +58,32 @@ export function bindApproveDeck(
   onDecision: (itemId: string, status: ApproveDecision, note?: string) => void,
 ): () => void {
   const onClick = (event: ApproveEvent): void => {
-    event.preventDefault();
     const target = event.target;
     if (target === null) return;
     const approve = target.getAttribute("data-approve");
     if (approve !== null && approve !== "") {
+      event.preventDefault();
       onDecision(approve, "approved");
+      return;
+    }
+    // Kit Redo uses data-redo. The file gate clears that section, same as reject.
+    const redo = target.getAttribute("data-redo");
+    if (redo !== null && redo !== "") {
+      event.preventDefault();
+      onDecision(redo, "rejected");
       return;
     }
     const reject = target.getAttribute("data-reject");
     if (reject === null || reject === "") return;
+    event.preventDefault();
     const note = noteValue(root, reject);
     onDecision(reject, "rejected", note);
   };
   root.addEventListener("click", onClick);
-  root.innerHTML = renderApproveCards(items);
+  // A plate that already drew Approve buttons keeps them. An empty root gets the cards.
+  if (root.querySelector("[data-approve]") === null) {
+    root.innerHTML = renderApproveCards(items);
+  }
   return () => {
     root.removeEventListener("click", onClick);
   };
