@@ -292,8 +292,9 @@ test("Approve and Redo go through bindApproveDeck to the local desk", async () =
   const stop = mountBrand(env);
   const kept = desk.innerHTML;
   click(desk, approve);
+  await waitFor(() => seen.length >= 1 && (note.textContent?.length ?? 0) > 0);
   click(desk, redo);
-  await flush();
+  await waitFor(() => seen.length >= 2 && note.textContent === "That section is cleared. The file is draft.");
   assert.equal(desk.innerHTML, kept);
   assert.equal(seen.length, 2);
   assert.equal(seen[0]?.url, "/api/brand");
@@ -451,4 +452,12 @@ async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function waitFor(ready: () => boolean, turns = 50): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    if (ready()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  if (!ready()) throw new Error("timed out waiting for brand desk note");
 }
