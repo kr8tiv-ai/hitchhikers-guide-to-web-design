@@ -1,4 +1,4 @@
-# Live fix 014. A % in an answer can expand on the grok command line
+# Live fix 012. A % in an answer can expand on the grok command line
 
 From `hh-build-plan/live-bugcheck/heavy-review-1.md` item 7. Verify first.
 

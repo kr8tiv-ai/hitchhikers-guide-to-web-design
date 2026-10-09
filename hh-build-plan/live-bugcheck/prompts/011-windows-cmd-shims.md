@@ -1,4 +1,4 @@
-# Live fix 012. Windows .cmd shims fail with EINVAL in tools, deploy and doctor
+# Live fix 011. Windows .cmd shims fail with EINVAL in tools, deploy and doctor
 
 From `hh-build-plan/live-bugcheck/heavy-review-1.md` item 5 (confirmed: `packages/cli/src/commands/tools.ts` spawns `pnpm.cmd` with `shell: false`; `packages/deploy/src/cli-run.ts` passes bare `vercel`/`netlify`/`wrangler` to `spawnImpl`).
 

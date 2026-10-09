@@ -1,4 +1,4 @@
-# Live fix 020. Desk usability B: map links, mobile map, footer
+# Live fix 025. Desk usability B: map links, mobile map, footer
 
 Items 5 and 6 of heavy-review-3.
 

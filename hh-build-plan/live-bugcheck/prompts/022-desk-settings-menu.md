@@ -1,10 +1,10 @@
-# Live fix 023. Desk usability E: one Desk menu for settings
+# Live fix 022. Desk usability E: one Desk menu for settings
 
-Item 20 of heavy-review-3, merged with heavy-review-2 item 8 and fix 017. Read what 017 decided and built first; extend it, do not duplicate it.
+Item 20 of heavy-review-3, merged with heavy-review-2 item 8 and fix 021. Read what 021 decided and built first; extend it, do not duplicate it.
 
 ## Read first
 
-- fix 017's commit and files, `packages/app/src/server/routes.ts` (`routeNav`), `packages/engine` config (`ai.model`, `ai.effort`, voice/STT), `packages/voice/src/xai-stt.ts` (`quoteStt`), `/hh-settings` skill in `packages/grok-plugin`
+- fix 021's commit and files, `packages/app/src/server/routes.ts` (`routeNav`), `packages/engine` config (`ai.model`, `ai.effort`, voice/STT), `packages/voice/src/xai-stt.ts` (`quoteStt`), `/hh-settings` skill in `packages/grok-plugin`
 
 ## Spec
 

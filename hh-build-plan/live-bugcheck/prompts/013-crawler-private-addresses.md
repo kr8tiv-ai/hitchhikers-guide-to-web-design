@@ -1,4 +1,4 @@
-# Live fix 015. The crawler can fetch loopback, private and metadata addresses
+# Live fix 013. The crawler can fetch loopback, private and metadata addresses
 
 From `hh-build-plan/live-bugcheck/heavy-review-1.md` item 8. Verify first.
 

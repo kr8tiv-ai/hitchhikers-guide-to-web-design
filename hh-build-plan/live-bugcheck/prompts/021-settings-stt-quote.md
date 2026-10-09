@@ -1,4 +1,4 @@
-# Live fix 017. The STT rate must be shown and accepted before xAI STT can be enabled
+# Live fix 021. The STT rate must be shown and accepted before xAI STT can be enabled
 
 From `hh-build-plan/live-bugcheck/heavy-review-2.md` item 8. Check first what post-159 fix 009 did (`hh-build-plan/once-over/009-stt-rate-on-a-settings-screen.md`, commit e9c6b41: the `/hh-settings` skill prints both `quoteStt` labels). Do not duplicate it.
 

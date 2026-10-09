@@ -1,6 +1,6 @@
-# Live fix 022. Desk usability D: focus, live region, errors, transcript
+# Live fix 026. Desk usability D: focus, live region, errors, transcript
 
-Items 13, 14, 15, 16, 18 of heavy-review-3. After 003 (errors keep the draft) and 019 (composer); check what they already did.
+Items 13, 14, 15, 16, 18 of heavy-review-3. After 003 (errors keep the draft) and 018 (composer); check what they already did.
 
 ## Read first
 

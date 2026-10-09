@@ -1,4 +1,4 @@
-# Live fix 016. /brand on a fresh project looks stuck
+# Live fix 019. /brand on a fresh project looks stuck
 
 From `hh-build-plan/live-bugcheck/heavy-review-2.md` item 7. Verify first.
 

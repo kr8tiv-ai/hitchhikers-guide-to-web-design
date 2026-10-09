@@ -1,4 +1,4 @@
-# Live fix 024. Desk usability F: logo drop zone and the language toggle
+# Live fix 027. Desk usability F: logo drop zone and the language toggle
 
 Items 17 and 19 of heavy-review-3.
 

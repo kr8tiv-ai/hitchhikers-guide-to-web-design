@@ -1,6 +1,6 @@
-# Live fix 019. Desk usability A: the card, progress, composer and buttons
+# Live fix 018. Desk usability A: the card, progress, composer and buttons
 
-Items 1, 2, 3, 4, 7, 8, 9 of heavy-review-3. Runs after every bug, Windows, security, quick-start and CLI fix (001-018), so read what 003, 004, 006 and 010 changed in `packages/app/src/card.ts`, `client/desk.ts` and `server/routes.ts` first and build on it.
+Items 1, 2, 3, 4, 7, 8, 9 of heavy-review-3, plus heavy-review-4 items 6 and 7 (mode, questions left, assumption badges). Runs after every bug, Windows, security, quick-start and CLI fix (001-017), so read what 003, 004, 006 and 010 changed in `packages/app/src/card.ts`, `client/desk.ts` and `server/routes.ts` first and build on it.
 
 ## Read first
 
@@ -16,10 +16,12 @@ Items 1, 2, 3, 4, 7, 8, 9 of heavy-review-3. Runs after every bug, Windows, secu
 5. Buttons: Answer is the only filled (primary) button and is enabled only when the draft has text. Enter submits, Shift+Enter is a newline, with a one-line hint under the field; IME composition (`isComposing`) never submits. Suggest reads "Suggest — I'll mark it as assumed". Skip reads "Skip — we'll assume" and the next card shows the assumption that was written; if the question is required (`requiredFor` non-empty), Skip asks for a confirm click first (inline, not `window.confirm`).
 6. Textarea placeholder: one example answer per question (use the question's `suggest` text when present, otherwise a short generic one).
 7. Hold to talk becomes a small mic button beside the field, off the primary row, still `data-voice="hold"` with the same pointer/keyboard hold behaviour from 9010874 and the in-place partial updates from fix 004 (do not reintroduce a full card repaint during listening). When no SpeechRecognition exists, it is disabled with the visible text "Talk needs Chrome or Edge".
+8. Depth visibility (heavy-review-4 item 6): the card shows the interview mode (Express, Standard or Deep, from config `interviewDepth`) and, for Express, one line that skipped-by-depth questions are deferred with written assumptions, not dropped (verify that is what `seedExpressAssumptions` does and say exactly that). "N questions left" comes from the engine.
+9. Assumption state (heavy-review-4 item 7): answers that came from Suggest, Skip or an Express default carry an "Assumed" badge in the transcript/log, and the card right after a Suggest or Skip shows the assumption that was written ("Assumed: ..."), so the person can see and change it. Never auto-approve anything because it was assumed; approval gates stay exactly as they are.
 
 ## Tests
 
-- card: the count "2 of 22" and phase render; the question text appears once; Answer disabled with an empty draft; Skip on a required question needs a confirm.
+- card: mode line and "Assumed" badge render from session data; the count "2 of 22" and phase render; the question text appears once; Answer disabled with an empty draft; Skip on a required question needs a confirm.
 - desk: Enter submits, Shift+Enter does not, composition does not; voice tests still pass (update selectors, not behaviour).
 
 ## Ground rules

@@ -1,4 +1,4 @@
-# Live fix 013. hh first-run: unknown commands, the Node floor, and doctor's verdicts
+# Live fix 016. hh first-run: unknown commands, the Node floor, and doctor's verdicts
 
 From `hh-build-plan/live-bugcheck/heavy-review-2.md` items 2, 3, 5, 9 and 10. Verified on Oct 9: `pnpm exec hh frobnicate` prints only `hh doctor [--project <dir>]` and exits 2. Verify the others before changing code.
 

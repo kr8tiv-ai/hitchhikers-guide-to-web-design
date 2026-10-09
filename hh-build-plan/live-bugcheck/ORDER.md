@@ -45,3 +45,22 @@ New prompts, by severity:
 22. `022-desk-accessibility` (items 13-16, 18): focus to the new question, aria-live, errors under the field, transcript "Earlier", Edit, a focus ring of its own.
 23. `023-desk-settings-menu` (item 20 + review-2 item 8): one Desk menu; extends 017.
 24. `024-logo-drop-and-language` (items 17, 19): a real drop zone for upload questions; the restatement behind a toggle.
+
+## Final order after SuperGrok Heavy review 4 (product and ship path, Oct 9 ~1:15 AM CR)
+
+`heavy-review-4-product.md` was deduped against reviews 2 and 3. New items became prompts 017 (cross-platform queue runner), 023 (docs alignment) and 024 (first-run doctor panel); mode, questions-left and assumption badges were added to 018. Prompts not yet run were renumbered to follow Heavy's order: bugs, Windows and security first, then (1) the clone path, (2) the command table and a non-Windows runner, (3) progress, mode and assumptions on the card, (4) empty plates with one next action, (5) Settings with the rate accept, (6) docs aligned with the code, then the remaining usability items. This list supersedes the numbering in the sections above. Approval gates are never weakened by any prompt.
+
+1-10. As above (001 cassette guard … 010 pushback keeps the draft).
+11. `011-windows-cmd-shims` (was 012): .cmd EINVAL in tools/deploy/doctor.
+12. `012-percent-off-the-cmd-line` (was 014): `%` expansion, security.
+13. `013-crawler-private-addresses` (was 015): crawler SSRF, security.
+14. `014-desk-links-new-tab` (was 018): external links leave the interview.
+15. `015-readme-quick-start` (was 011): Heavy order 1, the clone path.
+16. `016-cli-first-run` (was 013): Heavy order 2, command table, Node floor, doctor verdicts.
+17. `017-cross-platform-queue-runner` (new, review 4 #3): Heavy order 2, `hh drive` on macOS/Linux wired to Drive.
+18. `018-desk-card-and-composer` (was 019, + review 4 #6/#7): Heavy order 3, progress, mode and assumption badges.
+19. `019-brand-empty-plate` (was 016) and 20. `020-empty-states` (was 021): Heavy order 4.
+21. `021-settings-stt-quote` (was 017) and 22. `022-desk-settings-menu` (was 023): Heavy order 5.
+23. `023-docs-alignment` (new, review 4 #8): Heavy order 6.
+24. `024-desk-first-run-doctor` (new, review 4 #9): doctor panel, no "Ready" without grok.
+25. `025-desk-map-and-footer` (was 020), 26. `026-desk-accessibility` (was 022), 27. `027-logo-drop-and-language` (was 024): remaining usability from review 3.

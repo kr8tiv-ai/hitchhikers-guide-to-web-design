@@ -1,6 +1,6 @@
-# Live fix 021. Desk usability C: empty states with one next click
+# Live fix 020. Desk usability C: empty states with one next click
 
-Items 10, 11, 12 of heavy-review-3. Builds on fix 016 (empty brand plate); extend it, do not undo it.
+Items 10, 11, 12 of heavy-review-3. Builds on fix 019 (empty brand plate); extend it, do not undo it.
 
 ## Read first
 

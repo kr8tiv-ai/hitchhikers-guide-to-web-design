@@ -1,4 +1,4 @@
-# Live fix 018. Reference cards on the desk navigate away from the interview
+# Live fix 014. Reference cards on the desk navigate away from the interview
 
 From `hh-build-plan/live-bugcheck/heavy-review-1.md` item 9. Verify first. Small; can share a commit only if the audit already has a "desk links" prompt, otherwise its own commit.
 
