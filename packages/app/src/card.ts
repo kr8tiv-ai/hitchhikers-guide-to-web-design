@@ -13,6 +13,10 @@ export interface CardState {
   done: boolean;
   /** True while a command is in flight. A second submit returns this same state. */
   pending: boolean;
+  /** True while the talk button is held and the browser is listening. */
+  listening?: boolean;
+  /** A calm line under the field: listening, heard, or how to fix the mic. */
+  notice?: string | null;
 }
 
 export type CardEvent =
@@ -148,9 +152,17 @@ function button(
 }
 
 /** Hold fills the draft. It does not submit. Typing in the field still works. */
-function talkButton(disabled: boolean): string {
+function talkButton(disabled: boolean, listening: boolean): string {
   const flag = disabled ? " disabled" : "";
+  if (listening) {
+    return `<button class="hh-btn hh-btn--secondary hh-btn--listening" type="button" data-voice="hold" aria-pressed="true"${flag}>Listening. Release to stop</button>`;
+  }
   return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold"${flag}>Hold to talk</button>`;
+}
+
+function noticeLine(notice: string | null): string {
+  if (notice === null || notice === "") return "";
+  return `  <p class="hh-qcard__notice" role="status" data-card-notice>${escapeHtml(notice)}</p>\n`;
 }
 
 function heading(title: string, why: string, done: boolean): string {
@@ -188,8 +200,8 @@ ${pushLine}  <label class="hh-qcard__field">
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${described}>${escapeHtml(field)}</textarea>
   </label>
   <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
-  <div class="hh-qcard__actions">
-    ${talkButton(state.pending)}
+${noticeLine(state.notice ?? null)}  <div class="hh-qcard__actions">
+    ${talkButton(state.pending, state.listening === true)}
     ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}
     ${button("suggest", "Suggest for me", "secondary", state.pending)}
     ${button("skip", "Skip", "ghost", state.pending)}

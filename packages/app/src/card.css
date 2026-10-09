@@ -58,6 +58,25 @@
   background: transparent;
 }
 
+.hh-qcard .hh-qcard__notice {
+  margin: 0;
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+/* Hold to talk: no long-press menu, no text selection, no scroll while held. */
+.hh-qcard [data-voice="hold"] {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.hh-qcard .hh-btn--listening {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-surface));
+}
+
 /* Narrow widths: the three actions stack as blocks. */
 .hh-qcard .hh-qcard__actions {
   display: block;
