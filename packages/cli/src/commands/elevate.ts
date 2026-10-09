@@ -12,11 +12,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadConfig, spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
   "Usage: hh elevate --project <dir> [--url <url>] [--pick all|none|1,2]",
   "       hh elevate detail --project <dir> --url <url>",
   "       hh elevate copy --project <dir> [--approve id,id]",
+  "       --cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.",
 ].join("\n");
 
 const SOURCE_EXT = new Set([".astro", ".css", ".html", ".md", ".svelte", ".ts", ".tsx", ".vue"]);
@@ -95,10 +97,12 @@ export interface ElevateCommandDeps {
 export async function runElevateCommand(
   argv: readonly string[],
   deps: ElevateCommandDeps = {},
-): Promise<{ exitCode: number; stdout: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const parsed = parseElevateArgs(argv, deps.cwd ?? process.cwd());
   if (!parsed.ok) return { exitCode: 2, stdout: `${parsed.error}\n${USAGE}\n` };
   if (parsed.help) return { exitCode: 0, stdout: `${USAGE}\n` };
+  const refusal = cassetteRefusal(process.env, argv);
+  if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
   const model = deps.think ?? think;
   try {
     if (parsed.mode === "detail") return await runDetail(parsed);
@@ -126,6 +130,7 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
   let approve: string[] | null = null;
   let sawPick = false;
   let sawApprove = false;
+  let sawCassette = false;
   for (let index = start; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--project") {
@@ -148,6 +153,11 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
       pick = value.value;
       sawPick = true;
       index = value.next;
+      continue;
+    }
+    if (arg === "--cassette") {
+      if (sawCassette) return fail("Flag --cassette was given twice.");
+      sawCassette = true;
       continue;
     }
     if (arg === "--approve") {

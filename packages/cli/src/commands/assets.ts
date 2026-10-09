@@ -11,11 +11,13 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "@hitchhiker/engine";
+import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
   "Usage: hh assets <plan|run|diy|import> --project <dir>",
   "       hh assets run --project <dir> --yes",
   "       hh assets import --project <dir> --file <path>",
+  "       --cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.",
 ].join("\n");
 
 const COMMANDS = ["plan", "run", "diy", "import"] as const;
@@ -143,10 +145,14 @@ interface AssetsApi {
 export async function runAssetsCommand(
   argv: readonly string[],
   deps: AssetsCommandDeps = {},
-): Promise<{ exitCode: number; stdout: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const parsed = parseAssetsArgs(argv, deps.cwd ?? process.cwd());
   if (!parsed.ok) return { exitCode: 2, stdout: `${parsed.error}\n${USAGE}\n` };
   if (parsed.help) return { exitCode: 0, stdout: `${USAGE}\n` };
+  if (parsed.command === "run") {
+    const refusal = cassetteRefusal(process.env, argv);
+    if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
+  }
 
   try {
     const api = await loadAssets();
@@ -164,6 +170,7 @@ export function parseAssetsArgs(argv: readonly string[], cwd: string): Parsed {
   let project: string | undefined;
   let yes = false;
   let sawYes = false;
+  let sawCassette = false;
   let sawProject = false;
   const files: string[] = [];
 
@@ -171,6 +178,11 @@ export function parseAssetsArgs(argv: readonly string[], cwd: string): Parsed {
     const arg = argv[index];
     if (arg === undefined) continue;
     if (arg === "--help" || arg === "-h") return { ok: true, help: true };
+    if (arg === "--cassette") {
+      if (sawCassette) return fail("Flag --cassette was given twice.");
+      sawCassette = true;
+      continue;
+    }
     if (arg === "--yes") {
       if (sawYes) return fail("Flag --yes was given twice.");
       sawYes = true;

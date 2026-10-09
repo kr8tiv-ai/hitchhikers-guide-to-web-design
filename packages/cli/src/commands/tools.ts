@@ -11,11 +11,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { think } from "@hitchhiker/engine";
+import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
   "Usage: hh tools <search|install> --project <dir>",
   "       hh tools search --project <dir> --feature <text>",
   "       hh tools install --project <dir> --name <package> --yes",
+  "       --cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.",
 ].join("\n");
 
 const COMMANDS = ["search", "install"] as const;
@@ -107,10 +109,14 @@ interface ToolsApi {
 export async function runToolsCommand(
   argv: readonly string[],
   deps: ToolsCommandDeps = {},
-): Promise<{ exitCode: number; stdout: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const parsed = parseToolsArgs(argv, deps.cwd ?? process.cwd());
   if (!parsed.ok) return { exitCode: 2, stdout: `${parsed.error}\n${USAGE}\n` };
   if (parsed.help) return { exitCode: 0, stdout: `${USAGE}\n` };
+  if (parsed.command === "search") {
+    const refusal = cassetteRefusal(process.env, argv);
+    if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
+  }
 
   try {
     const api = await loadTools();
@@ -129,6 +135,7 @@ export function parseToolsArgs(argv: readonly string[], cwd: string): Parsed {
   let name = "";
   let yes = false;
   let sawYes = false;
+  let sawCassette = false;
   let sawProject = false;
   let sawFeature = false;
   let sawName = false;
@@ -152,6 +159,11 @@ export function parseToolsArgs(argv: readonly string[], cwd: string): Parsed {
     const arg = argv[index];
     if (arg === undefined) continue;
     if (arg === "--help" || arg === "-h") return { ok: true, help: true };
+    if (arg === "--cassette") {
+      if (sawCassette) return fail("Flag --cassette was given twice.");
+      sawCassette = true;
+      continue;
+    }
     if (arg === "--yes") {
       if (sawYes) return fail("Flag --yes was given twice.");
       sawYes = true;

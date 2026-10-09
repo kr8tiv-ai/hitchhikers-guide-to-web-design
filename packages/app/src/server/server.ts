@@ -25,6 +25,10 @@ export interface StartServerOptions {
   turnHandler?: TurnHandler;
   spawn?: BrowserSpawn;
   platform?: NodeJS.Platform;
+  /** Shown on the desk status line when replay or record was explicitly allowed. */
+  cassetteNotice?: string;
+  /** Replaces the platform opener. Tests inject this so a refusal can prove it was not called. */
+  openBrowser?: (url: string) => Promise<boolean>;
 }
 
 /**
@@ -62,6 +66,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   const app = await createDeskApp({
     projectDir,
     ...(opts.turnHandler === undefined ? {} : { turnHandler: opts.turnHandler }),
+    ...(opts.cassetteNotice === undefined ? {} : { cassetteNotice: opts.cassetteNotice }),
   });
   let dispatch: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => undefined;
   const server = createServer((req, res) => {
@@ -120,10 +125,13 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   let opened = false;
   if (opts.open === true) {
     try {
-      opened = await openBrowser(url, {
-        ...(opts.platform === undefined ? {} : { platform: opts.platform }),
-        ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
-      });
+      opened =
+        opts.openBrowser !== undefined
+          ? await opts.openBrowser(url)
+          : await openBrowser(url, {
+              ...(opts.platform === undefined ? {} : { platform: opts.platform }),
+              ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
+            });
     } catch {
       opened = false;
     }

@@ -1,8 +1,12 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { cassetteNotice, cassetteRefusal } from "../cassette-guard.ts";
 
-const USAGE = "Usage: hh app [--project <dir>] [--port <n>] [--no-open]";
+const USAGE = "Usage: hh app [--project <dir>] [--port <n>] [--no-open] [--cassette]";
+const HELP = `${USAGE}
+--cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.
+`;
 
 export type ParsedApp =
   | { ok: true; help: true }
@@ -20,7 +24,16 @@ interface DeskModule {
     projectDir: string;
     port?: number;
     open?: boolean;
+    cassetteNotice?: string;
+    openBrowser?: (url: string) => Promise<boolean>;
   }): Promise<StartedDesk>;
+}
+
+export interface RunAppOptions {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  /** Injected browser opener. A cassette refusal must not call it. */
+  open?: (url: string) => Promise<boolean>;
 }
 
 let active: StartedDesk | null = null;
@@ -41,6 +54,7 @@ export function parseAppArgs(argv: readonly string[], cwd = process.cwd()): Pars
   let sawProject = false;
   let sawPort = false;
   let sawOpen = false;
+  let sawCassette = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -49,6 +63,11 @@ export function parseAppArgs(argv: readonly string[], cwd = process.cwd()): Pars
       if (sawOpen) return { ok: false, error: `Flag --no-open was given twice. ${USAGE}` };
       sawOpen = true;
       open = false;
+      continue;
+    }
+    if (arg === "--cassette") {
+      if (sawCassette) return { ok: false, error: `Flag --cassette was given twice. ${USAGE}` };
+      sawCassette = true;
       continue;
     }
     if (arg === "--project") {
@@ -96,17 +115,22 @@ export function parseAppArgs(argv: readonly string[], cwd = process.cwd()): Pars
  */
 export async function runApp(
   argv: readonly string[],
-  opts: { cwd?: string } = {},
-): Promise<{ exitCode: number; stdout: string }> {
+  opts: RunAppOptions = {},
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const env = opts.env ?? process.env;
   const parsed = parseAppArgs(argv, opts.cwd ?? process.cwd());
-  if (!parsed.ok) return { exitCode: 1, stdout: `${parsed.error}\n` };
-  if (parsed.help) return { exitCode: 0, stdout: `${USAGE}\n` };
+  if (!parsed.ok) return { exitCode: 1, stdout: `${parsed.error}\n`, stderr: "" };
+  if (parsed.help) return { exitCode: 0, stdout: HELP, stderr: "" };
+  const refusal = cassetteRefusal(env, argv);
+  if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
+  const notice = cassetteNotice(env, argv);
 
   const serverFile = path.resolve(import.meta.dirname, "../../../app/src/server/server.ts");
   if (!existsSync(serverFile)) {
     return {
       exitCode: 1,
       stdout: "The companion app is not next to the CLI. Run hh app from the Guide repo.\n",
+      stderr: "",
     };
   }
 
@@ -115,10 +139,10 @@ export async function runApp(
     loaded = await import(pathToFileURL(serverFile).href);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "The companion app did not load.";
-    return { exitCode: 1, stdout: `${message}\n` };
+    return { exitCode: 1, stdout: `${message}\n`, stderr: "" };
   }
   if (!isDeskModule(loaded)) {
-    return { exitCode: 1, stdout: "The companion app did not load.\n" };
+    return { exitCode: 1, stdout: "The companion app did not load.\n", stderr: "" };
   }
 
   try {
@@ -126,19 +150,21 @@ export async function runApp(
       projectDir: parsed.projectDir,
       port: parsed.port,
       open: parsed.open,
+      ...(notice === null ? {} : { cassetteNotice: notice }),
+      ...(opts.open === undefined ? {} : { openBrowser: opts.open }),
     });
     if (!isHandle(handle)) {
-      return { exitCode: 1, stdout: "The companion app did not load.\n" };
+      return { exitCode: 1, stdout: "The companion app did not load.\n", stderr: "" };
     }
     active = handle;
     let stdout = `${handle.url}\n`;
     if (parsed.open && !handle.opened) {
       stdout += "The browser did not open. Use the URL above.\n";
     }
-    return { exitCode: 0, stdout };
+    return { exitCode: 0, stdout, stderr: "" };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "The desk did not start.";
-    return { exitCode: 1, stdout: `${message}\n` };
+    return { exitCode: 1, stdout: `${message}\n`, stderr: "" };
   }
 }
 

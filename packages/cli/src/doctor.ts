@@ -9,6 +9,7 @@ import {
   type GuideConfig,
   type SessionIdMode,
 } from "@hitchhiker/engine";
+import { cassetteLabel, formatCassetteLine } from "./cassette-guard.ts";
 import { classifyAuthStatus, classifyHelp } from "./session-probe.ts";
 
 export type AuthProbe = "skipped" | "no-flag" | "signed-in" | "signed-out" | "unknown";
@@ -22,6 +23,8 @@ export interface DoctorReport {
   auth: AuthProbe;
   sessionIdMode: "unknown" | "uuid" | "alias";
   effortFlag: boolean;
+  /** `off`, or the raw HH_CASSETTE value when the shell set one. */
+  cassette: string;
   warnings: string[];
 }
 
@@ -40,6 +43,7 @@ export interface DoctorOptions {
   projectDir?: string;
   nodeVersion?: string;
   runner?: CommandRunner;
+  env?: NodeJS.ProcessEnv;
 }
 
 const SPAWN_TIMEOUT_MS = 10_000;
@@ -64,6 +68,7 @@ export function formatDoctor(report: DoctorReport): string {
     formatAuth(report.auth),
     `session-id: ${report.sessionIdMode}`,
     `effort: ${report.effortFlag ? "present" : "absent"}`,
+    formatCassetteLine(report.cassette),
   ];
   for (const warning of report.warnings) {
     if (isToolLine(warning)) lines.push(warning);
@@ -130,6 +135,7 @@ export async function doctor(
     auth,
     sessionIdMode,
     effortFlag,
+    cassette: cassetteLabel(options.env ?? process.env),
     warnings,
   };
   return { report, exitCode: nodeOk ? 0 : 1 };

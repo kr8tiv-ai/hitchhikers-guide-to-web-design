@@ -551,7 +551,8 @@ test("hh app prints a loopback URL and hh sessions stays the doctor hint", async
     encoding: "utf8",
   });
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /Usage: hh app \[--project <dir>\] \[--port <n>\] \[--no-open\]/);
+  assert.match(help.stdout, /Usage: hh app \[--project <dir>\] \[--port <n>\] \[--no-open\] \[--cassette\]/);
+  assert.match(help.stdout, /HH_ALLOW_CASSETTE=1/);
 
   const unknown = spawnSync(process.execPath, ["--experimental-strip-types", cliEntry, "sessions"], {
     encoding: "utf8",
@@ -562,7 +563,7 @@ test("hh app prints a loopback URL and hh sessions stays the doctor hint", async
   const dir = tempProject();
   const child = spawn(
     process.execPath,
-    ["--experimental-strip-types", cliEntry, "app", "--no-open", "--project", dir],
+    ["--experimental-strip-types", cliEntry, "app", "--cassette", "--no-open", "--project", dir],
     { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
   );
   try {

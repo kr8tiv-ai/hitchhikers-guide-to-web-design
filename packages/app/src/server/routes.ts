@@ -154,6 +154,7 @@ const moduleCache = new Map<string, string>();
 export async function createDeskApp(opts: {
   projectDir: string;
   turnHandler?: TurnHandler;
+  cassetteNotice?: string;
 }): Promise<DeskApp> {
   const projectDir = path.resolve(opts.projectDir);
   const depth = loadConfig(projectDir).interviewDepth;
@@ -186,7 +187,8 @@ export async function createDeskApp(opts: {
     return run;
   };
 
-  const view = (): DeskSession => buildSession(projectDir, interview, questions, overlay);
+  const notice = opts.cassetteNotice ?? null;
+  const view = (): DeskSession => buildSession(projectDir, interview, questions, overlay, notice);
 
   return {
     token,
@@ -208,7 +210,7 @@ export async function createDeskApp(opts: {
         await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue);
         return;
       }
-      await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/");
+      await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/", notice);
     },
   };
 }
@@ -581,6 +583,7 @@ async function handleGet(
   projectDir: string,
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
   rawUrl: string,
+  notice: string | null = null,
 ): Promise<void> {
   if (pathname === "/") {
     const session = view();
@@ -589,7 +592,7 @@ async function handleGet(
   }
   if (pathname === "/gallery") {
     const opened = await enqueue(() => openGallery(projectDir, rawUrl));
-    sendHtml(req, res, 200, renderGallery(token, opened.view));
+    sendHtml(req, res, 200, renderGallery(token, opened.view, notice));
     return;
   }
   if (pathname === "/api/gallery") {
@@ -607,13 +610,13 @@ async function handleGet(
     return;
   }
   if (pathname === "/motion") {
-    sendHtml(req, res, 200, renderMotion(token));
+    sendHtml(req, res, 200, renderMotion(token, notice));
     return;
   }
   if (pathname === "/client/motion.js") {
     const compiled = compileAppModule(MOTION_SOURCE);
     if (compiled === null) {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
@@ -623,14 +626,14 @@ async function handleGet(
     try {
       sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(buildTheatreBundle()));
     } catch {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
     }
     return;
   }
   if (pathname.startsWith("/vendor-pkg/")) {
     const body = readVendorModule(pathname);
     if (body === null) {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(body));
@@ -640,7 +643,7 @@ async function handleGet(
     const rel = pathname.slice("/src/".length).replace(/\.js$/, ".ts");
     const compiled = compileAppModule(path.resolve(SRC_ROOT, rel));
     if (compiled === null) {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
@@ -649,7 +652,7 @@ async function handleGet(
   if (pathname === "/brand") {
     const loaded = await loadBrandKit(projectDir);
     if (loaded.kind === "missing") {
-      sendHtml(req, res, 200, renderBrand(token));
+      sendHtml(req, res, 200, renderBrand(token, notice));
       return;
     }
     const nav = routeNav("/brand");
@@ -661,7 +664,7 @@ async function handleGet(
     return;
   }
   if (pathname === "/approve") {
-    sendHtml(req, res, 200, renderApprove(token));
+    sendHtml(req, res, 200, renderApprove(token, notice));
     return;
   }
   if (pathname === "/hh-dashboard") {
@@ -732,12 +735,12 @@ async function handleGet(
     const ext = path.extname(pathname).toLowerCase();
     const type = STATIC_TYPES[ext];
     if (type === undefined) {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
       return;
     }
     const body = await readInside(root, pathname.slice(prefix.length));
     if (body === null) {
-      sendHtml(req, res, 404, renderMissing(token));
+      sendHtml(req, res, 404, renderMissing(token, notice));
       return;
     }
     sendBytes(req, res, 200, type, body);
@@ -747,7 +750,7 @@ async function handleGet(
     sendJson(req, res, 404, { error: "That route is not on the desk." });
     return;
   }
-  sendHtml(req, res, 404, renderMissing(token));
+  sendHtml(req, res, 404, renderMissing(token, notice));
 }
 
 function streamEvents(
@@ -787,6 +790,7 @@ function buildSession(
   session: InterviewSession,
   questions: readonly Question[],
   overlay: LiveOverlay,
+  notice: string | null,
 ): DeskSession {
   let question = session.next();
   const saved = loadState(projectDir);
@@ -858,9 +862,16 @@ function buildSession(
     mapHtml,
     guideHtml: renderGuideMap(answers, [...questions]),
     transcriptHtml: transcript,
-    statusHtml: `<span${overlay.calm ? ' data-calm="true"' : ""}>${escapeHtml(statusText)}</span>`,
+    statusHtml: statusSpans(statusText, notice, overlay.calm),
     cardHtml: renderCard(card),
   };
+}
+
+function statusSpans(text: string, notice: string | null | undefined, calm = false): string {
+  const calmAttr = calm ? ' data-calm="true"' : "";
+  const action = `<span${calmAttr}>${escapeHtml(text)}</span>`;
+  if (notice === null || notice === undefined || notice.length === 0) return action;
+  return `<span>${escapeHtml(notice)}</span>${action}`;
 }
 
 function renderTranscript(
@@ -949,8 +960,9 @@ function renderDesk(token: string, session: DeskSession): string {
   );
 }
 
-function renderBrand(token: string): string {
+function renderBrand(token: string, notice: string | null = null): string {
   return renderPanel({
+    notice,
     token,
     title: "Brand kit",
     description: "Palette, letters, and voice land on this plate after the brief is approved.",
@@ -970,8 +982,9 @@ function renderBrand(token: string): string {
   });
 }
 
-function renderApprove(token: string): string {
+function renderApprove(token: string, notice: string | null = null): string {
   return renderPanel({
+    notice,
     token,
     title: "Approvals",
     description: "Nothing is waiting for a yes.",
@@ -991,8 +1004,9 @@ function renderApprove(token: string): string {
   });
 }
 
-function renderMotion(token: string): string {
+function renderMotion(token: string, notice: string | null = null): string {
   return renderPanel({
+    notice,
     token,
     title: "Motion",
     description: "Ten short loops, then a number for how much motion the site should carry.",
@@ -1006,8 +1020,9 @@ function renderMotion(token: string): string {
   });
 }
 
-function renderMissing(token: string): string {
+function renderMissing(token: string, notice: string | null = null): string {
   return renderPanel({
+    notice,
     token,
     title: "Not on the desk",
     description: "This address is not a route.",
@@ -1030,6 +1045,7 @@ function renderPanel(opts: {
   kicker: string;
   main: string;
   status: string;
+  notice?: string | null;
   extraCss?: readonly string[];
   script?: string;
   board?: boolean;
@@ -1069,7 +1085,7 @@ ${extra}
         ${opts.main}
       </main>
       <footer class="hh-status">
-        <span>${escapeHtml(opts.status)}</span>
+        ${statusSpans(opts.status, opts.notice)}
       </footer>
     </div>
 ${script}  </body>
@@ -1581,8 +1597,9 @@ function galleryJson(opened: OpenedGallery): Record<string, unknown> {
   };
 }
 
-function renderGallery(token: string, view: GalleryView): string {
+function renderGallery(token: string, view: GalleryView, notice: string | null = null): string {
   return renderPanel({
+    notice,
     token,
     title: "Gallery walk",
     description: "A short walk through sites worth keeping.",

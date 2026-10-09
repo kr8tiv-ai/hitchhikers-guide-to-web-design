@@ -34,13 +34,15 @@ test("pnpm exec hh doctor runs the workspace bin and not Windows HTML Help", () 
 
     const cwd = path.join(work, "project");
     mkdirSync(cwd);
+    const repoDesk = path.join(repoRoot, ".hitchhiker");
+    const repoDeskBefore = existsSync(repoDesk);
     const result = runResolved(resolved, ["doctor"], env, cwd);
     const stdout = result.stdout ?? "";
     const stderr = result.stderr ?? "";
     assert.equal(result.status, 0, `hh doctor failed\n${stdout}\n${stderr}`);
     assert.match(stdout, /session-id:/);
     assert.equal(existsSync(path.join(cwd, ".hitchhiker")), false);
-    assert.equal(existsSync(path.join(repoRoot, ".hitchhiker")), false);
+    assert.equal(existsSync(repoDesk), repoDeskBefore);
 
     const calls = readFileSync(logPath, "utf8");
     assert.match(calls, /^grok --version$/m);

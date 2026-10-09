@@ -6,7 +6,7 @@ import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { runAssetsCommand } from "./commands/assets.ts";
 import { runElevateCommand } from "./commands/elevate.ts";
 import { runToolsCommand } from "./commands/tools.ts";
-import { closeActiveApp, runApp } from "./commands/app.ts";
+import { closeActiveApp, runApp, type RunAppOptions } from "./commands/app.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
 import { runInstall } from "./install.ts";
 
@@ -347,7 +347,9 @@ function roundWouldApply(rest: readonly string[]): boolean {
   return false;
 }
 
-async function routeElevate(argv: readonly string[]): Promise<{ exitCode: number; stdout: string }> {
+async function routeElevate(
+  argv: readonly string[],
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const rest = argv.slice(1);
   if (!isRoundElevate(rest)) return runQa(argv);
   if (roundWouldApply(rest) && !rest.includes("--yes")) {
@@ -369,10 +371,17 @@ export function cliEntryArgs(argv: readonly string[]): string[] {
 export async function runCli(
   argv: readonly string[],
   runner?: CommandRunner,
-): Promise<{ exitCode: number; stdout: string }> {
+  deps: RunAppOptions = {},
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const command = argv[0];
   if (command === "install") return runInstall(argv.slice(1));
-  if (command === "app") return runApp(argv.slice(1));
+  if (command === "app") {
+    return runApp(argv.slice(1), {
+      ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
+      ...(deps.env === undefined ? {} : { env: deps.env }),
+      ...(deps.open === undefined ? {} : { open: deps.open }),
+    });
+  }
   if (command === "assets") return runAssetsCommand(argv.slice(1));
   if (command === "tools") return runToolsCommand(argv.slice(1));
   if (command === "mostly-harmless") return runQa(argv);
@@ -385,6 +394,7 @@ export async function runCli(
   const options: DoctorOptions = {
     ...(parsed.projectDir === undefined ? {} : { projectDir: parsed.projectDir }),
     ...(runner === undefined ? {} : { runner }),
+    env: deps.env ?? process.env,
   };
   const outcome = await doctor(options);
   return { exitCode: outcome.exitCode, stdout: `${formatDoctor(outcome.report)}\n` };
@@ -416,6 +426,9 @@ if (isDirectRun()) {
   const argv = cliEntryArgs(process.argv.slice(2));
   runCli(argv)
     .then((outcome) => {
+      if (typeof outcome.stderr === "string" && outcome.stderr.length > 0) {
+        process.stderr.write(outcome.stderr);
+      }
       process.stdout.write(outcome.stdout);
       if (argv[0] === "app" && outcome.exitCode === 0) {
         const stop = (): void => {
