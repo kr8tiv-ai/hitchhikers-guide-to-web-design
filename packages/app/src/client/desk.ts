@@ -809,7 +809,38 @@ function asQuestion(value: unknown): Question | null {
   if (followUps !== null) question.followUps = followUps;
   const levels = asLevels(value.levels);
   if (levels !== null) question.levels = levels;
+  const resources = asResources(value.resources);
+  if (resources !== null) question.resources = resources;
   return question;
+}
+
+function asResources(value: unknown): NonNullable<Question["resources"]> | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const items: NonNullable<Question["resources"]> = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    if (typeof item.label !== "string" || item.label.trim() === "") return null;
+    if (typeof item.note !== "string" || item.note.trim() === "") return null;
+    const resource: NonNullable<Question["resources"]>[number] = {
+      label: item.label,
+      note: item.note,
+    };
+    if (Object.hasOwn(item, "url")) {
+      if (typeof item.url !== "string" || !isHttpsUrl(item.url)) return null;
+      resource.url = item.url;
+    }
+    items.push(resource);
+  }
+  return items;
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.hostname !== "";
+  } catch {
+    return false;
+  }
 }
 
 function asFollowUps(value: unknown): Array<{ id: string; ask: string }> | null {

@@ -181,3 +181,76 @@ test("DP-5.1 asks for three to five, and the ten-site walk stays on DP-5.2", () 
   const last = signature.followUps?.[signature.followUps.length - 1];
   assert.equal(last?.ask.includes("signature moment"), true);
 });
+
+const WHERE_TO_LOOK = [
+  {
+    label: "Awwwards",
+    url: "https://www.awwwards.com",
+    note: "the daily award winners; bold, experimental work.",
+  },
+  {
+    label: "Land-book",
+    url: "https://land-book.com",
+    note: "landing pages sorted by industry and style.",
+  },
+  {
+    label: "SiteInspire",
+    url: "https://www.siteinspire.com",
+    note: "calm, well-typeset sites by style and subject.",
+  },
+  {
+    label: "Lapa Ninja",
+    url: "https://www.lapa.ninja",
+    note: "landing pages by category, good for one industry.",
+  },
+  {
+    label: "One Page Love",
+    url: "https://onepagelove.com",
+    note: "single-page sites and portfolios.",
+  },
+  {
+    label: "Httpster",
+    url: "https://httpster.net",
+    note: "fresh, opinionated design picks.",
+  },
+  {
+    label: "Minimal Gallery",
+    url: "https://minimal.gallery",
+    note: "quiet, minimal sites.",
+  },
+  {
+    label: "Mobbin",
+    url: "https://mobbin.com",
+    note: "real app and mobile screens for patterns.",
+  },
+  {
+    label: "CSS Design Awards",
+    url: "https://www.cssdesignawards.com",
+    note: "judged winners with UI and UX scores.",
+  },
+  {
+    label: "And",
+    note: "competitors and brands you already admire in your own industry.",
+  },
+] as const;
+
+test("DP-5.1 loads where to look, and the ask, why, and writes stay put", () => {
+  const all = loadTree(treeFile);
+  const question = byId(all, "DP-5.1");
+  assert.equal(
+    question.ask,
+    "Name three to five sites you love, from any industry, and exactly what you love about each: type, scroll, layout, color, motion, or menu.",
+  );
+  assert.equal(
+    question.why,
+    "Three to five keeps the board small enough to use. The note is the part you love, not the whole site as a costume.",
+  );
+  assert.deepEqual(question.writes, ["SITE-BRIEF.md#references"]);
+  assert.deepEqual(question.resources, WHERE_TO_LOOK);
+  const resources = question.resources ?? [];
+  assert.equal(resources[resources.length - 1]?.url, undefined);
+  for (const item of resources) {
+    if (item.url !== undefined) assert.match(item.url, /^https:\/\//);
+  }
+  assert.equal(byId(all, "DP-5.2").resources, undefined);
+});

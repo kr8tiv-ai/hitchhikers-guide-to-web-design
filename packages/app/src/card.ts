@@ -175,6 +175,35 @@ function voiceNoteLine(show: boolean): string {
   return `  <p class="hh-qcard__voice-note" data-voice-note>${escapeHtml(VOICE_SERVICE_NOTE)}</p>\n`;
 }
 
+function httpsHref(url: string | undefined): string | null {
+  if (url === undefined || url === "") return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname === "") return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** Places to look, under the why. Absent resources leave the card unchanged. */
+function whereToLook(resources: Question["resources"]): string {
+  if (resources === undefined || resources.length === 0) return "";
+  const items = resources.map((item) => {
+    const note = escapeHtml(item.note);
+    const href = httpsHref(item.url);
+    if (href === null) return `      <li>${escapeHtml(item.label)}: ${note}</li>`;
+    return `      <li><a${attr("href", href)} target="_blank" rel="noopener noreferrer">${escapeHtml(item.label)}</a>, ${note}</li>`;
+  });
+  return `  <details class="hh-qcard__look" open>
+    <summary>Where to look</summary>
+    <ul>
+${items.join("\n")}
+    </ul>
+  </details>
+`;
+}
+
 function heading(title: string, why: string, done: boolean): string {
   const marker = done ? ' data-done="true"' : "";
   return `<article class="hh-qcard"${marker} aria-labelledby="hh-card-ask">
@@ -205,7 +234,7 @@ export function renderCard(state: CardState): string {
   <p class="hh-kicker">${escapeHtml(question.id)}</p>
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
   <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
-${pushLine}  <label class="hh-qcard__field">
+${whereToLook(question.resources)}${pushLine}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${described}>${escapeHtml(field)}</textarea>
   </label>

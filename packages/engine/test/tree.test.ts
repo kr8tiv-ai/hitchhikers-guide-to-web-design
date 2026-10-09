@@ -370,3 +370,25 @@ test("a missing ask throws", () => {
 test("tabs in the tree throw", () => {
   expectTreeError("questions:\n\t- id: DP-T.1\n", "yaml", /tabs are not allowed/);
 });
+
+test("a non-https resource url throws", () => {
+  expectTreeError(
+    `questions:
+  - id: DP-T.1
+    module: towel-check
+    depth: [express]
+    ask: "Ask."
+    why: "Why."
+    input: [text]
+    skip_default: "Default."
+    resources:
+      - label: Example
+        url: "http://example.com"
+        note: "Not a secure link."
+    writes:
+      - "NOTES.md#field"
+`,
+    "resources",
+    /resource url must be https/,
+  );
+});

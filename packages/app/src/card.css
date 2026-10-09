@@ -103,7 +103,11 @@
 .hh-qcard button:focus,
 .hh-qcard button:focus-visible,
 .hh-qcard textarea:focus,
-.hh-qcard textarea:focus-visible {
+.hh-qcard textarea:focus-visible,
+.hh-qcard__look a:focus,
+.hh-qcard__look a:focus-visible,
+.hh-qcard__look summary:focus,
+.hh-qcard__look summary:focus-visible {
   outline: 2px solid var(--rule);
   outline-offset: 3px;
   box-shadow: none;
@@ -137,4 +141,47 @@
   .hh-qcard .hh-qcard__actions .hh-btn + .hh-btn {
     margin-top: 0;
   }
+}
+
+/* Where to look. Long notes wrap inside the card. No horizontal scroll. */
+.hh-qcard__look {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+
+.hh-qcard__look summary {
+  cursor: pointer;
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--type-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hh-qcard__look ul {
+  margin: var(--space-2) 0 0;
+  padding: 0 0 0 1.15em;
+  min-width: 0;
+}
+
+.hh-qcard__look li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.hh-qcard__look li + li {
+  margin-top: var(--space-2);
+}
+
+.hh-qcard__look a {
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+  text-underline-offset: 0.18em;
+}
+
+.hh-qcard__look a:hover {
+  color: var(--color-ink);
 }

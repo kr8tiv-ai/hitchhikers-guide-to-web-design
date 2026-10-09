@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DESK_OFFLINE, mountDesk, type DeskEnv } from "../src/client/desk.ts";
+import { DESK_OFFLINE, mountDesk, parseSession, type DeskEnv } from "../src/client/desk.ts";
 
 /**
  * A failed Answer must leave the card usable. The draft stays, the button
@@ -193,4 +193,70 @@ test("the event stream says the desk is offline after a few failed reconnects", 
   } finally {
     stop();
   }
+});
+
+test("parseSession keeps resources and leaves a question without them unchanged", () => {
+  const bare = parseSession(session);
+  assert.ok(bare);
+  assert.equal(bare.question?.resources, undefined);
+
+  const parsed = parseSession({
+    question: {
+      id: "DP-5.1",
+      module: "point-of-view-gun",
+      depth: ["express", "standard", "deep"],
+      ask: "Name three to five sites you love.",
+      why: "Three to five keeps the board small enough to use.",
+      input: ["text", "voice"],
+      skipDefault: "No loved sites named.",
+      writes: ["SITE-BRIEF.md#references"],
+      resources: [
+        {
+          label: "Awwwards",
+          url: "https://www.awwwards.com",
+          note: "the daily award winners; bold, experimental work.",
+        },
+        {
+          label: "And",
+          note: "competitors and brands you already admire in your own industry.",
+        },
+      ],
+    },
+    pushback: null,
+    done: false,
+    mapHtml: "",
+    transcriptHtml: "",
+    statusHtml: "",
+  });
+  assert.ok(parsed);
+  assert.deepEqual(parsed.question?.resources, [
+    {
+      label: "Awwwards",
+      url: "https://www.awwwards.com",
+      note: "the daily award winners; bold, experimental work.",
+    },
+    {
+      label: "And",
+      note: "competitors and brands you already admire in your own industry.",
+    },
+  ]);
+
+  const rejected = parseSession({
+    question: {
+      id: "DP-5.1",
+      ask: "Name three to five sites you love.",
+      why: "Three to five keeps the board small enough to use.",
+      resources: [
+        {
+          label: "Awwwards",
+          url: "http://www.awwwards.com",
+          note: "the daily award winners; bold, experimental work.",
+        },
+      ],
+    },
+    pushback: null,
+    done: false,
+  });
+  assert.ok(rejected);
+  assert.equal(rejected.question?.resources, undefined);
 });

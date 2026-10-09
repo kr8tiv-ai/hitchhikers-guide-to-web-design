@@ -3,14 +3,22 @@ import { readFileSync } from "node:fs";
 /**
  * Interview tree loader for interview/tree.yaml.
  * The subset is mappings, block lists, flow lists, and one-line quoted strings.
- * A duplicate id, an empty skip default, a missing writes list, or an unknown
- * depth token throws. The loader does not skip a broken question.
+ * A duplicate id, an empty skip default, a missing writes list, an unknown
+ * depth token, or a resource url that is not https throws. The loader does
+ * not skip a broken question.
  * Express, Standard, and Deep are filters over this one file.
  */
 
 export type DepthName = "express" | "standard" | "deep";
 export type InputName = "upload" | "text" | "voice" | "choice";
 export type LevelName = "explain" | "terse";
+
+/** A place to look. `url` is omitted for a plain line, such as competitors. */
+export interface QuestionResource {
+  label: string;
+  url?: string;
+  note: string;
+}
 
 export interface Question {
   id: string;
@@ -25,6 +33,7 @@ export interface Question {
   followUps?: Array<{ id: string; ask: string }>;
   levels?: { beginner: LevelName; pro: LevelName };
   requiredFor?: string[];
+  resources?: QuestionResource[];
   writes: string[];
 }
 
@@ -71,6 +80,7 @@ const QUESTION_KEYS = new Set([
   "follow_ups",
   "levels",
   "required_for",
+  "resources",
   "writes",
 ]);
 
@@ -148,6 +158,8 @@ function toQuestion(value: Yaml, index: number): Question {
   if (levels !== undefined) question.levels = levels;
   const requiredFor = optionalStringList(value, "required_for", id);
   if (requiredFor !== undefined) question.requiredFor = requiredFor;
+  const resources = optionalResources(value, id);
+  if (resources !== undefined) question.resources = resources;
   return question;
 }
 
@@ -248,6 +260,49 @@ function optionalFollowUps(
     });
   }
   return out;
+}
+
+const RESOURCE_KEYS = new Set(["label", "url", "note"]);
+
+function optionalResources(map: YamlMap, id: string): QuestionResource[] | undefined {
+  if (!Object.hasOwn(map, "resources")) return undefined;
+  const value = map["resources"];
+  if (!Array.isArray(value)) {
+    throw new TreeError("resources", owned(id, "resources must be a list"), id);
+  }
+  if (value.length === 0) return undefined;
+  const out: QuestionResource[] = [];
+  for (const item of value) {
+    if (!isMap(item)) {
+      throw new TreeError("resources", owned(id, "resources items must be mappings"), id);
+    }
+    for (const key of Object.keys(item)) {
+      if (!RESOURCE_KEYS.has(key)) {
+        throw new TreeError("resources", owned(id, `unknown resources field ${key}`), id);
+      }
+    }
+    const resource: QuestionResource = {
+      label: requireString(item, "label", id),
+      note: requireString(item, "note", id),
+    };
+    if (Object.hasOwn(item, "url")) resource.url = requireHttps(item, id);
+    out.push(resource);
+  }
+  return out;
+}
+
+function requireHttps(map: YamlMap, id: string): string {
+  const value = requireString(map, "url", id);
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new TreeError("resources", owned(id, "resource url must be https"), id);
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname === "") {
+    throw new TreeError("resources", owned(id, "resource url must be https"), id);
+  }
+  return value;
 }
 
 function optionalLevels(

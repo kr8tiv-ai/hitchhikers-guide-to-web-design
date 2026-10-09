@@ -338,6 +338,67 @@ test("done renders Guide Entry is next and no buttons", async () => {
   assert.doesNotMatch(html, /Do you have a logo you love\?/);
 });
 
+test("a question with resources lists where to look, and one without does not", () => {
+  const plain = renderCard(state());
+  assert.doesNotMatch(plain, /Where to look/);
+  assert.doesNotMatch(plain, /<details/);
+  assert.doesNotMatch(plain, /target="_blank"/);
+  assert.match(plain, /<p class="hh-qcard__why">The logo anchors color, type, and tone\.<\/p>\n  <label/);
+
+  const html = renderCard(
+    state({
+      question: {
+        ...question(
+          "DP-5.1",
+          "Name three to five sites you love.",
+          "Three to five keeps the board small enough to use.",
+        ),
+        resources: [
+          {
+            label: `Awwwards <script>`,
+            url: `https://example.com/?a=1&b=2"onclick`,
+            note: `bold & "experimental"`,
+          },
+          {
+            label: "Land-book",
+            url: "https://land-book.com",
+            note: "landing pages sorted by industry and style.",
+          },
+          {
+            label: "Old",
+            url: "http://example.com",
+            note: "not a link",
+          },
+          {
+            label: "And",
+            note: "competitors and brands you already admire in your own industry.",
+          },
+        ],
+      },
+    }),
+  );
+  assert.ok(html.indexOf("hh-qcard__why") < html.indexOf("hh-qcard__look"));
+  assert.ok(html.indexOf("hh-qcard__look") < html.indexOf("hh-qcard__field"));
+  assert.match(html, /<details class="hh-qcard__look" open>/);
+  assert.match(html, /<summary>Where to look<\/summary>/);
+  const anchors = [...html.matchAll(/<a\b[^>]*>/g)].map((match) => match[0]);
+  assert.equal(anchors.length, 2);
+  for (const tag of anchors) {
+    assert.match(tag, /target="_blank"/);
+    assert.match(tag, /rel="noopener noreferrer"/);
+    assert.match(tag, /href="https:/);
+  }
+  assert.match(
+    html,
+    /<a href="https:\/\/example.com\/\?a=1&amp;b=2&quot;onclick" target="_blank" rel="noopener noreferrer">Awwwards &lt;script&gt;<\/a>, bold &amp; &quot;experimental&quot;/,
+  );
+  assert.match(html, /<li>Old: not a link<\/li>/);
+  assert.match(html, /<li>And: competitors and brands you already admire in your own industry\.<\/li>/);
+  assert.doesNotMatch(html, /href="http:/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.doesNotMatch(html, /!/);
+});
+
 test("card css stacks the actions and uses the rule outline", () => {
   const css = readFileSync(cssPath, "utf8");
   assert.match(css, /min-height:\s*44px/);
@@ -347,6 +408,9 @@ test("card css stacks the actions and uses the rule outline", () => {
   assert.doesNotMatch(css, /#[0-9a-fA-F]{3,8}\b/);
   assert.doesNotMatch(css, /indigo|violet|purple|magenta/i);
   assert.doesNotMatch(css, /rounded-full|bg-indigo|magnetic|!important/);
+  assert.match(css, /\.hh-qcard__look\s*\{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.hh-qcard__look li\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.doesNotMatch(css, /white-space:\s*nowrap/);
 });
 
 test("bindCard sends skip once and refuses an empty answer", async () => {

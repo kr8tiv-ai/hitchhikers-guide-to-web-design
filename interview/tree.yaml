@@ -543,6 +543,36 @@ questions:
     input: [text, voice]
     skip_default: "No loved sites named."
     suggest: "Three to five URLs. For each, one sentence on the part you would steal the thinking from."
+    resources:
+      - label: Awwwards
+        url: "https://www.awwwards.com"
+        note: "the daily award winners; bold, experimental work."
+      - label: Land-book
+        url: "https://land-book.com"
+        note: "landing pages sorted by industry and style."
+      - label: SiteInspire
+        url: "https://www.siteinspire.com"
+        note: "calm, well-typeset sites by style and subject."
+      - label: "Lapa Ninja"
+        url: "https://www.lapa.ninja"
+        note: "landing pages by category, good for one industry."
+      - label: "One Page Love"
+        url: "https://onepagelove.com"
+        note: "single-page sites and portfolios."
+      - label: Httpster
+        url: "https://httpster.net"
+        note: "fresh, opinionated design picks."
+      - label: "Minimal Gallery"
+        url: "https://minimal.gallery"
+        note: "quiet, minimal sites."
+      - label: Mobbin
+        url: "https://mobbin.com"
+        note: "real app and mobile screens for patterns."
+      - label: "CSS Design Awards"
+        url: "https://www.cssdesignawards.com"
+        note: "judged winners with UI and UX scores."
+      - label: And
+        note: "competitors and brands you already admire in your own industry."
     levels:
       beginner: explain
       pro: terse
