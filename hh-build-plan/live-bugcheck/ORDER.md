@@ -13,3 +13,24 @@ Started Oct 9, 2026 after the live demo of `hh app`. Each prompt is one job and 
 8. `008-windows-rename-retry`: high. `EPERM` on a locked `STATE.md` fails the save after `interview.json` has already moved. After 007 because both edit the lock helper, and 008 only adds the retry.
 9. `009-grok-help-once`: high. Every live `think()` runs `grok --help` in the project before the real call. After the data-loss fixes. 002 hides the console; this stops the extra process. Replay does not spawn it, so it is not the cassette-miss demo's windows.
 10. `010-pushback-keeps-the-draft`: medium. A re-render during pushback clears the new answer and disables Answer. Last, because 004 may already have edited the desk and the card.
+
+## Merged from SuperGrok Heavy reviews (Oct 9, ~1:00 AM CR)
+
+`heavy-review-1.md` (Heavy on 9010874) and `heavy-review-2.md` (Heavy, from Matt). Each item was checked against main before it became a prompt. Duplicates were folded into an existing prompt instead of getting a new one:
+
+- Heavy-1 #1 (cassette miss shown as "did not save", `isQuiet`, stale session) → notes appended to 003; data-loss side is 006.
+- Heavy-1 #2, #3, #10 (open-browser console, grok.cmd per turn, headed Playwright) → notes appended to 002.
+- Heavy-1 #4 (hold to talk repaint, Chrome auto-end, stuck recognizer, copy) → notes appended to 004.
+- Heavy-1 #6 (EPERM rename, `isPidAlive`) → 007/008; notes appended to 008.
+- Heavy-2 #2, #4 (no pnpm install, published CLI cannot start the desk) → 011 (docs) and 013 (doctor check).
+
+New prompts, by severity:
+
+11. `011-readme-quick-start`: high (visibility). `npx hitchhikers-guide` 404s (verified) and the live audience reads the README tonight. Docs only.
+12. `012-windows-cmd-shims`: high. `.cmd` with `shell:false` is EINVAL on Windows, so deploy fails after the yes (Heavy-1 #5, verified in `tools.ts`).
+13. `013-cli-first-run`: medium. Unknown commands print doctor's usage (verified), Node floor for a `.ts` bin, doctor fails without grok, System32 `hh.exe` check (Heavy-2 #3, #5, #9, #10). After 012 because doctor's probes use the shim launcher.
+14. `014-percent-off-the-cmd-line`: medium, security. `%VAR%` expands in a cmd-wrapped grok prompt (Heavy-1 #7). After 012 (same launcher).
+15. `015-crawler-private-addresses`: medium, security. Crawler SSRF to loopback/private/metadata (Heavy-1 #8).
+16. `016-brand-empty-plate`: low. Fresh `/brand` looks stuck (Heavy-2 #7).
+17. `017-settings-stt-quote`: low. STT rate acceptance surface; checks fix 009 first (Heavy-2 #8).
+18. `018-desk-links-new-tab`: low. Gallery/reference links leave the interview (Heavy-1 #9). Last so it also covers 005's links.

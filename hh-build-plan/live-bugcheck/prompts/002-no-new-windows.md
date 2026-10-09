@@ -33,3 +33,11 @@ While Matt used the desk on Windows 11 (Chrome, `hh app` started from PowerShell
 fix(windows): hide every child console and open the desk browser once
 ```
 Do not push.
+
+## Heavy review notes (verify each before changing code)
+
+`hh-build-plan/live-bugcheck/heavy-review-1.md` items 2, 3 and 10:
+
+- `open-browser.ts` spawns `cmd.exe /d /s /c start "" <url>` with `detached: true` on win32. Node's docs: a detached child on Windows gets its own console. Use no `detached` on win32, one verbatim command line (`start "" "<url>"` with `windowsVerbatimArguments: true`), only for `http://127.0.0.1` / `http://localhost` URLs, or `rundll32 url.dll,FileProtocolHandler <url>`. Heavy also claims Node drops the empty `""` title argument; check that against Node's actual quoting before relying on it.
+- `grok-cli.ts` `launch` wraps `grok.cmd`/`grok.bat` in `cmd.exe /d /s /c` per Guide call (several per Answer). Prefer resolving `grok.exe` next to the shim and spawning it directly. Note: on Matt's PC `where grok` resolves `C:\Users\lucid\.grok\bin\grok.exe` (an exe), so the shim path is not the only cause there: also check what `grok` itself is asked to do per call (flags, sandbox, terminal/tool modes, MCP servers) and whether any of those can open a console.
+- `packages/qa/src/playwright-opener.ts` `withChromium`: set `headless: true` explicitly.

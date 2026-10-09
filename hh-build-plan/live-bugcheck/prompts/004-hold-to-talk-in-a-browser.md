@@ -32,3 +32,13 @@ Also check by reading the code: `pointerup` outside the button still stops; a di
 test(app): hold to talk in Chromium with a stubbed speech recognizer
 ```
 Do not push.
+
+## Heavy review notes (verify each in the browser test before fixing)
+
+`hh-build-plan/live-bugcheck/heavy-review-1.md` item 4:
+- `onresult` calls `paint()`, which replaces the whole card on every partial result. The listeners are on `document`, so pointerup still arrives, but update the textarea value and the notice in place during listening instead of repainting the card (keeps focus, caret and the held button).
+- Chrome can end recognition by itself (a pause, or ~60s) while the pointer is still down: track "held" separately from recognition and restart while held.
+- If `stop()` happens before `onstart`, Chrome may never fire `onend`; then `recognition` stays non-null and the button is dead until reload. After stop, abort and finish after ~400ms if `onend` has not fired. Add a unit test for this.
+- A normal fast release shows the "allow the microphone" sentence even when the mic is already allowed. Show the Allow copy only on `not-allowed` / `service-not-allowed`; a fast release with nothing heard says "Hold the button while you speak."
+- Chrome's Web Speech sends audio to Google's speech service. Fix the comment in `desk.ts` that says nothing leaves the machine, and add a one-line note under the button the first time it is used ("Chrome sends this audio to its speech service.").
+- `setPointerCapture` on pointerdown where available.

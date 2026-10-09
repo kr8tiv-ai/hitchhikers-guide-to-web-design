@@ -39,3 +39,13 @@ On DP-2.6 Matt pressed Answer and saw only "The answer did not save. Try again, 
 fix(app): show why a Guide turn failed and keep the desk usable
 ```
 Do not push.
+
+## Heavy review notes (verified against the code)
+
+`hh-build-plan/live-bugcheck/heavy-review-1.md` item 1, confirmed: `routes.ts` `turnError` maps every non-`InterviewError` to 500 "The answer did not save. Try again, or skip."; `live-turn.ts` `isQuiet` accepts only `GrokMissingError`, `GrokUnavailableError`, `ThinkTimeoutError`, `ThinkRunError`, `ThinkSchemaError`, `PersonaError`, so `CassetteMissError` (engine `ai/cassette.ts`) and the plain `Error("cassette miss: ...")` from `guideThinkFromScript` escape `askGuide`'s calm fallback.
+
+Also do:
+- Treat `CassetteMissError`/`CassetteError` and `/^cassette miss:/` as quiet in `isQuiet`, so the desk falls back to the calm tree ask (and, with 001, says it is in replay mode).
+- Order: `answerText` thinks (`judgePushback`) before `storePlain`; `advance` then thinks again in `askGuide`. If the second think fails after `interview.json` was written, the in-memory session is stale and a retry gets "That question is no longer on the desk." Reload the interview from disk after a failed turn (`finally`), and return the real next question instead of a 409/500. Only say "did not save" when the write itself threw.
+- Map engine `LockHeld` to "Another Guide process is writing. Wait a moment." (409).
+- `desk.ts` SSE `error` listener is empty: after a few failed reconnects show a quiet "The desk lost its connection to hh app. Is the PowerShell window still open?" status.

@@ -32,3 +32,8 @@ Engine tests for the helper, plus one `persistPair` (or `replaceViaTemp`) test w
 fix(engine): retry a Windows rename when the state file is locked
 ```
 Do not push.
+
+## Heavy review notes (from `heavy-review-1.md` item 6; verify first)
+
+- `packages/engine/src/lock.ts` `isPidAlive` treats any `process.kill(pid, 0)` error other than `ESRCH` as alive. On Windows `EPERM` (a pid we cannot signal, or a recycled pid) then holds a dead lock until `STALE_LOCK_MS`. If 007 did not already handle it: store a lock token plus the owner's start time (or hostname + pid + random), and treat a pid whose start time differs as dead.
+- A held lock reaches the desk as "Another Guide process is writing. Wait a moment." (check what 003 already mapped).
