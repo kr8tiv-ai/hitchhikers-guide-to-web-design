@@ -231,7 +231,7 @@ test("queue source uses the engine lock and does not start a runner", () => {
   assert.match(source, /withStateLock/);
   assert.match(source, /replaceViaTemp/);
   assert.match(source, /Two saves serialize/);
-  assert.match(source, /state\.lock/);
+  assert.match(source, /STATE\.md\.lock/);
   assert.match(source, /path\.join\(projectDir, "\.hitchhiker", "queue\.json"\)/);
   assert.doesNotMatch(source, /child_process/);
   assert.doesNotMatch(source, /spawn\(/);
