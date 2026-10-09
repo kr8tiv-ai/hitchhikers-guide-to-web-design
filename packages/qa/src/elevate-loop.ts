@@ -20,7 +20,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { think } from "@hitchhiker/engine";
+import { hiddenChildOptions, type think } from "@hitchhiker/engine";
 import {
   ELEVATE_CAP,
   planElevateModel,
@@ -354,7 +354,7 @@ function git(dir: string, args: readonly string[]): Promise<string> {
     execFile(
       "git",
       full,
-      { windowsHide: true, encoding: "utf8", env: gitEnv(), maxBuffer: 8 * 1024 * 1024 },
+      hiddenChildOptions({ encoding: "utf8", env: gitEnv(), maxBuffer: 8 * 1024 * 1024 }),
       (error, stdout, stderr) => {
         if (error) {
           const detail = stderr.trim().length > 0 ? stderr.trim() : error.message;

@@ -21,6 +21,7 @@ export {
   flagsFromHelp,
   parseGrokStdout,
   planGrokCall,
+  promptOffCmdLine,
   resolveEffort,
   resolveGrokCommand,
   spawnGrok,

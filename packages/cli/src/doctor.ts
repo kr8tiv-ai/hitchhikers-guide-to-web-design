@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   defaultConfig,
+  hiddenChildOptions,
   loadConfig,
   saveConfig,
   type GuideConfig,
@@ -146,13 +147,12 @@ export function spawnCommand(
   command: string,
   args: readonly string[],
 ): CommandResult {
-  const result = spawnSync(command, [...args], {
+  const result = spawnSync(command, [...args], hiddenChildOptions({
     shell: false,
     timeout: SPAWN_TIMEOUT_MS,
     encoding: "utf8",
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+    stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+  }));
   return {
     status: result.status,
     stdout: typeof result.stdout === "string" ? result.stdout : "",

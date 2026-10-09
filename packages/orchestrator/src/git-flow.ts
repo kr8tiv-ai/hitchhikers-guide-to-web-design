@@ -14,6 +14,7 @@
 
 import { execFile } from "node:child_process";
 import path from "node:path";
+import { hiddenChildOptions } from "@hitchhiker/engine";
 import { evaluateCommand } from "./policy.ts";
 
 export class GitFlowError extends Error {
@@ -190,7 +191,7 @@ function execGit(argv: readonly string[]): Promise<string> {
     execFile(
       bin,
       argv.slice(1),
-      { windowsHide: true, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+      hiddenChildOptions({ encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }),
       (error, stdout) => {
         if (error) {
           reject(error);

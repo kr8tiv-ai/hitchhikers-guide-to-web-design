@@ -8,6 +8,9 @@ export type { TurnHandler } from "./routes.ts";
 
 const LOOPBACK = "127.0.0.1";
 
+/** The default opener runs once per process. Injected openers stay per call so tests can count them. */
+let defaultBrowserOpened = false;
+
 export interface ServerHandle {
   url: string;
   port: number;
@@ -124,16 +127,22 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   const url = `http://${LOOPBACK}:${port}/`;
   let opened = false;
   if (opts.open === true) {
-    try {
-      opened =
-        opts.openBrowser !== undefined
-          ? await opts.openBrowser(url)
-          : await openBrowser(url, {
-              ...(opts.platform === undefined ? {} : { platform: opts.platform }),
-              ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
-            });
-    } catch {
-      opened = false;
+    const injected = opts.openBrowser !== undefined || opts.spawn !== undefined;
+    if (!injected && defaultBrowserOpened) {
+      opened = true;
+    } else {
+      try {
+        opened =
+          opts.openBrowser !== undefined
+            ? await opts.openBrowser(url)
+            : await openBrowser(url, {
+                ...(opts.platform === undefined ? {} : { platform: opts.platform }),
+                ...(opts.spawn === undefined ? {} : { spawn: opts.spawn }),
+              });
+      } catch {
+        opened = false;
+      }
+      if (opened && !injected) defaultBrowserOpened = true;
     }
     if (!opened) process.stderr.write(`The browser did not open. Desk: ${url}\n`);
   }

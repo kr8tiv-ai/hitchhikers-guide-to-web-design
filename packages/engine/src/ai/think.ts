@@ -21,6 +21,7 @@ import {
   hasPromptFlag,
   parseGrokStdout,
   planGrokCall,
+  promptOffCmdLine,
   resolveEffort,
   resolveGrokCommand,
   spawnGrok,
@@ -304,7 +305,12 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
       const attempts = req.schema === undefined ? 1 : 2;
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         const input = attempt === 0 ? req.input : repairInput(req.input, firstErrors, firstRaw);
-        const plan = planGrokCall(callRequest(plain, input), cfg, flags, scratch);
+        const plan = promptOffCmdLine(
+          command,
+          planGrokCall(callRequest(plain, input), cfg, flags, scratch),
+          scratch,
+          flags.has("--prompt-file"),
+        );
         policyFlags = plan.argv.filter((arg) => arg.startsWith("-"));
         if (!hasPromptFlag(plan.argv)) {
           throw new ThinkInputError("grok help lists no prompt flag.");

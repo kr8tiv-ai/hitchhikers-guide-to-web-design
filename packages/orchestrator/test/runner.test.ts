@@ -70,6 +70,8 @@ test("argv carries the headless flags and the assembled prompt", () => {
   assert.equal(argv.includes("-r"), false);
   assert.equal(argv.includes("-c"), false);
   assert.ok(argv.includes("--no-auto-update"));
+  assert.ok(argv.includes("--no-alt-screen"));
+  assert.equal(argv.includes("--fullscreen"), false);
   assert.equal(flag(argv, "-p"), req.promptText);
   assert.equal(argv.includes(req.promptText), true);
   assert.equal(flag(argv, "-m"), DEFAULT_MODEL);

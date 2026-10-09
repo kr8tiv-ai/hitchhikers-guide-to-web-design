@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hiddenChildOptions } from "./hidden-child.ts";
 
 /** Default child lifetime. A longer run is killed and reported as TIMEOUT. */
 export const DEFAULT_TIMEOUT_MS = 60_000;
@@ -292,12 +293,12 @@ function spawnWhisper(
   return new Promise((resolve, reject) => {
     // shell stays off. On Unix the child leads its own group so a timeout
     // can signal the group. On Windows, child.kill("SIGKILL") stops it.
-    const child = spawn(bin, [...args], {
+    const child = spawn(bin, [...args], hiddenChildOptions({
       shell: false,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
-    });
+    }));
 
     let stdout = "";
     let stderr = "";

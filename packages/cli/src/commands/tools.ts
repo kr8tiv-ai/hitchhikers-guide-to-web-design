@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { think } from "@hitchhiker/engine";
+import { hiddenChildOptions, think } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
@@ -423,7 +423,7 @@ function readShortlist(projectDir: string): ToolOption[] {
 function defaultRun(cmd: string, args: string[]): Promise<number> {
   const bin = cmd === "pnpm" && process.platform === "win32" ? "pnpm.cmd" : cmd;
   return new Promise((resolve) => {
-    const child = spawn(bin, args, { shell: false, windowsHide: true, stdio: "inherit" });
+    const child = spawn(bin, args, hiddenChildOptions({ shell: false, stdio: "inherit" as const }));
     child.once("error", () => resolve(127));
     child.once("close", (code) => resolve(code ?? 1));
   });

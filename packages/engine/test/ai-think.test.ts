@@ -12,6 +12,7 @@ import {
   defaultConfig,
   flagsFromHelp,
   parseConfig,
+  promptOffCmdLine,
   redact,
   resolveGrokCommand,
   spawnGrok,
@@ -406,6 +407,54 @@ test("grok missing on PATH throws GrokMissingError with the doctor hint", async 
   }
 });
 
+test("headless flags suppress the alt screen when help lists them", () => {
+  const flags = new Set([...FLAGS, "--no-alt-screen", "--no-auto-update"]);
+  const argv = buildGrokArgv({ task: "quote", input: "price the job" }, defaultConfig(), flags);
+  assertKnownFlags(argv, flags);
+  assert.ok(argv.includes("--no-alt-screen"));
+  assert.ok(argv.includes("--no-auto-update"));
+  assert.equal(argv.includes("--sandbox"), false);
+  assert.equal(argv.includes("--fullscreen"), false);
+  assert.equal(argv.includes("--oauth"), false);
+  assert.equal(argv.includes("login"), false);
+  assert.equal(argv.includes("dashboard"), false);
+  assert.equal(argv.includes("--always-approve"), false);
+});
+
+test("a cmd shim beside grok.exe resolves to the exe", () => {
+  const dir = tempDir();
+  try {
+    if (process.platform !== "win32") return;
+    writeFileSync(path.join(dir, "grok.cmd"), "@echo off\r\n");
+    writeFileSync(path.join(dir, "grok.exe"), "");
+    const resolved = resolveGrokCommand({ PATH: dir, PATHEXT: ".CMD;.BAT" });
+    assert.equal(resolved, path.join(dir, "grok.exe"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a Windows cmd shim moves an inline prompt into a file", () => {
+  const dir = tempDir();
+  try {
+    const plan = { argv: ["-p", "100% PATH %PATH%"], files: [] };
+    const exe = promptOffCmdLine("C:\\tools\\grok.exe", plan, dir, true);
+    assert.equal(exe.argv.includes("-p"), true);
+    const moved = promptOffCmdLine("C:\\tools\\grok.cmd", plan, dir, true);
+    if (process.platform === "win32") {
+      assert.equal(moved.argv.includes("-p"), false);
+      assert.equal(moved.argv.includes("--prompt-file"), true);
+      assert.equal(moved.files[0]?.body, "100% PATH %PATH%");
+    } else {
+      assert.equal(moved.argv.includes("-p"), true);
+    }
+    const kept = promptOffCmdLine("C:\\tools\\grok.cmd", plan, dir, false);
+    assert.equal(kept.argv.includes("-p"), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("resolveGrokCommand walks PATH and prefers the PATHEXT order", () => {
   assert.throws(() => resolveGrokCommand({ PATH: "", PATHEXT: ".EXE" }), GrokMissingError);
   const dir = tempDir();
@@ -463,6 +512,17 @@ test("a Windows batch shim receives the prompt as an argument", { skip: process.
     assert.equal(output.timedOut, false);
     const written = JSON.parse(readFileSync(marker, "utf8")) as string[];
     assert.deepEqual(written, ["-p", "hello & echo pwned"]);
+    const percent = await spawnGrok({
+      command: script,
+      args: ["-p", "100%PATH%"],
+      cwd: dir,
+      env: process.env,
+      timeoutMs: 8_000,
+    });
+    assert.equal(percent.timedOut, false);
+    const percentArgs = JSON.parse(readFileSync(marker, "utf8")) as string[];
+    assert.deepEqual(percentArgs, ["-p", "100%PATH%"]);
+    assert.equal(percentArgs[1]?.includes(process.env.PATH ?? "no-such-path"), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { InterviewError } from "@hitchhiker/engine";
 import { parseSession } from "../src/client/desk.ts";
-import { browserLaunch, openBrowser } from "../src/server/open-browser.ts";
+import { browserLaunch, openBrowser, windowsBrowserLaunch } from "../src/server/open-browser.ts";
 import { createSseHub, HEARTBEAT_MS } from "../src/server/sse.ts";
 import { startServer, checkHost, type ServerHandle, type TurnHandler } from "../src/server/server.ts";
 
@@ -495,13 +495,19 @@ test("browser open uses the platform command and survives a missing opener", asy
   });
 
   let command = "";
+  let windowsHide: unknown;
+  let detached: unknown;
+  let verbatim: unknown;
   const opened = await openBrowser("http://127.0.0.1:9/", {
     platform: "win32",
-    spawn(next) {
+    spawn(next, _args, opts) {
       command = next;
+      windowsHide = opts.windowsHide;
+      detached = opts.detached;
+      verbatim = opts.windowsVerbatimArguments;
       return {
         once(event, listener) {
-          if (event === "spawn") listener();
+          if (event === "exit") listener(0);
         },
         unref() {},
       };
@@ -509,6 +515,28 @@ test("browser open uses the platform command and survives a missing opener", asy
   });
   assert.equal(opened, true);
   assert.equal(command, "start");
+  assert.equal(windowsHide, true);
+  assert.equal(detached, false);
+  assert.equal(verbatim, true);
+  assert.deepEqual(windowsBrowserLaunch("http://127.0.0.1:9/"), {
+    file: "cmd.exe",
+    args: ["/d", "/s", "/c", 'start "" "http://127.0.0.1:9/"'],
+  });
+  assert.throws(() => windowsBrowserLaunch("http://example.com/"), /non-loopback/);
+
+  let refused = false;
+  const blocked = await openBrowser("http://169.254.169.254/", {
+    platform: "win32",
+    spawn() {
+      refused = true;
+      return {
+        once() {},
+        unref() {},
+      };
+    },
+  });
+  assert.equal(blocked, false);
+  assert.equal(refused, false);
 
   const failed = await openBrowser("http://127.0.0.1:9/", {
     platform: "linux",
@@ -545,6 +573,81 @@ test("browser open uses the platform command and survives a missing opener", asy
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("the desk opens the browser once across requests and an SSE reconnect", async () => {
+  const calls: string[] = [];
+  const opener = async (url: string): Promise<boolean> => {
+    calls.push(url);
+    return true;
+  };
+  const dir = tempProject();
+  const skipped = await startServer({ projectDir: dir, open: false, openBrowser: opener });
+  try {
+    assert.equal(calls.length, 0);
+    assert.equal(skipped.opened, false);
+  } finally {
+    await skipped.close();
+  }
+
+  const handle = await startServer({ projectDir: dir, open: true, openBrowser: opener });
+  try {
+    assert.equal(calls.length, 1);
+    assert.equal(handle.opened, true);
+    assert.match(calls[0] ?? "", /^http:\/\/127\.0\.0\.1:\d+\/$/);
+    const home = await fetch(handle.url);
+    assert.equal(home.status, 200);
+    const again = await fetch(handle.url);
+    assert.equal(again.status, 200);
+    const session = await fetch(`${handle.url}api/session`);
+    assert.equal(session.status, 200);
+    await readSse(handle);
+    await readSse(handle);
+    const after = await fetch(handle.url);
+    assert.equal(after.status, 200);
+    assert.equal(calls.length, 1);
+  } finally {
+    await handle.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function readSse(handle: ServerHandle): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error !== undefined) reject(error);
+      else resolve();
+    };
+    const req = http.get(
+      {
+        hostname: "127.0.0.1",
+        port: handle.port,
+        path: "/api/events",
+        headers: { host: `127.0.0.1:${handle.port}` },
+      },
+      (res) => {
+        res.setEncoding("utf8");
+        let text = "";
+        res.on("data", (chunk: string) => {
+          text += chunk;
+          if (!text.includes(": connected")) return;
+          req.destroy();
+          finish();
+        });
+      },
+    );
+    const timer = setTimeout(() => {
+      req.destroy();
+      finish(new Error("SSE reconnect did not connect."));
+    }, 5_000);
+    req.on("error", () => {
+      if (!settled) finish(new Error("SSE reconnect did not connect."));
+    });
+  });
+}
 
 test("hh app prints a loopback URL and hh sessions stays the doctor hint", async () => {
   const help = spawnSync(process.execPath, ["--experimental-strip-types", cliEntry, "app", "--help"], {

@@ -188,6 +188,7 @@ function flagArgs(req: RunRequest, delivery: "inline" | "file"): string[] {
     delivery === "inline" ? ["-p", req.promptText] : ["--prompt-file", assembledPromptPath(req)];
   const args = [
     "--no-auto-update",
+    "--no-alt-screen",
     ...promptFlag,
     "-m",
     modelOf(req),

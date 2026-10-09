@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { GuideConfig } from "../config.ts";
+import { hiddenChildOptions } from "../hidden-child.ts";
 import type { ThinkRequest } from "./think.ts";
 
 /**
@@ -125,10 +126,25 @@ export function resolveGrokCommand(env: NodeJS.ProcessEnv): string {
       const found = entries.find((entry) => (windows ? entry.toLowerCase() : entry) === needle);
       if (found === undefined) continue;
       const candidate = path.join(dir, found);
-      if (isFile(candidate)) return candidate;
+      if (isFile(candidate)) return preferSiblingGrokExe(candidate);
     }
   }
   throw new GrokMissingError();
+}
+
+/**
+ * A `.cmd` / `.bat` shim cannot be CreateProcess'd without a console host.
+ * When `grok.exe` sits beside the shim, spawn the exe. PATH order is unchanged
+ * until that upgrade: an exe earlier on PATH is already returned above.
+ */
+function preferSiblingGrokExe(command: string): string {
+  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) return command;
+  const entries = directoryEntries(path.dirname(command));
+  if (entries === undefined) return command;
+  const exeName = entries.find((entry) => entry.toLowerCase() === "grok.exe");
+  if (exeName === undefined) return command;
+  const exe = path.join(path.dirname(command), exeName);
+  return isFile(exe) ? exe : command;
 }
 
 /** Flags named in `grok --help`. This is the same probe hh doctor runs. */
@@ -212,6 +228,11 @@ export function planGrokCall(
   const argv: string[] = [];
   const files: PlannedFile[] = [];
 
+  // grok is a TUI. --no-alt-screen keeps it on the pipes instead of a console.
+  // --no-auto-update skips the updater. Neither is passed unless help lists it.
+  // Sandbox, fullscreen, dashboard, login, and MCP servers are not requested.
+  push(argv, flags, "--no-auto-update");
+  push(argv, flags, "--no-alt-screen");
   push(argv, flags, "--permission-mode", "plan");
   push(argv, flags, "--tools", READ_ONLY_TOOLS);
   push(argv, flags, "--max-turns", String(turns));
@@ -247,6 +268,38 @@ export function planGrokCall(
     argv.push("--prompt-file", file);
   }
 
+  return { argv, files };
+}
+
+/**
+ * A Windows `.cmd` shim expands `%VAR%` on the command line.
+ * Move an inline prompt into a file when the binary is a shim and
+ * `--prompt-file` is available. An exe path is left alone.
+ */
+export function promptOffCmdLine(
+  command: string,
+  plan: GrokPlan,
+  dir: string,
+  allowPromptFile: boolean,
+): GrokPlan {
+  if (!allowPromptFile || process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
+    return plan;
+  }
+  const argv = [...plan.argv];
+  const files = plan.files.map((file) => ({ path: file.path, body: file.body }));
+  const inline = [
+    { flag: "-p", name: "prompt.txt" },
+    { flag: "--single", name: "prompt.txt" },
+    { flag: "--prompt-json", name: "prompt.json" },
+  ];
+  for (const item of inline) {
+    const index = argv.indexOf(item.flag);
+    if (index < 0 || index + 1 >= argv.length) continue;
+    const body = argv[index + 1] ?? "";
+    const file = path.join(dir, item.name);
+    files.push({ path: file, body });
+    argv.splice(index, 2, "--prompt-file", file);
+  }
   return { argv, files };
 }
 
@@ -408,6 +461,9 @@ export function unavailableMessage(stdout: string, stderr: string): string | und
 }
 
 function quoteCmdArg(arg: string): string {
+  // cmd expands %VAR% even inside quotes. %%VAR%% still contains %VAR%
+  // when VAR is set, so doubling is not an escape. End the quote, emit a
+  // caret-escaped percent, and reopen the quote: "100"^%"PATH"^%"".
   if (arg.length === 0) return '""';
   if (!/[\s"&|<>^()%!`]/.test(arg)) return arg;
   let out = '"';
@@ -415,6 +471,12 @@ function quoteCmdArg(arg: string): string {
   for (const char of arg) {
     if (char === "\\") {
       slashes += 1;
+      continue;
+    }
+    if (char === "%") {
+      if (slashes > 0) out += "\\".repeat(slashes * 2);
+      slashes = 0;
+      out += '"^%"';
       continue;
     }
     if (char === '"') {
@@ -442,23 +504,18 @@ function launch(file: string, args: readonly string[], cwd: string, env: NodeJS.
   const shared = {
     cwd,
     env,
-    windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
   };
   if (process.platform === "win32" && /\.(cmd|bat)$/i.test(file)) {
     const commandLine = [file, ...args].map((arg) => quoteCmdArg(arg)).join(" ");
     const comspec = envValue(env, "ComSpec") ?? "cmd.exe";
-    return spawn(comspec, ["/d", "/s", "/c", `"${commandLine}"`], {
+    return spawn(comspec, ["/d", "/s", "/c", `"${commandLine}"`], hiddenChildOptions({
       ...shared,
-      shell: false,
       windowsVerbatimArguments: true,
-    });
+    }));
   }
-  return spawn(file, [...args], {
-    ...shared,
-    shell: false,
-    detached: process.platform !== "win32",
-  });
+  return spawn(file, [...args], hiddenChildOptions(shared));
 }
 
 function killTree(child: ChildProcess): void {
@@ -468,11 +525,9 @@ function killTree(child: ChildProcess): void {
     return;
   }
   if (process.platform === "win32") {
-    const killer = spawn("taskkill.exe", ["/pid", String(pid), "/t", "/f"], {
-      shell: false,
-      windowsHide: true,
-      stdio: "ignore",
-    });
+    const killer = spawn("taskkill.exe", ["/pid", String(pid), "/t", "/f"], hiddenChildOptions({
+      stdio: "ignore" as const,
+    }));
     killer.unref();
     return;
   }

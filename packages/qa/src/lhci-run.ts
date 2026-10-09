@@ -16,7 +16,7 @@ import https from "node:https";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { defaultConfig, type GuideConfig } from "@hitchhiker/engine";
+import { defaultConfig, hiddenChildOptions, type GuideConfig } from "@hitchhiker/engine";
 import { evaluateLh, fromLhci, type LhScores } from "./lighthouse-gate.ts";
 import { ensureChromium } from "./playwright-opener.ts";
 
@@ -123,7 +123,7 @@ function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (pid === undefined) return;
   if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true, shell: false });
+    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], hiddenChildOptions({ stdio: "ignore" as const }));
     return;
   }
   child.kill("SIGKILL");
@@ -131,12 +131,10 @@ function killTree(child: ChildProcess): void {
 
 function runCli(args: string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [lhciCli(), ...args], {
+    const child = spawn(process.execPath, [lhciCli(), ...args], hiddenChildOptions({
       cwd,
-      windowsHide: true,
-      shell: false,
       env: process.env,
-    });
+    }));
     let stdout = "";
     let stderr = "";
     let settled = false;

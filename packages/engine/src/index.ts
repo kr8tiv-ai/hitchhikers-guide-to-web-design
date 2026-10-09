@@ -6,6 +6,7 @@ export {
 export type { WorkspacePackage } from "./workspace.ts";
 export { BOUNDARIES, findDeepImports, findEscapes } from "./boundaries.ts";
 export type { PackageBoundary } from "./boundaries.ts";
+export { hiddenChildOptions } from "./hidden-child.ts";
 export {
   ConfigError,
   IMAGINE_BUDGET_USD_MAX,
@@ -47,6 +48,7 @@ export {
   cassetteMode,
   writeCassette,
   flagsFromHelp,
+  promptOffCmdLine,
   redact,
   resolveGrokCommand,
   spawnGrok,

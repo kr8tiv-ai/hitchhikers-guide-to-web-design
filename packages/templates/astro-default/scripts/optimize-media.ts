@@ -81,7 +81,12 @@ export function ffmpegArgs(input: string, output: string, codec: "h264" | "webm"
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = spawn(command, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      shell: false,
+      windowsHide: true,
+      detached: false,
+    });
     let errorText = "";
     child.stderr?.on("data", (chunk: Buffer) => {
       errorText += chunk.toString("utf8");

@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSecureContext } from "node:tls";
+import { hiddenChildOptions } from "@hitchhiker/engine";
 import { chromium, type Browser, type Page } from "playwright";
 import { REVIEW_WIDTHS } from "./screenshots.ts";
 
@@ -49,10 +50,7 @@ function playwrightCli(): string {
 async function installChromium(): Promise<void> {
   const cli = playwrightCli();
   const code = await new Promise<number | null>((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, "install", "chromium"], {
-      windowsHide: true,
-      shell: false,
-    });
+    const child = spawn(process.execPath, [cli, "install", "chromium"], hiddenChildOptions());
     child.on("error", reject);
     child.on("close", (status) => resolve(status));
   });
@@ -71,6 +69,7 @@ export async function ensureChromium(): Promise<string> {
 export async function withChromium<T>(run: (browser: Browser) => Promise<T>): Promise<T> {
   const executablePath = await ensureChromium();
   const browser = await chromium.launch({
+    headless: true,
     executablePath,
     args: [
       "--ignore-certificate-errors",

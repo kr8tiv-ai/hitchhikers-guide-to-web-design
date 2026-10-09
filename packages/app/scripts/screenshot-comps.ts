@@ -21,7 +21,7 @@ const viewportHeight: Record<(typeof widths)[number], number> = {
 
 await mkdir(outDir, { recursive: true });
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ headless: true });
 try {
   for (const theme of themes) {
     for (const width of widths) {

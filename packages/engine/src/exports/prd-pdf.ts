@@ -13,6 +13,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hiddenChildOptions } from "../hidden-child.ts";
 import {
   assertExportOptions,
   ExportPdfError,
@@ -46,7 +47,11 @@ interface PdfBrowser {
 }
 
 interface PlaywrightChromium {
-  launch(options?: { executablePath?: string; args?: string[] }): Promise<PdfBrowser>;
+  launch(options?: {
+    executablePath?: string;
+    args?: string[];
+    headless?: boolean;
+  }): Promise<PdfBrowser>;
   executablePath(): string;
 }
 
@@ -154,6 +159,7 @@ async function printHtml(html: string, paper: PdfPaper): Promise<Buffer> {
   const chromium = await loadChromium();
   const executablePath = await ensureChromium(chromium);
   const browser = await chromium.launch({
+    headless: true,
     executablePath,
     args: ["--disable-dev-shm-usage", "--no-sandbox"],
   });
@@ -218,10 +224,7 @@ async function ensureChromium(chromium: PlaywrightChromium): Promise<string> {
   const cli = playwrightCli();
   if (cli === null) throw new ExportPdfError(CHROMIUM_FIX);
   const code = await new Promise<number | null>((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, "install", "chromium"], {
-      windowsHide: true,
-      shell: false,
-    });
+    const child = spawn(process.execPath, [cli, "install", "chromium"], hiddenChildOptions());
     child.on("error", reject);
     child.on("close", (status) => resolve(status));
   });
