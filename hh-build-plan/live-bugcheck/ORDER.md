@@ -34,3 +34,14 @@ New prompts, by severity:
 16. `016-brand-empty-plate`: low. Fresh `/brand` looks stuck (Heavy-2 #7).
 17. `017-settings-stt-quote`: low. STT rate acceptance surface; checks fix 009 first (Heavy-2 #8).
 18. `018-desk-links-new-tab`: low. Gallery/reference links leave the interview (Heavy-1 #9). Last so it also covers 005's links.
+
+## Desk usability (SuperGrok Heavy review 3, from Matt, Oct 9 ~1:12 AM CR)
+
+`heavy-review-3-usability.md`, 20 items, split into six prompts. They run after every bug, Windows, security, quick-start and CLI fix (001-018) because they touch the same desk files and must build on those fixes. No restyle: the cream desk, the rust rule and the Don't Panic wordmark stay.
+
+19. `019-desk-card-and-composer` (items 1-4, 7-9): question once, "2 of 22" progress, pinned composer on small screens, honest Answer/Suggest/Skip, Enter to submit, placeholder, mic beside the field. Keeps 9010874's hold behaviour and 004's no-repaint fix.
+20. `020-desk-map-and-footer` (items 5-6): map phases link to their desks, mobile collapse, footer shows the next step.
+21. `021-empty-states` (items 10-12): Start the interview, empty /brand, /approve and Drive with one next click; extends 016.
+22. `022-desk-accessibility` (items 13-16, 18): focus to the new question, aria-live, errors under the field, transcript "Earlier", Edit, a focus ring of its own.
+23. `023-desk-settings-menu` (item 20 + review-2 item 8): one Desk menu; extends 017.
+24. `024-logo-drop-and-language` (items 17, 19): a real drop zone for upload questions; the restatement behind a toggle.
