@@ -6,7 +6,7 @@
  * drive runner.
  *
  * Two saves serialize on the engine state lock (`withStateLock`, file
- * `state.lock`). A second writer is refused while the first still holds
+ * `STATE.md.lock`). A second writer is refused while the first still holds
  * that lock. The body is written with `replaceViaTemp`: a temp file in the
  * same directory, then a rename over the target, so a reader does not see
  * a half-written queue.
@@ -147,7 +147,7 @@ function assertProjectDir(projectDir: string): void {
 }
 
 /**
- * Write the queue under `state.lock`. An empty items array is valid:
+ * Write the queue under `STATE.md.lock`. An empty items array is valid:
  * the drive has not been planned yet.
  */
 export async function saveQueue(projectDir: string, queue: QueueFile): Promise<void> {

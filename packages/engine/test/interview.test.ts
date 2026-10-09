@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { LockHeld } from "../src/lock.ts";
+import { LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import { loadState, saveState, type GuideState } from "../src/state.ts";
 import { loadTree, questionsForDepth } from "../src/tree.ts";
 import {
@@ -89,7 +89,7 @@ function writeLock(projectDir: string, pid: number): void {
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    path.join(dir, "state.lock"),
+    path.join(dir, STATE_LOCK_NAME),
     `${JSON.stringify({ pid, acquiredAt: new Date().toISOString() })}\n`,
     "utf8",
   );
@@ -297,7 +297,7 @@ ${questionYaml("DP-0.1", "express", "Yourself.")}`;
     );
     assert.equal(readFileSync(answersPath(dir), "utf8"), before);
     assert.equal(readAnswers(dir).length, 1);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
     assert.equal(
       existsSync(path.join(dir, ".hitchhiker", `interview.json.tmp-${process.pid}`)),
       false,
@@ -424,7 +424,7 @@ test("command keeps phase, slice, blockers, and commit, and stamps the clock", a
     assert.equal(state.updatedAt, "2026-10-06T15:04:05.000Z");
     const raw = readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8");
     assert.equal(raw.includes("\r"), false);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -12,6 +13,7 @@ import { test } from "node:test";
 import {
   LockHeld,
   STALE_LOCK_MS,
+  STATE_LOCK_NAME,
   acquire,
   release,
   withStateLock,
@@ -30,7 +32,7 @@ function writeLock(lockPath: string, pid: number, acquiredAt: string): void {
 
 test("a live lock blocks a second acquire", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, "state.lock");
+  const lockPath = path.join(dir, STATE_LOCK_NAME);
   try {
     const held = await acquire(lockPath);
     assert.equal(held.pid, process.pid);
@@ -55,7 +57,7 @@ test("a live lock blocks a second acquire", async () => {
 
 test("two acquires at once: the second sees LockHeld", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, "state.lock");
+  const lockPath = path.join(dir, STATE_LOCK_NAME);
   try {
     const results = await Promise.allSettled([
       acquire(lockPath),
@@ -78,7 +80,7 @@ test("two acquires at once: the second sees LockHeld", async () => {
 
 test("a dead lock older than 30s is taken over once", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, "state.lock");
+  const lockPath = path.join(dir, STATE_LOCK_NAME);
   const start = Date.parse("2026-10-06T00:00:00.000Z");
   try {
     writeLock(lockPath, DEAD_PID, new Date(start).toISOString());
@@ -105,7 +107,7 @@ test("a dead lock older than 30s is taken over once", async () => {
 
 test("a young dead lock is not stolen", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, "state.lock");
+  const lockPath = path.join(dir, STATE_LOCK_NAME);
   const now = Date.parse("2026-10-06T00:00:00.000Z");
   try {
     writeLock(lockPath, DEAD_PID, new Date(now).toISOString());
@@ -128,7 +130,7 @@ test("a young dead lock is not stolen", async () => {
 
 test("withStateLock releases the lock when the writer throws", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, ".hitchhiker", "state.lock");
+  const lockPath = path.join(dir, ".hitchhiker", STATE_LOCK_NAME);
   try {
     await assert.rejects(
       () =>
@@ -155,7 +157,7 @@ test("withStateLock releases the lock when the writer throws", async () => {
 
 test("release deletes the lock only when the pid still matches", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, "state.lock");
+  const lockPath = path.join(dir, STATE_LOCK_NAME);
   try {
     const held = await acquire(lockPath);
     writeLock(lockPath, DEAD_PID, held.acquiredAt);
@@ -167,6 +169,43 @@ test("release deletes the lock only when the pid still matches", async () => {
     assert.equal(stored.pid, DEAD_PID);
     await release(lockPath, DEAD_PID);
     assert.equal(existsSync(lockPath), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a live legacy state.lock refuses the write", async () => {
+  const dir = tempDir();
+  const hitch = path.join(dir, ".hitchhiker");
+  const legacyPath = path.join(hitch, "state.lock");
+  try {
+    mkdirSync(hitch);
+    writeLock(legacyPath, process.pid, new Date().toISOString());
+    await assert.rejects(
+      () => withStateLock(dir, () => "ran"),
+      (error: unknown) => {
+        assert.ok(error instanceof LockHeld);
+        assert.equal(error.pid, process.pid);
+        return true;
+      },
+    );
+    assert.equal(existsSync(legacyPath), true);
+    assert.equal(existsSync(path.join(hitch, STATE_LOCK_NAME)), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a dead legacy state.lock is removed", async () => {
+  const dir = tempDir();
+  const hitch = path.join(dir, ".hitchhiker");
+  const legacyPath = path.join(hitch, "state.lock");
+  try {
+    mkdirSync(hitch);
+    writeLock(legacyPath, DEAD_PID, new Date().toISOString());
+    assert.equal(await withStateLock(dir, () => "ran"), "ran");
+    assert.equal(existsSync(legacyPath), false);
+    assert.equal(existsSync(path.join(hitch, STATE_LOCK_NAME)), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

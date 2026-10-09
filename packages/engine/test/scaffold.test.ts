@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { LockHeld } from "../src/lock.ts";
+import { LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import { ScaffoldError, scaffoldProject, type ProjectInfo } from "../src/spec/scaffold.ts";
 import { TemplateError } from "../src/templates.ts";
 
@@ -309,7 +309,7 @@ test("an existing PROJECT.md is left unchanged", async () => {
 
 test("a live state lock blocks the write", async () => {
   const dir = tempDir();
-  const lockPath = path.join(dir, ".hitchhiker", "state.lock");
+  const lockPath = path.join(dir, ".hitchhiker", STATE_LOCK_NAME);
   try {
     mkdirSync(path.dirname(lockPath), { recursive: true });
     writeFileSync(

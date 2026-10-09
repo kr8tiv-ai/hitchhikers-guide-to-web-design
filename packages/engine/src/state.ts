@@ -199,7 +199,7 @@ export function loadState(projectDir: string): GuideState | null {
 }
 
 /**
- * Write `.hitchhiker/STATE.md` under `state.lock`.
+ * Write `.hitchhiker/STATE.md` under `STATE.md.lock`.
  * The markdown is a short heading document, renamed over the target from a temp file.
  */
 export async function saveState(

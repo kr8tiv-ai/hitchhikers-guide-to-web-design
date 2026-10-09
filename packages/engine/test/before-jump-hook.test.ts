@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { think as engineThink, type ThinkResult } from "../src/ai/index.ts";
 import { BRAND_SECTIONS } from "../src/brand/approve.ts";
-import { acquire, release, LockHeld } from "../src/lock.ts";
+import { acquire, release, LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import type { AnswerRecord } from "../src/required.ts";
 import { onPhaseStart, savePartial, loadPartial, writeBack, type BeforeJumpAnswer, type BeforeJumpCard, type BeforeJumpPhase } from "../src/phases/before-jump-hook.ts";
 
@@ -330,7 +330,7 @@ test("writeBack throws while the state lock is held and leaves files untouched",
   const interview = path.join(hitch(dir), "interview.json");
   const sentinel = `${JSON.stringify({ version: 1, answers: [], cursor: 3, pushedIds: [] }, null, 2)}\n`;
   writeFileSync(interview, sentinel);
-  const info = await acquire(path.join(hitch(dir), "state.lock"));
+  const info = await acquire(path.join(hitch(dir), STATE_LOCK_NAME));
   try {
     await assert.rejects(
       writeBack(dir, {
@@ -346,7 +346,7 @@ test("writeBack throws while the state lock is held and leaves files untouched",
     assert.equal(readText(interview), sentinel);
     assert.equal(existsSync(path.join(hitch(dir), "SITE-BRIEF.md")), false);
   } finally {
-    await release(path.join(hitch(dir), "state.lock"), info.pid);
+    await release(path.join(hitch(dir), STATE_LOCK_NAME), info.pid);
     cleanup(dir);
   }
 });

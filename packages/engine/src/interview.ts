@@ -454,7 +454,7 @@ function isAnswerStatus(value: string): value is AnswerRecord["status"] {
 /**
  * Both files share one state lock. Temps are written first, then answers
  * are renamed, then state. saveState takes the same lock, so calling it
- * here would deadlock on state.lock. The heading document matches state.ts.
+ * here would deadlock on STATE.md.lock. The heading document matches state.ts.
  */
 async function persistPair(
   projectDir: string,

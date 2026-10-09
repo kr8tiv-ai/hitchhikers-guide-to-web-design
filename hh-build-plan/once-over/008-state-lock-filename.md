@@ -1,6 +1,6 @@
 # 008. Lock file name differs from v2
 
-Status: **proposed**. Not applied.
+Status: **applied**.
 
 ## Miss
 
@@ -17,3 +17,7 @@ Either rename the constant to `STATE.md.lock` and update every test that joins t
 ## Why this pass did not do it
 
 The name is pinned across the engine tests. A rename is a coordinated contract change, not a one-line fix.
+
+## Applied
+
+The code now matches v2. `STATE_LOCK_NAME` is `STATE.md.lock`. A live legacy `state.lock` still refuses the write. A dead one is removed.

@@ -20,7 +20,7 @@ import {
 } from "../src/brand/approve.ts";
 import { BRAND_WORD_CAP, compileBrand } from "../src/brand/brain.ts";
 import type { BrandParts } from "../src/brand/brain.ts";
-import { LockHeld, withStateLock } from "../src/lock.ts";
+import { LockHeld, STATE_LOCK_NAME, withStateLock } from "../src/lock.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.resolve(here, "..", "src", "brand", "approve.ts");
@@ -150,7 +150,7 @@ test("full approval flips the status line compileBrand wrote", async () => {
     for (const section of BRAND_SECTIONS) assert.equal(flags[section], true);
     const names = readFileSync(approvalFile(dir), "utf8");
     assert.equal(names.includes("\r"), false);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
     discard(dir);
   }
@@ -273,7 +273,7 @@ test("a corrupt brand-approval.json throws and is not deleted", async () => {
     assert.equal(existsSync(approvalFile(dir)), true);
     assert.equal(readFileSync(approvalFile(dir), "utf8"), junk);
     assert.equal(readFileSync(brandFile(dir), "utf8"), brandBefore);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
 
     const typed = `${JSON.stringify({
       purpose: "yes",
@@ -347,7 +347,7 @@ test("a missing Status line throws and writes nothing", async () => {
     await assert.rejects(() => approveSection(dir, "neighbors"), /missing a Status line/);
     assert.equal(existsSync(approvalFile(dir)), false);
     assert.equal(readFileSync(brandFile(dir), "utf8"), stripped);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
     discard(dir);
   }
@@ -375,7 +375,7 @@ test("approveSection and redoSection use the state lock", async () => {
       assert.equal(existsSync(approvalFile(dir)), false);
       assert.equal(readFileSync(brandFile(dir), "utf8"), before);
     });
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
     assert.equal(existsSync(approvalFile(dir)), false);
   } finally {
     discard(dir);

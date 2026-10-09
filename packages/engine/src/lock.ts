@@ -21,7 +21,10 @@ export class LockHeld extends Error {
  */
 export const STALE_LOCK_MS = 30_000;
 
-export const STATE_LOCK_NAME = "state.lock";
+export const STATE_LOCK_NAME = "STATE.md.lock";
+
+/** Pre-v2 filename. Not the lock we take. */
+const LEGACY_STATE_LOCK_NAME = "state.lock";
 
 type Clock = () => number;
 
@@ -147,13 +150,33 @@ async function attempt(
 }
 
 /**
+ * A project from before the v2 name may still have `state.lock` beside
+ * `STATE.md.lock`. A live pid refuses the write. A dead pid is removed
+ * with no 30s floor: that file is not the lock we take. A file we cannot
+ * parse has no live pid, so it is removed too.
+ */
+async function settleLegacyStateLock(dir: string): Promise<void> {
+  const legacyPath = path.join(dir, LEGACY_STATE_LOCK_NAME);
+  const read = await readLock(legacyPath);
+  if (read.status === "missing") return;
+  if (read.status === "ok" && isPidAlive(read.info.pid)) {
+    throw new LockHeld(read.info.pid);
+  }
+  await removeLock(legacyPath);
+}
+
+/**
  * Exclusive-create `lockPath`. A dead holder is stolen once, and only when
  * `acquiredAt` is older than {@link STALE_LOCK_MS}. `now` defaults to Date.now.
+ * Acquiring `STATE.md.lock` settles a sibling `state.lock` first.
  */
-export function acquire(
+export async function acquire(
   lockPath: string,
   now: Clock = Date.now,
 ): Promise<LockInfo> {
+  if (path.basename(lockPath) === STATE_LOCK_NAME) {
+    await settleLegacyStateLock(path.dirname(lockPath));
+  }
   return attempt(lockPath, now, false);
 }
 
@@ -165,7 +188,7 @@ export async function release(lockPath: string, pid: number): Promise<void> {
 }
 
 /**
- * Hold `.hitchhiker/state.lock` around `fn`. The directory is created first.
+ * Hold `.hitchhiker/STATE.md.lock` around `fn`. The directory is created first.
  * The lock is released when `fn` returns or throws, and only if the pid still matches.
  */
 export async function withStateLock<T>(

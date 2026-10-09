@@ -1,6 +1,6 @@
 /**
  * Don't Panic success criteria this file covers:
- * - lock: a live state.lock blocks the write, and a finished command releases it
+ * - lock: a live STATE.md.lock blocks the write, and a finished command releases it
  * - resume: a second session continues at the saved question id
  * - tree ids: Express uses the real tree and includes every required id
  * - card regions: packages/app/test/desk-e2e.test.ts renders the question card and the phase map
@@ -24,6 +24,7 @@ import {
   loadState,
   loadTree,
   LockHeld,
+  STATE_LOCK_NAME,
   missingRequired,
   openInterview,
   questionsForDepth,
@@ -78,7 +79,7 @@ function answersPath(projectDir: string): string {
 }
 
 function lockPath(projectDir: string): string {
-  return path.join(projectDir, ".hitchhiker", "state.lock");
+  return path.join(projectDir, ".hitchhiker", STATE_LOCK_NAME);
 }
 
 function readAnswers(projectDir: string): AnswerRecord[] {

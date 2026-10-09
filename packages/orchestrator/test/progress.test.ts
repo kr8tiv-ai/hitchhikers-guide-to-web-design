@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { LockHeld, loadState, saveState, type GuideState } from "@hitchhiker/engine";
+import { LockHeld, STATE_LOCK_NAME, loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { advance, ProgressError } from "../src/progress.ts";
 import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../src/queue-file.ts";
 
@@ -331,7 +331,7 @@ test("an unknown id throws and leaves the queue and STATE", async () => {
     );
     assert.equal(readFileSync(queueFile(dir), "utf8"), queueBefore);
     assert.equal(readFileSync(stateFile(dir), "utf8"), stateBefore);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -392,7 +392,7 @@ test("a paused queue throws until the drive is resumed", async () => {
     );
     assert.equal(readFileSync(queueFile(dir), "utf8"), queueBefore);
     assert.equal(readFileSync(stateFile(dir), "utf8"), stateBefore);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
     await saveQueue(dir, {
       items: [item("001", "running"), item("002", "queued", "review"), item("003", "queued")],
     });
@@ -415,7 +415,7 @@ test("a held state lock rejects advance before either file changes", async () =>
     const queueBefore = readFileSync(queueFile(dir), "utf8");
     const stateBefore = readFileSync(stateFile(dir), "utf8");
     writeFileSync(
-      path.join(dir, ".hitchhiker", "state.lock"),
+      path.join(dir, ".hitchhiker", STATE_LOCK_NAME),
       `${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`,
       "utf8",
     );

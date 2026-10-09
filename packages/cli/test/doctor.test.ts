@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import {
   ConfigError,
   LockHeld,
+  STATE_LOCK_NAME,
   defaultConfig,
   loadConfig,
   saveConfig,
@@ -75,10 +76,10 @@ test("saveConfig round-trips and uses the lock", async () => {
     const raw = readFileSync(filePath, "utf8");
     assert.equal(raw.includes("\r"), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", `config.json.tmp-${process.pid}`)), false);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
 
     writeFileSync(
-      path.join(dir, ".hitchhiker", "state.lock"),
+      path.join(dir, ".hitchhiker", STATE_LOCK_NAME),
       `${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`,
       "utf8",
     );
@@ -210,7 +211,7 @@ test("doctor --project writes uuid or alias and leaves unknown untouched", async
     assert.equal(saved.sessionIdMode, "alias");
     assert.equal(saved.model, defaultConfig().model);
     assert.equal(saved.effort, "medium");
-    assert.equal(existsSync(path.join(aliasDir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(aliasDir, ".hitchhiker", STATE_LOCK_NAME)), false);
 
     const unknownRun = scripted(gitOk());
     await doctor({ projectDir: unknownDir, nodeVersion: "v22.0.0", runner: unknownRun });

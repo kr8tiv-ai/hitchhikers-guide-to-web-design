@@ -17,7 +17,7 @@ import {
   saveState as saveStateFromIndex,
 } from "../src/index.ts";
 import { openInterview } from "../src/interview.ts";
-import { LockHeld } from "../src/lock.ts";
+import { LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import { scaffoldProject } from "../src/spec/scaffold.ts";
 import { loadState, saveState, type GuideState } from "../src/state.ts";
 
@@ -43,7 +43,7 @@ function writeLock(projectDir: string, pid: number, acquiredAt: string): void {
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    path.join(dir, "state.lock"),
+    path.join(dir, STATE_LOCK_NAME),
     `${JSON.stringify({ pid, acquiredAt })}\n`,
     "utf8",
   );
@@ -80,7 +80,7 @@ test("STATE.md round-trips a colon and a quote", async () => {
       existsSync(path.join(dir, ".hitchhiker", `STATE.md.tmp-${process.pid}`)),
       false,
     );
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
     assert.equal(raw.includes(".planning/"), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -116,7 +116,7 @@ test("a dead lock older than 30 seconds is taken over by saveState", async () =>
     );
     await saveState(dir, state);
     assert.deepEqual(loadState(dir), state);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

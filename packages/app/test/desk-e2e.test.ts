@@ -1,6 +1,6 @@
 /**
  * Don't Panic success criteria this file covers:
- * - lock: the skip write releases state.lock
+ * - lock: the skip write releases STATE.md.lock
  * - resume: a new session sits on the question the skip left behind
  * - tree ids: the card is the first Express question from the real tree
  * - card regions: title, why, and the Answer, Suggest, and Skip actions, plus the phase map
@@ -18,6 +18,7 @@ import {
   openInterview,
   questionsForDepth,
   requiredIds,
+  STATE_LOCK_NAME,
   type AnswerRecord,
   type InterviewSession,
 } from "@hitchhiker/engine";
@@ -157,7 +158,7 @@ test("the desk renders the question card and Don't Panic from a saved session", 
     assert.equal(stepped.error, null);
     assert.equal(stepped.done, false);
     assert.equal(stepped.question?.id, second.id);
-    assert.equal(existsSync(path.join(projectDir, ".hitchhiker", "state.lock")), false);
+    assert.equal(existsSync(path.join(projectDir, ".hitchhiker", STATE_LOCK_NAME)), false);
 
     const stored = readAnswers(projectDir);
     assert.equal(stored.length, 1);
