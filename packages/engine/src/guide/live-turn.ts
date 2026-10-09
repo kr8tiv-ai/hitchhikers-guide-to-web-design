@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { CassetteError, CassetteMissError } from "../ai/cassette.ts";
 import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
 import { think } from "../ai/think.ts";
 import {
@@ -472,14 +473,20 @@ function resolveTreePath(projectDir: string): string {
 }
 
 function isQuiet(error: unknown): boolean {
-  return (
+  if (
     error instanceof GrokMissingError ||
     error instanceof GrokUnavailableError ||
     error instanceof ThinkTimeoutError ||
     error instanceof ThinkRunError ||
     error instanceof ThinkSchemaError ||
-    error instanceof PersonaError
-  );
+    error instanceof PersonaError ||
+    error instanceof CassetteMissError ||
+    error instanceof CassetteError
+  ) {
+    return true;
+  }
+  // The scripted guide throws a plain Error when its list runs out.
+  return error instanceof Error && /^cassette miss:/.test(error.message);
 }
 
 async function hydrate(s: GuideSession): Promise<void> {

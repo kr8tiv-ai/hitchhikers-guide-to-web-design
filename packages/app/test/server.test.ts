@@ -6,11 +6,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { InterviewError } from "@hitchhiker/engine";
+import {
+  CassetteMissError,
+  GrokMissingError,
+  GrokUnavailableError,
+  InterviewError,
+  LockHeld,
+  ThinkTimeoutError,
+} from "@hitchhiker/engine";
 import { parseSession } from "../src/client/desk.ts";
 import { browserLaunch, openBrowser, windowsBrowserLaunch } from "../src/server/open-browser.ts";
 import { createSseHub, HEARTBEAT_MS } from "../src/server/sse.ts";
-import { startServer, checkHost, type ServerHandle, type TurnHandler } from "../src/server/server.ts";
+import { startServer, checkHost, type ServerHandle, type StartServerOptions, type TurnHandler } from "../src/server/server.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cliEntry = path.resolve(here, "../../cli/src/main.ts");
@@ -20,7 +27,13 @@ function tempProject(): string {
 }
 
 async function withDesk(
-  opts: { port?: number; open?: boolean; turnHandler?: TurnHandler; platform?: NodeJS.Platform },
+  opts: {
+    port?: number;
+    open?: boolean;
+    turnHandler?: TurnHandler;
+    platform?: NodeJS.Platform;
+    guideThink?: StartServerOptions["guideThink"];
+  },
   run: (handle: ServerHandle, dir: string) => Promise<void>,
 ): Promise<void> {
   const dir = tempProject();
@@ -32,6 +45,7 @@ async function withDesk(
       ...(opts.open === undefined ? {} : { open: opts.open }),
       ...(opts.turnHandler === undefined ? {} : { turnHandler: opts.turnHandler }),
       ...(opts.platform === undefined ? {} : { platform: opts.platform }),
+      ...(opts.guideThink === undefined ? {} : { guideThink: opts.guideThink }),
       spawn() {
         throw new Error("browser spawn was not expected");
       },
@@ -209,8 +223,205 @@ test("suggest and skip call the turn handler, and a thrown error stays off the p
     });
     assert.equal(skipped.status, 500);
     const text = await skipped.text();
-    assert.match(text, /did not save/);
+    assert.match(text, /The Guide hit an error/);
     assert.equal(text.includes("secret"), false);
+    assert.equal(text.includes("interview.json"), false);
+  });
+});
+
+test("a cassette miss and a timeout name the cause, and the question stays put", async () => {
+  const logs: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    logs.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+  const handler: TurnHandler = async (input) => {
+    if (input.text === "slow") throw new ThinkTimeoutError(120_000);
+    throw new CassetteMissError("desk-key");
+  };
+  try {
+    await withDesk({ turnHandler: handler }, async (handle) => {
+      const page = await fetch(handle.url);
+      const token = tokenFrom(await page.text());
+      const missed = await fetch(new URL("/api/answer", handle.url), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hh-csrf": token },
+        body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
+      });
+      assert.equal(missed.status, 500);
+      const missedText = await missed.text();
+      assert.match(missedText, /replay mode/);
+      assert.match(missedText, /HH_CASSETTE/);
+      assert.equal(missedText.includes("desk-key"), false);
+      assert.equal(missedText.includes("did not save"), false);
+
+      const session = await fetch(new URL("/api/session", handle.url));
+      const still = parseSession(await session.json());
+      assert.equal(still?.question?.id, "DP-0.1");
+
+      const timed = await fetch(new URL("/api/answer", handle.url), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hh-csrf": token },
+        body: JSON.stringify({ questionId: "DP-0.1", text: "slow" }),
+      });
+      assert.equal(timed.status, 500);
+      const timedText = await timed.text();
+      assert.match(timedText, /took too long/);
+      assert.match(timedText, /Your answer is kept/);
+      const after = parseSession(await (await fetch(new URL("/api/session", handle.url))).json());
+      assert.equal(after?.question?.id, "DP-0.1");
+    });
+  } finally {
+    process.stderr.write = write;
+  }
+  const logged = logs.join("\n");
+  assert.match(logged, /Desk error:.*cassette miss: desk-key/);
+  assert.match(logged, /think timed out after 120000 ms/);
+});
+
+test("grok missing, signed out, and usage limit each say the answer is kept", async () => {
+  const handler: TurnHandler = async (input) => {
+    if (input.text === "missing") throw new GrokMissingError();
+    if (input.text === "limit") throw new GrokUnavailableError("usage limit reached");
+    throw new GrokUnavailableError("not logged in");
+  };
+  await withDesk({ turnHandler: handler }, async (handle) => {
+    const page = await fetch(handle.url);
+    const token = tokenFrom(await page.text());
+    const post = async (text: string): Promise<string> => {
+      const response = await fetch(new URL("/api/answer", handle.url), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hh-csrf": token },
+        body: JSON.stringify({ questionId: "DP-0.1", text }),
+      });
+      assert.equal(response.status, 500);
+      return response.text();
+    };
+    const missing = await post("missing");
+    assert.match(missing, /not on this machine/);
+    assert.match(missing, /Your answer is kept/);
+    const limit = await post("limit");
+    assert.match(limit, /usage limit/);
+    assert.match(limit, /Your answer is kept/);
+    const signedOut = await post("For myself.");
+    assert.match(signedOut, /not signed in/);
+    assert.match(signedOut, /Your answer is kept/);
+  });
+});
+
+test("a lock and a failed rename do not look like a Guide phrase error", async () => {
+  const handler: TurnHandler = async (input) => {
+    if (input.text === "locked") throw new LockHeld(4242);
+    const error = new Error("EPERM: rename failed for interview.json");
+    (error as NodeJS.ErrnoException).code = "EPERM";
+    throw error;
+  };
+  await withDesk({ turnHandler: handler }, async (handle) => {
+    const page = await fetch(handle.url);
+    const token = tokenFrom(await page.text());
+    const locked = await fetch(new URL("/api/answer", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify({ questionId: "DP-0.1", text: "locked" }),
+    });
+    assert.equal(locked.status, 409);
+    const lockedText = await locked.text();
+    assert.match(lockedText, /Another Guide process is writing/);
+    assert.equal(lockedText.includes("4242"), false);
+
+    const renamed = await fetch(new URL("/api/answer", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
+    });
+    assert.equal(renamed.status, 500);
+    const renamedText = await renamed.text();
+    assert.match(renamedText, /did not save/);
+    assert.equal(renamedText.includes("interview.json"), false);
+  });
+});
+
+test("a guide failure after the answer is stored returns the next question and does not duplicate", async () => {
+  const guideThink: StartServerOptions["guideThink"] = async (req) => {
+    if (req.task === "pushback-judge") {
+      return {
+        value: { vague: false, quote: "", sharperChoice: "" },
+        raw: "{}",
+        durationMs: 0,
+        cassette: "hit" as const,
+      };
+    }
+    throw new Error("the phrase broke");
+  };
+  await withDesk({ guideThink }, async (handle, dir) => {
+    const page = await fetch(handle.url);
+    const token = tokenFrom(await page.text());
+    const answered = await fetch(new URL("/api/answer", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
+    });
+    assert.equal(answered.status, 200);
+    const body = (await answered.json()) as {
+      session?: { question?: { id?: string }; statusHtml?: string };
+    };
+    assert.equal(body.session?.question?.id, "DP-0.2");
+    assert.match(body.session?.statusHtml ?? "", /Saved\. The Guide(?:'|&#39;)s next question failed/);
+    assert.match(body.session?.statusHtml ?? "", /the phrase broke/);
+    const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
+      answers: Array<{ id: string; value: string }>;
+    };
+    assert.equal(file.answers.filter((answer) => answer.id === "DP-0.1").length, 1);
+
+    const again = await fetch(new URL("/api/answer", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
+    });
+    assert.equal(again.status, 200);
+    const retry = (await again.json()) as { session?: { question?: { id?: string }; statusHtml?: string } };
+    assert.equal(retry.session?.question?.id, "DP-0.2");
+    assert.match(retry.session?.statusHtml ?? "", /already saved/);
+    const after = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
+      answers: Array<{ id: string; value: string }>;
+    };
+    assert.equal(after.answers.filter((answer) => answer.id === "DP-0.1").length, 1);
+    assert.equal(after.answers.some((answer) => answer.id === "DP-0.2" && answer.value === "For myself."), false);
+  });
+});
+
+test("a quiet cassette miss keeps the saved answer and the tree ask", async () => {
+  const guideThink: StartServerOptions["guideThink"] = async (req) => {
+    if (req.task === "pushback-judge") {
+      return {
+        value: { vague: false, quote: "", sharperChoice: "" },
+        raw: "{}",
+        durationMs: 0,
+        cassette: "hit" as const,
+      };
+    }
+    throw new CassetteMissError("live-key");
+  };
+  await withDesk({ guideThink }, async (handle, dir) => {
+    const page = await fetch(handle.url);
+    const token = tokenFrom(await page.text());
+    const answered = await fetch(new URL("/api/answer", handle.url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
+    });
+    assert.equal(answered.status, 200);
+    const body = (await answered.json()) as {
+      session?: { question?: { id?: string }; statusHtml?: string };
+    };
+    assert.equal(body.session?.question?.id, "DP-0.2");
+    assert.match(body.session?.statusHtml ?? "", /quiet for a moment/);
+    assert.equal((body.session?.statusHtml ?? "").includes("live-key"), false);
+    const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
+      answers: Array<{ id: string }>;
+    };
+    assert.equal(file.answers.filter((answer) => answer.id === "DP-0.1").length, 1);
   });
 });
 

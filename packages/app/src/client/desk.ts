@@ -14,9 +14,13 @@ type LevelName = NonNullable<Question["levels"]>["beginner"];
 const DEPTHS: readonly DepthName[] = ["express", "standard", "deep"];
 const INPUTS: readonly InputName[] = ["upload", "text", "voice", "choice"];
 const LEVELS: readonly LevelName[] = ["explain", "terse"];
-const SAVE_FAILED = "The answer did not save. Try again, or skip.";
+const DRAFT_KEPT = "The desk could not reach hh app. Your draft is still here. Try again.";
 const EMPTY_ANSWER = "Write an answer or skip.";
 const LOAD_FAILED = "The desk could not load the session.";
+/** Quiet status after the event stream has failed this many times. */
+export const DESK_OFFLINE =
+  "The desk lost its connection to hh app. Is the PowerShell window still open?";
+const STREAM_FAILURES = 3;
 
 /**
  * Hold to talk. The browser's own speech recognition (Chrome and Edge) fills
@@ -172,7 +176,7 @@ export async function postTurn(
       body: JSON.stringify(body),
     });
   } catch {
-    return { ok: false, error: SAVE_FAILED };
+    return { ok: false, error: DRAFT_KEPT };
   }
   let payload: unknown = null;
   try {
@@ -181,11 +185,11 @@ export async function postTurn(
     payload = null;
   }
   if (!response.ok) {
-    const message = isRecord(payload) && typeof payload.error === "string" ? payload.error : SAVE_FAILED;
+    const message = isRecord(payload) && typeof payload.error === "string" ? payload.error : DRAFT_KEPT;
     return { ok: false, error: message };
   }
   const session = isRecord(payload) ? parseSession(payload.session) : null;
-  if (session === null) return { ok: false, error: SAVE_FAILED };
+  if (session === null) return { ok: false, error: DRAFT_KEPT };
   return { ok: true, session };
 }
 
@@ -199,6 +203,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let ready = false;
   let source: DeskSource | null = null;
   let notice: string | null = null;
+  let streamFailures = 0;
+  let connection: string | null = null;
   let listening = false;
   let recognition: SpeechRecognitionLike | null = null;
   let heardStart = false;
@@ -413,10 +419,17 @@ export function mountDesk(env: DeskEnv): () => void {
     source = new env.EventSource("/api/events");
     source.addEventListener("session", (event) => {
       if (!ready) return;
+      streamFailures = 0;
+      const recover = connection !== null;
+      connection = null;
       applyStream(event.data);
+      if (recover) paint();
     });
     source.addEventListener("error", () => {
-      // The browser retries. A dropped stream is not a failed answer.
+      streamFailures += 1;
+      if (streamFailures < STREAM_FAILURES || connection !== null) return;
+      connection = DESK_OFFLINE;
+      paint();
     });
   }
 
@@ -457,23 +470,27 @@ export function mountDesk(env: DeskEnv): () => void {
     pending = true;
     error = null;
     notice = null;
-    paint();
-    const result = await postTurn(
-      action,
-      token,
-      action === "answer" ? { questionId, text: draft } : { questionId },
-      env.fetch,
-    );
-    pending = false;
-    if (!result.ok) {
-      error = result.error;
+    try {
       paint();
-      return;
+      const result = await postTurn(
+        action,
+        token,
+        action === "answer" ? { questionId, text: draft } : { questionId },
+        env.fetch,
+      );
+      if (!result.ok) {
+        error = result.error;
+        return;
+      }
+      view = result.session;
+      draft = "";
+      error = null;
+    } catch {
+      error = DRAFT_KEPT;
+    } finally {
+      pending = false;
+      paint();
     }
-    view = result.session;
-    draft = "";
-    error = null;
-    paint();
   }
 
   function paint(): void {
@@ -498,7 +515,10 @@ export function mountDesk(env: DeskEnv): () => void {
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null && view !== null) transcript.innerHTML = view.transcriptHtml;
     const status = env.document.querySelector('[data-region="status"]');
-    if (status !== null && view !== null) status.innerHTML = view.statusHtml;
+    if (status !== null && (view !== null || connection !== null)) {
+      const base = view?.statusHtml ?? "";
+      status.innerHTML = connection === null ? base : `<span>${escapeHtml(connection)}</span>${base}`;
+    }
     ensureMotion(env.document, view?.question?.id);
   }
 }

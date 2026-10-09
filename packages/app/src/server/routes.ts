@@ -5,9 +5,15 @@ import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import {
+  CassetteError,
+  CassetteMissError,
+  GrokMissingError,
   GrokUnavailableError,
   InterviewError,
+  LockHeld,
+  ThinkTimeoutError,
   WHY_NUDGE,
+  redact,
   chooseShortlist,
   dealRound,
   defaultGalleryCacheDir,
@@ -151,10 +157,14 @@ const moduleCache = new Map<string, string>();
  * A caller can still pass `turnHandler` to drive the desk without a model.
  * When Grok is quiet, runTurn keeps the tree ask and the session on disk.
  */
+export type GuideThink = typeof think;
+
 export async function createDeskApp(opts: {
   projectDir: string;
   turnHandler?: TurnHandler;
   cassetteNotice?: string;
+  /** Tests inject the Guide model. Omitted, the desk picks replay, quiet, or live. */
+  guideThink?: GuideThink;
 }): Promise<DeskApp> {
   const projectDir = path.resolve(opts.projectDir);
   const depth = loadConfig(projectDir).interviewDepth;
@@ -168,7 +178,7 @@ export async function createDeskApp(opts: {
     opts.turnHandler ??
     createLiveTurn(projectDir, depth, () => interview, (next) => {
       interview = next;
-    }, selectGuideThink());
+    }, opts.guideThink ?? selectGuideThink());
   const turn: TurnHandler = async (input) => {
     const output = await rawTurn(input);
     if (output.live !== undefined) overlay = output.live;
@@ -226,35 +236,100 @@ function createLiveTurn(
   setInterview: (session: InterviewSession) => void,
   model: typeof think,
 ): TurnHandler {
-  return async (input) => {
-    const current = getInterview().next();
-    if (current === null) {
-      throw new InterviewError("finished", "The interview is finished.");
-    }
-    if (current.id !== input.questionId) {
-      throw new InterviewError("command", "That question is no longer on the desk.");
-    }
-    const session: GuideSession = {
-      projectDir,
-      depth,
-      language: "en",
-      pushes: {},
-    };
-    const result = await runTurn(
-      session,
-      input.text === undefined ? { kind: input.kind } : { kind: input.kind, text: input.text },
-      { think: model },
-    );
+  const reload = async (): Promise<void> => {
     setInterview(await openInterview(projectDir, depth));
-    const next = getInterview().next();
-    return {
-      next,
-      events: [
-        { type: "turn", kind: input.kind, questionId: input.questionId },
-        { type: "session", questionId: result.questionId },
-      ],
-      live: overlayFrom(result),
-    };
+  };
+
+  return async (input) => {
+    await reload();
+    let started = false;
+    let finished: GuideTurn | null = null;
+    try {
+      const current = getInterview().next();
+      if (current === null) {
+        throw new InterviewError("finished", "The interview is finished.");
+      }
+      if (current.id !== input.questionId) {
+        if (answerStored(projectDir, input.questionId)) {
+          return aheadTurn(current, input, ALREADY_SAVED_MESSAGE);
+        }
+        throw new InterviewError("command", "That question is no longer on the desk.");
+      }
+      const session: GuideSession = {
+        projectDir,
+        depth,
+        language: "en",
+        pushes: {},
+      };
+      started = true;
+      finished = await runTurn(
+        session,
+        input.text === undefined ? { kind: input.kind } : { kind: input.kind, text: input.text },
+        { think: model },
+      );
+      await reload();
+      return {
+        next: getInterview().next(),
+        events: [
+          { type: "turn", kind: input.kind, questionId: input.questionId },
+          { type: "session", questionId: finished.questionId },
+        ],
+        live: overlayFrom(finished),
+      };
+    } catch (error: unknown) {
+      try {
+        await reload();
+      } catch {
+        throw error;
+      }
+      if (finished !== null) {
+        logDeskError(error);
+        return {
+          next: getInterview().next(),
+          events: [
+            { type: "turn", kind: input.kind, questionId: input.questionId },
+            { type: "session", questionId: finished.questionId },
+          ],
+          live: overlayFrom(finished),
+        };
+      }
+      const next = getInterview().next();
+      const moved = next === null || next.id !== input.questionId;
+      if (started && moved && answerStored(projectDir, input.questionId)) {
+        logDeskError(error);
+        return aheadTurn(next, input, savedFailureMessage(error));
+      }
+      throw error;
+    } finally {
+      try {
+        await reload();
+      } catch {
+        // The response is already chosen. The next turn opens the file again.
+      }
+    }
+  };
+}
+
+function aheadTurn(
+  next: Question | null,
+  input: { kind: "answer" | "suggest" | "skip"; questionId: string },
+  message: string,
+): { next: Question | null; events: unknown[]; live: LiveOverlay } {
+  return {
+    next,
+    events: [
+      { type: "turn", kind: input.kind, questionId: input.questionId },
+      { type: "session", questionId: next === null ? null : next.id },
+    ],
+    live: {
+      forId: next === null ? null : next.id,
+      message,
+      quote: null,
+      calm: true,
+      status: next === null ? "done" : "asked",
+      cards: [],
+      options: [],
+    },
   };
 }
 
@@ -468,10 +543,7 @@ async function handleTurn(
     sendJson(req, res, 200, result);
   } catch (error: unknown) {
     const mapped = turnError(error);
-    if (mapped.status >= 500) {
-      const detail = error instanceof Error ? error.message : "turn failed";
-      process.stderr.write(`Desk error: ${detail}\n`);
-    }
+    if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
     sendJson(req, res, mapped.status, { error: mapped.message });
   }
 }
@@ -1920,6 +1992,90 @@ function asTurnResult(value: unknown): { next: unknown; events: unknown[] } {
   return { next: value.next ?? null, events: value.events };
 }
 
+const REPLAY_MESSAGE =
+  "The Guide is in replay mode and has no recorded answer for this. Restart hh app without HH_CASSETTE.";
+const TIMEOUT_MESSAGE = "The Guide took too long to answer. Your answer is kept. Try again.";
+const MISSING_MESSAGE = "Grok is not on this machine. Your answer is kept. Run hh doctor, then try again.";
+const SIGNED_OUT_MESSAGE = "Grok is not signed in. Your answer is kept. Run grok login, then try again.";
+const LIMITED_MESSAGE = "Grok's usage limit was reached. Your answer is kept. Try again later.";
+const LOCK_MESSAGE = "Another Guide process is writing. Wait a moment.";
+const NOT_SAVED_MESSAGE = "The answer did not save. Try again, or skip.";
+const ALREADY_SAVED_MESSAGE = "That answer is already saved. Here is the next question.";
+const DETAIL_LIMIT = 160;
+const USAGE_LIMIT = /usage limit|rate limit|too many requests|\b429\b|quota exceeded/i;
+const NOT_SIGNED_IN =
+  /unauthorized|\b401\b|not logged in|not signed in|authentication failed|auth(?:entication)? required|sign in to grok|grok login/i;
+const WRITE_CODES = new Set(["EPERM", "EBUSY", "EACCES", "ENOSPC", "EROFS", "EIO"]);
+
+function savedFailureMessage(error: unknown): string {
+  return `Saved. The Guide's next question failed: ${guideFailureMessage(error)}`;
+}
+
+function guideFailureMessage(error: unknown): string {
+  if (error instanceof LockHeld) return LOCK_MESSAGE;
+  if (isCassetteMiss(error)) return REPLAY_MESSAGE;
+  if (error instanceof ThinkTimeoutError) return TIMEOUT_MESSAGE;
+  if (error instanceof GrokMissingError) return MISSING_MESSAGE;
+  const text = error instanceof Error ? error.message : "";
+  if (USAGE_LIMIT.test(text)) return LIMITED_MESSAGE;
+  if (NOT_SIGNED_IN.test(text)) return SIGNED_OUT_MESSAGE;
+  if (isWriteFailure(error)) return "The state file was busy. Your answer is kept.";
+  if (error instanceof GrokUnavailableError) {
+    return `The Guide could not reach Grok. Your answer is kept. ${oneLine(error)}`;
+  }
+  return `The Guide hit an error: ${oneLine(error)}`;
+}
+
+function isCassetteMiss(error: unknown): boolean {
+  if (error instanceof CassetteMissError || error instanceof CassetteError) return true;
+  return error instanceof Error && /^cassette miss:/.test(error.message);
+}
+
+function oneLine(error: unknown): string {
+  const raw = error instanceof Error ? error.message : "";
+  const first = (raw.split(/\r?\n/, 1)[0] ?? "").replace(/\s+/g, " ").trim();
+  const clean = stripSecrets(first);
+  if (clean.length === 0 || clean === "[path]") return "something went wrong";
+  if (clean.length <= DETAIL_LIMIT) return clean;
+  return `${clean.slice(0, DETAIL_LIMIT - 3).trimEnd()}...`;
+}
+
+function stripSecrets(text: string): string {
+  return redact(text)
+    .replace(/[A-Za-z]:\\[^\s"]+/g, "[path]")
+    .replace(/[A-Za-z]:\/[^\s"]+/g, "[path]")
+    .replace(/\\\\[^\s"]+/g, "[path]")
+    .replace(/\/(?:Users|home|tmp|var|private|opt)\/[^\s"]+/g, "[path]")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isWriteFailure(error: unknown): boolean {
+  const code = nodeCode(error);
+  if (code !== undefined && WRITE_CODES.has(code)) return true;
+  if (!(error instanceof Error)) return false;
+  return /EPERM|EBUSY|EACCES/.test(error.message) && /rename|interview\.json|STATE\.md/i.test(error.message);
+}
+
+function nodeCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function answerStored(projectDir: string, questionId: string): boolean {
+  try {
+    return readAnswers(projectDir).some((answer) => answer.id === questionId);
+  } catch {
+    return false;
+  }
+}
+
+function logDeskError(error: unknown): void {
+  const detail = error instanceof Error ? (error.stack ?? error.message) : "turn failed";
+  process.stderr.write(`Desk error: ${redact(detail).replace(/\r?\n/g, " | ")}\n`);
+}
+
 function turnError(error: unknown): { status: number; message: string } {
   if (error instanceof InterviewError) {
     if (error.code === "empty-answer") return { status: 400, message: error.message };
@@ -1931,7 +2087,9 @@ function turnError(error: unknown): { status: number; message: string } {
     }
     return { status: 500, message: "The interview file could not be read." };
   }
-  return { status: 500, message: "The answer did not save. Try again, or skip." };
+  if (error instanceof LockHeld) return { status: 409, message: LOCK_MESSAGE };
+  if (isWriteFailure(error)) return { status: 500, message: NOT_SAVED_MESSAGE };
+  return { status: 500, message: guideFailureMessage(error) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

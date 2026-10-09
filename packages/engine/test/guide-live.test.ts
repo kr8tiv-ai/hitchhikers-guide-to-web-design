@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { CassetteMissError } from "../src/ai/cassette.ts";
 import { GrokUnavailableError } from "../src/ai/grok-cli.ts";
 import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { think } from "../src/ai/think.ts";
@@ -313,6 +314,44 @@ test("two invalid guide messages fall back to the tree ask", async () => {
     assert.equal(result.questionId, "DP-0.2");
     const next = (await openInterview(projectDir, "deep")).next();
     assert.equal(next?.ask, "What came before this shop site?");
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("a cassette miss keeps the answer and the tree ask", async () => {
+  const projectDir = tempProject();
+  try {
+    writePair(projectDir);
+    const model = asThink(async (req) => {
+      if (req.task === "pushback-judge") return hit({ vague: false, quote: "", sharperChoice: "" });
+      throw new CassetteMissError("guide-message");
+    });
+    const result = await runTurn(sessionFor(projectDir), { kind: "answer", text: "The shop is mine." }, { think: model });
+    assert.equal(result.calm, true);
+    assert.equal(result.message, CALM_MESSAGE);
+    assert.equal(result.questionId, "DP-0.2");
+    const saved = JSON.parse(readFileSync(path.join(projectDir, ".hitchhiker", "interview.json"), "utf8")) as {
+      answers: Array<{ id: string; status: string }>;
+    };
+    assert.equal(saved.answers.find((answer) => answer.id === "DP-0.1")?.status, "ANSWERED");
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("a scripted cassette miss is quiet and keeps the answer", async () => {
+  const projectDir = tempProject();
+  try {
+    writePair(projectDir);
+    const model = asThink(async (req) => {
+      if (req.task === "pushback-judge") return hit({ vague: false, quote: "", sharperChoice: "" });
+      throw new Error("cassette miss: guide-message #0");
+    });
+    const result = await runTurn(sessionFor(projectDir), { kind: "answer", text: "The shop is mine." }, { think: model });
+    assert.equal(result.calm, true);
+    assert.equal(result.questionId, "DP-0.2");
+    assert.equal(result.message, CALM_MESSAGE);
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }
