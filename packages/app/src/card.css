@@ -64,6 +64,13 @@
   overflow-wrap: break-word;
 }
 
+.hh-qcard .hh-qcard__voice-note {
+  margin: var(--space-2) 0 0;
+  color: var(--color-muted);
+  font-size: var(--type-micro);
+  line-height: 1.4;
+}
+
 /* Hold to talk: no long-press menu, no text selection, no scroll while held. */
 .hh-qcard [data-voice="hold"] {
   touch-action: none;

@@ -1,6 +1,6 @@
 import type { Question } from "@hitchhiker/engine";
 import type { CardState } from "../card.ts";
-import { escapeHtml, renderCard } from "../card.ts";
+import { escapeHtml, renderCard, VOICE_SERVICE_NOTE } from "../card.ts";
 
 /**
  * Desk page. Fetches the session, paints the card, and posts with the CSRF token.
@@ -23,10 +23,13 @@ export const DESK_OFFLINE =
 const STREAM_FAILURES = 3;
 
 /**
- * Hold to talk. The browser's own speech recognition (Chrome and Edge) fills
- * the draft while the button is held. Nothing is submitted: the person still
- * presses Answer. No API key, no paid call, nothing stored on the server.
+ * Hold to talk. Chrome and Edge speech recognition fills the draft while the
+ * button is held. Nothing is submitted: the person still presses Answer.
+ * This desk does not store the audio and does not send it to hh app.
+ * Chrome's Web Speech API sends the microphone audio to Google's speech service.
  */
+/** Chrome can drop onend when stop() runs before onstart. Finish the hold anyway. */
+const VOICE_STOP_GRACE_MS = 400;
 export const VOICE_LISTENING = "Listening. Speak, then let go of the button.";
 export const VOICE_HEARD = "Heard you. Check the words, then press Answer.";
 export const VOICE_UNSUPPORTED =
@@ -35,6 +38,8 @@ export const VOICE_BLOCKED =
   "The microphone is blocked. Click the icon at the left of the address bar, allow the microphone, then hold the button again.";
 export const VOICE_FIRST_ALLOW =
   "If Chrome asks to use the microphone, press Allow. Then hold the button while you speak.";
+/** A release with no words. Not the microphone permission sentence. */
+export const VOICE_RELEASE_EMPTY = "Hold the button while you speak.";
 export const VOICE_SILENT = "Nothing was heard. Hold the button while you speak, then let go.";
 export const VOICE_NO_MIC = "No microphone was found. Plug one in, or type your answer.";
 export const VOICE_NETWORK =
@@ -87,6 +92,9 @@ interface DeskElement {
   parentElement: DeskElement | null;
   value?: string;
   disabled?: boolean;
+  textContent?: string | null;
+  setPointerCapture?(pointerId: number): void;
+  insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
 }
 
 interface DeskEvent {
@@ -95,6 +103,7 @@ interface DeskEvent {
   key?: string;
   repeat?: boolean;
   button?: number;
+  pointerId?: number;
 }
 
 interface DeskParent {
@@ -206,7 +215,12 @@ export function mountDesk(env: DeskEnv): () => void {
   let streamFailures = 0;
   let connection: string | null = null;
   let listening = false;
+  let held = false;
+  let voiceSession = false;
+  let voiceDisclosed = false;
+  let restartQueued = false;
   let recognition: SpeechRecognitionLike | null = null;
+  let stopTimer: ReturnType<typeof setTimeout> | null = null;
   let heardStart = false;
   let voiceBase = "";
   let voiceFinal = "";
@@ -235,22 +249,30 @@ export function mountDesk(env: DeskEnv): () => void {
     if (!isVoiceTarget(event.target)) return;
     if (event.button !== undefined && event.button !== 0) return;
     event.preventDefault();
+    const button = holdButton(event.target);
+    if (button !== null) capturePointer(event, button);
+    if (held || recognition !== null) return;
+    held = true;
     startVoice();
   };
   const onPointerUp = (): void => {
-    if (listening) stopVoice();
+    if (!held) return;
+    held = false;
+    stopVoice();
   };
   const onKeyDown = (event: DeskEvent): void => {
     if (event.key !== " " && event.key !== "Enter") return;
     if (!isVoiceTarget(event.target)) return;
     event.preventDefault();
-    if (event.repeat === true || listening) return;
+    if (event.repeat === true || held || recognition !== null) return;
+    held = true;
     startVoice();
   };
   const onKeyUp = (event: DeskEvent): void => {
     if (event.key !== " " && event.key !== "Enter") return;
-    if (!listening) return;
+    if (!held && recognition === null) return;
     event.preventDefault();
+    held = false;
     stopVoice();
   };
   const onContextMenu = (event: DeskEvent): void => {
@@ -277,7 +299,7 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("keydown", onKeyDown);
     env.document.removeEventListener("keyup", onKeyUp);
     env.document.removeEventListener("contextmenu", onContextMenu);
-    recognition?.abort();
+    cancelVoice();
     source?.close();
   };
 
@@ -287,10 +309,14 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function startVoice(): void {
-    if (listening || recognition !== null) return;
-    if (pending || view === null || view.question === null) return;
+    if (recognition !== null || voiceSession || !held) return;
+    if (pending || view === null || view.question === null) {
+      held = false;
+      return;
+    }
     const Recognition = env.SpeechRecognition ?? null;
     if (Recognition === null) {
+      held = false;
       notice = null;
       error = VOICE_UNSUPPORTED;
       paint();
@@ -302,6 +328,29 @@ export function mountDesk(env: DeskEnv): () => void {
     voiceInterim = "";
     voiceError = null;
     heardStart = false;
+    voiceSession = true;
+    listening = true;
+    error = null;
+    notice = VOICE_LISTENING;
+    voiceDisclosed = true;
+    if (!patchListening()) paint();
+    beginRecognition();
+    if (recognition === null && !restartQueued) commitVoice();
+  }
+
+  function beginRecognition(): "started" | "idle" {
+    if (recognition !== null || !held || !voiceSession) return "idle";
+    const Recognition = env.SpeechRecognition ?? null;
+    if (Recognition === null) {
+      voiceError = VOICE_UNSUPPORTED;
+      return "idle";
+    }
+    if (voiceInterim !== "") {
+      voiceFinal = joinWords(voiceFinal, voiceInterim);
+      voiceInterim = "";
+      draft = joinWords(voiceBase, voiceFinal);
+      patchDraft();
+    }
     let rec: SpeechRecognitionLike;
     try {
       rec = new Recognition();
@@ -309,77 +358,209 @@ export function mountDesk(env: DeskEnv): () => void {
       rec.continuous = true;
       rec.interimResults = true;
     } catch {
-      error = VOICE_UNSUPPORTED;
-      paint();
-      return;
+      voiceError = VOICE_UNSUPPORTED;
+      return "idle";
     }
     rec.onstart = () => {
       heardStart = true;
     };
     rec.onresult = (event) => {
-      let interim = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        if (result === undefined || result.length === 0) continue;
-        const text = result[0]?.transcript ?? "";
-        if (result.isFinal) voiceFinal = joinWords(voiceFinal, text);
-        else interim = joinWords(interim, text);
-      }
-      voiceInterim = interim;
-      draft = joinWords(voiceBase, joinWords(voiceFinal, voiceInterim));
-      paint();
+      applyResult(event);
     };
     rec.onerror = (event) => {
+      // aborted is our own grace timer. no-speech is Chrome ending a pause.
+      if (event.error === "aborted" || event.error === "no-speech") return;
       voiceError = voiceMessage(event.error, heardStart);
     };
     rec.onend = () => {
-      finishVoice(rec);
+      endRecognition(rec);
     };
     recognition = rec;
-    listening = true;
-    error = null;
-    notice = VOICE_LISTENING;
-    paint();
     try {
       rec.start();
     } catch {
       voiceError = VOICE_FAILED;
-      finishVoice(rec);
+      recognition = null;
+      unhook(rec);
+      return "idle";
     }
+    return recognition === rec ? "started" : "idle";
+  }
+
+  function applyResult(event: SpeechResultEventLike): void {
+    let interim = "";
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      if (result === undefined || result.length === 0) continue;
+      const text = result[0]?.transcript ?? "";
+      if (result.isFinal) voiceFinal = joinWords(voiceFinal, text);
+      else interim = joinWords(interim, text);
+    }
+    voiceInterim = interim;
+    draft = joinWords(voiceBase, joinWords(voiceFinal, voiceInterim));
+    if (!patchDraft()) paint();
   }
 
   function stopVoice(): void {
-    listening = false;
+    held = false;
     const rec = recognition;
     if (rec === null) return;
-    if (!heardStart && voiceError === null) voiceError = VOICE_FIRST_ALLOW;
-    paint();
     try {
       rec.stop();
     } catch {
-      finishVoice(rec);
+      endRecognition(rec);
+      return;
     }
+    if (recognition === rec) armStopGrace(rec);
   }
 
-  function finishVoice(rec: SpeechRecognitionLike): void {
+  function endRecognition(rec: SpeechRecognitionLike): void {
+    clearStopTimer();
     if (recognition !== rec) return;
     recognition = null;
-    listening = false;
+    unhook(rec);
+    if (!voiceSession) return;
+    if (held && voiceError === null) {
+      queueRestart();
+      return;
+    }
+    commitVoice();
+  }
+
+  function queueRestart(): void {
+    if (restartQueued) return;
+    restartQueued = true;
+    queueMicrotask(() => {
+      restartQueued = false;
+      if (!voiceSession || recognition !== null) return;
+      if (held && voiceError === null && beginRecognition() === "started") return;
+      commitVoice();
+    });
+  }
+
+  function armStopGrace(rec: SpeechRecognitionLike): void {
+    clearStopTimer();
+    stopTimer = setTimeout(() => {
+      stopTimer = null;
+      if (recognition !== rec) return;
+      try {
+        rec.abort();
+      } catch {
+        // abort throws once the recognizer has already ended.
+      }
+      if (recognition === rec) endRecognition(rec);
+    }, VOICE_STOP_GRACE_MS);
+  }
+
+  function clearStopTimer(): void {
+    if (stopTimer === null) return;
+    clearTimeout(stopTimer);
+    stopTimer = null;
+  }
+
+  function unhook(rec: SpeechRecognitionLike): void {
     rec.onstart = null;
     rec.onresult = null;
     rec.onerror = null;
     rec.onend = null;
+  }
+
+  function commitVoice(): void {
+    if (!voiceSession) return;
+    voiceSession = false;
+    restartQueued = false;
+    listening = false;
+    held = false;
+    clearStopTimer();
     const heard = joinWords(voiceFinal, voiceInterim);
     if (heard !== "") {
       draft = joinWords(voiceBase, heard);
       error = null;
       notice = VOICE_HEARD;
     } else {
-      draft = voiceBase === "" ? draft : voiceBase;
+      draft = voiceBase;
       notice = null;
-      error = voiceError ?? VOICE_SILENT;
+      error = voiceError ?? VOICE_RELEASE_EMPTY;
     }
     paint();
+  }
+
+  function cancelVoice(): void {
+    voiceSession = false;
+    restartQueued = false;
+    held = false;
+    listening = false;
+    clearStopTimer();
+    const rec = recognition;
+    if (rec === null) return;
+    recognition = null;
+    unhook(rec);
+    try {
+      rec.abort();
+    } catch {
+      // Already ended.
+    }
+  }
+
+  function patchListening(): boolean {
+    const question = region();
+    if (question === null) return false;
+    const button = question.querySelector('[data-voice="hold"]');
+    if (button === null || !("textContent" in button)) return false;
+    button.textContent = "Listening. Release to stop";
+    button.setAttribute("aria-pressed", "true");
+    const cls = button.getAttribute("class") ?? "";
+    if (!cls.split(/\s+/).includes("hh-btn--listening")) {
+      button.setAttribute("class", `${cls} hh-btn--listening`.trim());
+    }
+    if (!patchNotice(question, VOICE_LISTENING)) return false;
+    if (!patchVoiceNote(question)) return false;
+    const errorNode = question.querySelector("[data-card-error]");
+    if (errorNode !== null && "textContent" in errorNode) errorNode.textContent = "";
+    const field = question.querySelector("#hh-card-draft");
+    if (field !== null) {
+      field.removeAttribute("aria-invalid");
+      field.removeAttribute("aria-describedby");
+    }
+    return true;
+  }
+
+  function patchDraft(): boolean {
+    const question = region();
+    if (question === null) return false;
+    const field = question.querySelector("#hh-card-draft");
+    if (field === null || typeof field.value !== "string") return false;
+    field.value = draft;
+    if (notice !== null && !patchNotice(question, notice)) return false;
+    return true;
+  }
+
+  function patchNotice(question: DeskElement, text: string): boolean {
+    let node = question.querySelector("[data-card-notice]");
+    if (node === null) {
+      const anchor = question.querySelector(".hh-qcard__actions");
+      if (anchor === null || typeof anchor.insertAdjacentHTML !== "function") return false;
+      anchor.insertAdjacentHTML(
+        "beforebegin",
+        `<p class="hh-qcard__notice" role="status" data-card-notice></p>`,
+      );
+      node = question.querySelector("[data-card-notice]");
+    }
+    if (node === null || !("textContent" in node)) return false;
+    node.textContent = text;
+    return true;
+  }
+
+  function patchVoiceNote(question: DeskElement): boolean {
+    if (!voiceDisclosed) return true;
+    if (question.querySelector("[data-voice-note]") !== null) return true;
+    const anchor = question.querySelector(".hh-qcard__actions");
+    if (anchor === null || typeof anchor.insertAdjacentHTML !== "function") return false;
+    anchor.insertAdjacentHTML(
+      "afterend",
+      `<p class="hh-qcard__voice-note" data-voice-note>${escapeHtml(VOICE_SERVICE_NOTE)}</p>`,
+    );
+    return question.querySelector("[data-voice-note]") !== null;
   }
 
   function region(): DeskElement | null {
@@ -448,12 +629,7 @@ export function mountDesk(env: DeskEnv): () => void {
     error = null;
     notice = null;
     pending = false;
-    if (recognition !== null) {
-      const rec = recognition;
-      recognition = null;
-      listening = false;
-      rec.abort();
-    }
+    cancelVoice();
     paint();
   }
 
@@ -505,6 +681,7 @@ export function mountDesk(env: DeskEnv): () => void {
         pending,
         listening,
         notice,
+        ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
       question.innerHTML = renderCard(state);
     } else if (question !== null && error !== null) {
@@ -536,16 +713,32 @@ function ensureMotion(document: DeskDocument, questionId: string | undefined): v
   parent.appendChild(script);
 }
 
-function isVoiceTarget(start: DeskElement | null): boolean {
+function holdButton(start: DeskElement | null): DeskElement | null {
   let node = start;
   const seen = new Set<DeskElement>();
   while (node !== null && node !== undefined && !seen.has(node)) {
     seen.add(node);
-    if (typeof node.getAttribute !== "function") return false;
-    if (node.getAttribute("data-voice") === "hold") return node.getAttribute("disabled") === null;
+    if (typeof node.getAttribute !== "function") return null;
+    if (node.getAttribute("data-voice") === "hold") return node;
     node = node.parentElement;
   }
-  return false;
+  return null;
+}
+
+function isVoiceTarget(start: DeskElement | null): boolean {
+  const button = holdButton(start);
+  if (button === null) return false;
+  return button.getAttribute("disabled") === null;
+}
+
+function capturePointer(event: DeskEvent, button: DeskElement): void {
+  if (typeof button.setPointerCapture !== "function") return;
+  if (typeof event.pointerId !== "number") return;
+  try {
+    button.setPointerCapture(event.pointerId);
+  } catch {
+    // The document pointerup listener still stops the hold.
+  }
 }
 
 function joinWords(left: string, right: string): string {
@@ -561,10 +754,10 @@ export function voiceMessage(code: string, started: boolean): string {
   if (code === "not-allowed" || code === "service-not-allowed") {
     return VOICE_BLOCKED;
   }
-  if (code === "no-speech") return VOICE_SILENT;
+  if (code === "no-speech") return started ? VOICE_SILENT : VOICE_RELEASE_EMPTY;
   if (code === "audio-capture") return VOICE_NO_MIC;
   if (code === "network") return VOICE_NETWORK;
-  if (code === "aborted") return started ? VOICE_SILENT : VOICE_FIRST_ALLOW;
+  if (code === "aborted") return VOICE_RELEASE_EMPTY;
   return VOICE_FAILED;
 }
 

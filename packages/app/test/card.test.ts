@@ -90,6 +90,14 @@ test("an ask and a why that contain markup are escaped", () => {
   assert.doesNotMatch(html, /<\/textarea><script>/);
 });
 
+test("the speech-service note stays off the card until Hold to talk has been used", () => {
+  const plain = renderCard(state());
+  assert.equal(plain.includes("data-voice-note"), false);
+  const used = renderCard(state({ voiceNote: true }));
+  assert.match(used, /data-voice-note>Chrome sends this audio to its speech service\.</);
+  assert.doesNotMatch(used, /!/);
+});
+
 test("the card shows one question and the three exact actions", () => {
   const html = renderCard(state());
   assert.match(html, /<h2 class="hh-qcard__title"[^>]*>Do you have a logo you love\?<\/h2>/);

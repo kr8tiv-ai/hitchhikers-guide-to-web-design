@@ -17,6 +17,8 @@ export interface CardState {
   listening?: boolean;
   /** A calm line under the field: listening, heard, or how to fix the mic. */
   notice?: string | null;
+  /** True after Hold to talk has been used on this page. */
+  voiceNote?: boolean;
 }
 
 export type CardEvent =
@@ -29,6 +31,9 @@ export type CardEvent =
 export type CardSession = Pick<InterviewSession, "command" | "next" | "lastPushback">;
 
 const EMPTY_ANSWER = "Write an answer or skip.";
+
+/** Shown under Hold to talk the first time that button is used. Chrome's Web Speech API uploads the audio. */
+export const VOICE_SERVICE_NOTE = "Chrome sends this audio to its speech service.";
 const DONE_TITLE = "Guide Entry is next.";
 const DONE_WHY = "The questions on this desk are finished.";
 const EMPTY_TITLE = "No question yet.";
@@ -165,6 +170,11 @@ function noticeLine(notice: string | null): string {
   return `  <p class="hh-qcard__notice" role="status" data-card-notice>${escapeHtml(notice)}</p>\n`;
 }
 
+function voiceNoteLine(show: boolean): string {
+  if (!show) return "";
+  return `  <p class="hh-qcard__voice-note" data-voice-note>${escapeHtml(VOICE_SERVICE_NOTE)}</p>\n`;
+}
+
 function heading(title: string, why: string, done: boolean): string {
   const marker = done ? ' data-done="true"' : "";
   return `<article class="hh-qcard"${marker} aria-labelledby="hh-card-ask">
@@ -206,7 +216,7 @@ ${noticeLine(state.notice ?? null)}  <div class="hh-qcard__actions">
     ${button("suggest", "Suggest for me", "secondary", state.pending)}
     ${button("skip", "Skip", "ghost", state.pending)}
   </div>
-</article>`;
+${voiceNoteLine(state.voiceNote === true)}</article>`;
 }
 
 function readAction(start: CardQuery | null): "answer" | "suggest" | "skip" | null {
