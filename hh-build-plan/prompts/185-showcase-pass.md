@@ -86,6 +86,7 @@ The build is feature complete through 184. What is missing is the first impressi
 7. Polished default look. Within the cream and rust identity: spacing rhythm, type scale, focus states, hover and pressed states, loading skeletons, and a considered first screen at 375 and 1440. Use existing design tokens. Anti-slop rules apply.
 8. Demo and screenshots. Write a script that drives the desk through the sample with Playwright and produces: an animated gif or short video (a few seconds to under a minute, small enough for a README) and at least four screenshots (desk empty, sample open, tour, phone width). Use only tools already in the repo or MIT-compatible ones; ffmpeg is not required (Playwright video plus a node gif encoder, or a frame sequence, is acceptable). Commit the generated media under `docs/assets/` and keep the total size modest (under 8 MB). Embed them in the README in a new section, adding only.
 9. `docs/PITCH.md`: one page. What it is, why it is useful, how to try it in two minutes. Funny but clear, in the project's voice. Link it from the README.
+   Community link: add a short, fun Join the community section to the README (add only, in the README's funny voice) pointing to the Antiheroo AI Facebook group, https://www.facebook.com/groups/antiheroai. Also mention the group, with the same link, in docs/PITCH.md. Verify by running a search that the URL appears in README.md (for example Select-String -Path README.md -SimpleMatch 'https://www.facebook.com/groups/antiheroai') and record the result.
 10. Review as Zaphod would: re-read each truth below against the code and the clean-clone result, run the full suite, fix at most one defect in a `fix(review):` commit. Do not add features during the review.
 
 ## Acceptance criteria
@@ -98,6 +99,7 @@ The build is feature complete through 184. What is missing is the first impressi
 - [ ] Empty states and errors are friendly, actionable, and hide stack traces behind Details.
 - [ ] `hh doctor` explains each problem and the OS-specific fix.
 - [ ] `docs/PITCH.md` exists, is short, and is linked from the README.
+- [ ] The README has a Join the community section linking to https://www.facebook.com/groups/antiheroai, the link is also in docs/PITCH.md, and a search of README.md confirms the link appears.
 - [ ] Old project files still open; no gate, test, or dependency rule was broken.
 
 ## must_haves
@@ -112,6 +114,7 @@ truths:
 - Empty states and errors are clear and friendly with a next step, with no stack trace in the UI by default.
 - `hh doctor` explains each failing check and gives the fix for the current OS.
 - `docs/PITCH.md` states what it is, why it is useful, and how to try it in two minutes, in the project's voice.
+- The README has a short, fun Join the community section (add-only, in the README's funny voice) linking to the Antiheroo AI Facebook group https://www.facebook.com/groups/antiheroai, and docs/PITCH.md also mentions the group with the same link.
 - No new paid dependency, and no breaking change to save or resume.
 
 artifacts:
@@ -152,6 +155,7 @@ node --experimental-strip-types packages/cli/src/main.ts doctor
 ```
 
 Plus the clean-clone run: clone to a temp directory, run the documented one command, confirm the desk responds, and record the transcript. Confirm the README embeds resolve to files that exist and that `git diff` on the README shows additions only.
+Also confirm the Facebook group link (https://www.facebook.com/groups/antiheroai) appears in README.md (for example Select-String -Path README.md -SimpleMatch 'https://www.facebook.com/groups/antiheroai' returns a match) and in docs/PITCH.md.
 
 ## Report back
 
