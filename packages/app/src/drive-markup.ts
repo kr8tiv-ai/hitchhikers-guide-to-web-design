@@ -165,8 +165,9 @@ export function verdictsHtml(items: readonly DriveItem[]): string {
     if (file === null) {
       return `<li class="hh-drive__verdict"><span class="hh-drive__id">${id}</span><span>No numbered review file for this id.</span></li>`;
     }
-    const href = escapeHtml(file);
-    return `<li class="hh-drive__verdict"><span class="hh-drive__id">${id}</span><a href="${href}">${href}</a></li>`;
+    // The path is a project file. A relative href resolves on the desk and 404s.
+    const shown = escapeHtml(file);
+    return `<li class="hh-drive__verdict"><span class="hh-drive__id">${id}</span><span>${shown}</span></li>`;
   });
   return `<ul class="hh-drive__log">${lines.join("")}</ul>`;
 }

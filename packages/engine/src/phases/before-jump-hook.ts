@@ -466,18 +466,22 @@ function sectionExcerpts(projectDir: string): Record<string, string> {
   } catch {
     return {};
   }
+  const lines = markdown.split("\n");
   const excerpts: Record<string, string> = {};
   for (const section of BRAND_SECTIONS) {
-    const heading = `${section.slice(0, 1).toUpperCase()}${section.slice(1)}`;
-    const pattern = new RegExp(`^## ${heading}\\n([\\s\\S]*?)(?=^## |$)`, "m");
-    const body = pattern.exec(markdown)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+    const heading = `## ${section.slice(0, 1).toUpperCase()}${section.slice(1)}`;
+    const start = lines.findIndex((line) => line.trim() === heading);
+    if (start < 0) continue;
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => line.startsWith("## "));
+    const body = (end < 0 ? rest : rest.slice(0, end)).join(" ").replace(/\s+/g, " ").trim();
     if (body !== "") excerpts[section] = body.slice(0, 180);
   }
   return excerpts;
 }
 
 function readBrand(file: string): string {
-  return readFileSync(file, "utf8");
+  return readFileSync(file, "utf8").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 function resolveTree(projectDir: string): string {

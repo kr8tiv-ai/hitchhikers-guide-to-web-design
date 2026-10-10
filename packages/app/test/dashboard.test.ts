@@ -98,6 +98,14 @@ test("every known status renders once, and passed is the only green status", () 
   assert.equal(html.match(/>Pause</g)?.length, 1);
 });
 
+test("a numbered review names its file and does not link the desk at it", () => {
+  const html = renderDashboard({
+    items: [{ id: "prompt-002", kind: "review", status: "queued" }],
+  });
+  assert.match(html, /reviews\/002-REVIEW\.md/);
+  assert.equal(/<a\b[^>]*\bhref="\/?reviews\//.test(html), false);
+});
+
 test("an empty queue keeps Pause and disables it", () => {
   const html = renderDashboard({ items: [] });
   assert.match(html, /No queue yet\. The plan lands here after you approve the prompts\./);

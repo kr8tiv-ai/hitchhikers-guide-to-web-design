@@ -374,9 +374,13 @@ function renderBriefFile(
   return withExtras(brief, extras);
 }
 
+function unixNewlines(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
 function extraSections(markdown: string): Map<string, string> {
   const map = new Map<string, string>();
-  const parts = markdown.split(/^## /m).slice(1);
+  const parts = unixNewlines(markdown).split(/^## /m).slice(1);
   for (const part of parts) {
     const breakAt = part.indexOf("\n");
     const title = (breakAt === -1 ? part : part.slice(0, breakAt)).trim();
@@ -404,15 +408,16 @@ function blankBrand(): string {
 }
 
 function upsertSection(markdown: string, heading: string, body: string): string {
+  const text = unixNewlines(markdown);
   const pattern = new RegExp(`(^## ${escapeRegExp(heading)}\\n)[\\s\\S]*?(?=^## |$)`, "m");
   const block = `## ${heading}\n\n${body.trim()}\n\n`;
-  if (pattern.test(markdown)) return markdown.replace(pattern, block);
-  return `${markdown.trimEnd()}\n\n${block}`;
+  if (pattern.test(text)) return text.replace(pattern, block);
+  return `${text.trimEnd()}\n\n${block}`;
 }
 
 function readDeploy(markdown: string): Record<DeployKey, string> {
   const settings = emptyDeploy();
-  for (const line of markdown.split("\n")) {
+  for (const line of unixNewlines(markdown).split("\n")) {
     const match = /^- ([A-Za-z]+): (.*)$/.exec(line);
     const key = match?.[1];
     const value = match?.[2];

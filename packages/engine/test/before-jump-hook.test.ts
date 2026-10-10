@@ -185,6 +185,104 @@ test("writeBack stores a brief field in SITE-BRIEF and interview.json", async ()
   }
 });
 
+test("writeBack replaces a brand section when BRAND.md uses CRLF", async () => {
+  const parent = await mkdtemp(path.join(tmpdir(), "hh-before-jump-"));
+  const dir = path.join(parent, "Night stall café");
+  mkdirSync(hitch(dir), { recursive: true });
+  try {
+    writeApprovalFile(dir, approvals({ logo: false }));
+    writeFileSync(path.join(hitch(dir), "BRAND.md"), brandDoc("draft").replaceAll("\n", "\r\n"));
+    await writeBack(dir, {
+      id: "brand:logo",
+      action: "answer",
+      text: "A brass wordmark, drawn once.",
+      target: "brand",
+      field: "logo",
+      answerId: null,
+    });
+    const brand = readText(path.join(hitch(dir), "BRAND.md")).replaceAll("\r\n", "\n");
+    assert.equal(brand.includes("\r"), false);
+    assert.equal((brand.match(/^## Logo$/gm) ?? []).length, 1);
+    assert.match(brand, /## Logo\n\nA brass wordmark, drawn once\./);
+    assert.match(brand, /## Purpose\n\nKeep purpose\./);
+    assert.match(brand, /^Status: draft$/m);
+  } finally {
+    cleanup(parent);
+  }
+});
+
+test("writeBack keeps deploy fields when DEPLOY.md uses CRLF", async () => {
+  const parent = await mkdtemp(path.join(tmpdir(), "hh-before-jump-"));
+  const dir = path.join(parent, "Night stall café");
+  mkdirSync(hitch(dir), { recursive: true });
+  try {
+    const file = [
+      "# DEPLOY",
+      "",
+      "Deploy runs only after an explicit yes.",
+      "",
+      "## Settings",
+      "",
+      "- deployTarget: hostinger",
+      "- domain: stall.example",
+      "- dns: cloudflare",
+      "- email: ",
+      "- analytics: ",
+      "- launchDate: ",
+      "- legal: ",
+      "",
+    ].join("\r\n");
+    writeFileSync(path.join(hitch(dir), "DEPLOY.md"), file);
+    await writeBack(dir, {
+      id: "email",
+      action: "answer",
+      text: "hello@stall.example",
+      target: "deploy",
+      field: "email",
+      answerId: null,
+    });
+    const deploy = readText(path.join(hitch(dir), "DEPLOY.md"));
+    assert.equal(deploy.includes("\r"), false);
+    assert.match(deploy, /^- deployTarget: hostinger$/m);
+    assert.match(deploy, /^- domain: stall\.example$/m);
+    assert.match(deploy, /^- dns: cloudflare$/m);
+    assert.match(deploy, /^- email: hello@stall\.example$/m);
+  } finally {
+    cleanup(parent);
+  }
+});
+
+test("a CRLF brand file still supplies section excerpts", async () => {
+  const dir = await project();
+  try {
+    writeInterview(dir, closedAnswers());
+    writeApprovalFile(dir, approvals());
+    writeFileSync(path.join(hitch(dir), "BRAND.md"), brandDoc("approved").replaceAll("\n", "\r\n"));
+    let purpose = "";
+    const think: ThinkFn = (async (request) => {
+      const raw = typeof request.input === "string" ? request.input : "";
+      const parsed = JSON.parse(raw) as { excerpts?: { purpose?: string } };
+      purpose = parsed.excerpts?.purpose ?? "";
+      return {
+        value: { contradicts: false, section: "" },
+        raw: "{}",
+        durationMs: 0,
+        cassette: "hit" as const,
+      };
+    }) as ThinkFn;
+    await onPhaseStart("so-long", dir, {
+      ask: async (cards) => {
+        const legal = cards.find((card) => card.id === "legal") ?? cards[0];
+        return [reply(mustCard(legal), "Privacy and terms, both.")];
+      },
+      think,
+    });
+    assert.match(purpose, /^Keep purpose\.$/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test("writeBack splices a brand section without approving it", async () => {
   const dir = await project();
   try {
