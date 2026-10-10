@@ -1,7 +1,15 @@
 import { spawn } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { evalFromParts, parseTestCounts, visibleCopy, type EvalResult } from "@hitchhiker/engine";
+import {
+  countOpenFindings,
+  evalFromParts,
+  parseTestCounts,
+  uxPassCount,
+  visibleCopy,
+  type EvalResult,
+} from "@hitchhiker/engine";
 import { hiddenChildOptions } from "@hitchhiker/engine";
 import { readTargetText } from "./files.ts";
 
@@ -88,5 +96,78 @@ export async function runEvaluation(cwd: string, targets: readonly string[]): Pr
     doctorExit: doctor.status ?? 1,
     tscExit: tsc.status ?? 1,
     antiSlopHits,
+  });
+}
+
+/** Open rows in docs/bug-scan.md and improve/findings. */
+export function openBugCountFromDisk(cwd: string): number {
+  const texts: string[] = [];
+  const scan = path.join(cwd, "docs", "bug-scan.md");
+  if (existsSync(scan)) texts.push(readFileSync(scan, "utf8"));
+  const dir = path.join(cwd, "improve", "findings");
+  if (!existsSync(dir)) return countOpenFindings(texts);
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".tsv") && !name.endsWith(".md")) continue;
+    const abs = path.join(dir, name);
+    if (!statSync(abs).isFile()) continue;
+    texts.push(readFileSync(abs, "utf8"));
+  }
+  return countOpenFindings(texts);
+}
+
+/** Polish e2e passes plus the anti-slop suite. A missing suite counts as 0. */
+async function measureUx(cwd: string): Promise<number> {
+  try {
+    const anti = await capture(
+      pnpmCommand(),
+      [
+        "--filter",
+        "@hitchhiker/qa",
+        "exec",
+        "node",
+        "--experimental-strip-types",
+        "--test",
+        path.join("test", "antislop.test.ts"),
+      ],
+      cwd,
+      10 * 60 * 1000,
+    );
+    const polish = await capture(
+      pnpmCommand(),
+      [
+        "--filter",
+        "@hitchhiker/app",
+        "exec",
+        "playwright",
+        "test",
+        path.join("e2e", "polish.spec.ts"),
+        "--reporter=line",
+      ],
+      cwd,
+      20 * 60 * 1000,
+    );
+    return uxPassCount(`${polish.stdout}\n${polish.stderr}`, `${anti.stdout}\n${anti.stderr}`);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * The 173 evaluation, plus the UX pass count and the open-bug count.
+ * Callers that inject a fake skip this.
+ */
+export async function runSupervisorEvaluation(cwd: string, targets: readonly string[]): Promise<EvalResult> {
+  const base = await runEvaluation(cwd, targets);
+  const uxPassed = await measureUx(cwd);
+  const bugCount = openBugCountFromDisk(cwd);
+  return evalFromParts({
+    testsPassed: base.testsPassed,
+    testsFailed: base.testsFailed,
+    testExit: base.testsFailed > 0 ? 1 : 0,
+    doctorExit: base.doctorExit,
+    tscExit: base.tscExit,
+    antiSlopHits: base.antiSlopHits,
+    uxPassed,
+    bugCount,
   });
 }

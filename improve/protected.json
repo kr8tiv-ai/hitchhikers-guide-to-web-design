@@ -30,7 +30,11 @@
     "**/*.pem",
     "**/*.key",
     "**/*credentials*",
-    "**/*secret*"
+    "**/*secret*",
+    "packages/cli/test/supervise.test.ts",
+    "packages/engine/test/supervise.test.ts",
+    "packages/app/e2e/polish.spec.ts",
+    "docs/bug-scan.md"
   ],
   "evaluation": [
     "packages/engine/src/improve/**",
@@ -40,6 +44,10 @@
     "packages/qa/src/antislop.ts",
     "packages/qa/src/licenses.ts",
     "packages/qa/test/antislop.test.ts",
-    "improve/protected.json"
+    "improve/protected.json",
+    "packages/cli/test/supervise.test.ts",
+    "packages/engine/test/supervise.test.ts",
+    "packages/app/e2e/polish.spec.ts",
+    "docs/bug-scan.md"
   ]
 }

@@ -14,6 +14,7 @@ import {
 } from "./commands-table.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
 import { runImprove } from "./improve/run.ts";
+import { runSupervise } from "./improve/supervisor.ts";
 import { runInstall } from "./install.ts";
 
 const HELP = "hh doctor [--project <dir>]";
@@ -414,6 +415,12 @@ async function dispatchImplemented(
       return { exitCode: outcome.exitCode, stdout: `${formatDoctor(outcome.report)}\n` };
     }
     case "improve":
+      if (argv[1] === "supervise") {
+        return runSupervise(argv.slice(2), {
+          cwd: deps.cwd ?? process.cwd(),
+          env: deps.env ?? process.env,
+        });
+      }
       return runImprove(argv.slice(1), {
         cwd: deps.cwd ?? process.cwd(),
         env: deps.env ?? process.env,

@@ -106,3 +106,108 @@ Protected paths include approval gates (brief, prompts, the Elevate gate, Hostin
 - Packages already fetched into the local store.
 
 Do not rely on the runner to undo those. Keep the deny rules in the argv, and do not point the target at a secret or a gate.
+
+## Supervisor preflight
+
+Use this section when the command is `hh improve supervise`. The sections above still apply to `hh improve`.
+
+1. `git status` is clean aside from `improve/results.tsv`, `improve/STOP`, `improve/hook-log.tsv`, `improve/PUSH-FAILED.txt`, and `improve/findings/`.
+2. HEAD is `main`, not detached. The supervisor does not check out a branch. If you pass `--branch`, it must be `main` or `improve/...`, and HEAD must already be that branch.
+3. `origin` is the remote you intend. The only push is `git push origin main`.
+4. `improve/program.md` has two test agents. `improve/protected.json` is the list the code enforces. Read both.
+5. `pnpm exec hh doctor` exits 0.
+6. Smoke: `node --experimental-strip-types packages/cli/src/main.ts improve supervise --dry-run --max-experiments 1`
+
+## Start the supervisor
+
+```text
+node --experimental-strip-types packages/cli/src/main.ts improve supervise --always-approve --max-experiments 5
+```
+
+`--always-approve` is already on if you omit the flag. The agent still receives the deny rules from the section above, plus these:
+
+```text
+Bash(*git reset --hard*)
+Bash(*git checkout *)
+Bash(*--no-verify*)
+Bash(*git push -f*)
+Bash(*git push --force-with-lease*)
+```
+
+The supervisor process, not the agent, runs the normal push after a keep. The agent is told not to push.
+
+## Between experiments
+
+After each experiment, before you invent the next one:
+
+1. Read the last row of `improve/results.tsv`. Columns are the 173 set plus `pushed` and `hooks_ok`.
+2. Read `improve/hook-log.tsv` for nonzero exits and hook names.
+3. Read `improve/findings/*.tsv`. Open rows lower the next score.
+4. Pick one hypothesis that is not a discarded note. Do not repeat a discarded idea.
+5. Leave the protected paths and the evaluation hash alone.
+
+One agent runs per experiment. The briefs alternate. `desk-explorer` walks the desk with Playwright and the fixtures under `packages/app/e2e`. `cli-explorer` runs the CLI with `HOME` and `USERPROFILE` pointed at an empty temporary directory. Findings use the header `id`, `status`, `area`, `summary`.
+
+## Push failure
+
+If the row is `failed`, or `improve/PUSH-FAILED.txt` exists:
+
+1. Stop. Do not start another experiment.
+2. Read the notice file. It begins with FAILED and includes the git output.
+3. Confirm the kept commit is not an ancestor of `origin/main`.
+4. Do not force-push. Do not pass `-f`, `--force`, `--force-with-lease`, or a `+refs` refspec.
+5. Fix the remote by hand, outside this loop, then decide whether that commit should stay.
+
+A rejected push and a failed ancestor check are the same stop. The loop exits nonzero.
+
+## Hook failure
+
+If `hooks_ok` is `no`, or `improve/hook-log.tsv` names `pre-commit`, `commit-msg`, or `pre-push` with a nonzero exit:
+
+1. Treat the experiment as discarded. The runner resets it when the failure is in the agent session.
+2. Read the note column. Do not retry that commit with `--no-verify`. The runner refuses the flag.
+3. Fix the hook or the change, then use a new hypothesis.
+
+A pre-push rejection of `git push origin main` is also a push failure: the notice file is written and the loop stops. Do not retry it with force.
+
+## How UX is scored
+
+UX is not a new metric. It is the pass count of two suites that are already protected:
+
+- Playwright `packages/app/e2e/polish.spec.ts`
+- The anti-slop test in `packages/qa`
+
+Each pass adds 10. Each open finding id subtracts 100. Each passing test in the main suite adds 1000. Anti-slop hits in the target copy subtract 1. A red test, a bad doctor, or a failed typecheck ignores the UX term, so polish cannot outrank a failure. Open bugs still make a red score worse.
+
+## When the supervisor stops
+
+Stop, and leave the loop stopped, when any of these is true:
+
+- `--max-experiments` is reached (default 5, ceiling 50).
+- `improve/STOP` exists. Checked before the baseline's next experiment, and before each later one.
+- The wall clock exceeds `--wall-minutes` (default 60, ceiling 180). The line is `FAILED: wall-clock cap reached.`
+- Three experiments in a row are discard, crash, or violation (`--max-failures`, default 3, ceiling 50). The line is `FAILED: consecutive failure cap reached.`
+- A push or an ancestor check fails. The line starts with `FAILED:`.
+
+A violation still means a protected path, a file outside the target, an evaluation hash change, or a `--no-verify` attempt. The commit is reset. Do not try that edit again.
+
+## What the supervisor enforces in always-approve mode
+
+These hold in code after the agent returns, even when every tool call was approved:
+
+- Protected paths in `improve/protected.json`, and the evaluation hash, are checked before every score.
+- The only push is `git push origin main`. Force flags and `+refs` throw before git is spawned.
+- `git reset --hard` runs only for the commit this experiment started from, only on the configured branch, and only when the human tree was clean at the start.
+- No deploy, no publish, no package install, no secret read, no checkout away from the configured branch, no `--no-verify`.
+- A failing hook or a nonzero command in the session log discards the experiment.
+- The minute budget kills the agent process tree. The wall clock, the failure cap, and `improve/STOP` halt the loop.
+
+## What only grok can enforce on a supervisor run
+
+`--deny` is still grok configuration. If a build ignores it, the supervisor cannot undo these once they have left the process:
+
+- A push, deploy, or publish the agent already performed.
+- Secret text already printed into the session log.
+- Packages already fetched into the local store.
+
+The supervisor can still discard a protected diff, refuse its own force push, and stop when `origin/main` does not contain the commit.

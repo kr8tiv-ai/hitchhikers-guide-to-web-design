@@ -121,6 +121,70 @@ function tagFrom(value: string | string[] | undefined): string {
   return clean.length > 0 ? clean : DEFAULT_TAG;
 }
 
+export interface AgentBrief {
+  id: string;
+  home: "repo" | "temporary";
+  findings: string;
+  instructions: string;
+}
+
+function briefField(body: string, key: string): string | undefined {
+  const prefix = `- ${key}:`;
+  for (const line of body.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(prefix)) return trimmed.slice(prefix.length).trim();
+  }
+  return undefined;
+}
+
+/**
+ * Briefs under `## Test agents`. Each `###` slug has home and a findings path.
+ * A program with no such section has an empty list.
+ */
+export function parseAgentBriefs(markdown: string): AgentBrief[] {
+  const text = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const marker = "## Test agents";
+  const at = text.indexOf(marker);
+  if (at < 0) return [];
+  let section = text.slice(at + marker.length);
+  const next = section.search(/\n## [^#\n]/);
+  if (next >= 0) section = section.slice(0, next);
+  const chunks = section.split(/\n### /);
+  const briefs: AgentBrief[] = [];
+  const seen = new Set<string>();
+  for (let index = 1; index < chunks.length; index += 1) {
+    const chunk = chunks[index] ?? "";
+    const nl = chunk.indexOf("\n");
+    const id = (nl < 0 ? chunk : chunk.slice(0, nl)).trim();
+    const body = nl < 0 ? "" : chunk.slice(nl + 1);
+    if (!/^[a-z][a-z0-9-]{0,40}$/.test(id)) throw new Error("Test agent id is not a slug.");
+    if (seen.has(id)) throw new Error("Test agent id is repeated.");
+    seen.add(id);
+    const home = briefField(body, "home");
+    const findings = briefField(body, "findings");
+    if (home !== "repo" && home !== "temporary") {
+      throw new Error("Test agent home must be repo or temporary.");
+    }
+    if (findings === undefined || findings.length === 0 || isUnsafe(findings)) {
+      throw new Error("Test agent findings path is not relative.");
+    }
+    const normalized = findings.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (!normalized.startsWith("improve/findings/")) {
+      throw new Error("Test agent findings path must be under improve/findings/.");
+    }
+    const instructions = body
+      .split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith("- home:") && !trimmed.startsWith("- findings:");
+      })
+      .join("\n")
+      .trim();
+    briefs.push({ id, home, findings: normalized, instructions });
+  }
+  return briefs;
+}
+
 /** Parse program.md. Missing targets fall back to the desk copy and card. */
 export function parseProgram(markdown: string): ImproveProgram {
   const text = markdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n");

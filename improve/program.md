@@ -35,3 +35,25 @@ Edit only the paths in `targets` above. A diff outside that list is a violation.
 ## Simplicity
 
 A smaller diff that raises the score beats a large one. If the score does not go up, the runner discards the commit.
+
+## Supervisor goals
+
+`hh improve supervise` runs on main. It spawns the test agents below, scores the protected evaluation, and pushes a kept commit with `git push origin main`. The agent does not push.
+
+The score rises when more tests pass, anti-slop hits in the target copy fall, polish and anti-slop checks pass, or open bugs fall. UX is the polish e2e pass count plus the anti-slop test pass count. Open findings in `docs/bug-scan.md` and `improve/findings/` lower the score. A red test, a bad doctor exit, or a failed typecheck stays below every green score. A tie is a discard.
+
+## Test agents
+
+### desk-explorer
+
+- home: repo
+- findings: improve/findings/desk-explorer.tsv
+
+Walk the desk through Playwright with the fixtures under packages/app/e2e. Write one row per bug. Columns are id, status, area, and summary. Status is open or fixed. Edit the target area only when asked to fix.
+
+### cli-explorer
+
+- home: temporary
+- findings: improve/findings/cli-explorer.tsv
+
+Exercise the hh CLI with HOME and USERPROFILE pointed at an empty temporary directory. Write one row per bug, using the same columns. Edit the target area only when asked to fix.

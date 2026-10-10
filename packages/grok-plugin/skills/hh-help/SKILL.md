@@ -19,7 +19,8 @@ The hh CLI can run these today:
 - `hh resume --project <dir>` shows the prompt id to continue from.
 - `hh doctor` or `hh doctor --project <dir>` prints the environment report.
 - `hh improve` runs a bounded loop on an improve branch. A human merges. It refuses main and a dirty tree.
+- `hh improve supervise` runs the standing loop on main. It pushes a kept commit with `git push origin main` and stops if origin/main does not contain that commit. It refuses a force push.
 
 The other /hh commands are skills only. Say that plainly. Do not invent flags.
 
-Never push. Never deploy. Never spend without the user's yes. Never create a GitHub repo.
+Never push. Never deploy. Never spend without the user's yes. Never create a GitHub repo. The one exception is the supervisor command above: a normal `git push origin main` after a keep, then stop if that commit is not on origin/main. Never force-push.

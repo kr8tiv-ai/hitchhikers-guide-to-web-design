@@ -140,11 +140,14 @@ function oneLine(value: string): string {
 /** Text table for an unknown subcommand. Ends with a newline. No doctor report. */
 export function renderCommandTable(unknownCommand: string, skillsDir?: string): string {
   const skills = skillsDir === undefined ? skillOnlySlashCommands() : skillOnlySlashCommands(skillsDir);
+  const commandLines = IMPLEMENTED_COMMANDS.flatMap((name) =>
+    name === "improve" ? [`  hh ${name}`, "  hh improve supervise"] : [`  hh ${name}`],
+  );
   const lines = [
     `Unknown command: ${oneLine(unknownCommand)}`,
     "",
     "Implemented commands",
-    ...IMPLEMENTED_COMMANDS.map((name) => `  hh ${name}`),
+    ...commandLines,
     "",
     "Skill-only slash commands",
   ];

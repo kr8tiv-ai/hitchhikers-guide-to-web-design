@@ -65,6 +65,7 @@ The list is the one in `packages/grok-plugin`. A slash name is a skill. The `hh`
 | | `hh install` | Copy skills into `.grok`. |
 | | `hh tools` | Search or install. Install needs a yes. |
 | | `hh improve` | Bounded loop on an improve branch. A human merges. [docs/improve.md](docs/improve.md). |
+| | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
 
 ## Motion
 

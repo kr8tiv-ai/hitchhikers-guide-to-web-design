@@ -7,6 +7,10 @@ export const DEFAULT_MAX_EXPERIMENTS = 5;
 export const MAX_EXPERIMENTS_CEILING = 50;
 export const MINUTE_CEILING = 180;
 export const TURN_CEILING = 600;
+export const DEFAULT_CONSECUTIVE_FAILURES = 3;
+export const CONSECUTIVE_FAILURE_CEILING = 50;
+export const DEFAULT_WALL_MINUTES = 60;
+export const WALL_MINUTE_CEILING = 180;
 
 const HEX_COMMIT = /^[0-9a-f]{40}$/;
 
@@ -18,6 +22,31 @@ export function resolveMaxExperiments(value: number | undefined): number {
     );
   }
   return value;
+}
+
+export function resolveConsecutiveFailures(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_CONSECUTIVE_FAILURES;
+  if (!Number.isSafeInteger(value) || value < 1 || value > CONSECUTIVE_FAILURE_CEILING) {
+    throw new Error(
+      `--max-failures must be an integer from 1 to ${CONSECUTIVE_FAILURE_CEILING}.`,
+    );
+  }
+  return value;
+}
+
+export function resolveWallMinutes(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_WALL_MINUTES;
+  if (!Number.isSafeInteger(value) || value < 1 || value > WALL_MINUTE_CEILING) {
+    throw new Error(`--wall-minutes must be an integer from 1 to ${WALL_MINUTE_CEILING}.`);
+  }
+  return value;
+}
+
+/** True when the run has used its wall-clock budget. */
+export function wallClockExceeded(elapsedMs: number, wallMinutes: number): boolean {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return false;
+  if (!Number.isSafeInteger(wallMinutes) || wallMinutes < 1) return false;
+  return elapsedMs >= wallMinutes * 60 * 1000;
 }
 
 export function resolveBudget(
@@ -48,6 +77,51 @@ export function assertImproveBranch(name: string): void {
   if (!isImproveBranchName(name)) {
     throw new Error("The improve branch must start with improve/.");
   }
+}
+
+/** The supervisor stays on main, or on an improve branch when one is configured. */
+export function assertSupervisorBranch(name: string): void {
+  if (name === "main" || isImproveBranchName(name)) return;
+  throw new Error("The supervisor branch must be main or an improve branch.");
+}
+
+/**
+ * Rollback is only the commit this experiment started from, and only when
+ * the human tree was clean at the start. Main is allowed when it is the
+ * configured branch. This does not relax the improve-loop reset rule.
+ */
+export function assertSupervisorReset(input: {
+  currentBranch: string;
+  configuredBranch: string;
+  targetCommit: string;
+  experimentPrior: string;
+  startedClean: boolean;
+}): void {
+  if (!input.startedClean) throw new Error("Refusing to reset a dirty human tree.");
+  if (input.currentBranch === "HEAD") throw new Error("Refusing to reset a detached HEAD.");
+  if (input.currentBranch !== input.configuredBranch || input.configuredBranch.length === 0) {
+    throw new Error("Refusing to reset a branch that is not the supervisor branch.");
+  }
+  assertSupervisorBranch(input.configuredBranch);
+  if (input.targetCommit !== input.experimentPrior) {
+    throw new Error("Refusing to reset beyond the experiment rollback.");
+  }
+  if (!HEX_COMMIT.test(input.targetCommit)) {
+    throw new Error("Refusing to reset to an unpinned commit.");
+  }
+}
+
+/** Logs the supervisor writes. They are not dirt and not a target violation. */
+export function isSupervisorArtifact(file: string): boolean {
+  const norm = file.replace(/\\/g, "/");
+  return (
+    norm === "improve/results.tsv" ||
+    norm === "improve/STOP" ||
+    norm === "improve/hook-log.tsv" ||
+    norm === "improve/PUSH-FAILED.txt" ||
+    norm === "improve/findings" ||
+    norm.startsWith("improve/findings/")
+  );
 }
 
 export function improveBranchName(date: string, tag: string): string {
