@@ -163,3 +163,17 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 157 | So Long and Thanks for All the Fish | Don't Panic Release | Write the release checklist and wire the root test | Heart of Gold | high |
 | 158 | So Long and Thanks for All the Fish | Zaphod | Review 156–157 and close So Long and Thanks for All the Fish | Heart of Gold | xhigh |
 | 159 | So Long and Thanks for All the Fish | Forty-Two | Once-over: the Guide against the v2 spec | Forty-Two | xhigh |
+| 160 | So Long and Thanks for All the Fish | Don't Panic Release | Make the hh bin runnable on the stated Node range | Heart of Gold | xhigh |
+| 161 | So Long and Thanks for All the Fish | Don't Panic Release | Fix the README quick start for a git clone | Heart of Gold | xhigh |
+| 162 | So Long and Thanks for All the Fish | Don't Panic Release | Print the real command table for unknown hh subcommands | Heart of Gold | xhigh |
+| 163 | So Long and Thanks for All the Fish | Don't Panic Release | Bring README Develop, CONTEXT-PACKAGE, and the once-over report in line with code | Heart of Gold | xhigh |
+| 164 | So Long and Thanks for All the Fish | Don't Panic Release | Add a macOS and Linux runner for the build queue | Heart of Gold | xhigh |
+| 165 | So Long and Thanks for All the Fish | Don't Panic Release | Show the doctor preflight on first run and fix the empty brand plate | Heart of Gold | xhigh |
+| 166 | So Long and Thanks for All the Fish | Don't Panic Release | Add the /settings route with the xAI STT rate quote | Heart of Gold | xhigh |
+| 167 | So Long and Thanks for All the Fish | Don't Panic Release | Question card usability pass | Heart of Gold | xhigh |
+| 168 | So Long and Thanks for All the Fish | Don't Panic Release | Map links, compact footer, and trimmed transcript | Heart of Gold | xhigh |
+| 169 | So Long and Thanks for All the Fish | Don't Panic Release | Empty plates get one next action | Heart of Gold | xhigh |
+| 170 | So Long and Thanks for All the Fish | Don't Panic Release | Focus, live region, and error handling for the desk | Heart of Gold | xhigh |
+| 171 | So Long and Thanks for All the Fish | Don't Panic Release | Logo question drop zone and German restatement toggle | Heart of Gold | xhigh |
+| 172 | So Long and Thanks for All the Fish | Zaphod | Review 160-171 and close the usability and ship pass | Heart of Gold | xhigh |
+| 173 | So Long and Thanks for All the Fish | Forty-Two | Self-improving loop for the Guide: hh improve | Heart of Gold | xhigh |
