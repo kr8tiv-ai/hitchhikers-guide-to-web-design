@@ -185,3 +185,4 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 179 | So Long and Thanks for All the Fish | Forty-Two | Standing auto-improve supervisor with spawned test agents | Heart of Gold | xhigh |
 | 180 | So Long and Thanks for All the Fish | Forty-Two | Fix the macOS QA CI failure: starter fixture phone gates | Heart of Gold | xhigh |
 | 181 | So Long and Thanks for All the Fish | Forty-Two | Restore the original README and fold in everything built since | Heart of Gold | xhigh |
+| 182 | So Long and Thanks for All the Fish | Forty-Two | Save every project to a portable project file and resume it from any AI | Heart of Gold | xhigh |
