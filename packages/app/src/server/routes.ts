@@ -30,6 +30,7 @@ import {
   parseWalkState,
   questionsForDepth,
   recordVerdict,
+  requiredIds,
   runTurn,
   seedExpressAssumptions,
   think,
@@ -46,12 +47,19 @@ import {
   type WalkQuery,
   type WalkState,
 } from "@hitchhiker/engine";
-import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
 import {
+  depthTouched,
   deskStatus,
+  mastLine,
+  modeNote,
+  openRequiredCount,
+  previousAssumption,
+  questionNeedsConfirm,
   renderEmptyBrand,
   renderPreflight,
   type DeskPreflight,
+  type InterviewMode,
 } from "./card.ts";
 import { documentHeadExtras } from "../design/document-head.ts";
 import { renderMotionPage } from "../motion-previews/index.ts";
@@ -112,6 +120,12 @@ export interface DeskSession {
   pushback: string | null;
   done: boolean;
   progress: DeskProgress;
+  /** Same answer list as progress. The client renders these numbers and does not recount. */
+  counts: CardCounts | null;
+  assumption: CardAssumption | null;
+  required: boolean;
+  mastCompact: boolean;
+  mastLine: string;
   mapHtml: string;
   guideHtml: string;
   transcriptHtml: string;
@@ -219,7 +233,7 @@ export async function createDeskApp(opts: {
   const notice = opts.cassetteNotice ?? null;
   const preflight = opts.preflight ?? null;
   const view = (): DeskSession =>
-    buildSession(projectDir, interview, questions, overlay, notice, preflight);
+    buildSession(projectDir, interview, questions, overlay, notice, preflight, depth);
 
   return {
     token,
@@ -905,6 +919,7 @@ function buildSession(
   overlay: LiveOverlay,
   notice: string | null,
   preflight: DeskPreflight | null,
+  depth: InterviewMode,
 ): DeskSession {
   let question = session.next();
   const saved = loadState(projectDir);
@@ -938,6 +953,21 @@ function buildSession(
     pushback = null;
   }
   const done = question === null;
+  const requiredList = requiredIds();
+  const index = question === null ? 0 : questions.findIndex((item) => item.id === question.id) + 1;
+  const counts: CardCounts | null =
+    question === null || index < 1
+      ? null
+      : {
+          index,
+          total: questions.length,
+          phase: state.phase,
+          openRequired: openRequiredCount(questions, answers, requiredList),
+          mode: depth,
+          modeNote: modeNote(depth),
+        };
+  const assumption = previousAssumption(questions, answers, question?.id ?? null);
+  const required = questionNeedsConfirm(question, requiredList);
   const card: CardState = {
     question,
     draft: "",
@@ -945,7 +975,12 @@ function buildSession(
     error: null,
     done,
     pending: false,
+    counts,
+    assumption,
+    required,
+    enterHint: true,
   };
+  const compact = depthTouched(questions, answers);
   let mapHtml: string;
   try {
     mapHtml = renderMap(state);
@@ -977,6 +1012,11 @@ function buildSession(
       promptId: state.promptId,
       nextAction: state.nextAction,
     },
+    counts,
+    assumption,
+    required,
+    mastCompact: compact,
+    mastLine: mastLine(state.phase, question?.id ?? null),
     mapHtml,
     guideHtml: renderGuideMap(answers, [...questions]),
     transcriptHtml: transcript,
@@ -995,7 +1035,7 @@ function statusSpans(text: string, notice: string | null | undefined, calm = fal
 function renderTranscript(
   tree: readonly Question[],
   answers: readonly AnswerRecord[],
-  current: Question | null,
+  _current: Question | null,
 ): string {
   const asks = new Map(tree.map((question) => [question.id, question.ask]));
   const lines: string[] = [];
@@ -1004,9 +1044,9 @@ function renderTranscript(
     if (ask !== undefined) lines.push(turnLine("Guide", ask, false));
     lines.push(turnLine("You", answer.value, true));
   }
-  if (current !== null) lines.push(turnLine("Guide", current.ask, false));
+  // The card title is the current question. Repeating it here printed the ask twice.
   if (lines.length === 0) {
-    return turnLine("Guide", "The desk is clear. Nothing has been asked yet.", false);
+    return turnLine("Guide", "Answers land here after you send one.", false);
   }
   return lines.join("\n");
 }
@@ -1019,6 +1059,9 @@ function turnLine(who: string, text: string, you: boolean): string {
 function renderDesk(token: string, session: DeskSession): string {
   let html = renderShell();
   const dek = `<p class="hh-dek">Don't Panic. One question at a time. The work saves on this machine.</p>`;
+  const fullHidden = session.mastCompact ? " hidden" : "";
+  const lineHidden = session.mastCompact ? "" : " hidden";
+  const mastAttr = session.mastCompact ? ' data-mast="line"' : "";
   html = mustReplace(
     html,
     '<meta charset="utf-8" />',
@@ -1033,9 +1076,26 @@ function renderDesk(token: string, session: DeskSession): string {
   );
   html = mustReplace(
     html,
-    dek,
-    `${dek}\n        ${deskMenu(false)}\n        ${routeNav("/")}`,
-    "dek",
+    `<header class="hh-mast hh-rise">
+        <div class="hh-mast__row">
+          <h1 class="hh-kicker">The Hitchhiker's Guide to Web Design</h1>
+          <p class="hh-kicker">Desk</p>
+        </div>
+        <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
+        ${dek}`,
+    `<header class="hh-mast hh-rise"${mastAttr}>
+        <div data-mast-full${fullHidden}>
+        <div class="hh-mast__row">
+          <h1 class="hh-kicker">The Hitchhiker's Guide to Web Design</h1>
+          <p class="hh-kicker">Desk</p>
+        </div>
+        <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
+        ${dek}
+        </div>
+        <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
+        ${deskMenu(false)}
+        ${routeNav("/")}`,
+    "mast",
   );
   html = mustReplace(
     html,

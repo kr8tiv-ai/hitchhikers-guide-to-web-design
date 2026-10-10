@@ -5,6 +5,24 @@ import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/e
  * Suggest does not call a model from this card.
  */
 
+export type CardMode = "express" | "standard" | "deep";
+
+/** Position and open-required count, computed with interview coverage. The client does not recount. */
+export interface CardCounts {
+  index: number;
+  total: number;
+  phase: string;
+  openRequired: number;
+  mode: CardMode;
+  modeNote: string;
+}
+
+/** The Suggest or Skip written on the previous card. */
+export interface CardAssumption {
+  value: string;
+  kind: "suggested" | "skipped";
+}
+
 export interface CardState {
   question: Question | null;
   draft: string;
@@ -19,7 +37,23 @@ export interface CardState {
   notice?: string | null;
   /** True after Hold to talk has been used on this page. */
   voiceNote?: boolean;
+  /** Desk progress. Absent on the before-jump card, which keeps the id kicker. */
+  counts?: CardCounts | null;
+  assumption?: CardAssumption | null;
+  /** True when Skip must be confirmed before it writes. */
+  required?: boolean;
+  /** True after the first Skip click on a required question. */
+  skipConfirm?: boolean;
+  /** True on the desk, where Enter submits and Shift+Enter adds a line. */
+  enterHint?: boolean;
 }
+
+/** Prompt 167 names these labels. The em dash is the prescribed glyph. */
+export const SUGGEST_LABEL = "Suggest \u2014 I'll mark it as assumed";
+export const SKIP_LABEL = "Skip \u2014 we'll assume";
+export const ANSWER_HINT = "Enter sends the answer. Shift+Enter adds a line.";
+export const PLACEHOLDER_FALLBACK = "A short sentence in your own words.";
+export const SKIP_CONFIRM = "This one is required. Choose Skip again to write the assumption.";
 
 export type CardEvent =
   | { type: "type"; text: string }
@@ -212,6 +246,34 @@ function heading(title: string, why: string, done: boolean): string {
 </article>`;
 }
 
+function kickerBlock(question: Question, counts: CardCounts | null | undefined): string {
+  if (counts === undefined || counts === null) {
+    return `  <p class="hh-kicker">${escapeHtml(question.id)}</p>\n`;
+  }
+  const line = `${question.id} · ${counts.index} of ${counts.total} · ${counts.phase}`;
+  return `  <p class="hh-kicker" data-card-kicker>${escapeHtml(line)}</p>
+  <p class="hh-qcard__count" data-open-required>${counts.openRequired} required still open</p>
+  <p class="hh-qcard__mode" data-interview-mode="${escapeHtml(counts.mode)}">${escapeHtml(counts.modeNote)}</p>
+`;
+}
+
+function assumptionBlock(assumption: CardAssumption | null | undefined): string {
+  if (assumption === undefined || assumption === null) return "";
+  const value = assumption.value.trim().replace(/^ASSUMED:\s*/i, "");
+  if (value === "") return "";
+  return `  <p class="hh-qcard__assumed" data-assumed="${assumption.kind}">Assumed: ${escapeHtml(value)}</p>\n`;
+}
+
+function confirmBlock(state: CardState): string {
+  if (state.skipConfirm !== true || state.required !== true) return "";
+  return `  <p class="hh-qcard__confirm" data-skip-confirm>${escapeHtml(SKIP_CONFIRM)}</p>\n`;
+}
+
+function sampleAnswer(question: Question): string {
+  const suggest = question.suggest?.trim() ?? "";
+  return suggest === "" ? PLACEHOLDER_FALLBACK : suggest;
+}
+
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
   if (state.done) return heading(DONE_TITLE, DONE_WHY, true);
@@ -220,8 +282,14 @@ export function renderCard(state: CardState): string {
 
   // A hold shows the pushback and an empty field, so the soft line is not sent again.
   const field = state.pushback === null ? state.draft : "";
-  const described =
-    state.error === null ? "" : ' aria-invalid="true" aria-describedby="hh-card-error"';
+  const hint = state.enterHint === true;
+  const describedBy = [hint ? "hh-card-hint" : "", state.error === null ? "" : "hh-card-error"]
+    .filter((id) => id !== "")
+    .join(" ");
+  const described = [
+    state.error === null ? "" : ' aria-invalid="true"',
+    describedBy === "" ? "" : ` aria-describedby="${describedBy}"`,
+  ].join("");
   const alert = state.error === null ? "" : ' role="alert"';
   const busy = state.pending ? ' aria-busy="true"' : "";
   const pushAttr = state.pushback === null ? "" : attr("data-pushback", state.pushback);
@@ -229,23 +297,27 @@ export function renderCard(state: CardState): string {
     state.pushback === null || state.pushback === ""
       ? ""
       : `  <p class="hh-qcard__push">${escapeHtml(state.pushback)}</p>\n`;
+  const hintLine = hint
+    ? `  <p class="hh-qcard__hint" id="hh-card-hint">${escapeHtml(ANSWER_HINT)}</p>\n`
+    : "";
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
-  <p class="hh-kicker">${escapeHtml(question.id)}</p>
-  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
+${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
   <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
-${whereToLook(question.resources)}${pushLine}  <label class="hh-qcard__field">
+${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
+  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
-    <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${described}>${escapeHtml(field)}</textarea>
+    <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
   </label>
-  <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
-${noticeLine(state.notice ?? null)}  <div class="hh-qcard__actions">
+${hintLine}  <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
+${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
     ${talkButton(state.pending, state.listening === true)}
     ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}
-    ${button("suggest", "Suggest for me", "secondary", state.pending)}
-    ${button("skip", "Skip", "ghost", state.pending)}
+    ${button("suggest", SUGGEST_LABEL, "secondary", state.pending)}
+    ${button("skip", SKIP_LABEL, "ghost", state.pending)}
   </div>
-${voiceNoteLine(state.voiceNote === true)}</article>`;
+${voiceNoteLine(state.voiceNote === true)}  </div>
+</article>`;
 }
 
 function readAction(start: CardQuery | null): "answer" | "suggest" | "skip" | null {

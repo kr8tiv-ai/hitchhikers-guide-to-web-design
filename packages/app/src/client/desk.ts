@@ -1,5 +1,5 @@
 import type { Question } from "@hitchhiker/engine";
-import type { CardState } from "../card.ts";
+import type { CardAssumption, CardCounts, CardState } from "../card.ts";
 import { escapeHtml, renderCard, VOICE_SERVICE_NOTE } from "../card.ts";
 
 /**
@@ -81,6 +81,11 @@ export interface SessionView {
   mapHtml: string;
   transcriptHtml: string;
   statusHtml: string;
+  counts: CardCounts | null;
+  assumption: CardAssumption | null;
+  required: boolean;
+  mastCompact: boolean;
+  mastLine: string;
 }
 
 interface DeskElement {
@@ -104,6 +109,9 @@ interface DeskEvent {
   repeat?: boolean;
   button?: number;
   pointerId?: number;
+  shiftKey?: boolean;
+  /** True while an IME composition is open. Enter must not submit. */
+  isComposing?: boolean;
 }
 
 interface DeskParent {
@@ -162,6 +170,11 @@ export function parseSession(value: unknown): SessionView | null {
     mapHtml: typeof value.mapHtml === "string" ? value.mapHtml : "",
     transcriptHtml: typeof value.transcriptHtml === "string" ? value.transcriptHtml : "",
     statusHtml: typeof value.statusHtml === "string" ? value.statusHtml : "",
+    counts: parseCounts(value.counts),
+    assumption: parseAssumption(value.assumption),
+    required: value.required === true,
+    mastCompact: value.mastCompact === true,
+    mastLine: typeof value.mastLine === "string" ? value.mastLine : "",
   };
 }
 
@@ -226,6 +239,7 @@ export function mountDesk(env: DeskEnv): () => void {
   let voiceFinal = "";
   let voiceInterim = "";
   let voiceError: string | null = null;
+  let skipConfirm = false;
 
   const onClick = (event: DeskEvent): void => {
     const action = readAction(event.target);
@@ -237,6 +251,11 @@ export function mountDesk(env: DeskEnv): () => void {
     const target = event.target;
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     draft = target.value ?? "";
+    if (skipConfirm) {
+      skipConfirm = false;
+      const note = region()?.querySelector("[data-skip-confirm]");
+      if (note !== null && note !== undefined && "textContent" in note) note.textContent = "";
+    }
     const button = region()?.querySelector('[data-action="answer"]');
     if (button === null || button === undefined) return;
     const locked = pending || draft.trim() === "";
@@ -261,6 +280,13 @@ export function mountDesk(env: DeskEnv): () => void {
     stopVoice();
   };
   const onKeyDown = (event: DeskEvent): void => {
+    if (isDraftTarget(event.target) && event.key === "Enter") {
+      // Shift+Enter is a newline. An open IME composition is not a submit.
+      if (event.shiftKey === true || event.isComposing === true) return;
+      event.preventDefault();
+      void submit("answer");
+      return;
+    }
     if (event.key !== " " && event.key !== "Enter") return;
     if (!isVoiceTarget(event.target)) return;
     event.preventDefault();
@@ -629,6 +655,7 @@ export function mountDesk(env: DeskEnv): () => void {
     error = null;
     notice = null;
     pending = false;
+    skipConfirm = false;
     cancelVoice();
     paint();
   }
@@ -642,6 +669,12 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       return;
     }
+    if (action === "skip" && view.required && !skipConfirm) {
+      skipConfirm = true;
+      paint();
+      return;
+    }
+    skipConfirm = false;
     const questionId = view.question.id;
     pending = true;
     error = null;
@@ -681,6 +714,11 @@ export function mountDesk(env: DeskEnv): () => void {
         pending,
         listening,
         notice,
+        counts: view.counts,
+        assumption: view.assumption,
+        required: view.required,
+        skipConfirm: skipConfirm && view.required,
+        enterHint: true,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
       question.innerHTML = renderCard(state);
@@ -696,8 +734,30 @@ export function mountDesk(env: DeskEnv): () => void {
       const base = view?.statusHtml ?? "";
       status.innerHTML = connection === null ? base : `<span>${escapeHtml(connection)}</span>${base}`;
     }
+    if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
     ensureMotion(env.document, view?.question?.id);
   }
+}
+
+function applyMast(document: DeskDocument, compact: boolean, line: string): void {
+  const full = document.querySelector("[data-mast-full]");
+  const text = document.querySelector("[data-mast-line]");
+  if (full === null || text === null) return;
+  if ("textContent" in text) text.textContent = line;
+  const header = document.querySelector(".hh-mast");
+  if (compact) {
+    full.setAttribute("hidden", "");
+    text.removeAttribute("hidden");
+    header?.setAttribute("data-mast", "line");
+  } else {
+    full.removeAttribute("hidden");
+    text.setAttribute("hidden", "");
+    header?.removeAttribute("data-mast");
+  }
+}
+
+function isDraftTarget(start: DeskElement | null): boolean {
+  return start !== null && start.getAttribute("id") === "hh-card-draft";
 }
 
 function ensureMotion(document: DeskDocument, questionId: string | undefined): void {
@@ -881,6 +941,25 @@ function isLevel(value: unknown): value is LevelName {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCounts(value: unknown): CardCounts | null {
+  if (!isRecord(value)) return null;
+  const { index, total, phase, openRequired, mode, modeNote } = value;
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 1) return null;
+  if (typeof total !== "number" || !Number.isInteger(total) || total < 1) return null;
+  if (typeof phase !== "string" || phase.trim() === "") return null;
+  if (typeof openRequired !== "number" || !Number.isInteger(openRequired) || openRequired < 0) return null;
+  if (mode !== "express" && mode !== "standard" && mode !== "deep") return null;
+  if (typeof modeNote !== "string" || modeNote.trim() === "") return null;
+  return { index, total, phase, openRequired, mode, modeNote };
+}
+
+function parseAssumption(value: unknown): CardAssumption | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.value !== "string" || value.value.trim() === "") return null;
+  if (value.kind !== "suggested" && value.kind !== "skipped") return null;
+  return { value: value.value, kind: value.kind };
 }
 
 function browserEnv(): DeskEnv | null {

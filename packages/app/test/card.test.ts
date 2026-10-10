@@ -110,14 +110,18 @@ test("the card shows one question and the three exact actions", () => {
   assert.match(buttonTag(html, "answer"), /type="button"/);
   assert.match(buttonTag(html, "answer"), /\sdisabled(?:\s|>)/);
   assert.match(html, /data-action="answer"[^>]*>Answer<\/button>/);
-  assert.match(html, /data-action="suggest"[^>]*>Suggest for me<\/button>/);
-  assert.match(html, /data-action="skip"[^>]*>Skip<\/button>/);
+  assert.match(html, /data-action="suggest"[^>]*>Suggest — I&#39;ll mark it as assumed<\/button>/);
+  assert.match(html, /data-action="skip"[^>]*>Skip — we&#39;ll assume<\/button>/);
   assert.match(buttonTag(html, "suggest"), /type="button"/);
   assert.match(buttonTag(html, "skip"), /type="button"/);
   assert.doesNotMatch(buttonTag(html, "suggest"), /disabled/);
   assert.doesNotMatch(buttonTag(html, "skip"), /disabled/);
   assert.doesNotMatch(html, /FOLLOW-UP-SHOULD-NOT-RENDER/);
-  assert.doesNotMatch(html, /SUGGEST-TEXT-SHOULD-NOT-RENDER/);
+  assert.match(html, /placeholder="SUGGEST-TEXT-SHOULD-NOT-RENDER"/);
+  assert.equal(
+    html.replace('placeholder="SUGGEST-TEXT-SHOULD-NOT-RENDER"', "").includes("SUGGEST-TEXT-SHOULD-NOT-RENDER"),
+    false,
+  );
   assert.doesNotMatch(html, /SKIP-DEFAULT-SHOULD-NOT-RENDER/);
   assert.doesNotMatch(html, /NEXT-ASK-SHOULD-NOT-RENDER/);
   assert.doesNotMatch(html, /coverage|answered:|suggested:|skipped:/i);
@@ -343,7 +347,7 @@ test("a question with resources lists where to look, and one without does not", 
   assert.doesNotMatch(plain, /Where to look/);
   assert.doesNotMatch(plain, /<details/);
   assert.doesNotMatch(plain, /target="_blank"/);
-  assert.match(plain, /<p class="hh-qcard__why">The logo anchors color, type, and tone\.<\/p>\n  <label/);
+  assert.match(plain, /<p class="hh-qcard__why">The logo anchors color, type, and tone\.<\/p>\n  <div class="hh-qcard__composer">\n  <label/);
 
   const html = renderCard(
     state({

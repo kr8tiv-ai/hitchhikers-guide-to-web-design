@@ -147,8 +147,8 @@ test("the desk renders the question card and Don't Panic from a saved session", 
     assert.match(opening, /class="hh-qcard__actions"/);
     assert.match(opening, new RegExp(`data-question-id="${first.id}"`));
     assert.match(opening, /data-action="answer"[^>]*>Answer<\/button>/);
-    assert.match(opening, /data-action="suggest"[^>]*>Suggest for me<\/button>/);
-    assert.match(opening, /data-action="skip"[^>]*>Skip<\/button>/);
+    assert.match(opening, /data-action="suggest"[^>]*>Suggest — I&#39;ll mark it as assumed<\/button>/);
+    assert.match(opening, /data-action="skip"[^>]*>Skip — we&#39;ll assume<\/button>/);
     assert.match(buttonTag(opening, "answer"), /disabled/);
     assert.doesNotMatch(buttonTag(opening, "suggest"), /disabled/);
     assert.doesNotMatch(buttonTag(opening, "skip"), /disabled/);
@@ -181,8 +181,8 @@ test("the desk renders the question card and Don't Panic from a saved session", 
     assert.match(card, /class="hh-qcard__why"/);
     assert.match(card, /class="hh-qcard__actions"/);
     assert.match(card, /data-action="answer"[^>]*>Answer<\/button>/);
-    assert.match(card, /data-action="suggest"[^>]*>Suggest for me<\/button>/);
-    assert.match(card, /data-action="skip"[^>]*>Skip<\/button>/);
+    assert.match(card, /data-action="suggest"[^>]*>Suggest — I&#39;ll mark it as assumed<\/button>/);
+    assert.match(card, /data-action="skip"[^>]*>Skip — we&#39;ll assume<\/button>/);
     assert.ok(resumedQuestion);
     assert.equal(card.includes(resumedQuestion.ask), true);
 

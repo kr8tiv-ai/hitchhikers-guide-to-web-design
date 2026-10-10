@@ -185,3 +185,56 @@
 .hh-qcard__look a:hover {
   color: var(--color-ink);
 }
+
+.hh-qcard__composer {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.hh-qcard__hint,
+.hh-qcard__count,
+.hh-qcard__mode,
+.hh-qcard__confirm {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--type-small);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.hh-qcard__assumed {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 4px solid var(--color-accent);
+  color: var(--color-ink);
+  overflow-wrap: break-word;
+}
+
+.hh-mast__line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--type-title);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+[data-mast-full][hidden],
+[data-mast-line][hidden] {
+  display: none;
+}
+
+/* Under 720px the field and actions stick while the why scrolls.
+   375 stays inside this query. 1440 does not, so the composer stays in flow. */
+@media (max-width: 719px) {
+  .hh-qcard__composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 0 calc(var(--space-5) * -1) calc(var(--space-5) * -1);
+    padding: var(--space-4) var(--space-5) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--color-surface) 94%, var(--color-ink));
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  }
+}
