@@ -387,6 +387,7 @@ async function dispatchImplemented(
         ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
         ...(deps.env === undefined ? {} : { env: deps.env }),
         ...(deps.open === undefined ? {} : { open: deps.open }),
+        ...(runner === undefined ? {} : { runner }),
       });
     case "assets":
       return runAssetsCommand(argv.slice(1));

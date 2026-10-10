@@ -47,6 +47,12 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardState } from "../card.ts";
+import {
+  deskStatus,
+  renderEmptyBrand,
+  renderPreflight,
+  type DeskPreflight,
+} from "./card.ts";
 import { documentHeadExtras } from "../design/document-head.ts";
 import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
@@ -165,6 +171,11 @@ export async function createDeskApp(opts: {
   cassetteNotice?: string;
   /** Tests inject the Guide model. Omitted, the desk picks replay, quiet, or live. */
   guideThink?: GuideThink;
+  /**
+   * PATH report from `probePathTools`. `hh app` passes it.
+   * Omitted, the desk does not invent a second probe.
+   */
+  preflight?: DeskPreflight;
 }): Promise<DeskApp> {
   const projectDir = path.resolve(opts.projectDir);
   const depth = loadConfig(projectDir).interviewDepth;
@@ -198,7 +209,9 @@ export async function createDeskApp(opts: {
   };
 
   const notice = opts.cassetteNotice ?? null;
-  const view = (): DeskSession => buildSession(projectDir, interview, questions, overlay, notice);
+  const preflight = opts.preflight ?? null;
+  const view = (): DeskSession =>
+    buildSession(projectDir, interview, questions, overlay, notice, preflight);
 
   return {
     token,
@@ -724,7 +737,7 @@ async function handleGet(
   if (pathname === "/brand") {
     const loaded = await loadBrandKit(projectDir);
     if (loaded.kind === "missing") {
-      sendHtml(req, res, 200, renderBrand(token, notice));
+      sendHtml(req, res, 200, renderBrand(token, notice, view().question?.id ?? null));
       return;
     }
     const nav = routeNav("/brand");
@@ -863,6 +876,7 @@ function buildSession(
   questions: readonly Question[],
   overlay: LiveOverlay,
   notice: string | null,
+  preflight: DeskPreflight | null,
 ): DeskSession {
   let question = session.next();
   const saved = loadState(projectDir);
@@ -911,12 +925,16 @@ function buildSession(
     const message = error instanceof Error ? error.message : "The map could not be drawn.";
     mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
   }
-  const statusText = overlay.calm && overlay.message !== null
-    ? overlay.message
+  const calm = overlay.calm && overlay.message !== null;
+  const baseStatus = calm
+    ? (overlay.message ?? "")
     : state.nextAction.trim().length > 0
       ? state.nextAction
       : "Ready.";
-  const transcript = `${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
+  const firstRun = answers.length === 0;
+  const statusText = deskStatus({ base: baseStatus, firstRun, calm, preflight });
+  const preflightHtml = preflight !== null && firstRun ? `${renderPreflight(preflight)}\n` : "";
+  const transcript = `${preflightHtml}${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
   return {
     question,
     pushback,
@@ -1032,7 +1050,7 @@ function renderDesk(token: string, session: DeskSession): string {
   );
 }
 
-function renderBrand(token: string, notice: string | null = null): string {
+function renderBrand(token: string, notice: string | null = null, questionId: string | null = null): string {
   return renderPanel({
     notice,
     token,
@@ -1041,16 +1059,7 @@ function renderBrand(token: string, notice: string | null = null): string {
     current: "/brand",
     kicker: "Brand kit",
     status: "The kit waits on the brief.",
-    main: `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
-        <p class="hh-kicker" id="brand-title">Type</p>
-        <p class="hh-specimen__display">The kit is not printed yet.</p>
-        <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>
-      </section>
-      <div class="hh-empty hh-rise hh-rise--3">
-        <h1 class="hh-empty__title">No kit on the desk</h1>
-        <p>The interview is still the work.</p>
-        <p class="hh-empty__next">Finish the questions, then open this plate again.</p>
-      </div>`,
+    main: renderEmptyBrand(questionId),
   });
 }
 

@@ -103,7 +103,9 @@ test("with no kit on disk /brand still shows the empty plate", async () => {
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /No kit on the desk/);
-    assert.match(html, /The kit is not printed yet/);
+    assert.match(html, /Approve the brief to print the kit/);
+    assert.match(html, /href="\/\?question=DP-0\.1"/);
+    assert.equal(html.includes("The kit is not printed yet"), false);
     assert.equal(html.includes("Draft. Not approved."), false);
     assert.equal(html.includes("/client/brand.js"), false);
     assert.equal(html.includes("data-brand-desk"), false);

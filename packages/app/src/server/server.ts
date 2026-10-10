@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
 import { openBrowser, type BrowserSpawn } from "./open-browser.ts";
+import type { DeskPreflight } from "./card.ts";
 import { createDeskApp, type GuideThink, type TurnHandler } from "./routes.ts";
 
 export type { TurnHandler } from "./routes.ts";
@@ -34,6 +35,8 @@ export interface StartServerOptions {
   guideThink?: GuideThink;
   /** Replaces the platform opener. Tests inject this so a refusal can prove it was not called. */
   openBrowser?: (url: string) => Promise<boolean>;
+  /** PATH report from the CLI doctor probes. Omitted, the desk does not claim Ready from a guess. */
+  preflight?: DeskPreflight;
 }
 
 /**
@@ -73,6 +76,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     ...(opts.turnHandler === undefined ? {} : { turnHandler: opts.turnHandler }),
     ...(opts.cassetteNotice === undefined ? {} : { cassetteNotice: opts.cassetteNotice }),
     ...(opts.guideThink === undefined ? {} : { guideThink: opts.guideThink }),
+    ...(opts.preflight === undefined ? {} : { preflight: opts.preflight }),
   });
   let dispatch: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => undefined;
   const server = createServer((req, res) => {

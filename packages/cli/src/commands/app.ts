@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { cassetteNotice, cassetteRefusal } from "../cassette-guard.ts";
+import { deskPreflight, spawnCommand, type CommandRunner } from "../doctor.ts";
 
 const USAGE = "Usage: hh app [--project <dir>] [--port <n>] [--no-open] [--cassette]";
 const HELP = `${USAGE}
@@ -19,6 +20,11 @@ interface StartedDesk {
   close(): Promise<void>;
 }
 
+interface DeskPreflightPayload {
+  grokOk: boolean;
+  probes: readonly { name: "grok" | "playwright" | "whisper" | "pdftotext"; ok: boolean; detail: string }[];
+}
+
 interface DeskModule {
   startServer(opts: {
     projectDir: string;
@@ -26,6 +32,7 @@ interface DeskModule {
     open?: boolean;
     cassetteNotice?: string;
     openBrowser?: (url: string) => Promise<boolean>;
+    preflight?: DeskPreflightPayload;
   }): Promise<StartedDesk>;
 }
 
@@ -34,6 +41,8 @@ export interface RunAppOptions {
   env?: NodeJS.ProcessEnv;
   /** Injected browser opener. A cassette refusal must not call it. */
   open?: (url: string) => Promise<boolean>;
+  /** Same runner `hh doctor` uses. Omitted, probes spawn on PATH. */
+  runner?: CommandRunner;
 }
 
 let active: StartedDesk | null = null;
@@ -150,6 +159,7 @@ export async function runApp(
       projectDir: parsed.projectDir,
       port: parsed.port,
       open: parsed.open,
+      preflight: deskPreflight(opts.runner ?? { run: spawnCommand }),
       ...(notice === null ? {} : { cassetteNotice: notice }),
       ...(opts.open === undefined ? {} : { openBrowser: opts.open }),
     });

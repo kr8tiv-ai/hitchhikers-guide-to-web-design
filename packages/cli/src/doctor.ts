@@ -51,6 +51,59 @@ const SPAWN_TIMEOUT_MS = 10_000;
 
 const OPTIONAL_TOOLS = ["playwright", "whisper", "pdftotext"] as const;
 
+export const PATH_PROBE_NAMES = ["grok", ...OPTIONAL_TOOLS] as const;
+
+export type PathProbeName = (typeof PATH_PROBE_NAMES)[number];
+
+export interface PathProbe {
+  name: PathProbeName;
+  ok: boolean;
+  detail: string;
+  version: string | null;
+}
+
+/** The four PATH lines the desk prints. Same probes as `hh doctor`. */
+export interface DeskPreflightReport {
+  grokOk: boolean;
+  probes: Array<{ name: PathProbeName; ok: boolean; detail: string }>;
+}
+
+/**
+ * grok, playwright, whisper, and pdftotext. One implementation for `hh doctor`
+ * and the desk. No login, no network, shell off. The runner is the only spawn.
+ */
+export function probePathTools(runner: CommandRunner): PathProbe[] {
+  const grok = probeGrok(runner);
+  const probes: PathProbe[] = [
+    {
+      name: "grok",
+      ok: grok.onPath,
+      detail: grok.onPath ? `grok: ${grok.version ?? "on PATH"}` : "grok: not on PATH",
+      version: grok.version,
+    },
+  ];
+  for (const tool of OPTIONAL_TOOLS) {
+    const args = tool === "pdftotext" ? ["-v"] : ["--version"];
+    const ok = commandFound(runner.run(tool, args));
+    probes.push({
+      name: tool,
+      ok,
+      detail: ok ? `${tool}: installed` : `${tool}: not installed`,
+      version: null,
+    });
+  }
+  return probes;
+}
+
+/** Structured preflight for the desk. `grokOk` is the grok probe, not the other three. */
+export function deskPreflight(runner: CommandRunner): DeskPreflightReport {
+  const probes = probePathTools(runner);
+  return {
+    grokOk: probes.some((probe) => probe.name === "grok" && probe.ok),
+    probes: probes.map((probe) => ({ name: probe.name, ok: probe.ok, detail: probe.detail })),
+  };
+}
+
 /**
  * Node is supported at major 22 and above. `version` is a string such as `v22.0.0`.
  */
@@ -98,11 +151,14 @@ export async function doctor(
   const gitOk = git.status === 0;
   if (!gitOk) warnings.push("git is not on PATH");
 
-  const grokProbe = probeGrok(runner);
+  const pathProbes = probePathTools(runner);
+  const grokProbe = pathProbes.find((probe) => probe.name === "grok");
+  const grokOnPath = grokProbe?.ok === true;
+  const grokVersion = grokProbe?.version ?? null;
   let sessionIdMode: SessionIdMode = "unknown";
   let effortFlag = false;
   let auth: AuthProbe = "skipped";
-  if (!grokProbe.onPath) {
+  if (!grokOnPath) {
     warnings.push("session probe skipped");
   } else {
     const help = runner.run("grok", ["--help"]);
@@ -116,11 +172,9 @@ export async function doctor(
     auth = readAuth(runner, classified.authStatusFlag, warnings);
   }
 
-  for (const tool of OPTIONAL_TOOLS) {
-    const args = tool === "pdftotext" ? ["-v"] : ["--version"];
-    if (!commandFound(runner.run(tool, args))) {
-      warnings.push(`${tool}: not installed`);
-    }
+  for (const probe of pathProbes) {
+    if (probe.name === "grok" || probe.ok) continue;
+    warnings.push(`${probe.name}: not installed`);
   }
 
   if (options.projectDir !== undefined) {
@@ -131,8 +185,8 @@ export async function doctor(
     nodeOk,
     nodeVersion,
     gitOk,
-    grokOnPath: grokProbe.onPath,
-    grokVersion: grokProbe.version,
+    grokOnPath,
+    grokVersion,
     auth,
     sessionIdMode,
     effortFlag,
