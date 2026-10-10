@@ -178,3 +178,8 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 172 | So Long and Thanks for All the Fish | Zaphod | Review 160-171 and close the usability and ship pass | Heart of Gold | xhigh |
 | 173 | So Long and Thanks for All the Fish | Forty-Two | Self-improving loop for the Guide: hh improve | Heart of Gold | xhigh |
 | 174 | So Long and Thanks for All the Fish | Forty-Two | Fix CI regressions from prompts 165 and 166 | Heart of Gold | xhigh |
+| 175 | So Long and Thanks for All the Fish | Forty-Two | Fix the Suggest flow: card stays, suggestion shows in place | Heart of Gold | xhigh |
+| 176 | So Long and Thanks for All the Fish | Forty-Two | UI beauty pass without a new visual system | Heart of Gold | xhigh |
+| 177 | So Long and Thanks for All the Fish | Forty-Two | Deep bug scan across every desk screen and CLI command | Heart of Gold | xhigh |
+| 178 | So Long and Thanks for All the Fish | Forty-Two | Voice with no API spend by default | Heart of Gold | xhigh |
+| 179 | So Long and Thanks for All the Fish | Forty-Two | Standing auto-improve supervisor with spawned test agents | Heart of Gold | xhigh |
