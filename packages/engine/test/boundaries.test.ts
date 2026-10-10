@@ -87,6 +87,32 @@ test("relative imports inside a package are allowed; escapes and vendor imports 
   }
 });
 
+test("Windows-style separators still count as deep imports and package escapes", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "hh-boundaries-"));
+  try {
+    const src = path.join(root, "packages", "sample", "src");
+    mkdirSync(src, { recursive: true });
+    const deep = ["@hitchhiker", "engine", "src", "workspace"].join("\\");
+    const outside = ["..", "..", "..", "outside.ts"].join("\\");
+    writeFileSync(
+      path.join(src, "win.ts"),
+      `import { listWorkspacePackages } from "${deep}";\nimport x from "${outside}";\nvoid x;\n`,
+      "utf8",
+    );
+
+    assert.deepEqual(
+      findDeepImports(root).map((hit) => hit.specifier),
+      [deep],
+    );
+    assert.deepEqual(
+      findEscapes(root).map((hit) => hit.specifier),
+      [outside],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("the repo has no deep imports and no package escapes", () => {
   assert.deepEqual(findDeepImports(repoRoot), []);
   assert.deepEqual(findEscapes(repoRoot), []);

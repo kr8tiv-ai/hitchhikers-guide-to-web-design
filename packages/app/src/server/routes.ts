@@ -1320,7 +1320,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, true), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-hh-ready aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, true), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
   html = replaceBlock(
@@ -1462,7 +1462,7 @@ ${extra}
         ${deskMenu(opts.onSettings === true)}
         ${routeNav(opts.current)}
       </header>
-      <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}">
+      <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}" data-hh-ready>
         ${opts.main}
       </main>
       <footer class="hh-status">

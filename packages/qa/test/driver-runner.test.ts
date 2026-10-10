@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   buildDriverRules,
   buildGrokArgs,
@@ -22,7 +23,7 @@ import {
   shouldPush,
   textLooksLikeUsageLimit,
   turnsForKind,
-} from "../../../.hh-driver/run-build.mjs";
+} from "../src/driver-plan.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
@@ -151,6 +152,24 @@ function fake(num: number, kind = "build"): PromptRow {
 
 test("importing the runner does not start it", () => {
   assert.equal(invokedDirectly(), false);
+  assert.equal(invokedDirectly(runnerPath, pathToFileURL(runnerPath).href), true);
+  const runner = readFileSync(runnerPath, "utf8");
+  assert.match(runner, /from "\.\.\/packages\/qa\/src\/driver-plan\.mjs"/);
+  assert.match(runner, /invokedDirectly\(process\.argv\[1\], import\.meta\.url\)/);
+  assert.equal(runner.includes("export const MODEL"), false);
+  assert.equal(runner.includes('["push", "origin", "main"]'), true);
+  const imported = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `await import(${JSON.stringify(pathToFileURL(runnerPath).href)}); console.log("imported");`,
+    ],
+    { cwd: repoRoot, encoding: "utf8", timeout: 20_000, windowsHide: true },
+  );
+  assert.equal(imported.error, undefined);
+  assert.equal(imported.status, 0, imported.stderr ?? "");
+  assert.match(imported.stdout ?? "", /imported/);
 });
 
 test("front matter matches the PowerShell regexes for 157, 158, and 159", () => {

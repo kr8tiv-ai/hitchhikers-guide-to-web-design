@@ -14,7 +14,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadTree, questionsForDepth, type AnswerRecord } from "@hitchhiker/engine";
-import { escapeHtml, SKIP_LABEL, SUGGEST_LABEL } from "../src/card.ts";
+import { escapeHtml } from "../src/card.ts";
 import { mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { compactMapLabel, savedFooterLine } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
@@ -110,10 +110,7 @@ test("map phases link to desks and exactly one is the current step", async () =>
       assert.match(html, /\.hh-map-fold::details-content \{ content-visibility: visible; \}/);
       assert.match(html, /\.hh-map-fold > \.hh-map \{ display: grid; \}/);
       assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
-      const withoutLabels = html
-        .replaceAll(escapeHtml(SUGGEST_LABEL), "")
-        .replaceAll(escapeHtml(SKIP_LABEL), "");
-      assert.equal(withoutLabels.includes("\u2014"), false);
+      assert.equal(html.includes("\u2014"), false);
 
       for (const href of ["/", "/brand", "/approve", "/hh-dashboard"]) {
         const page = await fetch(new URL(href, handle.url));

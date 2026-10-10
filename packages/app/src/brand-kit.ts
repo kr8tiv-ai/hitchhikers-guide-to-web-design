@@ -179,7 +179,7 @@ function document(kit: Prepared): string {
             <li><a href="#voice-title">Voice</a></li>
           </ol>
         </nav>
-        <main class="bk-page">
+        <main class="bk-page" data-hh-ready>
           ${purposeBlock(kit)}
           ${storyBlock(kit)}
           ${typeAndPalette(kit)}

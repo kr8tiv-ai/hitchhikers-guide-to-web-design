@@ -429,7 +429,7 @@ ${documentHeadExtras("Anything to add before we jump?")}
         <p class="hh-dek">Anything to add before we jump?</p>
       </header>
       <div class="hh-columns">
-        <main id="main" class="hh-read" data-index="${session.index}">
+        <main id="main" class="hh-read" data-index="${session.index}" data-hh-ready>
           <p class="hh-kicker" id="hh-card-progress">${escapeHtml(progress)}</p>
           ${main}
         </main>

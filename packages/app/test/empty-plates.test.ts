@@ -69,6 +69,7 @@ test("each empty plate has one primary action and the brand plate keeps its ques
     const drive = await (await fetch(new URL("/hh-dashboard", handle.url))).text();
 
     assert.deepEqual(primaryHrefs(brand), ["/?question=DP-0.1"]);
+    assert.match(brand, /<h1 class="hh-specimen__display">No kit on the desk<\/h1>/);
     assert.match(brand, /Approve the brief to print the kit/);
     assert.equal(brand.includes("The kit is not printed yet"), false);
 

@@ -68,8 +68,13 @@ export function dressBrandKit(html: string, token: string, navHtml: string): str
   if (next.includes(wordmark)) {
     next = next.replace(wordmark, `${wordmark}\n        ${navHtml}`);
   }
-  if (next.includes('<main class="bk-page">')) {
-    next = next.replace('<main class="bk-page">', '<main class="bk-page" data-brand-desk>');
+  if (next.includes('<main class="bk-page" data-hh-ready>')) {
+    next = next.replace(
+      '<main class="bk-page" data-hh-ready>',
+      '<main class="bk-page" data-brand-desk data-hh-ready>',
+    );
+  } else if (next.includes('<main class="bk-page">')) {
+    next = next.replace('<main class="bk-page">', '<main class="bk-page" data-brand-desk data-hh-ready>');
   } else {
     next = next.replace("<body>", "<body data-brand-desk>");
   }
@@ -98,7 +103,7 @@ export function renderBrandKitError(token: string, navHtml: string): string {
         <p class="hh-kicker">Brand kit</p>
         ${navHtml}
       </header>
-      <main id="main" class="hh-read">
+      <main id="main" class="hh-read" data-hh-ready>
         <div class="hh-empty">
           <h1 class="hh-empty__title">The brand kit file could not be read</h1>
           <p>The file is on disk, and it is not a kit this desk can show.</p>

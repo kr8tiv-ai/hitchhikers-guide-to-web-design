@@ -14,7 +14,6 @@ import {
   LockHeld,
   ThinkTimeoutError,
 } from "@hitchhiker/engine";
-import { escapeHtml, SKIP_LABEL, SUGGEST_LABEL } from "../src/card.ts";
 import { parseSession } from "../src/client/desk.ts";
 import { browserLaunch, openBrowser, windowsBrowserLaunch } from "../src/server/open-browser.ts";
 import { createSseHub, HEARTBEAT_MS } from "../src/server/sse.ts";
@@ -129,9 +128,8 @@ test("the server binds to 127.0.0.1 and refuses any other host", async () => {
     assert.match(html, /Is this site for you, or for a client\?/);
     assert.match(html, /src="\/client\/desk\.js"/);
     assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
-    // Prompt 167 names these two labels, including the em dash. The rest of the page stays clear of it.
-    const withoutLabels = html.replaceAll(escapeHtml(SUGGEST_LABEL), "").replaceAll(escapeHtml(SKIP_LABEL), "");
-    assert.equal(withoutLabels.includes("\u2014"), false);
+    // Suggest and Skip use a colon. The whole page, labels included, stays clear of an em dash.
+    assert.equal(html.includes("\u2014"), false);
     const wrong = await raw(handle.port, `evil.example:${handle.port}`, "GET", "/");
     assert.equal(wrong.status, 421);
     assert.match(wrong.body, /localhost/);

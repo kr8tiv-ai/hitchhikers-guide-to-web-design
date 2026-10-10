@@ -197,7 +197,7 @@ export function renderDriveDocument(
         <p class="hh-dek">${DRIVE_DEK}</p>
       </header>
 
-      <main id="drive-main">
+      <main id="drive-main" data-hh-ready>
       <div class="hh-dash">
         <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue" aria-labelledby="queue-title">
           <div class="hh-drive__toolbar">
@@ -295,7 +295,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">${DRIVE_DEK}</p>
       </header>
-      <main id="drive-main">
+      <main id="drive-main" data-hh-ready>
       <article class="hh-error" id="drive-error" role="alert">
         <p class="hh-kicker">Queue file</p>
         <h2 class="hh-error__title">The queue file could not be read.</h2>

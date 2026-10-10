@@ -48,9 +48,12 @@ export interface CardState {
   enterHint?: boolean;
 }
 
-/** Prompt 167 names these labels. The em dash is the prescribed glyph. */
-export const SUGGEST_LABEL = "Suggest \u2014 I'll mark it as assumed";
-export const SKIP_LABEL = "Skip \u2014 we'll assume";
+/**
+ * Prompt 167 named these labels with an em dash.
+ * Screen copy rejects that glyph, so the break is a colon.
+ */
+export const SUGGEST_LABEL = "Suggest: I'll mark it as assumed";
+export const SKIP_LABEL = "Skip: we'll assume";
 export const ANSWER_HINT = "Enter sends the answer. Shift+Enter adds a line.";
 export const PLACEHOLDER_FALLBACK = "A short sentence in your own words.";
 export const SKIP_CONFIRM = "This one is required. Choose Skip again to write the assumption.";

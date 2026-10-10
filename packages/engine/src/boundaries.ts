@@ -54,7 +54,8 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/templates", allowDeps: ["@hitchhiker/engine"] },
 ];
 
-const DEEP_IMPORT = /@hitchhiker\/[a-z-]+\//g;
+/** Package name, then a slash of either kind, then another path segment. */
+const DEEP_IMPORT = /@hitchhiker[/\\][a-z-]+[/\\]/g;
 
 const IMPORT_SPECIFIER =
   /(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g;
@@ -152,6 +153,11 @@ function importSpecifiers(text: string): string[] {
   return specs;
 }
 
+/** Both separators count, so a Windows-style specifier is the same escape on every OS. */
+function withPlatformSeparators(specifier: string): string {
+  return specifier.split(/[\\/]/).join(path.sep);
+}
+
 function leavesPackage(
   file: string,
   specifier: string,
@@ -160,7 +166,7 @@ function leavesPackage(
   if (!specifier.startsWith(".")) {
     return false;
   }
-  const resolved = path.resolve(path.dirname(file), specifier);
+  const resolved = path.resolve(path.dirname(file), withPlatformSeparators(specifier));
   const relative = path.relative(packageRoot, resolved);
   return (
     relative === ".." ||

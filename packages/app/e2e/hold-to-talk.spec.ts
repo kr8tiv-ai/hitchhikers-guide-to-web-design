@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { TALK_NEEDS_CHROMIUM } from "../src/client/desk.ts";
 
 /**
  * Hold to talk against the served /client/desk.js. Chromium has no microphone
@@ -16,8 +17,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const NOTE = "Chrome sends this audio to its speech service.";
 const RELEASE_EMPTY = "Hold the button while you speak.";
 const BLOCKED = "The microphone is blocked.";
-const UNSUPPORTED = "Voice input needs Chrome or Edge";
-
 type VoiceMode = "words" | "restart" | "stuck" | "fast" | "denied" | "missing";
 
 let child: ChildProcess | null = null;
@@ -183,9 +182,11 @@ test("a blocked microphone shows the alert", async ({ page }) => {
 test("no speech recognition shows the unsupported message", async ({ page }) => {
   const errors = trackErrors(page);
   await openDesk(page, "missing");
-  await pointerDown(page, page.locator('[data-voice="hold"]'));
-  await expect(page.locator('[role="alert"]')).toContainText(UNSUPPORTED);
+  const button = page.locator('[data-voice="hold"]');
+  await expect(button).toHaveText(TALK_NEEDS_CHROMIUM);
+  await expect(button).toBeDisabled();
   await expect(page.locator("[data-voice-note]")).toHaveCount(0);
+  await expect(page.locator('[role="alert"]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -208,14 +209,18 @@ async function openDesk(page: Page, mode: VoiceMode): Promise<void> {
     };
   });
   expect(boot.boot).toBe(mode);
+  const button = page.locator('[data-voice="hold"]');
   if (mode === "missing") {
     expect(boot.speech).toBe("undefined");
     expect(boot.webkit).toBe("undefined");
-  } else {
-    expect(boot.speech).toBe("FakeSpeech");
-    expect(boot.webkit).toBe("FakeSpeech");
+    await expect(button).toHaveText(TALK_NEEDS_CHROMIUM);
+    await expect(button).toBeDisabled();
+    return;
   }
-  await expect(page.locator('[data-voice="hold"]')).toHaveText("Hold to talk");
+  expect(boot.speech).toBe("FakeSpeech");
+  expect(boot.webkit).toBe("FakeSpeech");
+  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toBeEnabled();
 }
 
 function installVoice(mode: VoiceMode): void {

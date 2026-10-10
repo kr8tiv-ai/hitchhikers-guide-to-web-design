@@ -179,7 +179,7 @@ export function renderEmptyBrand(questionId: string | null, intake: LogoIntake |
   const logoBlock = logo === "" ? "" : `\n        ${logo}`;
   return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
         <p class="hh-kicker" id="brand-title">Type</p>
-        <p class="hh-specimen__display">No kit on the desk</p>
+        <h1 class="hh-specimen__display">No kit on the desk</h1>
         <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>${logoBlock}
       </section>
       <div class="hh-empty hh-rise hh-rise--3">

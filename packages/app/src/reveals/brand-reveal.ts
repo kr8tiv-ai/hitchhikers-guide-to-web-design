@@ -92,7 +92,7 @@ export function revealDocument(input: {
         <h1 class="hh-headline">${escapeHtml(input.headline)}</h1>
         <p class="hh-dek">${escapeHtml(input.dek)}</p>
       </header>
-      <main id="reveal">${input.main}</main>
+      <main id="reveal" data-hh-ready>${input.main}</main>
     </div>
   </body>
 </html>

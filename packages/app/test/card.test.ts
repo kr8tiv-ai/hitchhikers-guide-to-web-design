@@ -110,8 +110,8 @@ test("the card shows one question and the three exact actions", () => {
   assert.match(buttonTag(html, "answer"), /type="button"/);
   assert.match(buttonTag(html, "answer"), /\sdisabled(?:\s|>)/);
   assert.match(html, /data-action="answer"[^>]*>Answer<\/button>/);
-  assert.match(html, /data-action="suggest"[^>]*>Suggest — I&#39;ll mark it as assumed<\/button>/);
-  assert.match(html, /data-action="skip"[^>]*>Skip — we&#39;ll assume<\/button>/);
+  assert.match(html, /data-action="suggest"[^>]*>Suggest: I&#39;ll mark it as assumed<\/button>/);
+  assert.match(html, /data-action="skip"[^>]*>Skip: we&#39;ll assume<\/button>/);
   assert.match(buttonTag(html, "suggest"), /type="button"/);
   assert.match(buttonTag(html, "skip"), /type="button"/);
   assert.doesNotMatch(buttonTag(html, "suggest"), /disabled/);

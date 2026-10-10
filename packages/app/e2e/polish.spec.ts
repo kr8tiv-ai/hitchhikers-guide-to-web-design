@@ -109,7 +109,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "desk-question",
         path: "/",
         state: "question",
-        ready: "[data-question-id='DP-0.1']",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(deskUrl);
         },
@@ -118,7 +118,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "gallery-walk",
         path: "/gallery",
         state: "walk",
-        ready: "#hh-gallery .hh-site",
+        ready: "[data-hh-ready]",
         async open(target) {
           await resetGallery(projectDir);
           await writeFile(packFile, JSON.stringify(fixturePack()));
@@ -129,7 +129,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "gallery-empty",
         path: "/gallery",
         state: "empty",
-        ready: ".hh-empty__title",
+        ready: "[data-hh-ready]",
         async open(target) {
           await resetGallery(projectDir);
           await writeFile(packFile, "[]");
@@ -140,7 +140,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "motion-preview",
         path: "/motion",
         state: "preview",
-        ready: "#hh-motion",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(`${deskUrl}motion`);
         },
@@ -149,7 +149,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "brand-empty",
         path: "/brand",
         state: "empty",
-        ready: ".hh-empty__title",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(`${deskUrl}brand`);
         },
@@ -158,7 +158,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "brand-kit",
         path: "/brand",
         state: "kit",
-        ready: "h1.hh-headline",
+        ready: "[data-hh-ready]",
         async open(target) {
           const html = absoluteAssets(renderBrandKit(kitModel()));
           await fulfill(target, `${deskUrl}__polish/brand-kit`, html);
@@ -168,7 +168,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "approve-empty",
         path: "/approve",
         state: "empty",
-        ready: ".hh-empty__title",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(`${deskUrl}approve`);
         },
@@ -177,7 +177,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "approve-gate",
         path: "/approve",
         state: "gate",
-        ready: "#prd-title",
+        ready: "[data-hh-ready]",
         async open(target) {
           const html = absoluteAssets(
             renderApproval({
@@ -194,7 +194,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "dashboard-empty",
         path: "/hh-dashboard",
         state: "empty",
-        ready: "#drive-empty",
+        ready: "[data-hh-ready]",
         async open(target) {
           await rm(path.join(projectDir, ".hitchhiker", "queue.json"), { force: true });
           await target.goto(`${deskUrl}hh-dashboard`);
@@ -204,7 +204,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "dashboard-queue",
         path: "/hh-dashboard",
         state: "queue",
-        ready: ".hh-table",
+        ready: "[data-hh-ready]",
         async open(target) {
           await writeQueue(projectDir, false);
           await target.goto(`${deskUrl}hh-dashboard`);
@@ -214,7 +214,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "dashboard-error",
         path: "/hh-dashboard",
         state: "error",
-        ready: "#drive-error",
+        ready: "[data-hh-ready]",
         async open(target) {
           await writeQueue(projectDir, true);
           await target.goto(`${deskUrl}hh-dashboard`);
@@ -224,7 +224,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "missing-error",
         path: "/missing",
         state: "error",
-        ready: ".hh-empty__title",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(`${deskUrl}not-on-the-desk`);
         },
@@ -252,7 +252,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "before-jump-open",
         path: "/before-jump",
         state: "open",
-        ready: "#hh-card-ask",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(jumpUrl);
         },
@@ -275,7 +275,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         id: "before-jump-clear",
         path: "/before-jump",
         state: "clear",
-        ready: "[data-jump='true']",
+        ready: "[data-hh-ready]",
         async open(target) {
           await target.goto(jumpUrl);
         },
