@@ -1208,8 +1208,10 @@ const PHASE_HREF: Readonly<Record<string, string>> = {
 /**
  * Under 720px the summary is the map and the list waits in the disclosure.
  * 375 is inside max-width 719px. 1440 is not: the summary is hidden and the
- * list stays in the rail. Author display beats the closed-details user-agent
- * rule, so the wide map does not need the open attribute.
+ * list stays in the rail. Chromium hides a closed details body with
+ * content-visibility on ::details-content, so display:grid on the list is
+ * not enough. The wide query turns that visibility back on. The element
+ * stays closed, and the narrow query still hides the list.
  */
 const MAP_FOLD_CSS = `.hh-map-fold { margin: 0; min-width: 0; }
 .hh-map-fold > summary { display: none; }
@@ -1231,6 +1233,7 @@ const MAP_FOLD_CSS = `.hh-map-fold { margin: 0; min-width: 0; }
   .hh-map-fold:not([open]) > .hh-map { display: none; }
 }
 @media (min-width: 720px) {
+  .hh-map-fold::details-content { content-visibility: visible; }
   .hh-map-fold > .hh-map { display: grid; }
 }
 /* Logo drop sits above the composer. 375 is under 720px, so the composer sticks and this zone scrolls with the question. 1440 is outside that query, and the zone stays in the 40rem read column. */

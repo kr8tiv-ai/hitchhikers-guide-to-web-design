@@ -4,6 +4,8 @@
  * Width, from the fold rules in the desk response.
  * 375 is inside max-width 719px: the summary shows and a closed disclosure hides the list.
  * 1440 is inside min-width 720px: the summary is hidden and the phase list stays in the rail.
+ * Chromium keeps a closed details body at content-visibility:hidden on ::details-content.
+ * The wide rule must set that to visible or the rail paints at height 0.
  */
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -105,6 +107,7 @@ test("map phases link to desks and exactly one is the current step", async () =>
       assert.match(html, /\.hh-map-fold:not\(\[open\]\) > \.hh-map \{ display: none; \}/);
       assert.match(html, /\.hh-map-fold > summary \{[\s\S]*display: list-item;/);
       assert.match(html, /@media \(min-width: 720px\)/);
+      assert.match(html, /\.hh-map-fold::details-content \{ content-visibility: visible; \}/);
       assert.match(html, /\.hh-map-fold > \.hh-map \{ display: grid; \}/);
       assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
       const withoutLabels = html
