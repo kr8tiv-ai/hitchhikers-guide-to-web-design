@@ -1,0 +1,9 @@
+Read the project file first. It is pretty-printed JSON. The resumeMd field is the plain-language brief. Read that field before you change anything.
+
+Project file: C:\Users\towel\Desktop\Towel Desk.hhproject
+Project: Towel Desk
+Next: Answer DP-0.2.
+
+Rules: do not skip an approval gate, do not add secrets, do not push unless the owner asked, and quote Windows paths that contain spaces.
+
+Then do the next step named above. This file is enough for any coding agent.

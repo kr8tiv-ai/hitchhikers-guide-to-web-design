@@ -74,6 +74,8 @@ export async function* briefLoop(
     note = yield { draft, approved: false };
   }
   await writeSiteBrief(s.projectDir, draft);
+  const { recordApprovalYes } = await import("../project-file/yes.ts");
+  await recordApprovalYes(s.projectDir, "brief-yes.json");
   yield { draft, approved: true };
 }
 

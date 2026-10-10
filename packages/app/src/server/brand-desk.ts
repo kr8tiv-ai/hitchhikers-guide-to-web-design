@@ -130,6 +130,8 @@ export async function postBrandDecision(
       };
     }
     const allApproved = await approveThroughStatus(projectDir, parsed.section);
+    const { autosaveProject } = await import("@hitchhiker/engine");
+    await autosaveProject(projectDir);
     return {
       status: 200,
       body: { ok: true, section: parsed.section, action: "approve", allApproved },

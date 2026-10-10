@@ -1,8 +1,9 @@
 #!/usr/bin/env -S node --experimental-strip-types
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
+import { isPortableResume, runResumeFile, runSave } from "./commands/project-file.ts";
 import { runAssetsCommand } from "./commands/assets.ts";
 import { runElevateCommand } from "./commands/elevate.ts";
 import { runToolsCommand } from "./commands/tools.ts";
@@ -283,7 +284,13 @@ async function runElevatePlan(
     lines.push(ELEVATE_NEEDS_YES);
     return { exitCode: 2, stdout: `${lines.join("\n")}\n` };
   }
-  if (deps.apply !== undefined) await deps.apply(project);
+  if (deps.apply !== undefined) {
+    await deps.apply(project);
+    if (existsSync(project)) {
+      const { recordApprovalYes } = await import("@hitchhiker/engine");
+      await recordApprovalYes(project, "elevate-yes.json");
+    }
+  }
   lines.push(deps.apply === undefined ? "Nothing was written." : "Applied.");
   return { exitCode: 0, stdout: `${lines.join("\n")}\n` };
 }
@@ -401,8 +408,12 @@ async function dispatchImplemented(
       return routeElevate(argv);
     case "progress":
     case "pause":
-    case "resume":
       return runStateCommand(argv);
+    case "resume":
+      if (isPortableResume(argv)) return runResumeFile(argv);
+      return runStateCommand(argv);
+    case "save":
+      return runSave(argv);
     case "doctor": {
       const parsed = parseArgs(argv);
       if (!parsed.ok) return { exitCode: 2, stdout: `${HELP}\n` };

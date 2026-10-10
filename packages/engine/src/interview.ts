@@ -234,6 +234,8 @@ class InterviewRun {
       this.#clock,
       nextQuestion,
     );
+    const { autosaveProject } = await import("./project-file/autosave.ts");
+    await autosaveProject(this.#projectDir);
   }
 
   #countFor(id: string): number {

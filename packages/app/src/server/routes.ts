@@ -85,6 +85,7 @@ import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
+import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
 import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
@@ -164,6 +165,7 @@ const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const SAVE_SOURCE = path.resolve(SRC_ROOT, "client", "save-status.ts");
 const VOICE_ENGINE_SOURCE = path.resolve(SRC_ROOT, "client", "voice-engine.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
@@ -225,6 +227,9 @@ export async function createDeskApp(opts: {
   }
   const questions = questionsForDepth(loadTree(treeFile(projectDir)), depth);
   let interview = await openInterview(projectDir, depth);
+  const reloadInterview = async (): Promise<void> => {
+    interview = await openInterview(projectDir, depth);
+  };
   let overlay: LiveOverlay = emptyOverlay();
   const rawTurn =
     opts.turnHandler ??
@@ -271,7 +276,7 @@ export async function createDeskApp(opts: {
         return;
       }
       if (method === "POST") {
-        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice);
+        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice, reloadInterview);
         return;
       }
       await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/", notice);
@@ -511,9 +516,18 @@ async function handlePost(
   hub: SseHub,
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
   notice: string | null,
+  reloadInterview: () => Promise<void>,
 ): Promise<void> {
   if (pathname === "/settings") {
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
+    return;
+  }
+  if (
+    pathname === "/api/project/save" ||
+    pathname === "/api/project/open" ||
+    pathname === "/api/project/remove"
+  ) {
+    await handleProjectRoute(req, res, pathname, token, projectDir, reloadInterview);
     return;
   }
   const header = req.headers["x-hh-csrf"];
@@ -550,6 +564,47 @@ async function handlePost(
     return;
   }
   sendJson(req, res, 404, { error: "That route is not on the desk." });
+}
+
+async function handleProjectRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  token: string,
+  projectDir: string,
+  reloadInterview: () => Promise<void>,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const result = await runProjectPost({
+    pathname,
+    projectDir,
+    token,
+    header: req.headers["x-hh-csrf"],
+    raw: capped.body.toString("utf8"),
+    contentType: headerOne(req.headers["content-type"]),
+    tokensMatch,
+  });
+  if (result.type === "redirect") {
+    if (pathname === "/api/project/open") await reloadInterview();
+    res.writeHead(303, { location: "/" });
+    res.end();
+    return;
+  }
+  if (result.type === "html") {
+    sendHtml(req, res, result.status, result.html);
+    return;
+  }
+  sendJson(req, res, result.status, result.body);
 }
 
 async function handleBrandPost(
@@ -781,12 +836,12 @@ async function handleGet(
   if (pathname === "/") {
     const session = view();
     const flags = await enqueue(() => readVoiceDeskFlags(projectDir));
-    sendHtml(req, res, 200, renderDesk(token, session, flags), foldStyleHeaders());
+    await deliverHtml(req, res, 200, renderDesk(token, session, flags), projectDir, token, true, foldStyleHeaders());
     return;
   }
   if (pathname === "/gallery") {
     const opened = await enqueue(() => openGallery(projectDir, rawUrl));
-    sendHtml(req, res, 200, renderGallery(token, opened.view, notice));
+    await deliverHtml(req, res, 200, renderGallery(token, opened.view, notice), projectDir, token, false);
     return;
   }
   if (pathname === "/api/gallery") {
@@ -804,13 +859,13 @@ async function handleGet(
     return;
   }
   if (pathname === "/motion") {
-    sendHtml(req, res, 200, renderMotion(token, notice));
+    await deliverHtml(req, res, 200, renderMotion(token, notice), projectDir, token, false);
     return;
   }
   if (pathname === "/client/motion.js") {
     const compiled = compileAppModule(MOTION_SOURCE);
     if (compiled === null) {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
@@ -820,14 +875,14 @@ async function handleGet(
     try {
       sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(buildTheatreBundle()));
     } catch {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
     }
     return;
   }
   if (pathname.startsWith("/vendor-pkg/")) {
     const body = readVendorModule(pathname);
     if (body === null) {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(body));
@@ -837,7 +892,7 @@ async function handleGet(
     const rel = pathname.slice("/src/".length).replace(/\.js$/, ".ts");
     const compiled = compileAppModule(path.resolve(SRC_ROOT, rel));
     if (compiled === null) {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
@@ -852,15 +907,15 @@ async function handleGet(
       const html = raster
         ? renderBrand(token, notice, questionId, intake, ["/src/brand-kit.css"])
         : renderBrand(token, notice, questionId, intake);
-      sendHtml(req, res, 200, html);
+      await deliverHtml(req, res, 200, html, projectDir, token, false);
       return;
     }
     const nav = `${deskMenu(false)}\n        ${routeNav("/brand")}`;
     if (loaded.kind === "bad") {
-      sendHtml(req, res, 500, renderBrandKitError(token, nav));
+      await deliverHtml(req, res, 500, renderBrandKitError(token, nav), projectDir, token, false);
       return;
     }
-    sendHtml(req, res, 200, injectBrandLogo(dressBrandKit(loaded.html, token, nav), intake), brandKitHeaders());
+    await deliverHtml(req, res, 200, injectBrandLogo(dressBrandKit(loaded.html, token, nav), intake), projectDir, token, false, brandKitHeaders());
     return;
   }
   if (pathname === "/brand/logo") {
@@ -868,23 +923,23 @@ async function handleGet(
     return;
   }
   if (pathname === "/approve") {
-    sendHtml(req, res, 200, renderApprove(token, notice, view().question?.id ?? null));
+    await deliverHtml(req, res, 200, renderApprove(token, notice, view().question?.id ?? null), projectDir, token, false);
     return;
   }
   if (pathname === "/settings") {
     try {
       const settingsView = await enqueue(() => loadSettingsView(projectDir));
-      sendHtml(req, res, 200, renderSettingsDocument(token, settingsView, notice, null));
+      await deliverHtml(req, res, 200, renderSettingsDocument(token, settingsView, notice, null), projectDir, token, false);
     } catch (error: unknown) {
       logDeskError(error);
-      sendHtml(req, res, 500, renderSettingsFailure(token, notice));
+      await deliverHtml(req, res, 500, renderSettingsFailure(token, notice), projectDir, token, false);
     }
     return;
   }
   if (pathname === "/hh-dashboard") {
     const drive = await readDashboard(projectDir, token);
     if (drive.kind === "html") {
-      sendHtml(req, res, drive.status, withDeskMenu(drive.html));
+      await deliverHtml(req, res, drive.status, withDeskMenu(drive.html), projectDir, token, false);
       return;
     }
     sendDriveResult(req, res, drive);
@@ -904,6 +959,10 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/save-status.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(SAVE_SOURCE)));
     return;
   }
   if (pathname === "/client/voice-engine.js") {
@@ -958,12 +1017,12 @@ async function handleGet(
     const ext = path.extname(pathname).toLowerCase();
     const type = STATIC_TYPES[ext];
     if (type === undefined) {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
       return;
     }
     const body = await readInside(root, pathname.slice(prefix.length));
     if (body === null) {
-      sendHtml(req, res, 404, renderMissing(token, notice));
+      await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
       return;
     }
     sendBytes(req, res, 200, type, body);
@@ -973,7 +1032,7 @@ async function handleGet(
     sendJson(req, res, 404, { error: "That route is not on the desk." });
     return;
   }
-  sendHtml(req, res, 404, renderMissing(token, notice));
+  await deliverHtml(req, res, 404, renderMissing(token, notice), projectDir, token, false);
 }
 
 function streamEvents(
@@ -1618,10 +1677,10 @@ async function replySettings(
   try {
     const view = result?.view ?? (await enqueue(() => loadSettingsView(projectDir)));
     const flash = status === 200 ? { kind: "ok" as const, text } : { kind: "warn" as const, text };
-    sendHtml(req, res, status, renderSettingsDocument(token, view, notice, flash));
+    await deliverHtml(req, res, status, renderSettingsDocument(token, view, notice, flash), projectDir, token, false);
   } catch (error: unknown) {
     logDeskError(error);
-    sendHtml(req, res, status, renderSettingsFailure(token, notice));
+    await deliverHtml(req, res, status, renderSettingsFailure(token, notice), projectDir, token, false);
   }
 }
 
@@ -2691,6 +2750,20 @@ function sendJson(
   body: unknown,
 ): void {
   sendBytes(req, res, status, "application/json; charset=utf-8", Buffer.from(JSON.stringify(body)));
+}
+
+async function deliverHtml(
+  req: IncomingMessage,
+  res: ServerResponse,
+  status: number,
+  html: string,
+  projectDir: string,
+  token: string,
+  first: boolean,
+  headers?: Record<string, string>,
+): Promise<void> {
+  const chrome = await projectChrome(projectDir, token, first);
+  sendHtml(req, res, status, applyProjectChrome(html, chrome), headers);
 }
 
 function sendHtml(

@@ -17,9 +17,10 @@
  * rejection: their commands upload a directory of built files.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { SpawnLike } from "@hitchhiker/engine";
+import { recordApprovalYes, type SpawnLike } from "@hitchhiker/engine";
 import { deployCloudflare } from "./cloudflare.ts";
 import {
   loadHostingerSite,
@@ -360,6 +361,9 @@ export async function deploy(
 ): Promise<DeployOutcome> {
   const approved = await deps.yes();
   if (approved !== true) return { declined: true };
+  if (existsSync(projectDir)) {
+    await recordApprovalYes(projectDir, "hostinger-yes.json");
+  }
 
   const decision = await readSiteShape(projectDir);
   if (target === "hostinger") {

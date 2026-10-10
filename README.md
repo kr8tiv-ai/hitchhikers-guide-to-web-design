@@ -364,10 +364,19 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh elevate` | One Elevate round. A pick needs the user's yes. |
 | `hh progress` | Phase, slice, prompt, next action. |
 | `hh pause` | Save the next action. |
-| `hh resume` | Where to continue. |
+| `hh resume` | Where to continue. `hh resume <file>` restores a portable project file. |
+| `hh save` | Write the portable project file. |
 | `hh doctor` | Node, git, grok, an auth classification, session id, effort. Warns if playwright, whisper, or pdftotext is missing. It does not log you in. Exit 1 only when Node is older than 22. |
 | `hh improve` | Bounded loop on an improve branch. A human merges. [docs/improve.md](docs/improve.md). |
 | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
+
+## Save and resume
+
+A long build saves itself. After an answer, an approval, or a finished build prompt, the desk writes one pretty-printed JSON file named `<project>.hhproject`. The default place is your Desktop. If that folder is missing, the file is written in your home folder and the desk says where.
+
+`hh save --project <dir>` writes that file. `hh save --to <path>` picks another place and remembers it. `hh resume <file>` rebuilds the project from the file. `hh resume --project <dir>` still prints the prompt id and does not rewrite state.
+
+The file includes a plain-language brief and a short resume prompt. Another coding agent can read those and continue. It does not contain API keys. `/hh-save` and `/hh-resume` are the matching skills.
 
 **Skill-only commands.** A slash name is something you type. These are not `hh` subcommands:
 

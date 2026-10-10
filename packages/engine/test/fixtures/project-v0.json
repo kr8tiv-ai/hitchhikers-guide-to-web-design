@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 0,
+  "name": "Towel",
+  "savedAt": "2020-01-01T00:00:00.000Z",
+  "promptId": "interview:DP-0.2",
+  "projectId": "p-v0towel",
+  "answers": [
+    { "id": "DP-0.1", "status": "ANSWERED", "value": "For a client." },
+    { "id": "DP-5.3", "status": "SUGGESTED", "value": "Quiet and dry." }
+  ],
+  "lastDone": "7"
+}

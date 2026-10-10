@@ -18,6 +18,7 @@ export const IMPLEMENTED_COMMANDS = [
   "progress",
   "pause",
   "resume",
+  "save",
   "doctor",
   "improve",
 ] as const;

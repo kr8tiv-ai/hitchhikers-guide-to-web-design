@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 export interface LockInfo {
@@ -207,19 +207,36 @@ export async function withStateLock<T>(
   }
 }
 
+export interface ReplaceOptions {
+  /** Runs after the temp file is flushed and before the rename. */
+  beforeRename?: () => Promise<void>;
+}
+
 /**
- * Write `body` to a temp file in the same directory, then rename it over `targetPath`.
+ * Write `body` to a temp file in the same directory, flush it, then rename it over `targetPath`.
  * The temp file stays in place until the rename, including when the target already exists.
+ * `sync` pushes the bytes to disk before the rename so a kill mid-write leaves the previous file.
  */
 export async function replaceViaTemp(
   targetPath: string,
   body: string,
+  options?: ReplaceOptions,
 ): Promise<void> {
   const tempPath = path.join(
     path.dirname(targetPath),
     `${path.basename(targetPath)}.tmp-${process.pid}`,
   );
-  await writeFile(tempPath, body, "utf8");
+  const handle = await open(tempPath, "w");
+  try {
+    await handle.writeFile(body, "utf8");
+    await handle.sync();
+  } catch (error) {
+    await handle.close();
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
+  }
+  await handle.close();
+  if (options?.beforeRename !== undefined) await options.beforeRename();
   try {
     await rename(tempPath, targetPath);
   } catch (error) {

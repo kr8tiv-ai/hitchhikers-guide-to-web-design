@@ -17,6 +17,7 @@ import path from "node:path";
 import {
   loadState,
   replaceViaTemp,
+  autosaveProject,
   saveState,
   withStateLock,
   type GuideState,
@@ -48,7 +49,7 @@ interface AdvanceInput {
 
 export async function advance(input: AdvanceInput): Promise<{ nextId: string | null }> {
   assertInput(input);
-  return withStateLock(input.projectDir, async () => {
+  const result = await withStateLock(input.projectDir, async () => {
     const queue = await readQueue(input.projectDir);
     const updatedAt = new Date().toISOString();
     const applied = applyAdvance(queue, loadState(input.projectDir), input, updatedAt);
@@ -57,6 +58,8 @@ export async function advance(input: AdvanceInput): Promise<{ nextId: string | n
     await replaceViaTemp(statePath(input.projectDir), markdown);
     return { nextId: applied.nextId };
   });
+  await autosaveProject(input.projectDir);
+  return result;
 }
 
 function assertInput(input: AdvanceInput): void {
