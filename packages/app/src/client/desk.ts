@@ -406,6 +406,10 @@ export function mountDesk(env: DeskEnv): () => void {
   let voiceInterim = "";
   let voiceError: string | null = null;
   let skipConfirm = false;
+  /** True while Suggest must not replace the question card. */
+  let cardHold = false;
+  /** The suggestion on screen, plus the next session waiting for Answer. */
+  let suggestHold: { questionId: string; suggestion: string; session: SessionView } | null = null;
   const editing = new Set<string>();
   let logoSaved: { id: string; text: string } | null = null;
 
@@ -433,6 +437,10 @@ export function mountDesk(env: DeskEnv): () => void {
     const target = event.target;
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     draft = target.value ?? "";
+    if (suggestHold !== null) {
+      if (draft.trim() === suggestHold.suggestion.trim()) showAssumed(suggestHold.suggestion);
+      else hideAssumed();
+    }
     if (skipConfirm) {
       skipConfirm = false;
       const note = region()?.querySelector("[data-skip-confirm]");
@@ -866,6 +874,20 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const session = parseSession(payload);
     if (session === null || view === null) return;
+    if (cardHold) {
+      if (view.question === null) return;
+      const questionId = suggestHold?.questionId ?? view.question.id;
+      if (
+        suggestHold !== null &&
+        signature(session) === signature(suggestHold.session) &&
+        session.transcriptHtml === suggestHold.session.transcriptHtml
+      ) {
+        return;
+      }
+      // The stream arrives before the POST body. Park the suggestion on this card.
+      placeSuggestion(session, questionId);
+      return;
+    }
     if (signature(session) === signature(view)) return;
     view = session;
     draft = "";
@@ -879,8 +901,20 @@ export function mountDesk(env: DeskEnv): () => void {
 
   async function submit(action: "answer" | "suggest" | "skip"): Promise<void> {
     if (pending || token === null || view === null || view.question === null) return;
-    const field = region()?.querySelector("#hh-card-draft");
-    if (field !== null && field !== undefined && typeof field.value === "string") draft = field.value;
+    readDraft();
+    if (action === "suggest") {
+      if (suggestHold !== null) return;
+      await requestSuggestion(view.question.id);
+      return;
+    }
+    if (action === "answer" && suggestHold !== null) {
+      await acceptSuggestion();
+      return;
+    }
+    if (action === "skip" && suggestHold !== null) {
+      suggestHold = null;
+      cardHold = false;
+    }
     if (action === "answer" && draft.trim() === "") {
       error = EMPTY_ANSWER;
       paint();
@@ -920,6 +954,204 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       if (advance) focusNewQuestion();
     }
+  }
+
+  async function requestSuggestion(questionId: string): Promise<void> {
+    if (token === null) return;
+    pending = true;
+    error = null;
+    notice = null;
+    cardHold = true;
+    setBusy(true);
+    let result: { ok: true; session: SessionView } | { ok: false; error: string };
+    try {
+      result = await postTurn("suggest", token, { questionId }, env.fetch);
+    } catch {
+      result = { ok: false, error: DRAFT_KEPT };
+    }
+    pending = false;
+    if (!result.ok) {
+      // A session event may already have placed the suggestion. Do not paint over it.
+      if (suggestHold !== null) {
+        setBusy(false);
+        return;
+      }
+      cardHold = false;
+      showFieldError(result.error);
+      setBusy(false);
+      return;
+    }
+    placeSuggestion(result.session, questionId);
+  }
+
+  async function acceptSuggestion(): Promise<void> {
+    if (suggestHold === null || token === null) return;
+    readDraft();
+    if (draft.trim() === "") {
+      showFieldError(EMPTY_ANSWER);
+      return;
+    }
+    const held = suggestHold;
+    if (draft.trim() === held.suggestion.trim()) {
+      suggestHold = null;
+      cardHold = false;
+      view = held.session;
+      draft = "";
+      error = null;
+      notice = null;
+      pending = false;
+      paint();
+      focusNewQuestion();
+      return;
+    }
+    pending = true;
+    error = null;
+    notice = null;
+    setBusy(true);
+    let advance = false;
+    try {
+      const result = await postTurn("answer", token, { questionId: held.questionId, text: draft }, env.fetch);
+      if (!result.ok) {
+        showFieldError(result.error);
+        return;
+      }
+      suggestHold = null;
+      cardHold = false;
+      view = result.session;
+      draft = "";
+      error = null;
+      advance = true;
+    } catch {
+      showFieldError(DRAFT_KEPT);
+    } finally {
+      pending = false;
+      if (advance) {
+        paint();
+        focusNewQuestion();
+      } else {
+        setBusy(false);
+      }
+    }
+  }
+
+  function suggestionText(session: SessionView, questionId: string): string {
+    const assumed = session.assumption;
+    if (assumed !== null && assumed.kind === "suggested") {
+      return assumed.value.trim().replace(/^ASSUMED:\s*/i, "");
+    }
+    if (view !== null && view.question !== null && view.question.id === questionId) {
+      return (view.question.suggest ?? "").trim().replace(/^ASSUMED:\s*/i, "");
+    }
+    return "";
+  }
+
+  function placeSuggestion(session: SessionView, questionId: string): void {
+    const incoming = suggestionText(session, questionId);
+    const previous = suggestHold;
+    const edited = previous !== null && draft.trim() !== previous.suggestion.trim();
+    const suggestion = incoming !== "" ? incoming : (previous?.suggestion ?? "");
+    suggestHold = {
+      questionId,
+      suggestion: edited && previous !== null ? previous.suggestion : suggestion,
+      session,
+    };
+    cardHold = true;
+    if (!edited) {
+      draft = suggestion;
+      const field = region()?.querySelector("#hh-card-draft");
+      if (field !== null && field !== undefined) field.value = suggestion;
+      if (suggestion !== "") showAssumed(suggestion);
+      else hideAssumed();
+      clearFieldError();
+    }
+    const transcript = env.document.querySelector('[data-region="transcript"]');
+    if (transcript !== null) transcript.innerHTML = session.transcriptHtml;
+    if (!pending) setBusy(false);
+  }
+
+  function showAssumed(text: string): void {
+    const question = region();
+    if (question === null) return;
+    const clean = text.trim().replace(/^ASSUMED:\s*/i, "");
+    const line = `Assumed: ${clean}`;
+    const existing = question.querySelector("#hh-card-assumed");
+    if (existing !== null) {
+      existing.removeAttribute("hidden");
+      existing.setAttribute("data-assumed", "suggested");
+      existing.setAttribute("class", "hh-qcard__assumed");
+      if ("textContent" in existing) existing.textContent = line;
+      return;
+    }
+    const ask = question.querySelector("#hh-card-ask");
+    if (ask === null || typeof ask.insertAdjacentHTML !== "function") return;
+    ask.insertAdjacentHTML(
+      "beforebegin",
+      `<p class="hh-qcard__assumed" id="hh-card-assumed" data-assumed="suggested">${escapeHtml(line)}</p>`,
+    );
+  }
+
+  function hideAssumed(): void {
+    const node = region()?.querySelector("#hh-card-assumed");
+    if (node === null || node === undefined) return;
+    node.removeAttribute("data-assumed");
+    node.setAttribute("hidden", "");
+    node.setAttribute("class", "hh-qcard__assumed");
+    if ("textContent" in node) node.textContent = "";
+  }
+
+  function showFieldError(message: string): void {
+    error = message;
+    const node = region()?.querySelector("[data-card-error]");
+    if (node === null || node === undefined) return;
+    if ("textContent" in node) node.textContent = message;
+    node.setAttribute("role", "alert");
+    node.setAttribute("class", "hh-error hh-qcard__error");
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field === null || field === undefined) return;
+    field.setAttribute("aria-invalid", "true");
+    const described = field.getAttribute("aria-describedby") ?? "";
+    if (!described.split(/\s+/).includes("hh-card-error")) {
+      field.setAttribute("aria-describedby", `${described} hh-card-error`.trim());
+    }
+  }
+
+  function clearFieldError(): void {
+    error = null;
+    const node = region()?.querySelector("[data-card-error]");
+    if (node === null || node === undefined) return;
+    if ("textContent" in node) node.textContent = "";
+    node.removeAttribute("role");
+    node.setAttribute("class", "hh-qcard__error");
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined) field.removeAttribute("aria-invalid");
+  }
+
+  function setBusy(on: boolean): void {
+    const question = region();
+    if (question === null) return;
+    const article = question.querySelector("[data-question-id]");
+    if (article !== null) {
+      if (on) article.setAttribute("aria-busy", "true");
+      else article.removeAttribute("aria-busy");
+    }
+    for (const name of ["answer", "suggest", "skip"] as const) {
+      const button = question.querySelector(`[data-action="${name}"]`);
+      if (button === null) continue;
+      const lock = on || (name === "answer" && draft.trim() === "");
+      button.disabled = lock;
+      if (lock) button.setAttribute("disabled", "");
+      else button.removeAttribute("disabled");
+    }
+    const voice = question.querySelector('[data-voice="hold"]');
+    if (voice === null) return;
+    if (on) {
+      voice.disabled = true;
+      voice.setAttribute("disabled", "");
+      return;
+    }
+    if ((voice.textContent ?? "") === TALK_NEEDS_CHROMIUM) return;
+    voice.disabled = false;
+    voice.removeAttribute("disabled");
   }
 
   function firstFile(list: ArrayLike<File> | undefined): File | null {

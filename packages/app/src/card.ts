@@ -294,6 +294,8 @@ export function renderCard(state: CardState): string {
     describedBy === "" ? "" : ` aria-describedby="${describedBy}"`,
   ].join("");
   const alert = state.error === null ? "" : ' role="alert"';
+  // An empty slot stays in the card for a later failure. The red treatment is only for a real error.
+  const errorClass = state.error === null ? "hh-qcard__error" : "hh-error hh-qcard__error";
   const busy = state.pending ? ' aria-busy="true"' : "";
   const pushAttr = state.pushback === null ? "" : attr("data-pushback", state.pushback);
   const pushLine =
@@ -312,7 +314,7 @@ ${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
   </label>
-${hintLine}  <p class="hh-error hh-qcard__error" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
+${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
 ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
     ${talkButton(state.pending, state.listening === true)}
     ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}

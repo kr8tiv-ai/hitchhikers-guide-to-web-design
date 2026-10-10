@@ -67,11 +67,14 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     await say(page, "The site exists so a neighbor can order tea without calling.", "real sites should we walk", "DP-5.2");
 
     await page.locator('[data-action="suggest"]').click();
-    await expect(page.locator("[data-question-id='DP-5.3']")).toBeVisible();
-    await expect(page.locator("#hh-card-ask")).toContainText("three words");
+    await expect(page.locator("[data-question-id='DP-5.2']")).toBeVisible();
+    await expect(page.locator("[data-assumed='suggested']")).toBeVisible();
     await expect(page.locator("[data-gallery='godly']")).toHaveCount(2);
     await expect(page.locator("[data-gallery='awwwards']")).toHaveCount(2);
     await expect(page.locator("[data-suggest-option]")).toHaveCount(4);
+    await page.locator('[data-action="answer"]').click();
+    await expect(page.locator("[data-question-id='DP-5.3']")).toBeVisible();
+    await expect(page.locator("#hh-card-ask")).toContainText("three words");
 
     await say(
       page,
