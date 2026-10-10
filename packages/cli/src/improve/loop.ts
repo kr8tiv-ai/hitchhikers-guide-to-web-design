@@ -191,6 +191,7 @@ export async function runExperimentLoop(input: LoopInput): Promise<{ exitCode: n
   try {
     if (!sameHash()) throw new Error("evaluation hash changed before the baseline.");
     baseline = await input.hooks.evaluate();
+    if (!sameHash()) throw new Error("evaluation hash changed before the baseline.");
   } catch (error: unknown) {
     const note = error instanceof Error ? error.message : "baseline evaluation failed";
     record({

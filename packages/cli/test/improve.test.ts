@@ -475,6 +475,29 @@ test("a minute-budget kill resets, and leaving the branch does not", async () =>
   });
 });
 
+test("a baseline hash change is a crash and does not start a session", async () => {
+  await withRepo("seed", async (cwd) => {
+    seed(cwd);
+    const sessions: SessionRequest[] = [];
+    const outcome = await runImprove(["--max-experiments", "2"], {
+      cwd,
+      now,
+      runSession: async (request) => {
+        sessions.push(request);
+        return { timedOut: false, exitCode: 0, note: "" };
+      },
+      evaluate: async () => {
+        writeFileSync(path.join(cwd, "metric.txt"), "changed during baseline\n", "utf8");
+        return green(0);
+      },
+    });
+    assert.equal(outcome.exitCode, 1);
+    assert.equal(sessions.length, 0);
+    assert.equal(rows(cwd)[0]?.[5], "crash");
+    assert.match(rows(cwd)[0]?.[7] ?? "", /evaluation hash changed before the baseline/);
+  });
+});
+
 test("an existing results log is not dirt and flag budgets reach the session", async () => {
   await withRepo("seed", async (cwd) => {
     seed(cwd);
