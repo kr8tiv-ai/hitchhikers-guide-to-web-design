@@ -177,3 +177,4 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 171 | So Long and Thanks for All the Fish | Don't Panic Release | Logo question drop zone and German restatement toggle | Heart of Gold | xhigh |
 | 172 | So Long and Thanks for All the Fish | Zaphod | Review 160-171 and close the usability and ship pass | Heart of Gold | xhigh |
 | 173 | So Long and Thanks for All the Fish | Forty-Two | Self-improving loop for the Guide: hh improve | Heart of Gold | xhigh |
+| 174 | So Long and Thanks for All the Fish | Forty-Two | Fix CI regressions from prompts 165 and 166 | Heart of Gold | xhigh |
