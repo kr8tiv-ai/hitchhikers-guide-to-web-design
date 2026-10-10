@@ -1,6 +1,6 @@
 # 004. CREDITS.json has two shapes
 
-Status: **proposed**. Not applied.
+Status: **applied** in the post-159 pass.
 
 ## Miss
 
@@ -18,3 +18,7 @@ One parser accepts both shapes and emits one page model. `CC0` and `CC0-1.0` bot
 ## Why this pass did not do it
 
 Unifying the types changes two locked test contracts. That is not a local obvious edit.
+
+## Applied
+
+Commit d6b7483. `parseCredits` in `packages/engine/src/credits-file.ts` accepts the 3D array, the `entries` object, and the `assets` object. `CC0` and `CC0-1.0` both count as public domain. The writer's spelling stays on the row. Test `CC0 and CC0-1.0 are public domain and the writer spelling stays` in `packages/engine/test/credits-file.test.ts`.

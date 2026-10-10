@@ -2,7 +2,7 @@
 
 Prompt 159. This pass looked for drift. It did not ship a new phase.
 
-The product is not done. Two requirements have no code. Seven more are partial and stay as fix prompts. One local typecheck miss was fixed and proved with a test.
+The once-over found two requirements with no code and seven partials, and wrote fix prompts 001–010. Later commits, recorded in `hh-build-plan/post-159/SUMMARY.md`, applied 001–004 and 006–010. Fix 005 was closed with no code change: the name-bound sharp exception stays. Status rows below match that later evidence. Items that no later file marks applied stay under "Still open on purpose".
 
 Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code exists and does not meet the sentence), **MISSING** (no code for the sentence). Every row has a path. Each MISSING row links to its v2 section.
 
@@ -12,13 +12,21 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 
 | Fix | Status | Proof |
 |---|---|---|
-| [001-post-check-title.md](001-post-check-title.md) | Applied | `packages/deploy/src/post-check.ts` `titleText` treats a missing capture as `""`. Test `a multiline title is collapsed and still counts` in `packages/deploy/test/post-check.test.ts`. |
-| [002](002-research-mit-fallback.md) through [009](009-stt-rate-on-a-settings-screen.md) | Proposed | Listed below. Not improvised in this commit. |
+| [001-post-check-title.md](001-post-check-title.md) | Applied | `packages/deploy/src/post-check.ts` `titleText` treats a missing capture as `""`. Test `a multiline title is collapsed and still counts` in `packages/deploy/test/post-check.test.ts`. Commit 662a363. |
+| [002-research-mit-fallback.md](002-research-mit-fallback.md) | Applied | Commit 342bd18. The withdrawal sentence is the only remaining copy. Test `research and v1 record the withdrawn GSAP fallback` in `packages/engine/test/research-docs.test.ts`. |
+| [003-scaffold-state-vs-loadstate.md](003-scaffold-state-vs-loadstate.md) | Applied | Commit ee0ecf3. `loadState` in `packages/engine/src/state.ts` reads the scaffolded GSD template. Test `a scaffolded STATE.md loads and the interview opens on the first question` in `packages/engine/test/state.test.ts`. |
+| [004-credits-json-shapes.md](004-credits-json-shapes.md) | Applied | Commit d6b7483. `parseCredits` in `packages/engine/src/credits-file.ts` accepts `CC0` and `CC0-1.0`. |
+| [005-sharp-lgpl-and.md](005-sharp-lgpl-and.md) | Closed | No commit. `hh-build-plan/post-159/SUMMARY.md`: Matt decided no sharp swap. The name-bound `@img/sharp-*` exception in `packages/qa/src/licenses.ts` stays. |
+| [006-brand-approval-on-the-desk.md](006-brand-approval-on-the-desk.md) | Applied | Commit 241681b. `GET /brand` loads the kit in `packages/app/src/server/routes.ts`. `packages/app/src/server/brand-desk.ts` calls `applyStatus` and `redoSection`. |
+| [007-doctor-auth-probe.md](007-doctor-auth-probe.md) | Applied | Commit e869196. `doctor()` in `packages/cli/src/doctor.ts` prints an `auth:` line and does not run `grok login`. |
+| [008-state-lock-filename.md](008-state-lock-filename.md) | Applied | Commit 65d3bdd. `STATE_LOCK_NAME` is `STATE.md.lock` in `packages/engine/src/lock.ts`. Follow-up c04e938. |
+| [009-stt-rate-on-a-settings-screen.md](009-stt-rate-on-a-settings-screen.md) | Applied | Commit e9c6b41. `packages/grok-plugin/skills/hh-settings/SKILL.md` prints both `quoteStt` labels before xAI speech-to-text can be turned on. No desk route was added. |
+| [010-hh-bin-on-windows.md](010-hh-bin-on-windows.md) | Applied | Commits 1c5d85a and e15dd28. Root `package.json` depends on `hitchhikers-guide` at `workspace:*`, so `pnpm exec` links `hh` before Windows HTML Help. |
 
 ## Conflicts recorded, not rewritten
 
-- D-001 and [v2 §15](../CONTEXT-PACKAGE.v2.md) withdraw the GSAP MIT fallback and the "avoid Theatre" note. `context/research/00-SUMMARY.md`, `context/research/06-library-stack.md`, and `CONTEXT-PACKAGE.md` (v1) still contain that language. Product code does not implement a switch. See fix 002.
-- [v2 §4](../CONTEXT-PACKAGE.v2.md) names the lock `STATE.md.lock`. `packages/engine/src/lock.ts` exports `STATE_LOCK_NAME = "state.lock"`. Matt and `DECISIONS.md` are silent on the filename. Behavior (exclusive create, stale pid) is present. The name was not changed. See fix 008.
+- D-001 and [v2 §15](../CONTEXT-PACKAGE.v2.md) withdraw the GSAP MIT fallback and the "avoid Theatre" note. Commit 342bd18 replaced the live advice in `context/research/00-SUMMARY.md`, `context/research/06-library-stack.md`, and `CONTEXT-PACKAGE.md` (v1). Each file keeps one withdrawal sentence that other docs cite. Product code does not implement a switch. Fix 002 is applied.
+- [v2 §4](../CONTEXT-PACKAGE.v2.md) names the lock `STATE.md.lock`. Commit 65d3bdd set `STATE_LOCK_NAME` to that name in `packages/engine/src/lock.ts`. A dead legacy `state.lock` is removed. Fix 008 is applied.
 - `CRITIQUE.md` §9 (Q-A through Q-G) is already answered or defaulted. Those items are not new misses. Q-B is the Towel & Tea fixture. Q-E keeps X posting out of v1. Q-F keeps `@theatre/studio` out.
 
 ## v2 §4 Surfaces
@@ -33,12 +41,12 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | Voice is push-to-talk. The Guide replies in text. No TTS | PRESENT | `packages/voice/`, `packages/grok-plugin/skills/hh-settings/SKILL.md` |
 | Default speech engine is whisper.cpp, local, models named in the spec | PRESENT | `packages/voice/src/whisper.ts` |
 | Optional xAI STT quotes $0.10/hr REST and $0.20/hr streaming | PRESENT | `packages/voice/src/xai-stt.ts` `quoteStt` |
-| A settings screen shows that rate before xAI speech-to-text can be turned on | **MISSING** | No settings route. `packages/app/src/server/routes.ts` routes are `/`, `/brand`, `/approve`, `/hh-dashboard`, `/gallery`, `/motion`. [v2 §4](../CONTEXT-PACKAGE.v2.md). Fix [009](009-stt-rate-on-a-settings-screen.md). |
-| `STATE.md` is the spine that interview open can read | PARTIAL | `saveState` / `loadState` in `packages/engine/src/state.ts` want short headings. `scaffoldProject` in `packages/engine/src/spec/scaffold.ts` writes the GSD template. `openInterview` in `packages/engine/src/interview.ts` calls `loadState` and throws on a fresh scaffold. Fix [003](003-scaffold-state-vs-loadstate.md). |
+| A settings screen shows that rate before xAI speech-to-text can be turned on | PRESENT | `/hh-settings` prints both `quoteStt` labels ($0.10/h rest, $0.20/h streaming) before xAI speech-to-text can be turned on. `packages/grok-plugin/skills/hh-settings/SKILL.md`. Commit e9c6b41. Fix [009](009-stt-rate-on-a-settings-screen.md) applied. No desk route was added. |
+| `STATE.md` is the spine that interview open can read | PRESENT | `loadState` in `packages/engine/src/state.ts` reads the short headings and the scaffolded GSD template. Test `a scaffolded STATE.md loads and the interview opens on the first question` in `packages/engine/test/state.test.ts`. Commit ee0ecf3. Fix [003](003-scaffold-state-vs-loadstate.md) applied. |
 | Lock is an exclusive create and goes stale after a dead pid | PRESENT | `packages/engine/src/lock.ts` |
-| Lock file is named `STATE.md.lock` | PARTIAL | Constant is `state.lock` in `packages/engine/src/lock.ts`. [v2 §4](../CONTEXT-PACKAGE.v2.md). Fix [008](008-state-lock-filename.md). |
+| Lock file is named `STATE.md.lock` | PRESENT | `STATE_LOCK_NAME = "STATE.md.lock"` in `packages/engine/src/lock.ts`. Commit 65d3bdd. Fix [008](008-state-lock-filename.md) applied. |
 | Progress stays visible and a phase ends with a reveal | PRESENT | Guide map on `/`. `packages/app/src/reveals/brand-reveal.ts` |
-| Item-by-item brand approval is reachable on the live desk | PARTIAL | `renderBrand` in `packages/app/src/server/routes.ts` prints the empty plate and does not call `renderBrandKit`. `applyStatus` in `packages/engine/src/brand/approve.ts` writes a status only when every section is true. `bindApproveDeck` in `packages/app/src/brand/approve-cards.ts` calls a callback and does not write a file. Fix [006](006-brand-approval-on-the-desk.md). |
+| Item-by-item brand approval is reachable on the live desk | PRESENT | `GET /brand` in `packages/app/src/server/routes.ts` calls `loadBrandKit`. When a kit file exists, `packages/app/src/server/brand-desk.ts` renders it and `POST /api/brand` calls `applyStatus` / `redoSection`. The empty plate stays when no kit file exists. Commit 241681b. Fix [006](006-brand-approval-on-the-desk.md) applied. |
 
 ## v2 §8.4 Required minimum
 
@@ -74,8 +82,8 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | SEO: unique title, meta, OG, one H1, alt, sitemap, robots, canonical, JSON-LD | PRESENT | `packages/qa/` and `packages/deploy/src/post-check.ts` |
 | The CI typecheck that guards that post-check can run | PRESENT | Fixed this pass. `.github/workflows/ci.yml` runs `pnpm exec tsc -b`. Review 158 had recorded TS2532 on `match[1]`. |
 | Visual diffs against the last PASS in this environment | PRESENT | `packages/qa/` |
-| Links and weight. Hero video cap. Credits file and page match | PARTIAL on credits | Weight and link checks live in `packages/qa/`. Two CREDITS.json shapes disagree: assets use `CC0-1.0`, the template fetcher accepts `CC0` and rejects `CC0-1.0` (review 087). [v2 §12](../CONTEXT-PACKAGE.v2.md) "File and page match". Fix [004](004-credits-json-shapes.md). |
-| Brand ≥ 8/10 on each dimension, plus the user's approval | PRESENT as a gate | `packages/qa/` jury and brand score. The live desk wiring is the §4 partial above. |
+| Links and weight. Hero video cap. Credits file and page match | PRESENT | Weight and link checks live in `packages/qa/`. `parseCredits` in `packages/engine/src/credits-file.ts` accepts the 3D array, `entries`, and `assets`. `CC0` and `CC0-1.0` both count as public domain. Commit d6b7483. Fix [004](004-credits-json-shapes.md) applied. |
+| Brand ≥ 8/10 on each dimension, plus the user's approval | PRESENT as a gate | `packages/qa/` jury and brand score. The live desk wiring is the §4 row above. Fix 006 applied in 241681b. |
 | Jury weights 40/30/20/10. Elevate is repeatable and a regressed gate does not merge. The word stays banned in site copy | PRESENT | `packages/qa/`, `packages/cli/src/commands/elevate.ts`, anti-slop lint |
 
 ## v2 §14 Anti-slop
@@ -96,7 +104,7 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | Lenis, Three, OGL or WebGL2, Motion, anime.js, `@theatre/core`, CSS scroll-driven, and vanilla are reachable from the pack or the templates | PRESENT | Headings in `packages/knowledge/packs/motion/recipes.md`: GSAP SplitText, CSS scroll-driven, Motion in a React island, anime.js stagger, OGL shader, Three.js lazy hero, Theatre core on the ticker, Vanilla IntersectionObserver fade, Reduced motion |
 | `@theatre/core` is pinned. `@theatre/studio` is not imported | PRESENT | No import of `@theatre/studio` in product source. Pin recorded in `hh-build-plan/RESEARCH-ADDENDUM.md` and D-001. |
 | No MIT-fallback switch in product code. `renderMotionMd` throws on `gsap fallback` and on `@theatre/studio` | PRESENT | `packages/engine/src/spec/motion.ts` |
-| Research and v1 still tell a reader to keep a MIT fallback and to avoid Theatre | PARTIAL | `context/research/00-SUMMARY.md`, `context/research/06-library-stack.md`, `CONTEXT-PACKAGE.md` near the GSAP licence paragraphs. [v2 §15](../CONTEXT-PACKAGE.v2.md) and [v2 §21](../CONTEXT-PACKAGE.v2.md). Fix [002](002-research-mit-fallback.md). This pass did not add a fallback project. |
+| Research and v1 defer GSAP to D-001. No MIT-fallback switch | PRESENT | The live advice was replaced by one withdrawal sentence in `context/research/00-SUMMARY.md`, `context/research/06-library-stack.md`, and `CONTEXT-PACKAGE.md`. Commit 342bd18. Test in `packages/engine/test/research-docs.test.ts`. Fix [002](002-research-mit-fallback.md) applied. No fallback project was added. |
 | Generated pages import only the chosen effects | PRESENT | `packages/templates/astro-default/src/pages/index.astro` imports none of the toolkit. Effect modules are per-effect. |
 | One scroll owner. Lenis+ScrollTrigger or CSS `animation-timeline`, not both | PRESENT | `packages/templates/` `motion-contract.ts` refuses both. `packages/engine/src/spec/motion.ts` coexistence list. |
 | One ticker (`gsap.ticker`), one WebGL context, one timeline owner per element | PRESENT | `packages/engine/src/spec/motion.ts` and `packages/templates/` `shared/motion.ts` (`wireLenis`, `registerEffect`) |
@@ -111,7 +119,7 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | The 22 commands exist as skills with `user-invocable: true` | PRESENT | `packages/grok-plugin/skills/hh-new` through `hh-help`, plus `guide-persona` |
 | Deploy and other side effects set `disable-model-invocation: true` | PRESENT | `packages/grok-plugin/skills/hh-so-long/SKILL.md` and the matching side-effect skills |
 | `/hh-doctor` probes session-id shape and does not treat a slug as a legal `--session-id` | PRESENT | `packages/cli/src/doctor.ts`, `packages/cli/src/session-probe.ts`. This machine classified `uuid`. |
-| `/hh-doctor` probes auth | **MISSING** | `doctor()` checks node, git, `grok --version`, `grok --help`, and optional playwright / whisper / pdftotext. The word `auth` does not appear. Exit 1 only when node is older than 22. [v2 §18](../CONTEXT-PACKAGE.v2.md). Fix [007](007-doctor-auth-probe.md). This pass did not run `grok login`. |
+| `/hh-doctor` probes auth | PRESENT | `doctor()` in `packages/cli/src/doctor.ts` reads `grok --help` for a bare auth-status flag and prints `auth:`. It does not run `grok login`. Commit e869196. Fix [007](007-doctor-auth-probe.md) applied. |
 | Fourteen skills have no matching `hh` subcommand and point at `/hh-help` | Note, not a §18 miss | Review 151. §18 names skills. The short CLI help string in `packages/cli/src/main.ts` is `hh doctor [--project <dir>]`. Other subcommands live under `packages/cli/src/commands/`. |
 
 ## v2 §19 Repo shape
@@ -123,8 +131,8 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | `evals/towel-and-tea/` fictional fixture. Aura Homes is not required | PRESENT | `evals/towel-and-tea/` |
 | MIT license, NOTICE, secrets in the keychain or `.env.local` | PRESENT | `LICENSE`, `NOTICE`, `packages/qa/src/secrets.ts` |
 | `.planning/` is not the Guide state directory | PRESENT | `scaffoldProject` throws if a template mentions `.planning`. Home index is `os.homedir()` plus `.hitchhiker/index.json` (`packages/engine/src/home-index.ts`). |
-| Licence audit accepts the seven permissive identifiers, plus the named sharp exception | PARTIAL | `auditDeps` in `packages/qa/src/licenses.ts` allows `Apache-2.0 AND LGPL-3.0-or-later` only when the name starts with `@img/sharp-`. A lone LGPL fails. NOTICE names the exception. The audit in this pass returned ok. [v2 §19](../CONTEXT-PACKAGE.v2.md). Fix [005](005-sharp-lgpl-and.md). Sharp was not removed. |
-| `packages/cli` is the `hh` binary and `pnpm -w exec hh doctor` runs it | PARTIAL | `packages/cli/package.json` declares `"bin": { "hh": "./src/main.ts" }`. Root `node_modules/.bin` has `tsc` and `tsserver` only. On this Windows machine `pnpm -w exec hh doctor` resolved to `hh.exe` (HTML Help) and printed nothing. The program itself runs: `node --experimental-strip-types packages/cli/src/main.ts doctor` exited 0. [v2 §19](../CONTEXT-PACKAGE.v2.md). Fix [010](010-hh-bin-on-windows.md). The command name was not renamed. |
+| Licence audit accepts the seven permissive identifiers, plus the named sharp exception | PRESENT | `auditDeps` in `packages/qa/src/licenses.ts` allows `Apache-2.0 AND LGPL-3.0-or-later` only when the name starts with `@img/sharp-`, and a lone LGPL only for `@img/sharp-libvips-`. NOTICE names the exception. Fix [005](005-sharp-lgpl-and.md) closed in `hh-build-plan/post-159/SUMMARY.md`: no sharp swap, and the exception was not widened. |
+| `packages/cli` is the `hh` binary and `pnpm -w exec hh doctor` runs it | PRESENT | Root `package.json` is named `hitchhikers-guide-to-web-design` and depends on `hitchhikers-guide` at `workspace:*`. `packages/cli/package.json` keeps `"bin": { "hh": "./src/main.ts" }`. Commits 1c5d85a and e15dd28. Fix [010](010-hh-bin-on-windows.md) applied. The command name was not renamed. |
 
 ## Matt Q1–Q40
 
@@ -136,11 +144,11 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | Q4 | Free and open source | PRESENT | `LICENSE` MIT |
 | Q5 | Product name is The Hitchhiker's Guide to Web Design. The Oct 5 answer file still shows the shortlist | PRESENT | App chrome, package metadata, this plan. The shortlist line was not reopened. |
 | Q6 | Ask experience. Simple in, technical out | PRESENT | DP-0.2, DP-0.3, DP-0.4 |
-| Q7 | Save and resume, show progress | PARTIAL | Home index and the Guide map are present. Fresh scaffold vs `loadState` is fix 003. |
+| Q7 | Save and resume, show progress | PRESENT | Home index and the Guide map. `loadState` reads a fresh scaffold. Fix 003 applied in ee0ecf3. |
 | Q8 | Funny, artsy, pushes back. Text replies. No TTS | PRESENT | `packages/grok-plugin/skills/guide-persona/SKILL.md` |
 | Q9 | Suggest for me. Real example sites for taste | PRESENT | Desk button. DP-5.2 guided walk. |
 | Q10 | User approves PRD, context, and prompts | PRESENT | Phase gates in the engine spec writers |
-| Q11 | Skip with assets. Always ask "happy with this?" | PARTIAL | Interview skip and suggest exist. Live `/brand` does not persist Approve. Fix 006. |
+| Q11 | Skip with assets. Always ask "happy with this?" | PRESENT | Interview skip and suggest exist. Live `/brand` persists Approve through `applyStatus`. Fix 006 applied in 241681b. |
 | Q12 | Logo via Imagine, SVG, full mini brand kit unless they brought one | PRESENT | `packages/assets/`, Babel Fish skills |
 | Q13 | Build a Brand, every step skippable, upload a guide | PRESENT | `interview/tree.yaml` module 1, `hh-import` |
 | Q14 | Upscale weak images. Weights not committed | PRESENT | D-007, assets pipeline |
@@ -159,7 +167,7 @@ Status words: **PRESENT** (the sentence has code and a path), **PARTIAL** (code 
 | Q27/28 | Reviewer auto-fixes with desktop and mobile shots. Watchdog fixes immediately | PRESENT | Zaphod and Marvin. Default recorded in `context/matt-answers.md`. |
 | Q29 | GSD-shaped spec files plus BRAND, VOICE, MOTION, PRD, and a dashboard | PRESENT | Engine spec writers, `/hh-dashboard` |
 | Q30 | Gates, then a repeatable Elevate loop | PRESENT | `packages/qa/`, `hh-elevate` |
-| Q31 | Push-to-talk the whole way. Most cost-effective wins. Local default | PRESENT | `packages/voice/`. The missing screen is the §4 row, not a second voice engine. |
+| Q31 | Push-to-talk the whole way. Most cost-effective wins. Local default | PRESENT | `packages/voice/`. The rate is on `/hh-settings`. Fix 009 applied in e9c6b41. That is not a second voice engine. |
 | Q32 | PDFs, screenshots, URLs, images, boards, competitors | PRESENT | `packages/crawler/`, interview inputs |
 | Q33 | Progress, then a reveal | PRESENT | Guide map and `packages/app/src/reveals/` |
 | Q34 | Don't Panic energy. Not AntiHero. Not about Matt | PRESENT | Tokens, shell, and the four shots. Not a generic screen. |
@@ -197,12 +205,12 @@ Source: `context/miro/*.png` and `CONTEXT-PACKAGE.md` §8.1. Board spelling stay
 
 | Hunt | Result |
 |---|---|
-| MIT-fallback switch in product code | Absent. Research text remains. Fix 002. |
+| MIT-fallback switch in product code | Absent. Research text aligned in 342bd18. Fix 002 applied. |
 | Comment that deletes the Theatre integration | Absent. Theatre core stays in the motion spec and the recipes. |
 | Import of `@theatre/studio` | Absent. |
 | Two scroll owners on one page | The contract refuses the pair. No starter page imports both. |
 | Secret in the tree | `scanText` from `packages/qa/src/secrets.ts` matched fixture strings in tests, prompt 154, and review 115. No live key. Those fixtures were left in place. gitleaks is the CI linux job in `.github/workflows/audit.yml` and was not run on this Windows machine. |
-| GPL or AGPL dependency | `auditDeps` returned `ok: true`, 331 packages, `problems: []`. The sharp rows pass only through the name-bound LGPL exception. Fix 005. |
+| GPL or AGPL dependency | `auditDeps` returned `ok: true`, 331 packages, `problems: []`. The sharp rows pass only through the name-bound LGPL exception. Fix 005 closed. Sharp stays. |
 | UI that fails the anti-slop rulebook | The desk does not. See shots. |
 | Gate that cannot run | `tsc -b` could not, before fix 001. It can now. |
 | Deploy path that fires without a yes | Absent. `deploy()` in `packages/deploy/src/cli-run.ts` returns `{ declined: true }` unless `yes()` is exactly `true`, before spawn, MCP, API, or `DEPLOYS.md`. Host adapters throw when `approved !== true`. |
@@ -217,7 +225,7 @@ The companion was opened on `http://127.0.0.1:4721/` against a temp project. Por
 | [shots/desk-375.png](shots/desk-375.png) | Answer "This site is for me." saved. Advanced to DP-0.2. Buttons stack. Calm line: "The Guide is quiet for a moment. The question below is the one from the tree. Your place on this machine is saved." That line is the designed live fallback. Console on the 1440 submit was 0 errors and 0 warnings. `scrollWidth` equalled `clientWidth` at 375. |
 | [shots/drive-1440.png](shots/drive-1440.png) | Title Drive. Kicker `/hh-dashboard`. "Not xAI's agent dashboard." Empty queue, Marvin, Zaphod, Lighthouse, cost. Approve, Elevate, and Deploy say they open the approval gate and do not open a model session. |
 | [shots/drive-375.png](shots/drive-375.png) | Same desk. Deploy wraps to its own row. No horizontal overflow. Pause, Approve, Elevate, Deploy, and Night desk measured 44 px tall. |
-| [shots/brand-375.png](shots/brand-375.png) | Designed empty plate: "The kit is not printed yet." Approve buttons are not on this plate. That is fix 006, not an unstyled screen. |
+| [shots/brand-375.png](shots/brand-375.png) | Designed empty plate: "The kit is not printed yet." Approve buttons are not on this plate because no kit file was present. Fix 006, applied in 241681b, renders the kit and calls `applyStatus` when the file exists. |
 
 Q34 is PRESENT.
 
@@ -229,7 +237,7 @@ Commands from the prompt, this session:
 |---|---|---|
 | `Test-Path hh-build-plan/once-over/REPORT.md` | True (shell exit 0) | This file. |
 | `pnpm -w test` | 0 | Confirmation run this session, 104.74 s. Root script `"test": "pnpm -r test"` is wired. Scope 12 of 13 workspace projects. `packages/qa` 225 pass, 0 fail, `duration_ms` 86195.7967. |
-| `pnpm -w exec hh doctor` | Did not finish. Stopped. | Resolved to Windows `hh.exe` with command line `hh doctor`. No doctor lines. See the §19 row and fix 010. |
+| `pnpm -w exec hh doctor` | Did not finish. Stopped. | This session resolved to Windows `hh.exe` with command line `hh doctor`. No doctor lines. Fix 010 later applied that miss in 1c5d85a and e15dd28. The §19 row above records the applied state. |
 | `node --experimental-strip-types packages/cli/src/main.ts doctor` | 0 | The doctor program, no `--project`, so nothing was written under the repo `.hitchhiker/`. Output below. |
 
 Doctor output from the node entry, exit 0:
@@ -256,16 +264,16 @@ Earlier in the same once-over, before this report file existed:
 
 ## Fix prompts
 
-1. [001-post-check-title.md](001-post-check-title.md) — applied.
-2. [002-research-mit-fallback.md](002-research-mit-fallback.md) — strike the withdrawn fallback sentences. Do not add a code switch.
-3. [003-scaffold-state-vs-loadstate.md](003-scaffold-state-vs-loadstate.md) — one STATE.md shape so `openInterview` survives a fresh scaffold.
-4. [004-credits-json-shapes.md](004-credits-json-shapes.md) — one parser, both writers, `CC0` and `CC0-1.0`.
-5. [005-sharp-lgpl-and.md](005-sharp-lgpl-and.md) — keep the name-bound exception documented, or replace sharp later. Do not widen it here.
-6. [006-brand-approval-on-the-desk.md](006-brand-approval-on-the-desk.md) — when a kit file exists, `/brand` renders it and a decision calls `applyStatus`.
-7. [007-doctor-auth-probe.md](007-doctor-auth-probe.md) — read `grok --help` for a non-interactive status. Do not run `grok login`.
-8. [008-state-lock-filename.md](008-state-lock-filename.md) — one name, in code and in v2 together.
-9. [009-stt-rate-on-a-settings-screen.md](009-stt-rate-on-a-settings-screen.md) — show `quoteStt` before xAI STT can be selected. Do not add a route inside this once-over.
-10. [010-hh-bin-on-windows.md](010-hh-bin-on-windows.md) — make `pnpm -w exec hh doctor` run the Guide. Do not rename the command. Do not leave it bound to Windows HTML Help.
+1. [001-post-check-title.md](001-post-check-title.md) — applied. Evidence: commit 662a363, `packages/deploy/src/post-check.ts`.
+2. [002-research-mit-fallback.md](002-research-mit-fallback.md) — applied. Evidence: commit 342bd18, `packages/engine/test/research-docs.test.ts`. No code switch was added.
+3. [003-scaffold-state-vs-loadstate.md](003-scaffold-state-vs-loadstate.md) — applied. Evidence: commit ee0ecf3, `packages/engine/src/state.ts`, test in `packages/engine/test/state.test.ts`.
+4. [004-credits-json-shapes.md](004-credits-json-shapes.md) — applied. Evidence: commit d6b7483, `packages/engine/src/credits-file.ts`. `CC0` and `CC0-1.0` both parse.
+5. [005-sharp-lgpl-and.md](005-sharp-lgpl-and.md) — closed. Evidence: `hh-build-plan/post-159/SUMMARY.md`. No sharp swap. The name-bound exception in `packages/qa/src/licenses.ts` stays, and it was not widened.
+6. [006-brand-approval-on-the-desk.md](006-brand-approval-on-the-desk.md) — applied. Evidence: commit 241681b, `packages/app/src/server/brand-desk.ts` calls `applyStatus`.
+7. [007-doctor-auth-probe.md](007-doctor-auth-probe.md) — applied. Evidence: commit e869196, `packages/cli/src/doctor.ts`. `grok login` is not run.
+8. [008-state-lock-filename.md](008-state-lock-filename.md) — applied. Evidence: commit 65d3bdd, `STATE_LOCK_NAME` in `packages/engine/src/lock.ts`. Follow-up c04e938.
+9. [009-stt-rate-on-a-settings-screen.md](009-stt-rate-on-a-settings-screen.md) — applied. Evidence: commit e9c6b41, `packages/grok-plugin/skills/hh-settings/SKILL.md`. No desk route was added.
+10. [010-hh-bin-on-windows.md](010-hh-bin-on-windows.md) — applied. Evidence: commits 1c5d85a and e15dd28. The command name stays `hh`. |
 
 ## Still open on purpose
 

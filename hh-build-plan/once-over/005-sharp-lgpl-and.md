@@ -1,6 +1,6 @@
 # 005. Sharp platform packages pass with an LGPL side
 
-Status: **proposed**. Not applied. Do not remove `sharp` in this prompt.
+Status: **closed**. No code change. Do not remove `sharp`.
 
 ## Miss
 
@@ -17,3 +17,7 @@ Decide in a later prompt. Options are a documented exception that stays name-bou
 ## Why this pass did not do it
 
 Removing sharp changes image optimization across the starters. That is a library swap, which this pass does not improvise.
+
+## Closed
+
+`hh-build-plan/post-159/SUMMARY.md` records Matt's decision: no sharp swap. The name-bound exception stays. `auditDeps` in `packages/qa/src/licenses.ts` still allows `Apache-2.0 AND LGPL-3.0-or-later` only when the name starts with `@img/sharp-`, and a lone LGPL only for `@img/sharp-libvips-`. The exception was not widened. Sharp was not removed.

@@ -71,7 +71,7 @@ GSAP is the base, with ScrollTrigger, SplitText, and the other free plugins. The
 
 ## Develop
 
-Node 22 and pnpm. The root package has no test script, so `pnpm -w test` is not wired. Run the package you changed: `pnpm --filter @hitchhiker/engine test`. The other workspace packages that ship a test script use the same command.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`.
 
 ## Credits
 

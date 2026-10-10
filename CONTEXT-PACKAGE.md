@@ -890,7 +890,7 @@ See §10.4. The decision record must include the pick, why, alternatives, trade-
 Stale libraries to avoid by default: Barba and Matter.js have no npm publish since 2024 (`research/06`).
 
 ### 15.4 GSAP
-D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
+D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine. DECISIONS.md D-001 is the rule for this section: GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. Three.js, raw WebGL and GLSL, Motion, anime.js, Theatre.js core, Lenis, CSS scroll-driven animations, and vanilla JS all ship. The picker chooses per effect. There is no replacement path and no second engine.
 
 ### 15.5 Mobile standard (Matt Q18)
 Every heavy effect gets a calm phone version (poster or still instead of scrub/3D, shorter pins, no cursor effects). Touch targets ≥ 44 px. `inputmode`/`autocomplete` on forms. Fluid type with `clamp()`. Test real-device widths 375/390/430. Budgets per `research/06` mobile table. The motion gate respects `prefers-reduced-motion`.
@@ -1057,7 +1057,7 @@ hitchhikers-guide-to-web-design/
 
 ## 21. Risks, open questions and things to verify
 
-1. D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine.
+1. D-001 withdrew the MIT fallback and the avoid Theatre advice. GSAP stays the base engine. This is not an open risk. DECISIONS.md D-001 forbids a GSAP risk entry and a second engine.
 2. **Imagine access**: does the SuperGrok login used by Grok Build allow Imagine API calls, or is an `XAI_API_KEY` with console credits required? Design for both, with DIY as the fallback.
 3. **Grok Voice for STT inside our app** needs an API key (billed separately). Local Whisper is the default.
 4. **X API**: pay-per-use pricing and media upload auth (v2 OAuth 2.0 vs claims that v1.1/OAuth 1.0a is still needed). Test before v2 posting.
