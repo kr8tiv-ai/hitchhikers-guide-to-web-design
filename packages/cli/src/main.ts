@@ -7,6 +7,11 @@ import { runAssetsCommand } from "./commands/assets.ts";
 import { runElevateCommand } from "./commands/elevate.ts";
 import { runToolsCommand } from "./commands/tools.ts";
 import { closeActiveApp, runApp, type RunAppOptions } from "./commands/app.ts";
+import {
+  isImplementedCommand,
+  renderCommandTable,
+  type ImplementedCommand,
+} from "./commands-table.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
 import { runInstall } from "./install.ts";
 
@@ -368,36 +373,61 @@ export function cliEntryArgs(argv: readonly string[]): string[] {
   return [...argv];
 }
 
+async function dispatchImplemented(
+  command: ImplementedCommand,
+  argv: readonly string[],
+  runner: CommandRunner | undefined,
+  deps: RunAppOptions,
+): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
+  switch (command) {
+    case "install":
+      return runInstall(argv.slice(1));
+    case "app":
+      return runApp(argv.slice(1), {
+        ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
+        ...(deps.env === undefined ? {} : { env: deps.env }),
+        ...(deps.open === undefined ? {} : { open: deps.open }),
+      });
+    case "assets":
+      return runAssetsCommand(argv.slice(1));
+    case "tools":
+      return runToolsCommand(argv.slice(1));
+    case "mostly-harmless":
+      return runQa(argv);
+    case "elevate":
+      return routeElevate(argv);
+    case "progress":
+    case "pause":
+    case "resume":
+      return runStateCommand(argv);
+    case "doctor": {
+      const parsed = parseArgs(argv);
+      if (!parsed.ok) return { exitCode: 2, stdout: `${HELP}\n` };
+      const options: DoctorOptions = {
+        ...(parsed.projectDir === undefined ? {} : { projectDir: parsed.projectDir }),
+        ...(runner === undefined ? {} : { runner }),
+        env: deps.env ?? process.env,
+      };
+      const outcome = await doctor(options);
+      return { exitCode: outcome.exitCode, stdout: `${formatDoctor(outcome.report)}\n` };
+    }
+  }
+}
+
 export async function runCli(
   argv: readonly string[],
   runner?: CommandRunner,
   deps: RunAppOptions = {},
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const command = argv[0];
-  if (command === "install") return runInstall(argv.slice(1));
-  if (command === "app") {
-    return runApp(argv.slice(1), {
-      ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
-      ...(deps.env === undefined ? {} : { env: deps.env }),
-      ...(deps.open === undefined ? {} : { open: deps.open }),
-    });
+  // Bare `hh` is rewritten to `app` before this runs. `--help` stays the old usage line.
+  if (command === undefined || command === "--help" || command === "-h") {
+    return { exitCode: 2, stdout: `${HELP}\n` };
   }
-  if (command === "assets") return runAssetsCommand(argv.slice(1));
-  if (command === "tools") return runToolsCommand(argv.slice(1));
-  if (command === "mostly-harmless") return runQa(argv);
-  if (command === "elevate") return routeElevate(argv);
-  if (command === "progress" || command === "pause" || command === "resume") {
-    return runStateCommand(argv);
+  if (!isImplementedCommand(command)) {
+    return { exitCode: 2, stdout: "", stderr: renderCommandTable(command) };
   }
-  const parsed = parseArgs(argv);
-  if (!parsed.ok) return { exitCode: 2, stdout: `${HELP}\n` };
-  const options: DoctorOptions = {
-    ...(parsed.projectDir === undefined ? {} : { projectDir: parsed.projectDir }),
-    ...(runner === undefined ? {} : { runner }),
-    env: deps.env ?? process.env,
-  };
-  const outcome = await doctor(options);
-  return { exitCode: outcome.exitCode, stdout: `${formatDoctor(outcome.report)}\n` };
+  return dispatchImplemented(command, argv, runner, deps);
 }
 
 function isDirectRun(): boolean {

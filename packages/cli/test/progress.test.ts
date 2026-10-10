@@ -66,8 +66,11 @@ test("pause rejects an empty message and a newline", () => {
 test("an unknown command still exits 2", async () => {
   const refused = await runCli(["sessions"]);
   assert.equal(refused.exitCode, 2);
-  assert.equal(refused.stdout, "hh doctor [--project <dir>]\n");
-  assert.equal(refused.stdout.includes("!"), false);
+  assert.equal(refused.stdout, "");
+  assert.match(refused.stderr ?? "", /^  hh progress$/m);
+  assert.match(refused.stderr ?? "", /^  \/hh-dont-panic$/m);
+  assert.equal((refused.stderr ?? "").includes("!"), false);
+  assert.equal((refused.stderr ?? "").includes("node:"), false);
 });
 
 test("progress prints the slice and exits 1 when state is missing", async () => {

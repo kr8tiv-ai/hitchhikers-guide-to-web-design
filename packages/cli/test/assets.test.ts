@@ -53,7 +53,9 @@ test("hh assets without a command exits 2", async () => {
 
   const refused = await runCli(["sessions"]);
   assert.equal(refused.exitCode, 2);
-  assert.equal(refused.stdout, "hh doctor [--project <dir>]\n");
+  assert.equal(refused.stdout, "");
+  assert.match(refused.stderr ?? "", /^  hh assets$/m);
+  assert.equal((refused.stderr ?? "").includes("node:"), false);
 });
 
 test("plan prints the quote and not the prompt", async () => {

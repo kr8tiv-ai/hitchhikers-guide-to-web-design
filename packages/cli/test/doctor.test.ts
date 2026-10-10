@@ -293,8 +293,10 @@ test("hh doctor is the only successful command", async () => {
 
   const refused = await runCli(["sessions"], scripted({}));
   assert.equal(refused.exitCode, 2);
-  assert.equal(refused.stdout, "hh doctor [--project <dir>]\n");
-  assert.equal(refused.stdout.includes("!"), false);
+  assert.equal(refused.stdout, "");
+  assert.match(refused.stderr ?? "", /^  hh doctor$/m);
+  assert.equal((refused.stderr ?? "").includes("!"), false);
+  assert.doesNotMatch(refused.stderr ?? "", /^node: /m);
 
   const run = scripted(gitOk());
   const accepted = await runCli(["doctor"], run);

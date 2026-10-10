@@ -860,7 +860,7 @@ function readSse(handle: ServerHandle): Promise<void> {
   });
 }
 
-test("hh app prints a loopback URL and hh sessions stays the doctor hint", async () => {
+test("hh app prints a loopback URL and hh sessions prints the command table", async () => {
   const help = spawnSync(process.execPath, ["--experimental-strip-types", cliEntry, "app", "--help"], {
     encoding: "utf8",
   });
@@ -872,7 +872,10 @@ test("hh app prints a loopback URL and hh sessions stays the doctor hint", async
     encoding: "utf8",
   });
   assert.equal(unknown.status, 2);
-  assert.equal(unknown.stdout, "hh doctor [--project <dir>]\n");
+  assert.equal(unknown.stdout, "");
+  assert.match(unknown.stderr, /^  hh app$/m);
+  assert.match(unknown.stderr, /^  \/hh-drive$/m);
+  assert.doesNotMatch(unknown.stderr, /^node: /m);
 
   const dir = tempProject();
   const child = spawn(
