@@ -22,7 +22,7 @@ Day is paper `#f3ebdd` with a venetian stamp `#8e2f1a`. Night is a designed dark
 
 `tokens.css` is the source the comps load. `tokens.ts` exports the same colour, space, radius, and motion values for tests and for anything that computes a style. `design-tokens.test.ts` fails if they drift.
 
-Colour roles: surface, ink, muted, accent, accent-ink, success, warning, danger, focus. Light is the default. Dark follows `prefers-color-scheme` unless `data-theme="light"` or `data-theme="dark"` is set.
+Colour roles: surface, ink, muted, accent, accent-ink, success, warning, danger, focus. Light is the default. Dark follows `prefers-color-scheme` unless `data-theme="light"` or `data-theme="dark"` is set. Focus is ink on paper and light cream in the dark, separate from the venetian accent, so the ring stays visible on the filled Answer button.
 
 Space is a 4px base: 0, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128. Radius is 2, 4, 10, and a pill. Type sizes are `clamp()` from 375 to 1440. Shadows have a light set and a dark set.
 

@@ -18,7 +18,7 @@ export const color: Record<
   success: { light: "#1b5c3a", dark: "#9dceb6" },
   warning: { light: "#7a4208", dark: "#f0c98a" },
   danger: { light: "#8e2430", dark: "#f0b0a6" },
-  focus: { light: "#8e2f1a", dark: "#e6a15c" },
+  focus: { light: "#1c1612", dark: "#f4ede3" },
 };
 
 export const space: readonly number[] = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128];

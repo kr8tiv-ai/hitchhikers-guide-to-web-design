@@ -16,6 +16,58 @@ export function replaceEmptyCard(html: string, questionId: string | null): strin
   return `<article class="hh-qcard"><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${START_INTERVIEW_LABEL}</a></p></article>`;
 }
 
+/** Shown on the mic when this browser has no speech recognition. */
+export const TALK_NEEDS_CHROMIUM = "Talk needs Chrome or Edge";
+
+const HOLD_BUTTON =
+  /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="true")?(?: disabled)?>[^<]*<\/button>/;
+
+/** Latest Guide line for the polite region. Empty when the desk has not asked. */
+export function guideTurnText(ask: string | null, done: boolean): string {
+  if (ask !== null && ask !== "") return ask;
+  if (done) return "Guide Entry is next.";
+  return "";
+}
+
+/**
+ * Moves Hold to talk beside the field and gives the question heading a focus target.
+ * When speech is missing, the mic is disabled and names Chrome or Edge.
+ * The Answer row keeps Answer, Suggest, and Skip.
+ */
+export function reshapeDeskCard(html: string, speech: boolean): string {
+  const match = HOLD_BUTTON.exec(html);
+  if (match === null || match.index === undefined) return withQuestionTabIndex(html);
+  let button = match[0];
+  const without = html.slice(0, match.index) + html.slice(match.index + button.length);
+  if (!speech) button = unsupportedTalk(button);
+  return withQuestionTabIndex(placeBesideField(without, button));
+}
+
+function unsupportedTalk(button: string): string {
+  const openEnd = button.indexOf(">");
+  if (openEnd < 0) return button;
+  let open = button.slice(0, openEnd);
+  if (!/\sdisabled(?:\s|=|$)/.test(open)) open += " disabled";
+  return `${open}>${TALK_NEEDS_CHROMIUM}</button>`;
+}
+
+function placeBesideField(html: string, button: string): string {
+  const start = html.indexOf('<label class="hh-qcard__field">');
+  const end = start < 0 ? -1 : html.indexOf("</label>", start);
+  if (start < 0 || end < 0) return html;
+  const close = end + "</label>".length;
+  const label = html.slice(start, close);
+  const entry = `<div class="hh-qcard__entry">\n    ${label}\n    ${button}\n  </div>`;
+  return html.slice(0, start) + entry + html.slice(close);
+}
+
+function withQuestionTabIndex(html: string): string {
+  return html.replaceAll(
+    '<h2 class="hh-qcard__title" id="hh-card-ask">',
+    '<h2 class="hh-qcard__title" id="hh-card-ask" tabindex="-1">',
+  );
+}
+
 /**
  * Desk page. Fetches the session, paints the card, and posts with the CSRF token.
  * Importing this module from Node does nothing: there is no document.
@@ -114,6 +166,7 @@ interface DeskElement {
   textContent?: string | null;
   setPointerCapture?(pointerId: number): void;
   insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
+  focus?(): void;
 }
 
 interface DeskEvent {
@@ -341,6 +394,7 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("keydown", onKeyDown);
   env.document.addEventListener("keyup", onKeyUp);
   env.document.addEventListener("contextmenu", onContextMenu);
+  markTalkSupport();
   void load();
 
   return () => {
@@ -706,6 +760,7 @@ export function mountDesk(env: DeskEnv): () => void {
     pending = true;
     error = null;
     notice = null;
+    let advance = false;
     try {
       paint();
       const result = await postTurn(
@@ -721,11 +776,13 @@ export function mountDesk(env: DeskEnv): () => void {
       view = result.session;
       draft = "";
       error = null;
+      advance = true;
     } catch {
       error = DRAFT_KEPT;
     } finally {
       pending = false;
       paint();
+      if (advance) focusNewQuestion();
     }
   }
 
@@ -748,7 +805,10 @@ export function mountDesk(env: DeskEnv): () => void {
         enterHint: true,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
-      question.innerHTML = replaceEmptyCard(renderCard(state), view.question?.id ?? null);
+      question.innerHTML = reshapeDeskCard(
+        replaceEmptyCard(renderCard(state), view.question?.id ?? null),
+        speechReady(),
+      );
     } else if (question !== null && error !== null) {
       question.innerHTML = `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
     }
@@ -764,6 +824,34 @@ export function mountDesk(env: DeskEnv): () => void {
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
     applyEdits();
     ensureMotion(env.document, view?.question?.id);
+    syncGuideLive();
+  }
+
+  function speechReady(): boolean {
+    return env.SpeechRecognition != null;
+  }
+
+  function markTalkSupport(): void {
+    if (speechReady()) return;
+    const button = region()?.querySelector('[data-voice="hold"]');
+    if (button === null || button === undefined) return;
+    button.setAttribute("disabled", "");
+    if ("textContent" in button) button.textContent = TALK_NEEDS_CHROMIUM;
+  }
+
+  function syncGuideLive(): void {
+    const node = env.document.querySelector("[data-guide-live]");
+    if (node === null || !("textContent" in node)) return;
+    const next = guideTurnText(view?.question?.ask ?? null, view?.done === true);
+    if ((node.textContent ?? "") === next) return;
+    node.textContent = next;
+  }
+
+  function focusNewQuestion(): void {
+    const heading = region()?.querySelector("#hh-card-ask");
+    if (heading === null || heading === undefined) return;
+    if (heading.getAttribute("tabindex") !== "-1") heading.setAttribute("tabindex", "-1");
+    if (typeof heading.focus === "function") heading.focus();
   }
 
   function toggleEdit(id: string): void {

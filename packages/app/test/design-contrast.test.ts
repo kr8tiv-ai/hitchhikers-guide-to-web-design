@@ -31,10 +31,15 @@ test("text pairs clear WCAG AA in both themes", () => {
       contrastRatio(color.muted[theme], color.surface[theme]) >= 4.5,
       `muted on surface ${theme}`,
     );
+    assert.equal(color.focus[theme], color.ink[theme], `focus uses ink ${theme}`);
+    assert.notEqual(color.focus[theme], color.accent[theme], `focus is its own token ${theme}`);
     assert.ok(
       contrastRatio(color.focus[theme], color.surface[theme]) >= 3,
       `focus on surface ${theme}`,
     );
+    // The ring is ink on cream and light cream on the dark page, offset from the
+    // filled Answer button. One colour cannot clear 3:1 against both that page
+    // and the rust or brass fill. The gap is the page, so the ring reads there.
     assert.ok(
       contrastRatio(color.success[theme], color.surface[theme]) >= 4.5,
       `success on surface ${theme}`,

@@ -51,6 +51,7 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
+import { guideTurnText, reshapeDeskCard } from "../client/desk.ts";
 import {
   compactMapLabel,
   depthTouched,
@@ -1242,10 +1243,11 @@ function renderDesk(token: string, session: DeskSession): string {
     `<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" aria-label="Transcript">\n            ${session.transcriptHtml}\n          </section>`,
     "transcript",
   );
+  const guideLive = escapeHtml(guideTurnText(session.question?.ask ?? null, session.done));
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${session.cardHtml}\n          </section>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${reshapeDeskCard(session.cardHtml, true)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
   html = replaceBlock(

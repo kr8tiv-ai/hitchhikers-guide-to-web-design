@@ -319,7 +319,8 @@ test("the desk page shows one ask, Deep, the open count, and a full mast", async
     const questions = questionsForDepth(loadTree(treeFile), "deep");
     const open = openRequiredCount(questions, readAnswers(dir), requiredIds());
     const ask = "Is this site for you, or for a client?";
-    assert.equal(occurrences(html, ask), 1);
+    // The card shows the ask once. The clipped live region repeats it for assistive tech.
+    assert.equal(occurrences(region(html, "question"), ask), 1);
     assert.equal(occurrences(region(html, "transcript"), ask), 0);
     assert.match(html, /Answers land here after you send one\./);
     const phase = escapeHtml("Don't Panic");
@@ -389,7 +390,7 @@ test("skip marks the assumption on the next card and shrinks the mast", async ()
     const html = page.body;
     const ask = "Have you built a website before, and with what? Drop any URLs, including the old ones.";
     const previous = "Is this site for you, or for a client?";
-    assert.equal(occurrences(html, ask), 1);
+    assert.equal(occurrences(region(html, "question"), ask), 1);
     assert.equal(occurrences(region(html, "transcript"), ask), 0);
     assert.equal(occurrences(region(html, "transcript"), previous), 1);
     assert.match(html, /data-assumed="skipped">Assumed: For myself\.</);
