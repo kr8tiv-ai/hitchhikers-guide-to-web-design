@@ -258,7 +258,7 @@ function tinyIcon(): Buffer {
   return buf;
 }
 
-function derLen(length: number): Buffer {
+export function derLen(length: number): Buffer {
   if (length < 0x80) return Buffer.from([length]);
   const bytes: number[] = [];
   let value = length;
@@ -277,9 +277,23 @@ function seq(parts: readonly Buffer[]): Buffer {
   return tlv(0x30, Buffer.concat(parts));
 }
 
-function derInt(value: Buffer): Buffer {
-  const first = value[0];
-  const body = first !== undefined && (first & 0x80) !== 0 ? Buffer.concat([Buffer.from([0]), value]) : value;
+/**
+ * Unsigned big-endian magnitude as a minimal non-negative DER INTEGER.
+ * Redundant leading 0x00 bytes are removed, then one 0x00 is added when
+ * the high bit is set. Zero, including an empty or all-zero buffer, is
+ * a single 0x00 content byte. OpenSSL rejects a zero-length INTEGER.
+ */
+export function derInt(value: Buffer): Buffer {
+  let start = 0;
+  while (start < value.length) {
+    const byte = value[start];
+    if (byte === undefined || byte !== 0) break;
+    start += 1;
+  }
+  const magnitude = start === value.length ? Buffer.from([0]) : value.subarray(start);
+  const first = magnitude[0];
+  const body =
+    first !== undefined && (first & 0x80) !== 0 ? Buffer.concat([Buffer.from([0]), magnitude]) : magnitude;
   return tlv(0x02, body);
 }
 
@@ -313,7 +327,15 @@ function pem(label: string, der: Buffer): string {
   return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----\n`;
 }
 
-function localCertificate(): { key: string; cert: string } {
+function certificateSerial(): Buffer {
+  const bytes = randomBytes(8);
+  const lead = bytes[0];
+  bytes[0] = ((lead ?? 0) & 0x7f) | 0x01;
+  return bytes;
+}
+
+/** Fixture cert for localhost and 127.0.0.1. Pass `serial` only to test integer encoding. */
+export function localCertificate(serial?: Buffer): { key: string; cert: string } {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const spki = publicKey.export({ type: "spki", format: "der" });
   const exportedKey = privateKey.export({ type: "pkcs8", format: "pem" });
@@ -328,7 +350,7 @@ function localCertificate(): { key: string; cert: string } {
   const extension = seq([oid([2, 5, 29, 17]), tlv(0x04, san)]);
   const tbs = seq([
     tlv(0xa0, derInt(Buffer.from([2]))),
-    derInt(randomBytes(8)),
+    derInt(serial ?? certificateSerial()),
     sha256Rsa,
     name,
     seq([utcTime(new Date(now - 86_400_000)), utcTime(new Date(now + 730 * 86_400_000))]),
