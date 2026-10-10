@@ -174,7 +174,12 @@ test("an empty queue does not post, and the theme control still flips", async ()
   assert.equal(view.env.document.documentElement.dataset.theme, "dark");
   assert.equal(toggle.textContent, "Day desk");
   paintDrive(view.env.document, []);
-  assert.match(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /No drive queued\./);
+  assert.match(
+    view.regions.get("#drive-queue-body")?.innerHTML ?? "",
+    /No queue yet\. The plan lands here after you approve the prompts\./,
+  );
+  assert.equal(pause.getAttribute("disabled"), "");
+  assert.equal(pause.getAttribute("aria-disabled"), "true");
 });
 
 test("a throwing theme probe still posts pause", async () => {

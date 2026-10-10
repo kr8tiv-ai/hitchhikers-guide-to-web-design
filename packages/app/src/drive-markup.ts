@@ -41,6 +41,11 @@ const KIND_LABEL: Record<DriveKind, string> = {
 
 const THEME_MODULE = `<script type="module" src="/client/theme.js"></script>`;
 
+/** Route name stays /hh-dashboard. The old xAI disclaimer is not part of the plate. */
+const DRIVE_DEK = "The queue on this machine.";
+
+export const DRIVE_EMPTY_COPY = "No queue yet. The plan lands here after you approve the prompts.";
+
 const INLINE_THEME = `    <script>
       const root = document.documentElement;
       const toggle = document.querySelector("[data-theme-toggle]");
@@ -103,9 +108,8 @@ export function progressHtml(items: readonly DriveItem[]): string {
 export function queueBodyHtml(items: readonly DriveItem[]): string {
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
-            <h3 class="hh-empty__title">No drive queued.</h3>
-            <p>The drive has not been planned.</p>
-            <p class="hh-empty__next">Rows land here when a queue is on disk.</p>
+            <p>${DRIVE_EMPTY_COPY}</p>
+            <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/approve">Approve the prompts</a></p>
           </div>`;
   }
   const rows = items.map((item) => row(item)).join("\n");
@@ -190,7 +194,7 @@ export function renderDriveDocument(
         </div>
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
-        <p class="hh-dek">The queue on this machine. Not xAI's agent dashboard.</p>
+        <p class="hh-dek">${DRIVE_DEK}</p>
       </header>
 
       <main id="drive-main">
@@ -201,9 +205,9 @@ export function renderDriveDocument(
           </div>
           <div class="hh-approval" data-region="gates">
             ${pauseButton(empty)}
-            <a class="hh-btn hh-btn--secondary" href="/approve" data-action="approve">Approve</a>
-            <a class="hh-btn hh-btn--secondary" href="/approve" data-action="elevate">Elevate</a>
-            <a class="hh-btn hh-btn--secondary" href="/approve" data-action="deploy">Deploy</a>
+            ${gateLink("approve", "Approve", empty)}
+            ${gateLink("elevate", "Elevate", empty)}
+            ${gateLink("deploy", "Deploy", empty)}
             <p class="hh-approval__note">Approve, Elevate, and Deploy open the approval gate. This page does not open a model session.</p>
             <p id="drive-pause-note" class="hh-approval__note" role="status" hidden></p>
           </div>
@@ -289,7 +293,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         </div>
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
-        <p class="hh-dek">The queue on this machine. Not xAI's agent dashboard.</p>
+        <p class="hh-dek">${DRIVE_DEK}</p>
       </header>
       <main id="drive-main">
       <article class="hh-error" id="drive-error" role="alert">
@@ -323,7 +327,7 @@ function documentShell(
   <head>
     <meta charset="utf-8" />${csrfMeta(options?.token)}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-${documentHeadExtras("The queue on this machine. Not xAI's agent dashboard.")}
+${documentHeadExtras(DRIVE_DEK)}
     <title>${escapeHtml(title)}</title>
     <link rel="stylesheet" href="src/design/tokens.css" />
     <link rel="stylesheet" href="src/design/type.css" />
@@ -362,8 +366,18 @@ function tally(items: readonly DriveItem[]): Record<DriveStatus, number> {
 }
 
 function pauseButton(empty: boolean): string {
-  const disabled = empty ? ` aria-disabled="true"` : "";
+  const disabled = empty ? ` disabled aria-disabled="true"` : "";
   return `<button class="hh-btn hh-btn--secondary" type="button" id="drive-pause" data-action="pause"${disabled}>Pause</button>`;
+}
+
+/**
+ * Empty gates are real disabled controls. An anchor ignores the disabled
+ * attribute, so the drive client also cancels the click while it is locked.
+ * A queue on disk leaves them as links to the approval gate.
+ */
+function gateLink(action: "approve" | "elevate" | "deploy", label: string, empty: boolean): string {
+  const locked = empty ? ` disabled aria-disabled="true"` : "";
+  return `<a class="hh-btn hh-btn--secondary" href="/approve" data-action="${action}"${locked}>${label}</a>`;
 }
 
 function row(item: DriveItem): string {

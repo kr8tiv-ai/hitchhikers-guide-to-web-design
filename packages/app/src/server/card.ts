@@ -22,12 +22,39 @@ export interface DeskPreflight {
 }
 
 export const EMPTY_BRAND_ACTION = "Approve the brief to print the kit";
+export const START_INTERVIEW_LABEL = "Start the interview";
+export const APPROVE_EMPTY_ACTION = "Answer the open question";
 
 const GROK_MISSING = "Grok is not on PATH.";
 
 export function openQuestionHref(questionId: string | null): string {
   if (questionId === null || !/^[A-Za-z0-9._-]{1,64}$/.test(questionId)) return "/";
   return `/?question=${encodeURIComponent(questionId)}`;
+}
+
+/** First question on the packaged tree. Callers pass a real id when they have one. */
+export function startInterviewHref(questionId: string | null): string {
+  if (questionId !== null && /^[A-Za-z0-9._-]{1,64}$/.test(questionId)) {
+    return openQuestionHref(questionId);
+  }
+  return openQuestionHref("DP-0.1");
+}
+
+/** One primary control. The href is the first question route. */
+export function renderStartInterview(questionId: string | null): string {
+  const href = escapeHtml(startInterviewHref(questionId));
+  return `<a class="hh-btn hh-btn--primary" href="${href}">${START_INTERVIEW_LABEL}</a>`;
+}
+
+/**
+ * The empty card used to say "No question yet" and stop.
+ * One button opens the first question. At 375 the desk is one column.
+ * At 1440 the button sits in the 40rem read column. No new palette.
+ */
+export function renderEmptyInterview(questionId: string | null): string {
+  return `<article class="hh-qcard">
+  <p class="hh-empty__next">${renderStartInterview(questionId)}</p>
+</article>`;
 }
 
 /**

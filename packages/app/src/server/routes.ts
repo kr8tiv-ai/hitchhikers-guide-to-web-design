@@ -62,7 +62,11 @@ import {
   previousAssumption,
   questionNeedsConfirm,
   renderEmptyBrand,
+  APPROVE_EMPTY_ACTION,
+  openQuestionHref,
+  renderEmptyInterview,
   renderPreflight,
+  renderStartInterview,
   type DeskPreflight,
   type InterviewMode,
 } from "./card.ts";
@@ -794,7 +798,7 @@ async function handleGet(
     return;
   }
   if (pathname === "/approve") {
-    sendHtml(req, res, 200, renderApprove(token, notice));
+    sendHtml(req, res, 200, renderApprove(token, notice, view().question?.id ?? null));
     return;
   }
   if (pathname === "/settings") {
@@ -1022,6 +1026,10 @@ function buildSession(
   }
   const preflightHtml = preflight !== null && firstRun ? `${renderPreflight(preflight)}\n` : "";
   const transcript = `${preflightHtml}${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
+  const renderedCard = renderCard(card);
+  const cardHtml = renderedCard.includes("No question yet.")
+    ? renderEmptyInterview(questions[0]?.id ?? null)
+    : renderedCard;
   return {
     question,
     pushback,
@@ -1045,7 +1053,7 @@ function buildSession(
     guideHtml: renderGuideMap(answers, [...questions]),
     transcriptHtml: transcript,
     statusHtml: statusSpans(footerText, notice, overlay.calm),
-    cardHtml: renderCard(card),
+    cardHtml,
   };
 }
 
@@ -1179,6 +1187,10 @@ function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): st
 function renderDesk(token: string, session: DeskSession): string {
   let html = renderShell();
   const dek = `<p class="hh-dek">Don't Panic. One question at a time. The work saves on this machine.</p>`;
+  const startInterview =
+    session.question !== null && session.mastCompact !== true && session.counts?.index === 1
+      ? `\n        <p class="hh-empty__next">${renderStartInterview(session.question.id)}</p>`
+      : "";
   const fullHidden = session.mastCompact ? " hidden" : "";
   const lineHidden = session.mastCompact ? "" : " hidden";
   const mastAttr = session.mastCompact ? ' data-mast="line"' : "";
@@ -1210,7 +1222,7 @@ function renderDesk(token: string, session: DeskSession): string {
           <p class="hh-kicker">Desk</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
-        ${dek}
+        ${dek}${startInterview}
         </div>
         <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
         ${deskMenu(false)}
@@ -1271,7 +1283,8 @@ function renderBrand(token: string, notice: string | null = null, questionId: st
   });
 }
 
-function renderApprove(token: string, notice: string | null = null): string {
+function renderApprove(token: string, notice: string | null = null, questionId: string | null = null): string {
+  const href = escapeHtml(openQuestionHref(questionId));
   return renderPanel({
     notice,
     token,
@@ -1282,13 +1295,8 @@ function renderApprove(token: string, notice: string | null = null): string {
     status: "Nothing is waiting for a yes.",
     main: `<div class="hh-empty hh-rise hh-rise--2">
         <h1 class="hh-empty__title">Nothing is waiting for a yes</h1>
-        <p>No plate is ready for a decision.</p>
-        <p class="hh-empty__next">When a plate is ready, Approve and Redo sit here.</p>
-      </div>
-      <div class="hh-approval hh-rise hh-rise--3">
-        <button class="hh-btn hh-btn--primary" type="button" aria-disabled="true">Approve</button>
-        <button class="hh-btn hh-btn--secondary" type="button" aria-disabled="true">Redo</button>
-        <p class="hh-approval__note">Happy with this stays the question. Nothing is queued yet.</p>
+        <p>A plate shows up here when a brief or a prompt is ready for a decision.</p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${APPROVE_EMPTY_ACTION}</a></p>
       </div>`,
   });
 }

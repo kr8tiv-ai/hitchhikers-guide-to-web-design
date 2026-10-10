@@ -48,6 +48,8 @@ test("rows stay in order, escape ids, and expose status", () => {
   assert.equal(html.match(/data-action="pause"/g)?.length, 1);
   assert.equal(html.match(/>Pause</g)?.length, 1);
   assert.doesNotMatch(pauseTag(html), /aria-disabled/);
+  assert.doesNotMatch(pauseTag(html), /\sdisabled[\s>]/);
+  assert.equal(html.includes("xAI's agent dashboard"), false);
   assert.equal(copy(html).includes("!"), false);
   assert.equal(copy(html).includes("\u2014"), false);
   assert.doesNotMatch(html, /grok dashboard/i);
@@ -98,11 +100,16 @@ test("every known status renders once, and passed is the only green status", () 
 
 test("an empty queue keeps Pause and disables it", () => {
   const html = renderDashboard({ items: [] });
-  assert.match(html, /No drive queued\./);
+  assert.match(html, /No queue yet\. The plan lands here after you approve the prompts\./);
+  assert.equal(html.includes("No drive queued."), false);
+  assert.equal(html.includes("Not xAI"), false);
+  assert.equal(html.includes("xAI's agent dashboard"), false);
   assert.match(html, /<h1 class="hh-headline" id="drive-title">Drive<\/h1>/);
   assert.match(pauseTag(html), /aria-disabled="true"/);
+  assert.match(pauseTag(html), /\sdisabled[\s>]/);
   assert.equal(html.match(/data-action="pause"/g)?.length, 1);
-  assert.equal(html.match(/aria-disabled="true"/g)?.length, 1);
+  assert.equal(html.match(/aria-disabled="true"/g)?.length, 4);
+  assert.equal(html.match(/hh-btn--primary/g)?.length, 1);
   assert.match(html, /The drive has not been planned\./);
   assert.match(html, /No escalations/);
   assert.match(html, /No Zaphod verdict is on this queue\./);
@@ -188,6 +195,7 @@ test("the subscription line matches formatCost", () => {
 test("a queue read error stays styled and drops markup in the message", () => {
   const html = renderQueueReadError("queue.json is not valid JSON.");
   assert.match(html, /The queue file could not be read\./);
+  assert.equal(html.includes("xAI's agent dashboard"), false);
   assert.match(html, /queue\.json is not valid JSON\./);
   assert.match(html, /It was left on disk\./);
   assert.match(html, /hh-error/);

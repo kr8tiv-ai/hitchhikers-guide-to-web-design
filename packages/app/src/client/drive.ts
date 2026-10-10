@@ -31,6 +31,7 @@ interface DriveElement {
 
 interface DriveEvent {
   target: DriveElement | null;
+  preventDefault?: () => void;
 }
 
 interface DriveDocument {
@@ -74,12 +75,27 @@ export function paintDrive(document: DriveDocument, items: readonly DriveItem[])
   if (verdicts !== null) verdicts.innerHTML = verdictsHtml(items);
   const watchdog = document.querySelector("#drive-watchdog");
   if (watchdog !== null) watchdog.innerHTML = watchdogHtml(items);
-  const pause = document.querySelector("#drive-pause");
-  if (pause !== null) {
-    if (items.length === 0) pause.setAttribute("aria-disabled", "true");
-    else pause.removeAttribute("aria-disabled");
+  const empty = items.length === 0;
+  syncLock(document.querySelector("#drive-pause"), empty);
+  for (const action of ["approve", "elevate", "deploy"]) {
+    syncLock(document.querySelector(`[data-action="${action}"]`), empty);
   }
   setNote(document, "");
+}
+
+function syncLock(node: DriveElement | null, empty: boolean): void {
+  if (node === null) return;
+  if (empty) {
+    node.setAttribute("aria-disabled", "true");
+    node.setAttribute("disabled", "");
+  } else {
+    node.removeAttribute("aria-disabled");
+    node.removeAttribute("disabled");
+  }
+}
+
+function gateLocked(node: DriveElement): boolean {
+  return node.getAttribute("disabled") !== null || node.getAttribute("aria-disabled") === "true";
 }
 
 /** Wire the current document. Returns a cleanup, or does nothing outside a browser. */
@@ -119,13 +135,18 @@ export function mountDrive(env: DriveEnv): () => void {
       toggleTheme(env);
       return;
     }
+    const gate = findGate(target);
+    if (gate !== null && gateLocked(gate)) {
+      event.preventDefault?.();
+      return;
+    }
     if (findPause(target) === null) return;
     void postPause();
   };
 
   const postPause = async (): Promise<void> => {
     const button = env.document.querySelector("#drive-pause");
-    if (button !== null && button.getAttribute("aria-disabled") === "true") return;
+    if (button !== null && gateLocked(button)) return;
     if (token === null) {
       setNote(env.document, "Reload the page.");
       return;
@@ -233,8 +254,22 @@ function readToken(document: DriveDocument): string | null {
   return /^[0-9a-f]{64}$/.test(token) ? token : null;
 }
 
+const GATE_ACTIONS = new Set(["pause", "approve", "elevate", "deploy"]);
+
 function findPause(start: DriveElement): DriveElement | null {
   return findMarked(start, "data-action", "pause");
+}
+
+function findGate(start: DriveElement): DriveElement | null {
+  let node: DriveElement | null = start;
+  const seen = new Set<DriveElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    const action = node.getAttribute("data-action");
+    if (action !== null && GATE_ACTIONS.has(action)) return node;
+    node = node.parentElement;
+  }
+  return null;
 }
 
 function findMarked(start: DriveElement, attr: string, expected?: string): DriveElement | null {

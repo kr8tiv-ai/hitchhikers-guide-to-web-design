@@ -2,6 +2,20 @@ import type { Question } from "@hitchhiker/engine";
 import type { CardAssumption, CardCounts, CardState } from "../card.ts";
 import { escapeHtml, renderCard, VOICE_SERVICE_NOTE } from "../card.ts";
 
+const START_INTERVIEW_LABEL = "Start the interview";
+const EMPTY_CARD_TITLE = "No question yet.";
+
+/**
+ * The empty card becomes one button to the first question.
+ * A card that already has an ask is left alone.
+ */
+export function replaceEmptyCard(html: string, questionId: string | null): string {
+  if (!html.includes(EMPTY_CARD_TITLE)) return html;
+  const id = questionId !== null && /^[A-Za-z0-9._-]{1,64}$/.test(questionId) ? questionId : "DP-0.1";
+  const href = escapeHtml(`/?question=${encodeURIComponent(id)}`);
+  return `<article class="hh-qcard"><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${START_INTERVIEW_LABEL}</a></p></article>`;
+}
+
 /**
  * Desk page. Fetches the session, paints the card, and posts with the CSRF token.
  * Importing this module from Node does nothing: there is no document.
@@ -734,7 +748,7 @@ export function mountDesk(env: DeskEnv): () => void {
         enterHint: true,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
-      question.innerHTML = renderCard(state);
+      question.innerHTML = replaceEmptyCard(renderCard(state), view.question?.id ?? null);
     } else if (question !== null && error !== null) {
       question.innerHTML = `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
     }

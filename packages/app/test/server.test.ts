@@ -595,7 +595,9 @@ test("a missing queue file renders the empty state and pause creates nothing", a
     const page = await fetch(new URL("/hh-dashboard", handle.url));
     const html = await page.text();
     assert.equal(page.status, 200);
-    assert.match(html, /No drive queued\./);
+    assert.match(html, /No queue yet\. The plan lands here after you approve the prompts\./);
+    assert.equal(html.includes("No drive queued."), false);
+    assert.equal(html.includes("xAI's agent dashboard"), false);
     assert.match(html, /The drive has not been planned\./);
     assert.match(html, /No prompts on this queue\./);
     assert.equal(html.includes("The queue is empty"), false);
@@ -629,6 +631,7 @@ test("a corrupt queue file is a styled 500 and stays on disk", async () => {
     const html = await page.text();
     assert.equal(page.status, 500);
     assert.match(html, /The queue file could not be read\./);
+    assert.equal(html.includes("xAI's agent dashboard"), false);
     assert.match(html, /queue\.json is not valid JSON\./);
     assert.match(html, /It was left on disk\./);
     assert.match(html, /hh-error/);
