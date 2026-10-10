@@ -11,11 +11,22 @@ const commandsPath = path.join(repoRoot, "packages", "grok-plugin", "src", "comm
 const interviewPath = path.join(repoRoot, "docs", "dont-panic.md");
 
 const PANIC_PERIOD = "don't panic.";
+const PANIC_PERIOD_CAP = 3;
+
+/**
+ * The restored README keeps two sentences from the original character note.
+ * Each is removed once. A second copy, or any other use, still refuses.
+ */
+const ALLOWED_AUTISTIC = [
+  "it's a bit autistic, on purpose and with affection",
+  "matt is openly autistic, which is partly why the guide's personality is written as a strength rather than a punchline",
+] as const;
 
 /**
  * Refuse a public README that breaks the Guide voice.
- * Throws on an exclamation mark, on "Don't Panic!", on autistic, autism,
- * or spectrum, on an em dash, and on "Don't Panic." more than once.
+ * Throws on "Don't Panic!", on a prose exclamation mark (badge `![` markers
+ * are not prose), on autistic outside the two original sentences, on autism
+ * or spectrum, on an em dash, and on "Don't Panic." more than three times.
  * A curly apostrophe is treated as a straight one.
  */
 export function assertReadme(markdown: string): void {
@@ -24,10 +35,17 @@ export function assertReadme(markdown: string): void {
   if (lower.includes("don't panic!")) {
     throw new Error("README refused: Don't Panic!");
   }
-  if (normalized.includes("!")) {
+  if (normalized.replaceAll("![", "").includes("!")) {
     throw new Error("README refused: exclamation mark");
   }
-  if (lower.includes("autistic")) {
+  let autisticScan = lower;
+  for (const allowed of ALLOWED_AUTISTIC) {
+    const at = autisticScan.indexOf(allowed);
+    if (at >= 0) {
+      autisticScan = autisticScan.slice(0, at) + autisticScan.slice(at + allowed.length);
+    }
+  }
+  if (autisticScan.includes("autistic")) {
     throw new Error("README refused: autistic");
   }
   if (lower.includes("autism")) {
@@ -45,8 +63,8 @@ export function assertReadme(markdown: string): void {
     const at = lower.indexOf(PANIC_PERIOD, from);
     if (at < 0) return;
     count += 1;
-    if (count > 1) {
-      throw new Error("README refused: Don't Panic. more than once");
+    if (count > PANIC_PERIOD_CAP) {
+      throw new Error("README refused: Don't Panic. more than three times");
     }
     from = at + PANIC_PERIOD.length;
   }
@@ -102,8 +120,36 @@ test("assertReadme reads README.md from disk", () => {
   const markdown = readFileSync(readmePath, "utf8");
   assert.equal(path.basename(readmePath), "README.md");
   assertReadme(markdown);
-  assert.equal(markdown.toLowerCase().split(PANIC_PERIOD).length - 1, 1);
-  assert.ok(wordCount(markdown) < 900, `README is ${wordCount(markdown)} words`);
+  assert.equal(markdown.toLowerCase().split(PANIC_PERIOD).length - 1, PANIC_PERIOD_CAP);
+  assert.ok(
+    wordCount(markdown) > 2500,
+    `README is ${wordCount(markdown)} words, under the restored-document floor`,
+  );
+  assert.ok(markdown.includes("docs/assets/banner.svg"), "banner");
+  const originalHeadings = [
+    "## You've arrived early",
+    "## What is this, exactly?",
+    "## Who it's for",
+    "## How it works: six phases",
+    "## Meet The Guide",
+    "## Talk to it",
+    "## Difficulty tiers",
+    "## The motion toolkit",
+    "## The anti-slop rules",
+    "## Quality gates and the Elevate loop",
+    "## Built on GSD",
+    "## What's in the repo today",
+    "## Requirements",
+    "## Quick start",
+    "## Roadmap",
+    "## Contributing",
+    "## FAQ",
+    "## Credits",
+    "## License",
+  ];
+  for (const heading of originalHeadings) {
+    assert.ok(markdown.includes(heading), `missing heading: ${heading}`);
+  }
   assert.equal(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(markdown), false);
   assert.equal(markdown.toLowerCase().includes("fallback"), false);
   assert.equal(markdown.toLowerCase().includes("imagine is free"), false);
@@ -184,15 +230,32 @@ test("assertReadme throws on the banned strings", () => {
   assert.equal(refusal("Don't Panic!"), "README refused: Don't Panic!");
   assert.equal(refusal("Don\u2019t Panic!"), "README refused: Don't Panic!");
   assert.equal(refusal("Hello!"), "README refused: exclamation mark");
+  assert.equal(
+    refusal("[![ok](https://example.com/badge)](LICENSE) Hello!"),
+    "README refused: exclamation mark",
+  );
+  assert.doesNotThrow(() => assertReadme("[![License: MIT](https://example.com/badge)](LICENSE)"));
   assert.equal(refusal("The word autistic appears."), "README refused: autistic");
+  assert.equal(
+    refusal(
+      "It's a bit autistic, on purpose and with affection. It's a bit autistic, on purpose and with affection.",
+    ),
+    "README refused: autistic",
+  );
+  assert.doesNotThrow(() =>
+    assertReadme(
+      "It's a bit autistic, on purpose and with affection. Matt is openly autistic, which is partly why the Guide's personality is written as a strength rather than a punchline.",
+    ),
+  );
   assert.equal(refusal("The word Autism appears."), "README refused: autism");
   assert.equal(refusal("The word spectrum appears."), "README refused: spectrum");
   assert.equal(refusal("An em dash \u2014 sits here."), "README refused: em dash");
   assert.equal(
-    refusal("Don't Panic. Then Don't Panic. again."),
-    "README refused: Don't Panic. more than once",
+    refusal("Don't Panic. Don't Panic. Don't Panic. Don't Panic."),
+    "README refused: Don't Panic. more than three times",
   );
   assert.doesNotThrow(() => assertReadme("Don't Panic. Plain words after."));
+  assert.doesNotThrow(() => assertReadme("Don't Panic. Don't Panic. Don't Panic."));
 });
 
 test("docs/dont-panic.md points at hh doctor and the interview", () => {

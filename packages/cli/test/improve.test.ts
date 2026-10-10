@@ -597,7 +597,10 @@ test("the improve docs teach the run and stay inside the voice", () => {
   ];
   for (const rel of docs) {
     const text = readFileSync(path.join(repoRoot, rel), "utf8");
-    assert.equal(text.includes("!"), false, rel);
+    // The restored README keeps shields.io badges. Their markdown is `![`.
+    // A prose exclamation mark still fails. The other three docs have no badges.
+    const prose = rel === "README.md" ? text.replaceAll("![", "") : text;
+    assert.equal(prose.includes("!"), false, rel);
     assert.equal(text.includes("\u2014"), false, rel);
   }
   const runbook = readFileSync(path.join(repoRoot, "docs", "improve-runbook.md"), "utf8");
