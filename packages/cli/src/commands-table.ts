@@ -19,6 +19,7 @@ export const IMPLEMENTED_COMMANDS = [
   "pause",
   "resume",
   "doctor",
+  "improve",
 ] as const;
 
 export type ImplementedCommand = (typeof IMPLEMENTED_COMMANDS)[number];

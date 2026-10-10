@@ -23,6 +23,7 @@ export const COMMANDS: readonly HhCommand[] = [
   { name: "pause", skillDir: "hh-pause", cli: ["pause"], sideEffect: false },
   { name: "resume", skillDir: "hh-resume", cli: ["resume"], sideEffect: false },
   { name: "doctor", skillDir: "hh-doctor", cli: ["doctor"], sideEffect: false },
+  { name: "improve", skillDir: "", cli: ["improve"], sideEffect: false },
 ];
 
 /** Slash-command skills from v2 section 18, in that order. */

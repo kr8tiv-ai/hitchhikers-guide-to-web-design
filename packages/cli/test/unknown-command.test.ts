@@ -124,7 +124,7 @@ test("implemented names are the dispatch cases in main.ts", () => {
     (match) => match[1] ?? "",
   );
   assert.deepEqual(cases, [...IMPLEMENTED_COMMANDS]);
-  assert.equal(IMPLEMENTED_COMMANDS.length, 10);
+  assert.equal(IMPLEMENTED_COMMANDS.length, 11);
 });
 
 test("hh doctor still runs and hh --help stays the usage line", async () => {

@@ -13,6 +13,7 @@ import {
   type ImplementedCommand,
 } from "./commands-table.ts";
 import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
+import { runImprove } from "./improve/run.ts";
 import { runInstall } from "./install.ts";
 
 const HELP = "hh doctor [--project <dir>]";
@@ -412,6 +413,11 @@ async function dispatchImplemented(
       const outcome = await doctor(options);
       return { exitCode: outcome.exitCode, stdout: `${formatDoctor(outcome.report)}\n` };
     }
+    case "improve":
+      return runImprove(argv.slice(1), {
+        cwd: deps.cwd ?? process.cwd(),
+        env: deps.env ?? process.env,
+      });
   }
 }
 

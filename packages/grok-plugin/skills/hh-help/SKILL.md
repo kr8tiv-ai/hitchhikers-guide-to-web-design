@@ -18,6 +18,7 @@ The hh CLI can run these today:
 - `hh pause --project <dir> --message <text>` saves one next-action line.
 - `hh resume --project <dir>` shows the prompt id to continue from.
 - `hh doctor` or `hh doctor --project <dir>` prints the environment report.
+- `hh improve` runs a bounded loop on an improve branch. A human merges. It refuses main and a dirty tree.
 
 The other /hh commands are skills only. Say that plainly. Do not invent flags.
 
