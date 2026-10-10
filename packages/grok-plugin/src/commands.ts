@@ -1,6 +1,7 @@
 /**
  * Guide commands that the hh CLI actually implements.
- * The regex follows equality checks in packages/cli/src/main.ts, including `parsed.cmd`.
+ * The regex follows equality checks and switch cases in packages/cli/src/main.ts,
+ * including `parsed.cmd` and `case "app":`.
  * Skills with no row here are not CLI subcommands yet.
  */
 
@@ -58,7 +59,7 @@ export const SIDE_EFFECT_SKILLS: readonly string[] = [
   "hh-undo",
 ];
 
-const CLI_SUBCOMMAND = /(?:command|cmd|argv\[0\]) (?:===|!==) "([a-z][a-z0-9-]*)"/g;
+const CLI_SUBCOMMAND = /(?:(?:command|cmd|argv\[0\]) (?:===|!==)|case) "([a-z][a-z0-9-]*)"/g;
 
 const ALLOWED_KEYS = new Set([
   "name",
