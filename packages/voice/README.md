@@ -31,4 +31,4 @@ Upstream also offers `--output-txt` (`-otxt`) as an optional flag that writes a 
 
 The child is killed if it runs longer than 60 seconds (`timeoutMs` can override that). A missing binary, a missing model, bad audio, a non-zero exit, empty stdout, or a timeout throws `WhisperError`. The `code` is `MISSING_BIN`, `MISSING_MODEL`, `BAD_AUDIO`, `FAILED`, or `TIMEOUT`. Stderr in a failure is trimmed to 500 characters. The environment is not copied into the error.
 
-Guide config `voiceEngine` value `local` is the only engine this package calls.
+Guide config `voiceEngine` value `local` stays off the paid engine. Browser speech is chosen outside this process. The xAI path runs only after the rate is accepted.

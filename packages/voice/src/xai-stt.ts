@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { guardPaidSttRequest, type RateAcceptGate } from "./select.ts";
 
 /**
  * Opt-in xAI speech-to-text.
@@ -47,6 +48,8 @@ export interface XaiTranscribeRequest {
   wavPath: string;
   apiKey: string;
   fetchImpl: typeof fetch;
+  /** Both flags must be true. Omit them and the paid call is refused before fetch. */
+  optIn?: RateAcceptGate;
 }
 
 export interface XaiTranscript {
@@ -167,6 +170,15 @@ async function transcribeAt(target: string, req: XaiTranscribeRequest): Promise<
   const form = new FormData();
   form.append("model", TRANSCRIBE_MODEL);
   form.append("file", new File([bytes], uploadName, { type: "audio/wav" }));
+
+  guardPaidSttRequest({
+    url: target,
+    paidEngine: true,
+    optIn: {
+      settingEnabled: req.optIn?.settingEnabled === true,
+      rateAccepted: req.optIn?.rateAccepted === true,
+    },
+  });
 
   let response: Response;
   try {

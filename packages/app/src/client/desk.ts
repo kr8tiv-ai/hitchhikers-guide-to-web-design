@@ -1,6 +1,14 @@
 import type { Question } from "@hitchhiker/engine";
 import type { CardAssumption, CardCounts, CardState } from "../card.ts";
 import { escapeHtml, renderCard, VOICE_SERVICE_NOTE } from "../card.ts";
+import {
+  engineForDesk,
+  voiceChromeFor,
+  VOICE_FALLBACK,
+  type VoiceChrome,
+  type VoiceDeskFlags,
+  type VoiceEngineId,
+} from "./voice-engine.ts";
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -34,13 +42,15 @@ export function guideTurnText(ask: string | null, done: boolean): string {
  * When speech is missing, the mic is disabled and names Chrome or Edge.
  * The Answer row keeps Answer, Suggest, and Skip.
  */
-export function reshapeDeskCard(html: string, speech: boolean): string {
+export function reshapeDeskCard(html: string, speech: boolean, chrome?: VoiceChrome): string {
   const match = HOLD_BUTTON.exec(html);
   if (match === null || match.index === undefined) return withQuestionTabIndex(html);
   let button = match[0];
   const without = html.slice(0, match.index) + html.slice(match.index + button.length);
-  if (!speech) button = unsupportedTalk(button);
-  return withQuestionTabIndex(placeBesideField(without, button));
+  const status = chrome ?? voiceChromeFor(speech ? "web-speech" : "none");
+  if (status.engine === "xai") button = disableTalk(button);
+  else if (!speech || status.engine !== "web-speech") button = unsupportedTalk(button);
+  return withQuestionTabIndex(placeBesideField(without, button, voiceStatusHtml(status)));
 }
 
 function unsupportedTalk(button: string): string {
@@ -51,14 +61,36 @@ function unsupportedTalk(button: string): string {
   return `${open}>${TALK_NEEDS_CHROMIUM}</button>`;
 }
 
-function placeBesideField(html: string, button: string): string {
+function disableTalk(button: string): string {
+  const openEnd = button.indexOf(">");
+  if (openEnd < 0) return button;
+  let open = button.slice(0, openEnd);
+  if (!/\sdisabled(?:\s|=|$)/.test(open)) open += " disabled";
+  return `${open}>${button.slice(openEnd + 1)}`;
+}
+
+function voiceStatusHtml(chrome: VoiceChrome): string {
+  const limit =
+    chrome.engine === "xai"
+      ? `<p class="hh-qcard__voice-help" data-voice-limit>xAI speech-to-text is on at the accepted rate. This desk does not send the microphone to a paid service. Type your answer, or choose Browser in Settings.</p>\n  `
+      : chrome.engine === "local-whisper"
+        ? `<p class="hh-qcard__voice-help" data-voice-limit>Local whisper is installed. This desk does not send the microphone to it. Type your answer.</p>\n  `
+        : "";
+  const fallback =
+    chrome.fallback === null
+      ? ""
+      : `<p class="hh-qcard__voice-help" data-voice-fallback>${escapeHtml(chrome.fallback)}</p>\n  `;
+  return `<div class="hh-qcard__voice" data-voice-status>\n  <p class="hh-qcard__voice-engine" data-voice-engine="${escapeHtml(chrome.engine)}">${escapeHtml(chrome.label)}</p>\n  <p class="hh-qcard__voice-help" data-voice-help>${escapeHtml(chrome.help)}</p>\n  ${limit}${fallback}</div>`;
+}
+
+function placeBesideField(html: string, button: string, chrome: string): string {
   const start = html.indexOf('<label class="hh-qcard__field">');
   const end = start < 0 ? -1 : html.indexOf("</label>", start);
   if (start < 0 || end < 0) return html;
   const close = end + "</label>".length;
   const label = html.slice(start, close);
   const entry = `<div class="hh-qcard__entry">\n    ${label}\n    ${button}\n  </div>`;
-  return html.slice(0, start) + entry + html.slice(close);
+  return html.slice(0, start) + entry + chrome + html.slice(close);
 }
 
 function withQuestionTabIndex(html: string): string {
@@ -193,8 +225,7 @@ const STREAM_FAILURES = 3;
 const VOICE_STOP_GRACE_MS = 400;
 export const VOICE_LISTENING = "Listening. Speak, then let go of the button.";
 export const VOICE_HEARD = "Heard you. Check the words, then press Answer.";
-export const VOICE_UNSUPPORTED =
-  "Voice input needs Chrome or Edge on this computer. Type your answer instead.";
+export const VOICE_UNSUPPORTED = VOICE_FALLBACK;
 export const VOICE_BLOCKED =
   "The microphone is blocked. Click the icon at the left of the address bar, allow the microphone, then hold the button again.";
 export const VOICE_FIRST_ALLOW =
@@ -563,6 +594,14 @@ export function mountDesk(env: DeskEnv): () => void {
     if (recognition !== null || voiceSession || !held) return;
     if (pending || view === null || view.question === null) {
       held = false;
+      return;
+    }
+    const engineNow = activeEngine();
+    if (engineNow !== "web-speech") {
+      held = false;
+      notice = null;
+      error = engineNow === "none" ? VOICE_UNSUPPORTED : null;
+      paint();
       return;
     }
     const Recognition = env.SpeechRecognition ?? null;
@@ -1273,9 +1312,11 @@ export function mountDesk(env: DeskEnv): () => void {
         enterHint: true,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
+      const engine = activeEngine();
       const card = reshapeDeskCard(
         replaceEmptyCard(renderCard(state), view.question?.id ?? null),
-        speechReady(),
+        speechReady() && engine === "web-speech",
+        voiceChromeFor(engine),
       );
       const saved =
         logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : undefined;
@@ -1303,6 +1344,24 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function speechReady(): boolean {
     return env.SpeechRecognition != null;
+  }
+
+  function deskFlags(): VoiceDeskFlags {
+    return {
+      xaiSetting: flag("data-xai-setting"),
+      rateAccepted: flag("data-rate-accepted"),
+      localWhisper: flag("data-local-whisper"),
+    };
+  }
+
+  function flag(name: string): boolean {
+    const node = region();
+    if (node === null) return false;
+    return node.getAttribute(name) === "true";
+  }
+
+  function activeEngine(): VoiceEngineId {
+    return engineForDesk(deskFlags(), speechReady());
   }
 
   function markTalkSupport(): void {

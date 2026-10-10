@@ -14,6 +14,7 @@ import {
 
 const FIXTURE_KEY = "fixture-key-hh-023-do-not-leak";
 const FIXTURE_ENDPOINT = "https://api.x.ai/v1/stt";
+const OPT_IN = { settingEnabled: true, rateAccepted: true } as const;
 const voiceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function codeWithoutComments(source: string): string {
@@ -184,6 +185,7 @@ test("the injected fetch receives the fixture endpoint and the bearer key", asyn
       wavPath: clip.wavPath,
       apiKey: FIXTURE_KEY,
       fetchImpl,
+      optIn: OPT_IN,
     });
     assert.equal(globalCalls, 0);
     assert.equal(seen.length, 1);
@@ -234,6 +236,7 @@ test("a caller-supplied https endpoint is the one that is posted", async () => {
       wavPath: clip.wavPath,
       apiKey: FIXTURE_KEY,
       fetchImpl,
+      optIn: OPT_IN,
     });
     assert.equal(seen, endpoint);
     assert.notEqual(seen, XAI_STT_ENDPOINT);
@@ -261,6 +264,7 @@ test("a failed response does not echo the API key", async () => {
           wavPath: clip.wavPath,
           apiKey: FIXTURE_KEY,
           fetchImpl,
+          optIn: OPT_IN,
         }),
       (error: unknown) => {
         assertKeyHidden(error);
@@ -284,6 +288,7 @@ test("a fetch error that contains the key is redacted", async () => {
           wavPath: clip.wavPath,
           apiKey: FIXTURE_KEY,
           fetchImpl,
+          optIn: OPT_IN,
         }),
       (error: unknown) => {
         assertKeyHidden(error);

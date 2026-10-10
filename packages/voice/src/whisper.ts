@@ -13,8 +13,8 @@ const BIN_ENV = "WHISPER_CPP_BIN";
 const MODEL_ENV = "WHISPER_CPP_MODEL";
 
 /**
- * The only engine this package calls. A paid speech API is out of scope.
- * Callers pass `local` from Guide config `voiceEngine`.
+ * Local whisper.cpp. Paid speech stays in the xAI module, behind the rate gate.
+ * Callers pass paths from resolveWhisperPaths. This file does not download weights.
  */
 const LOCAL_ENGINE = "local" as const;
 
@@ -126,6 +126,19 @@ export function resolveWhisperPaths(options: ResolveOptions = {}): WhisperPaths 
   assertBin(bin);
   assertModel(model);
   return { bin, model };
+}
+
+/**
+ * True only when both the binary and the model are already on disk.
+ * A miss returns false. This does not download, install, or spawn.
+ */
+export function detectLocalWhisper(options: ResolveOptions = {}): boolean {
+  try {
+    const paths = resolveWhisperPaths(options);
+    return paths.bin.length > 0 && paths.model.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**

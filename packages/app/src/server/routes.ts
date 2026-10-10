@@ -52,6 +52,7 @@ import {
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
 import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
+import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
   compactMapLabel,
   depthTouched,
@@ -94,6 +95,7 @@ import {
   settingsStatus,
   type SettingsView,
 } from "./settings.ts";
+import { readVoiceDeskFlags, type VoiceDeskFlags } from "./voice-flags.ts";
 import {
   MAX_UPLOAD_BYTES,
   acceptAudio,
@@ -162,6 +164,7 @@ const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const VOICE_ENGINE_SOURCE = path.resolve(SRC_ROOT, "client", "voice-engine.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
 const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
@@ -777,7 +780,8 @@ async function handleGet(
 ): Promise<void> {
   if (pathname === "/") {
     const session = view();
-    sendHtml(req, res, 200, renderDesk(token, session), foldStyleHeaders());
+    const flags = await enqueue(() => readVoiceDeskFlags(projectDir));
+    sendHtml(req, res, 200, renderDesk(token, session, flags), foldStyleHeaders());
     return;
   }
   if (pathname === "/gallery") {
@@ -900,6 +904,10 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/voice-engine.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(VOICE_ENGINE_SOURCE)));
     return;
   }
   if (pathname === "/client/brand.js") {
@@ -1258,7 +1266,10 @@ function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): st
           </details>`;
 }
 
-function renderDesk(token: string, session: DeskSession): string {
+function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags): string {
+  const voiceFlags = flags ?? { xaiSetting: false, rateAccepted: false, localWhisper: false };
+  const engine = engineForDesk(voiceFlags, true);
+  const chrome = voiceChromeFor(engine);
   let html = renderShell();
   const dek = `<p class="hh-dek">Don't Panic. One question at a time. The work saves on this machine.</p>`;
   const startInterview =
@@ -1320,7 +1331,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-hh-ready aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, true), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
   html = replaceBlock(
@@ -1668,7 +1679,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
-    .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"');
+    .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
+    .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"');
   moduleCache.set(filePath, js);
   return js;
 }

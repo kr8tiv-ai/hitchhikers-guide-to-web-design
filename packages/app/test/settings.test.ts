@@ -118,8 +118,12 @@ test("GET /settings shows voice, model, effort, and both rates, with xAI off", a
     assert.match(html, /data-settings="voice"/);
     assert.match(html, /data-settings="model"/);
     assert.match(html, /data-settings="effort"/);
-    assert.match(html, /name="voice" value="local" checked/);
+    assert.match(html, /name="voice" value="browser" checked/);
+    assert.doesNotMatch(html, /name="voice" value="local" checked/);
     assert.doesNotMatch(html, /name="voice" value="xai" checked/);
+    assert.match(html, /Google/);
+    assert.match(html, /Microsoft/);
+    assert.match(html, /may leave/);
     assert.match(html, /name="model"[^>]*value="grok-4\.7"/);
     assert.match(html, /name="effort" value="medium" checked/);
     assert.match(html, /name="effort" value="high"/);

@@ -18,6 +18,7 @@ import {
   type GuideConfig,
 } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
+import { VOICE_PRIVACY_HELP } from "../client/voice-engine.ts";
 
 export const STT_QUOTE_FILENAME = "stt-quote.json";
 
@@ -127,7 +128,7 @@ export function renderSettingsMain(
           ${choice("voice", "local", "Local", view.voice === "local")}
           ${choice("voice", "xai", "xAI", view.voice === "xai")}
         </div>
-        <p class="hh-qcard__why">Browser speech stays in this browser. Local whisper.cpp is on this machine and is the default. xAI is billed at the rate below.</p>
+        <p class="hh-qcard__why">${escapeHtml(VOICE_PRIVACY_HELP)} Local whisper is used only when it is installed and this browser has no speech recognition. xAI is billed at the rate below and stays off until you accept that rate.</p>
         ${note}
       </div>
       <div data-settings="rate">
@@ -258,7 +259,7 @@ function viewFrom(config: GuideConfig, quote: QuoteFile | null, rates: XaiSttRat
     streamingPerHour: rates.streaming.ratePerHour,
     note:
       config.voiceEngine === "xai" && !accepted
-        ? "The config names xAI speech-to-text, and the rate is not accepted, so this page keeps local whisper."
+        ? "The config names xAI speech-to-text, and the rate is not accepted, so this page keeps the free engine."
         : null,
   };
 }
@@ -269,8 +270,8 @@ function displayedVoice(
   accepted: boolean,
 ): VoiceChoice {
   if (config.voiceEngine === "xai" && accepted) return "xai";
-  if (quote?.voiceInput === "browser") return "browser";
-  return "local";
+  if (quote?.voiceInput === "local") return "local";
+  return "browser";
 }
 
 function nextQuote(previous: QuoteFile | null, input: SettingsInput, rates: XaiSttRates): QuoteFile {
