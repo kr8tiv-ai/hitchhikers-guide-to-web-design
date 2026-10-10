@@ -184,3 +184,4 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 178 | So Long and Thanks for All the Fish | Forty-Two | Voice with no API spend by default | Heart of Gold | xhigh |
 | 179 | So Long and Thanks for All the Fish | Forty-Two | Standing auto-improve supervisor with spawned test agents | Heart of Gold | xhigh |
 | 180 | So Long and Thanks for All the Fish | Forty-Two | Fix the macOS QA CI failure: starter fixture phone gates | Heart of Gold | xhigh |
+| 181 | So Long and Thanks for All the Fish | Forty-Two | Restore the original README and fold in everything built since | Heart of Gold | xhigh |
