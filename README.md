@@ -8,11 +8,16 @@ Don't Panic. The work is a conversation you can pause, a spec you can read, and 
 
 ## Quick start
 
-`npx hitchhikers-guide` runs the `hh` command. With no arguments it starts the local app.
+The desk needs this clone because `hh app` and `hh install` resolve the sibling `packages/app` and `packages/grok-plugin`, and the install prompt copies skills into `.grok` from that plugin.
 
-`hh install --project <dir>` copies skills, agents, hooks, and rules into that project's `.grok` directory. The install prompt is the one that implements the copy.
+1. Node >=22.18
+2. `corepack enable`
+3. `corepack prepare pnpm@10.32.1 --activate`
+4. `pnpm install`
+5. `pnpm exec hh doctor`
+6. `pnpm exec hh app --project <dir> --no-open`
 
-In Grok Build, `/hh-new` creates the project. `/hh-dont-panic` starts or resumes the interview.
+`npx hitchhikers-guide` is not yet published on npm and returns 404 today. It is only a future note.
 
 ## What this is not
 
