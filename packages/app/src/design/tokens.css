@@ -78,6 +78,10 @@
   --shadow-sm: var(--shadow-sm-light);
   --shadow-md: var(--shadow-md-light);
   --shadow-lg: var(--shadow-lg-light);
+  --color-plate: color-mix(in srgb, var(--color-ink) 5%, var(--color-surface));
+  --color-field: var(--color-surface);
+  --color-line: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  --color-line-strong: color-mix(in srgb, var(--color-ink) 34%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -95,6 +99,10 @@
     --shadow-sm: var(--shadow-sm-dark);
     --shadow-md: var(--shadow-md-dark);
     --shadow-lg: var(--shadow-lg-dark);
+    --color-plate: color-mix(in srgb, var(--color-ink) 8%, var(--color-surface));
+    --color-field: color-mix(in srgb, var(--color-ink) 12%, var(--color-surface));
+    --color-line: color-mix(in srgb, var(--color-ink) 28%, transparent);
+    --color-line-strong: color-mix(in srgb, var(--color-ink) 46%, transparent);
   }
 }
 
@@ -112,6 +120,10 @@
   --shadow-sm: var(--shadow-sm-dark);
   --shadow-md: var(--shadow-md-dark);
   --shadow-lg: var(--shadow-lg-dark);
+  --color-plate: color-mix(in srgb, var(--color-ink) 8%, var(--color-surface));
+  --color-field: color-mix(in srgb, var(--color-ink) 12%, var(--color-surface));
+  --color-line: color-mix(in srgb, var(--color-ink) 28%, transparent);
+  --color-line-strong: color-mix(in srgb, var(--color-ink) 46%, transparent);
 }
 
 :root[data-theme="light"] {
@@ -128,4 +140,8 @@
   --shadow-sm: var(--shadow-sm-light);
   --shadow-md: var(--shadow-md-light);
   --shadow-lg: var(--shadow-lg-light);
+  --color-plate: color-mix(in srgb, var(--color-ink) 5%, var(--color-surface));
+  --color-field: var(--color-surface);
+  --color-line: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  --color-line-strong: color-mix(in srgb, var(--color-ink) 34%, transparent);
 }

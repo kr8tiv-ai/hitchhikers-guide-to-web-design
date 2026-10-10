@@ -522,6 +522,26 @@ async function shoot(page: Page, shot: Shot, axeNotes: string[]): Promise<void> 
     }
   }
 
+  const motionOff = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (el === null) return null;
+      const style = getComputedStyle(el);
+      return {
+        transition: style.transitionDuration,
+        animation: style.animationName,
+      };
+    };
+    return { button: read(".hh-btn"), rise: read(".hh-rise") };
+  });
+  expect(motionOff.button !== null || motionOff.rise !== null, `${shot.id} motion target`).toBe(true);
+  if (motionOff.button !== null) {
+    expect(motionOff.button.transition, `${shot.id} button transition`).toBe("0s");
+  }
+  if (motionOff.rise !== null) {
+    expect(motionOff.rise.animation, `${shot.id} rise animation`).toBe("none");
+  }
+
   await page.keyboard.press("Tab");
   const focusRing = await page.evaluate(() => {
     const active = document.activeElement;

@@ -26,6 +26,8 @@ Colour roles: surface, ink, muted, accent, accent-ink, success, warning, danger,
 
 Space is a 4px base: 0, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128. Radius is 2, 4, 10, and a pill. Type sizes are `clamp()` from 375 to 1440. Shadows have a light set and a dark set.
 
+Plate, field, line, and line-strong are mixes of ink and surface, not a new palette. Night lifts the plate and the field so a card and an input sit apart from the page. Day keeps the field on the paper and the plate one step darker.
+
 ## Type
 
 See `public/fonts/OFL.md`. Display 800 at optical size 96. UI 600 at optical size 16. Text 400, italic 400, and semibold 600, all at optical size 16. `@font-face` uses `font-display: swap` and a relative URL from this folder to `public/fonts/`. If a file is missing, the face does not silently become `system-ui`.

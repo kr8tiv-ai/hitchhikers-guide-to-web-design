@@ -40,7 +40,7 @@ export function enter(el: Element, opts?: { delay?: number }): Promise<void> {
           {
             autoAlpha: 1,
             y: 0,
-            duration: motion.durations.base / 1000,
+            duration: motion.durations.fast / 1000,
             delay,
             ease: EASE.out,
             onComplete: resolve,
@@ -112,7 +112,7 @@ export function toast(el: Element): Promise<void> {
           {
             autoAlpha: 1,
             y: 0,
-            duration: motion.durations.base / 1000,
+            duration: motion.durations.fast / 1000,
             ease: EASE.out,
             onComplete: resolve,
           },

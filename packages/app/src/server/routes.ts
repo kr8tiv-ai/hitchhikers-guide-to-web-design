@@ -1411,7 +1411,7 @@ function renderMissing(token: string, notice: string | null = null): string {
     main: `<div class="hh-empty">
         <h1 class="hh-empty__title">This page is not on the desk</h1>
         <p>The address does not match a route.</p>
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--secondary" href="/">Back to the desk</a></p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/">Back to the desk</a></p>
       </div>`,
   });
 }
@@ -1522,6 +1522,7 @@ function renderSettingsFailure(token: string, notice: string | null): string {
     main: `<div class="hh-empty">
         <h1 class="hh-empty__title">Settings could not be read</h1>
         <p>The rate card stayed unread. Nothing was turned on.</p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/">Back to the desk</a></p>
       </div>`,
   });
 }

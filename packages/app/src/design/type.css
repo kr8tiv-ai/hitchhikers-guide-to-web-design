@@ -53,7 +53,7 @@ body {
   font-size: var(--type-body);
   font-weight: 400;
   font-synthesis: none;
-  line-height: 1.55;
+  line-height: 1.6;
   letter-spacing: 0;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -67,11 +67,27 @@ body {
   letter-spacing: -0.035em;
 }
 
+.hh-headline,
+.hh-title,
+.hh-empty__title,
+.hh-error__title,
+.hh-qcard__title {
+  text-wrap: balance;
+}
+
+.hh-dek,
+.hh-qcard__why,
+.hh-site__note,
+.hh-empty p,
+.hh-error p {
+  text-wrap: pretty;
+}
+
 .hh-headline {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: var(--type-headline);
-  line-height: 0.96;
+  line-height: 1.02;
   letter-spacing: -0.03em;
 }
 
@@ -79,7 +95,7 @@ body {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--type-title);
-  line-height: 1.15;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
@@ -87,13 +103,13 @@ body {
   font-family: var(--font-text);
   font-weight: 400;
   font-size: var(--type-body);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .hh-small {
   font-family: var(--font-text);
   font-size: var(--type-small);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .hh-micro {

@@ -57,7 +57,7 @@ function renderWalking(view: GalleryView): string {
   const cards = view.cards.map((card, index) => renderCard(card, view, index === 0)).join("\n");
   const empty =
     view.cards.length === 0
-      ? `<div class="hh-empty"><h2 class="hh-empty__title">No sites matched</h2><p>The pack has nothing left to show.</p><p class="hh-empty__next">Reload the page, or widen the industry filter.</p></div>`
+      ? `<div class="hh-empty"><h2 class="hh-empty__title">No sites matched</h2><p>The pack has nothing left to show. Widen the industry filter if you need a wider set.</p><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/gallery">Reload the gallery</a></p></div>`
       : "";
   return `<p class="hh-dek">Four sites at a time, two from Godly and two from Awwwards. Mark each one love, meh, or hate, and say why.</p>
 ${note}

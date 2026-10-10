@@ -2,7 +2,7 @@
 
 .hh-motion {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -27,6 +27,13 @@
 .hh-motion__film,
 .hh-motion__costs {
   min-width: 0;
+}
+
+.hh-motion__card {
+  display: grid;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .hh-motion__frame {
@@ -199,6 +206,10 @@
 }
 
 .hh-motion [data-in-range="false"] {
+  color: var(--color-muted);
+}
+
+.hh-motion [data-in-range="false"] .hh-motion__frame {
   opacity: 0.72;
 }
 
@@ -251,9 +262,16 @@
   .hh-motion__bar,
   .hh-motion__knob,
   .hh-motion__orb,
-  .hh-motion__fade {
+  .hh-motion__fade,
+  .hh-motion__card,
+  .hh-motion__frame {
     animation: none;
+    transition: none;
     transform: none;
+  }
+
+  .hh-motion__cssline,
+  .hh-motion__fade {
     opacity: 1;
   }
 }

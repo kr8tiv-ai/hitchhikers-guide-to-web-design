@@ -40,7 +40,11 @@
 }
 
 .hh-gallery__why {
-  min-height: 4.5rem;
+  min-height: var(--space-9);
+}
+
+.hh-gallery .hh-error[hidden] {
+  display: none;
 }
 
 .hh-gallery__tools {

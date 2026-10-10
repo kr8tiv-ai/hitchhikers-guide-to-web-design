@@ -108,6 +108,7 @@ export function progressHtml(items: readonly DriveItem[]): string {
 export function queueBodyHtml(items: readonly DriveItem[]): string {
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
+            <h2 class="hh-empty__title">No plan is on the desk</h2>
             <p>${DRIVE_EMPTY_COPY}</p>
             <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/approve">Approve the prompts</a></p>
           </div>`;

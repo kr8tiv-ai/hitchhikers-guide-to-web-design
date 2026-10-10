@@ -100,7 +100,7 @@ export function renderApproval(input: ApprovalInput): string {
         <h1 class="hh-headline" id="prd-title">${escapeHtml(heading)}</h1>
         <p class="hh-dek">Improbability Drive stays off until PRD.md, CONTEXT.md, and the prompt package each carry a yes.</p>
       </header>
-      <main id="main" data-hh-ready>
+      <main id="main" class="hh-read" data-hh-ready>
       <section class="hh-rise hh-rise--2" aria-labelledby="gates-title">
         <div class="hh-phase-mark">
           <p class="hh-kicker">Context</p>

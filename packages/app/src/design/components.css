@@ -46,12 +46,12 @@ textarea {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: var(--space-5) var(--space-4) 0 calc(var(--spine) + var(--space-4));
+  padding: var(--space-5) var(--space-4) var(--space-6) calc(var(--spine) + var(--space-4));
 }
 
 .hh-mast {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
 
@@ -82,6 +82,7 @@ textarea {
 /* Outlined mark from wordmark.svg. Inlined: Chromium does not paint an external SVG mask from a file URL. */
 .hh-wordmark {
   display: block;
+  margin-block: var(--space-2);
   width: min(100%, 34rem);
   aspect-ratio: 1090.69 / 150.8;
   background: var(--color-ink);
@@ -103,7 +104,7 @@ textarea {
   height: 1px;
   margin: 0;
   border: 0;
-  background: color-mix(in srgb, var(--color-ink) 18%, transparent);
+  background: var(--color-line);
 }
 
 .hh-columns {
@@ -151,6 +152,9 @@ textarea {
   line-height: 1;
   text-decoration: none;
   text-transform: uppercase;
+  transition:
+    color var(--motion-duration-fast) var(--motion-easing-out),
+    border-color var(--motion-duration-fast) var(--motion-easing-out);
 }
 
 .hh-routes a[aria-current="page"] {
@@ -187,7 +191,7 @@ textarea {
 
 .hh-turn--you {
   padding-left: var(--space-4);
-  border-left: 1px solid color-mix(in srgb, var(--color-ink) 28%, transparent);
+  border-left: 1px solid var(--color-line-strong);
   color: var(--color-ink);
   font-style: italic;
 }
@@ -195,12 +199,12 @@ textarea {
 .hh-qcard {
   min-width: 0;
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-5);
   padding: var(--space-5);
-  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border: 1px solid var(--color-line);
   border-left: 4px solid var(--color-accent);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-surface) 94%, var(--color-ink));
+  background: var(--color-plate);
   box-shadow: var(--shadow-md);
 }
 
@@ -209,7 +213,7 @@ textarea {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: var(--type-title);
-  line-height: 1.12;
+  line-height: 1.2;
   letter-spacing: -0.025em;
   overflow-wrap: break-word;
 }
@@ -281,7 +285,7 @@ textarea {
   gap: var(--space-2);
   margin: 0;
   padding-top: var(--space-3);
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  border-top: 1px solid var(--color-line);
 }
 
 .hh-qcard__actions,
@@ -309,6 +313,7 @@ textarea {
   font-size: var(--type-small);
   letter-spacing: 0.01em;
   line-height: 1;
+  text-align: center;
   text-decoration: none;
   cursor: pointer;
   transition:
@@ -327,6 +332,10 @@ textarea {
   background: color-mix(in srgb, var(--color-accent) 82%, var(--color-ink));
 }
 
+.hh-btn--primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 70%, var(--color-ink));
+}
+
 .hh-btn--primary:focus-visible,
 .hh-qcard__input:focus-visible {
   outline: 2px solid var(--color-focus);
@@ -335,7 +344,7 @@ textarea {
 
 .hh-btn--secondary,
 .hh-vote {
-  border-color: color-mix(in srgb, var(--color-ink) 32%, transparent);
+  border-color: var(--color-line-strong);
   color: var(--color-ink);
   background: transparent;
 }
@@ -343,6 +352,12 @@ textarea {
 .hh-btn--secondary:hover,
 .hh-vote:hover {
   border-color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+}
+
+.hh-btn--secondary:active:not(:disabled),
+.hh-vote:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-ink) 12%, transparent);
 }
 
 .hh-btn--ghost {
@@ -351,10 +366,11 @@ textarea {
 
 .hh-btn--ghost:hover {
   color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
 }
 
-.hh-btn:active,
-.hh-vote:active {
+.hh-btn:active:not(:disabled),
+.hh-vote:active:not(:disabled) {
   transform: translateY(1px);
 }
 
@@ -363,10 +379,32 @@ textarea {
 .hh-btn:disabled,
 .hh-btn:disabled:hover {
   color: var(--color-muted);
-  background: transparent;
-  border-color: color-mix(in srgb, var(--color-ink) 22%, transparent);
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  border-color: var(--color-line);
   cursor: not-allowed;
   transform: none;
+}
+
+.hh-btn[aria-busy="true"],
+[aria-busy="true"] .hh-btn--primary:disabled {
+  color: var(--color-accent);
+  background: transparent;
+  border-color: var(--color-accent);
+  cursor: progress;
+}
+
+.hh-btn[aria-busy="true"]::after,
+[aria-busy="true"] .hh-btn--primary::after {
+  content: "";
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-left: var(--space-2);
+  vertical-align: -0.05em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: hh-wait var(--motion-duration-slow) linear infinite;
 }
 
 .hh-vote.is-selected {
@@ -384,10 +422,10 @@ textarea {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  border: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   overflow: visible;
-  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-ink));
+  background: var(--color-plate);
 }
 
 .hh-site__shot {
@@ -415,7 +453,7 @@ textarea {
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: var(--space-2);
+  gap: var(--space-4);
   padding: var(--space-4);
 }
 
@@ -425,7 +463,7 @@ textarea {
   font-weight: 600;
   font-size: var(--type-title);
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.2;
 }
 
 .hh-site__note {
@@ -447,7 +485,7 @@ textarea {
 .hh-map__item {
   min-width: 0;
   padding: var(--space-3) 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  border-top: 1px solid var(--color-line);
   color: var(--color-muted);
 }
 
@@ -464,7 +502,7 @@ textarea {
   margin-top: var(--space-1);
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 1rem;
+  font-size: var(--type-small);
   letter-spacing: -0.02em;
   line-height: 1.2;
   overflow-wrap: break-word;
@@ -484,6 +522,10 @@ textarea {
   color: var(--color-ink);
 }
 
+.hh-map__item--current .hh-map__name {
+  font-size: var(--type-body);
+}
+
 .hh-map__item--current .hh-map__index {
   color: var(--color-accent);
 }
@@ -492,7 +534,7 @@ textarea {
   display: block;
   height: 2px;
   margin-top: var(--space-3);
-  background: color-mix(in srgb, var(--color-ink) 16%, transparent);
+  background: var(--color-line);
 }
 
 .hh-map__meter-fill {
@@ -511,7 +553,7 @@ textarea {
   min-height: 44px;
   margin-top: var(--space-6);
   padding: var(--space-3) 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-top: 1px solid var(--color-line);
   color: var(--color-muted);
   font-family: var(--font-display);
   font-weight: 600;
@@ -547,7 +589,7 @@ textarea {
 
 .hh-table th {
   padding: var(--space-3) var(--space-3) var(--space-3) 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+  border-bottom: 1px solid var(--color-line-strong);
   color: var(--color-muted);
   font-family: var(--font-display);
   font-weight: 600;
@@ -559,7 +601,7 @@ textarea {
 
 .hh-table td {
   padding: var(--space-4) var(--space-3) var(--space-4) 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+  border-bottom: 1px solid var(--color-line);
   vertical-align: baseline;
 }
 
@@ -606,7 +648,7 @@ textarea {
   display: grid;
   gap: var(--space-2);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+  border-bottom: 1px solid var(--color-line);
 }
 
 .hh-phase-mark__num {
@@ -621,12 +663,12 @@ textarea {
 .hh-empty,
 .hh-error {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-4);
   min-width: 0;
   max-width: var(--measure);
-  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  padding: var(--space-6) var(--space-5) var(--space-6) var(--space-6);
   border-radius: 0;
-  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+  background: var(--color-plate);
 }
 
 .hh-empty {
@@ -644,10 +686,10 @@ textarea {
 .hh-error__title {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 800;
   font-size: var(--type-title);
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .hh-empty__next,
@@ -655,13 +697,25 @@ textarea {
 .hh-empty p,
 .hh-error p {
   margin: 0;
+  max-width: 38rem;
   overflow-wrap: break-word;
 }
 
-.hh-empty__next,
-.hh-error__next {
+.hh-empty p,
+.hh-error p {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+p.hh-empty__next,
+p.hh-error__next {
   color: var(--color-ink);
   font-weight: 600;
+}
+
+.hh-empty .hh-btn--ghost {
+  justify-content: flex-start;
+  padding-inline: 0;
 }
 
 .hh-kit {
@@ -700,7 +754,7 @@ textarea {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+  border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -760,7 +814,7 @@ textarea {
 
   .hh-table tr {
     padding: var(--space-4) 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+    border-bottom: 1px solid var(--color-line);
   }
 
   .hh-table td {
@@ -794,7 +848,12 @@ textarea {
 
 @media (min-width: 768px) {
   .hh-shell {
-    padding: var(--space-7) var(--space-7) 0 calc(var(--spine) + var(--space-7));
+    padding: var(--space-7) var(--space-7) var(--space-7) calc(var(--spine) + var(--space-7));
+  }
+
+  .hh-mast {
+    gap: var(--space-5);
+    margin-bottom: var(--space-7);
   }
 
   .hh-map {
@@ -808,7 +867,7 @@ textarea {
 
 @media (min-width: 1100px) {
   .hh-shell {
-    padding: var(--space-8) var(--space-8) 0 calc(var(--spine) + var(--space-8));
+    padding: var(--space-8) var(--space-8) var(--space-8) calc(var(--spine) + var(--space-8));
   }
 
   .hh-columns {
@@ -826,7 +885,7 @@ textarea {
     top: var(--space-6);
     grid-template-columns: minmax(0, 1fr);
     padding-left: var(--space-5);
-    border-left: 1px solid color-mix(in srgb, var(--color-ink) 16%, transparent);
+    border-left: 1px solid var(--color-line);
   }
 
   .hh-dash {
@@ -834,10 +893,42 @@ textarea {
   }
 }
 
+.hh-shell > main,
+.hh-shell main > section {
+  min-width: 0;
+}
+
+.hh-shell main > section {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.hh-error[hidden],
+.hh-empty[hidden],
+.hh-qcard [hidden],
+.hh-turn form[hidden] {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .hh-qcard__entry > [data-voice="hold"] {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hh-btn,
   .hh-vote,
-  .hh-rise {
+  .hh-rise,
+  .hh-routes a,
+  .hh-qcard,
+  .hh-qcard__input,
+  .hh-site,
+  .hh-skip,
+  .hh-btn[aria-busy="true"]::after,
+  [aria-busy="true"] .hh-btn--primary::after {
     animation: none;
     transition: none;
   }
@@ -845,7 +936,7 @@ textarea {
 
 @media (prefers-reduced-motion: no-preference) {
   .hh-rise {
-    animation: hh-rise var(--motion-duration-slow) var(--motion-easing-out) both;
+    animation: hh-rise var(--motion-duration-fast) var(--motion-easing-out) both;
   }
 
   .hh-rise--2 {
@@ -863,10 +954,16 @@ textarea {
 
 @keyframes hh-rise {
   from {
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
 
   to {
     transform: none;
+  }
+}
+
+@keyframes hh-wait {
+  to {
+    transform: rotate(360deg);
   }
 }
