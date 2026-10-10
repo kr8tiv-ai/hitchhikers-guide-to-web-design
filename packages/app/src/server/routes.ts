@@ -51,7 +51,7 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
-import { guideTurnText, reshapeDeskCard } from "../client/desk.ts";
+import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import {
   compactMapLabel,
   depthTouched,
@@ -63,7 +63,13 @@ import {
   previousAssumption,
   questionNeedsConfirm,
   renderEmptyBrand,
+  injectBrandLogo,
+  isLogoAssetName,
+  isRasterLogo,
+  parseLogoIntake,
+  serializeLogoIntake,
   APPROVE_EMPTY_ACTION,
+  type LogoIntake,
   openQuestionHref,
   renderEmptyInterview,
   renderPreflight,
@@ -634,7 +640,56 @@ async function handleUpload(
     return;
   }
   await storeUpload(projectDir, decision.safeName, part.data);
+  try {
+    await rememberLogo(projectDir, decision.safeName, headerOne(req.headers["x-hh-question"]));
+  } catch {
+    // The bytes are already in .hitchhiker/uploads. A brand-folder problem must not hide that.
+  }
   sendJson(req, res, 201, { ok: true, safeName: decision.safeName, bytes: part.data.length });
+}
+
+/**
+ * Logo questions record a pointer the brand plate can read.
+ * The bytes stay in uploads. SVG and PDF are named, not served.
+ * Other upload questions keep the file and do not write this pointer.
+ */
+async function rememberLogo(projectDir: string, safeName: string, rawQuestionId: string): Promise<void> {
+  const questionId = rawQuestionId.trim();
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(questionId)) return;
+  if (!isLogoAssetName(safeName)) return;
+  const questions = loadTree(treeFile(projectDir));
+  const question = questions.find((item) => item.id === questionId);
+  if (question === undefined || !isLogoQuestion(question)) return;
+  const dir = path.join(projectDir, ".hitchhiker", "brand");
+  await mkdir(dir, { recursive: true });
+  await replaceViaTemp(path.join(dir, "logo-intake.json"), serializeLogoIntake({ safeName, questionId }));
+}
+
+function readLogoIntake(projectDir: string): LogoIntake | null {
+  const file = path.join(projectDir, ".hitchhiker", "brand", "logo-intake.json");
+  if (!existsSync(file)) return null;
+  try {
+    return parseLogoIntake(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Raster logos only. SVG is never given a route, and PDF stays a file name. */
+async function sendBrandLogo(req: IncomingMessage, res: ServerResponse, projectDir: string): Promise<void> {
+  const intake = readLogoIntake(projectDir);
+  if (intake === null || !isRasterLogo(intake.safeName)) {
+    sendJson(req, res, 404, { error: "No logo file is on the desk." });
+    return;
+  }
+  const bytes = await readInside(path.join(projectDir, ".hitchhiker", "uploads"), intake.safeName);
+  const ext = path.extname(intake.safeName).toLowerCase();
+  const type = STATIC_TYPES[ext];
+  if (bytes === null || type === undefined || type === "image/svg+xml") {
+    sendJson(req, res, 404, { error: "No logo file is on the desk." });
+    return;
+  }
+  sendBytes(req, res, 200, type, bytes);
 }
 
 async function handleAudio(
@@ -785,9 +840,15 @@ async function handleGet(
     return;
   }
   if (pathname === "/brand") {
+    const intake = readLogoIntake(projectDir);
+    const questionId = view().question?.id ?? null;
     const loaded = await loadBrandKit(projectDir);
     if (loaded.kind === "missing") {
-      sendHtml(req, res, 200, renderBrand(token, notice, view().question?.id ?? null));
+      const raster = intake !== null && isRasterLogo(intake.safeName);
+      const html = raster
+        ? renderBrand(token, notice, questionId, intake, ["/src/brand-kit.css"])
+        : renderBrand(token, notice, questionId, intake);
+      sendHtml(req, res, 200, html);
       return;
     }
     const nav = `${deskMenu(false)}\n        ${routeNav("/brand")}`;
@@ -795,7 +856,11 @@ async function handleGet(
       sendHtml(req, res, 500, renderBrandKitError(token, nav));
       return;
     }
-    sendHtml(req, res, 200, dressBrandKit(loaded.html, token, nav), brandKitHeaders());
+    sendHtml(req, res, 200, injectBrandLogo(dressBrandKit(loaded.html, token, nav), intake), brandKitHeaders());
+    return;
+  }
+  if (pathname === "/brand/logo") {
+    await sendBrandLogo(req, res, projectDir);
     return;
   }
   if (pathname === "/approve") {
@@ -1167,7 +1232,12 @@ const MAP_FOLD_CSS = `.hh-map-fold { margin: 0; min-width: 0; }
 }
 @media (min-width: 720px) {
   .hh-map-fold > .hh-map { display: grid; }
-}`;
+}
+/* Logo drop sits above the composer. 375 is under 720px, so the composer sticks and this zone scrolls with the question. 1440 is outside that query, and the zone stays in the 40rem read column. */
+.hh-qcard__drop { display: grid; gap: var(--space-2); min-width: 0; max-width: 100%; padding: var(--space-4); border: 1px dashed color-mix(in srgb, var(--color-ink) 32%, transparent); border-radius: var(--radius-md); }
+.hh-qcard__file { display: block; width: 100%; max-width: 100%; min-height: 44px; color: var(--color-ink); font-family: var(--font-text); font-size: var(--type-small); }
+.hh-qcard__file:focus-visible, .hh-qcard__lang > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.hh-qcard__lang > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--color-ink); font-family: var(--font-display); font-weight: 600; font-size: var(--type-small); }`;
 
 function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): string {
   const linked = mapHtml.replace(
@@ -1247,7 +1317,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${reshapeDeskCard(session.cardHtml, true)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, true), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
   html = replaceBlock(
@@ -1272,7 +1342,13 @@ function renderDesk(token: string, session: DeskSession): string {
   );
 }
 
-function renderBrand(token: string, notice: string | null = null, questionId: string | null = null): string {
+function renderBrand(
+  token: string,
+  notice: string | null = null,
+  questionId: string | null = null,
+  intake: LogoIntake | null = null,
+  extraCss?: readonly string[],
+): string {
   return renderPanel({
     notice,
     token,
@@ -1281,7 +1357,8 @@ function renderBrand(token: string, notice: string | null = null, questionId: st
     current: "/brand",
     kicker: "Brand kit",
     status: "The kit waits on the brief.",
-    main: renderEmptyBrand(questionId),
+    main: renderEmptyBrand(questionId, intake),
+    ...(extraCss === undefined ? {} : { extraCss }),
   });
 }
 

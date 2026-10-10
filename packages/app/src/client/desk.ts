@@ -69,6 +69,101 @@ function withQuestionTabIndex(html: string): string {
 }
 
 /**
+ * Logo questions are the ones that write the logo anchors, plus DP-0.4,
+ * which asks for a logo among the brand assets and lists upload.
+ * Other upload questions stay text-only.
+ */
+const LOGO_WRITES = new Set(["BRAND.md#logo", "ASSETS.md#logo"]);
+
+export function isLogoQuestion(question: {
+  id: string;
+  input?: readonly string[];
+  writes?: readonly string[];
+}): boolean {
+  if (question.writes?.some((write) => LOGO_WRITES.has(write)) === true) return true;
+  return question.id === "DP-0.4" && question.input?.includes("upload") === true;
+}
+
+/** Summary control. The restatement is not in the card until this opens. */
+export const READ_THIS_IN = "Read this in\u2026";
+
+/**
+ * Same question as the desk comp, in German. Only DP-1.1 has this line.
+ * It stays out of the card HTML until the toggle opens.
+ */
+const LOGO_GERMAN =
+  "Falls Sie bereits ein geliebtes Firmenlogo besitzen, legen Sie die Datei hier ab und sagen Sie mir, welche Teile unantastbar bleiben, ob Sie damit zufrieden sind, oder ob die Firmenlogoentscheidung noch bis zur Markenphase warten soll.";
+
+export function germanRestatement(questionId: string): string | null {
+  return questionId === "DP-1.1" ? LOGO_GERMAN : null;
+}
+
+/** Panel inserted when the toggle opens. Absent from the first card HTML. */
+export function languagePanel(questionId: string): string {
+  const text = germanRestatement(questionId);
+  if (text === null) {
+    return `<p class="hh-qcard__body" data-restatement>This question is not restated in German.</p>`;
+  }
+  return `<p class="hh-kicker">Same question, in German</p>\n<p class="hh-qcard__body" lang="de" data-restatement>${escapeHtml(text)}</p>`;
+}
+
+const LOGO_HINT =
+  "Drop a logo file here, or choose one. PNG, JPG, WEBP, GIF, SVG, or PDF. Up to 25 MB. It stays on this machine.";
+
+/** Matches the server cap in uploads.ts. The server still refuses a larger body. */
+const LOGO_MAX_BYTES = 25 * 1024 * 1024;
+
+const LOGO_ACCEPT =
+  ".png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf";
+
+/**
+ * File input for logo questions, and a closed language toggle on every question.
+ * The drop zone is before the composer: at 375 the composer sticks and this zone
+ * scrolls with the question. At 1440 both stay in the 40rem read column.
+ */
+export function withInterviewExtras(
+  html: string,
+  question: { id: string; input?: readonly string[]; writes?: readonly string[] } | null,
+  logoNote?: string,
+): string {
+  if (question === null) return html;
+  if (!html.includes(`data-question-id="${escapeHtml(question.id)}"`)) return html;
+  let next = html;
+  if (!next.includes("data-lang-toggle")) next = insertBeforeComposer(next, languageToggle());
+  if (isLogoQuestion(question) && !next.includes("data-logo-drop")) {
+    next = insertBeforeComposer(next, logoDropZone(logoNote));
+  }
+  return next;
+}
+
+function languageToggle(): string {
+  return `<details class="hh-qcard__lang" data-lang-toggle>\n    <summary>${READ_THIS_IN}</summary>\n  </details>\n  `;
+}
+
+function logoDropZone(logoNote?: string): string {
+  const status = logoNote === undefined || logoNote === "" ? LOGO_HINT : logoNote;
+  return `<div class="hh-qcard__drop" data-logo-drop role="group" aria-labelledby="hh-logo-label">
+    <label class="hh-qcard__field">
+      <span class="hh-qcard__label" id="hh-logo-label">Logo file</span>
+      <input class="hh-qcard__file" id="hh-logo-file" name="logo" type="file" accept="${LOGO_ACCEPT}" data-logo-file aria-describedby="hh-logo-status" />
+    </label>
+    <p class="hh-qcard__hint" id="hh-logo-status" data-logo-status>${escapeHtml(status)}</p>
+  </div>
+  `;
+}
+
+function insertBeforeComposer(html: string, block: string): string {
+  const marker = '<div class="hh-qcard__composer">';
+  const at = html.indexOf(marker);
+  if (at < 0) {
+    const end = html.lastIndexOf("</article>");
+    if (end < 0) return html;
+    return `${html.slice(0, end)}${block}${html.slice(end)}`;
+  }
+  return `${html.slice(0, at)}${block}${html.slice(at)}`;
+}
+
+/**
  * Desk page. Fetches the session, paints the card, and posts with the CSRF token.
  * Importing this module from Node does nothing: there is no document.
  */
@@ -164,6 +259,9 @@ interface DeskElement {
   value?: string;
   disabled?: boolean;
   textContent?: string | null;
+  /** Present on `<input type="file">`. Absent on every other control. */
+  files?: ArrayLike<File>;
+  open?: boolean;
   setPointerCapture?(pointerId: number): void;
   insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
   focus?(): void;
@@ -179,6 +277,7 @@ interface DeskEvent {
   shiftKey?: boolean;
   /** True while an IME composition is open. Enter must not submit. */
   isComposing?: boolean;
+  dataTransfer?: { files?: ArrayLike<File> } | null;
 }
 
 interface DeskParent {
@@ -187,8 +286,8 @@ interface DeskParent {
 
 interface DeskDocument {
   querySelector(selector: string): DeskElement | null;
-  addEventListener(type: string, listener: (event: DeskEvent) => void): void;
-  removeEventListener(type: string, listener: (event: DeskEvent) => void): void;
+  addEventListener(type: string, listener: (event: DeskEvent) => void, capture?: boolean): void;
+  removeEventListener(type: string, listener: (event: DeskEvent) => void, capture?: boolean): void;
   createElement?(tag: string): DeskElement;
   body?: DeskParent;
 }
@@ -308,8 +407,11 @@ export function mountDesk(env: DeskEnv): () => void {
   let voiceError: string | null = null;
   let skipConfirm = false;
   const editing = new Set<string>();
+  let logoSaved: { id: string; text: string } | null = null;
 
   const onClick = (event: DeskEvent): void => {
+    const details = langDetails(event.target);
+    if (details !== null) queueMicrotask(() => syncLanguage(details));
     const saveId = readMarked(event.target, "data-edit-save");
     if (saveId !== null) {
       event.preventDefault();
@@ -386,8 +488,38 @@ export function mountDesk(env: DeskEnv): () => void {
     if (isVoiceTarget(event.target)) event.preventDefault();
   };
 
+  const onChange = (event: DeskEvent): void => {
+    const target = event.target;
+    if (target === null || target.getAttribute("data-logo-file") === null) return;
+    const file = firstFile(target.files);
+    if (file === null) return;
+    void uploadLogo(file);
+  };
+  const onDragOver = (event: DeskEvent): void => {
+    if (dropHost(event.target) === null) return;
+    event.preventDefault();
+  };
+  const onDrop = (event: DeskEvent): void => {
+    if (dropHost(event.target) === null) return;
+    event.preventDefault();
+    const file = firstFile(event.dataTransfer?.files);
+    if (file === null) return;
+    void uploadLogo(file);
+  };
+  const onToggle = (event: DeskEvent): void => {
+    const details = langDetails(event.target);
+    if (details === null) return;
+    // The open flag is settled by the time the click task yields.
+    queueMicrotask(() => syncLanguage(details));
+  };
+
   env.document.addEventListener("click", onClick);
   env.document.addEventListener("input", onInput);
+  env.document.addEventListener("change", onChange);
+  env.document.addEventListener("dragover", onDragOver);
+  env.document.addEventListener("drop", onDrop);
+  // toggle does not bubble. Capture still sees it when the summary opens.
+  env.document.addEventListener("toggle", onToggle, true);
   env.document.addEventListener("pointerdown", onPointerDown);
   env.document.addEventListener("pointerup", onPointerUp);
   env.document.addEventListener("pointercancel", onPointerUp);
@@ -400,6 +532,10 @@ export function mountDesk(env: DeskEnv): () => void {
   return () => {
     env.document.removeEventListener("click", onClick);
     env.document.removeEventListener("input", onInput);
+    env.document.removeEventListener("change", onChange);
+    env.document.removeEventListener("dragover", onDragOver);
+    env.document.removeEventListener("drop", onDrop);
+    env.document.removeEventListener("toggle", onToggle, true);
     env.document.removeEventListener("pointerdown", onPointerDown);
     env.document.removeEventListener("pointerup", onPointerUp);
     env.document.removeEventListener("pointercancel", onPointerUp);
@@ -786,6 +922,106 @@ export function mountDesk(env: DeskEnv): () => void {
     }
   }
 
+  function firstFile(list: ArrayLike<File> | undefined): File | null {
+    if (list === undefined || list.length < 1) return null;
+    return list[0] ?? null;
+  }
+
+  function markedHost(start: DeskElement | null, name: string): DeskElement | null {
+    let node = start;
+    const seen = new Set<DeskElement>();
+    while (node !== null && !seen.has(node)) {
+      seen.add(node);
+      if (typeof node.getAttribute !== "function") return null;
+      if (node.getAttribute(name) !== null) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function dropHost(start: DeskElement | null): DeskElement | null {
+    return markedHost(start, "data-logo-drop");
+  }
+
+  function langDetails(start: DeskElement | null): DeskElement | null {
+    return markedHost(start, "data-lang-toggle");
+  }
+
+  function currentQuestionId(): string | null {
+    return (
+      view?.question?.id ??
+      region()?.querySelector("[data-question-id]")?.getAttribute("data-question-id") ??
+      null
+    );
+  }
+
+  /** The German line is inserted here, so the first card HTML does not contain it. */
+  function syncLanguage(details: DeskElement): void {
+    const open = details.open === true || details.getAttribute("open") !== null;
+    if (!open) return;
+    if (details.querySelector("[data-restatement]") !== null) return;
+    const id = currentQuestionId() ?? "";
+    details.insertAdjacentHTML?.("beforeend", languagePanel(id));
+  }
+
+  async function uploadLogo(file: File): Promise<void> {
+    const question = view?.question ?? null;
+    if (question === null || !isLogoQuestion(question) || token === null) return;
+    if (file.size === 0) {
+      logoSaved = { id: question.id, text: "File is empty." };
+      paint();
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      logoSaved = { id: question.id, text: "File is over 25 MB." };
+      paint();
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file, file.name);
+    let response: Response;
+    try {
+      response = await env.fetch("/api/upload", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "x-hh-csrf": token,
+          "x-hh-question": question.id,
+        },
+        body,
+      });
+    } catch {
+      logoSaved = { id: question.id, text: "The logo did not save. Try again." };
+      paint();
+      return;
+    }
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      const message =
+        isRecord(payload) && typeof payload.error === "string"
+          ? payload.error
+          : "The logo did not save. Try again.";
+      logoSaved = { id: question.id, text: message };
+      paint();
+      return;
+    }
+    const safeName = isRecord(payload) && typeof payload.safeName === "string" ? payload.safeName : "";
+    if (safeName === "" || !/^[A-Za-z0-9._-]{1,80}$/.test(safeName)) {
+      logoSaved = { id: question.id, text: "The logo did not save. Try again." };
+      paint();
+      return;
+    }
+    const line = `Logo file: ${safeName}`;
+    if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
+    logoSaved = { id: question.id, text: `Saved as ${safeName}.` };
+    paint();
+  }
+
   function paint(): void {
     const question = region();
     if (question !== null && view !== null) {
@@ -805,10 +1041,16 @@ export function mountDesk(env: DeskEnv): () => void {
         enterHint: true,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
-      question.innerHTML = reshapeDeskCard(
+      const card = reshapeDeskCard(
         replaceEmptyCard(renderCard(state), view.question?.id ?? null),
         speechReady(),
       );
+      const saved =
+        logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : undefined;
+      question.innerHTML =
+        saved === undefined
+          ? withInterviewExtras(card, view.question)
+          : withInterviewExtras(card, view.question, saved);
     } else if (question !== null && error !== null) {
       question.innerHTML = `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
     }

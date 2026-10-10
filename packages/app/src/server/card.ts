@@ -103,17 +103,84 @@ export function renderPreflight(preflight: DeskPreflight): string {
 }
 
 /**
+ * Pointer the brand plate reads after a logo question upload.
+ * The bytes stay in `.hitchhiker/uploads` under safeName.
+ */
+export interface LogoIntake {
+  safeName: string;
+  questionId: string;
+}
+
+const LOGO_ASSET_NAME =
+  /^hh-[0-9a-f]{8}-[A-Za-z0-9_-][A-Za-z0-9._-]{0,47}\.(png|jpe?g|webp|gif|svg|pdf)$/;
+
+export function isLogoAssetName(name: string): boolean {
+  if (name.includes("..") || name.includes("/") || name.includes("\\")) return false;
+  return LOGO_ASSET_NAME.test(name);
+}
+
+export function isRasterLogo(name: string): boolean {
+  return isLogoAssetName(name) && /\.(?:png|jpe?g|webp|gif)$/i.test(name);
+}
+
+export function parseLogoIntake(raw: string): LogoIntake | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw.replace(/^\uFEFF/, "")) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.safeName !== "string" || typeof record.questionId !== "string") return null;
+  if (!isLogoAssetName(record.safeName)) return null;
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(record.questionId)) return null;
+  return { safeName: record.safeName, questionId: record.questionId };
+}
+
+export function serializeLogoIntake(intake: LogoIntake): string {
+  return `${JSON.stringify({ safeName: intake.safeName, questionId: intake.questionId })}\n`;
+}
+
+/**
+ * Raster logos are an image. SVG and PDF stay a file name: SVG is not given a route.
+ * bk-figure caps the image at 28rem, so 375 fits the column and 1440 does not grow past that.
+ */
+export function logoIntakeMarkup(intake: LogoIntake | null): string {
+  if (intake === null) return "";
+  const name = escapeHtml(intake.safeName);
+  const question = escapeHtml(intake.questionId);
+  if (isRasterLogo(intake.safeName)) {
+    return `<figure class="bk-figure" data-logo-intake data-logo-question="${question}"><img src="/brand/logo" alt="Logo on file" /><figcaption class="hh-small">${name}</figcaption></figure>`;
+  }
+  return `<p class="hh-specimen__text" data-logo-intake data-logo-question="${question}">Logo on file: ${name}</p>`;
+}
+
+/** Puts the intake mark beside the kit's Logo heading. A plate with no heading is unchanged. */
+export function injectBrandLogo(html: string, intake: LogoIntake | null): string {
+  if (intake === null || html.includes("data-logo-intake")) return html;
+  const block = logoIntakeMarkup(intake);
+  if (block === "") return html;
+  const marker = '<h2 class="hh-title" id="logo-title">Logo</h2>';
+  if (!html.includes(marker)) return html;
+  return html.replace(marker, `${marker}${block}`);
+}
+
+/**
  * One next action, linked to the open question.
  * At 375 the shell is a single column with 16px padding. At 1440 the plate
  * sits in the 40rem read column. The button uses the existing rust primary.
+ * A saved logo sits in that same column.
  */
-export function renderEmptyBrand(questionId: string | null): string {
+export function renderEmptyBrand(questionId: string | null, intake: LogoIntake | null = null): string {
   const href = escapeHtml(openQuestionHref(questionId));
   const label = questionId === null ? "Open question" : `Open question ${questionId}`;
+  const logo = logoIntakeMarkup(intake);
+  const logoBlock = logo === "" ? "" : `\n        ${logo}`;
   return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
         <p class="hh-kicker" id="brand-title">Type</p>
         <p class="hh-specimen__display">No kit on the desk</p>
-        <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>
+        <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>${logoBlock}
       </section>
       <div class="hh-empty hh-rise hh-rise--3">
         <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${EMPTY_BRAND_ACTION}</a></p>
