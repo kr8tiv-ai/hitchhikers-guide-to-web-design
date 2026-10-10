@@ -63,6 +63,14 @@ import { issueToken, tokensMatch } from "./csrf.ts";
 import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
+  applySettingsPost,
+  loadSettingsView,
+  renderSettingsMain,
+  settingsSavedLine,
+  settingsStatus,
+  type SettingsView,
+} from "./settings.ts";
+import {
   MAX_UPLOAD_BYTES,
   acceptAudio,
   acceptUpload,
@@ -230,7 +238,7 @@ export async function createDeskApp(opts: {
         return;
       }
       if (method === "POST") {
-        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue);
+        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice);
         return;
       }
       await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/", notice);
@@ -456,7 +464,12 @@ async function handlePost(
   view: () => DeskSession,
   hub: SseHub,
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  notice: string | null,
 ): Promise<void> {
+  if (pathname === "/settings") {
+    await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
+    return;
+  }
   const header = req.headers["x-hh-csrf"];
   if (typeof header !== "string" || !tokensMatch(token, header)) {
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
@@ -740,7 +753,7 @@ async function handleGet(
       sendHtml(req, res, 200, renderBrand(token, notice, view().question?.id ?? null));
       return;
     }
-    const nav = routeNav("/brand");
+    const nav = `${deskMenu(false)}\n        ${routeNav("/brand")}`;
     if (loaded.kind === "bad") {
       sendHtml(req, res, 500, renderBrandKitError(token, nav));
       return;
@@ -752,8 +765,23 @@ async function handleGet(
     sendHtml(req, res, 200, renderApprove(token, notice));
     return;
   }
+  if (pathname === "/settings") {
+    try {
+      const settingsView = await enqueue(() => loadSettingsView(projectDir));
+      sendHtml(req, res, 200, renderSettingsDocument(token, settingsView, notice, null));
+    } catch (error: unknown) {
+      logDeskError(error);
+      sendHtml(req, res, 500, renderSettingsFailure(token, notice));
+    }
+    return;
+  }
   if (pathname === "/hh-dashboard") {
-    sendDriveResult(req, res, await readDashboard(projectDir, token));
+    const drive = await readDashboard(projectDir, token);
+    if (drive.kind === "html") {
+      sendHtml(req, res, drive.status, withDeskMenu(drive.html));
+      return;
+    }
+    sendDriveResult(req, res, drive);
     return;
   }
   if (pathname === "/api/drive") {
@@ -1006,7 +1034,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = mustReplace(
     html,
     dek,
-    `${dek}\n        ${routeNav("/")}`,
+    `${dek}\n        ${deskMenu(false)}\n        ${routeNav("/")}`,
     "dek",
   );
   html = mustReplace(
@@ -1122,7 +1150,7 @@ function renderPanel(opts: {
   token: string;
   title: string;
   description: string;
-  current: RouteName;
+  current: RouteName | null;
   kicker: string;
   main: string;
   status: string;
@@ -1130,6 +1158,7 @@ function renderPanel(opts: {
   extraCss?: readonly string[];
   script?: string;
   board?: boolean;
+  onSettings?: boolean;
 }): string {
   const extra = (opts.extraCss ?? [])
     .map((href) => `    <link rel="stylesheet" href="${escapeHtml(href)}" />`)
@@ -1160,6 +1189,7 @@ ${extra}
           <p class="hh-kicker">Local desk</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
+        ${deskMenu(opts.onSettings === true)}
         ${routeNav(opts.current)}
       </header>
       <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}">
@@ -1174,7 +1204,173 @@ ${script}  </body>
 `;
 }
 
-function routeNav(current: RouteName): string {
+function deskMenu(onSettings: boolean): string {
+  const open = onSettings ? " open" : "";
+  const current = onSettings ? ' aria-current="page"' : "";
+  return `<details class="hh-desk-menu hh-qcard__look"${open}>
+          <summary class="hh-kicker">Desk menu</summary>
+          <a class="hh-btn hh-btn--ghost" href="/settings"${current}>Settings</a>
+        </details>`;
+}
+
+function withDeskMenu(html: string): string {
+  if (html.includes('class="hh-desk-menu')) return html;
+  const mark = `<div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>`;
+  if (!html.includes(mark)) return html;
+  return html.replace(mark, `${mark}\n        ${deskMenu(false)}`);
+}
+
+function renderSettingsDocument(
+  token: string,
+  view: SettingsView,
+  notice: string | null,
+  flash: { kind: "ok" | "warn"; text: string } | null,
+): string {
+  return renderPanel({
+    notice,
+    token,
+    title: "Settings",
+    description: "Voice, model, and effort. The speech-to-text rate is shown before xAI can be turned on.",
+    current: null,
+    onSettings: true,
+    kicker: "Settings",
+    status: flash?.text ?? settingsStatus(view),
+    main: renderSettingsMain(view, token, flash),
+  });
+}
+
+function renderSettingsFailure(token: string, notice: string | null): string {
+  return renderPanel({
+    notice,
+    token,
+    title: "Settings",
+    description: "Settings could not be read.",
+    current: null,
+    onSettings: true,
+    kicker: "Settings",
+    status: "Settings could not be read.",
+    main: `<div class="hh-empty">
+        <h1 class="hh-empty__title">Settings could not be read</h1>
+        <p>The rate card stayed unread. Nothing was turned on.</p>
+      </div>`,
+  });
+}
+
+async function handleSettingsPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  notice: string | null,
+): Promise<void> {
+  const contentType = headerOne(req.headers["content-type"]);
+  const wantsJson = contentType.split(";")[0]?.trim().toLowerCase() === "application/json";
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    await replySettings(req, res, wantsJson, 413, "That request is too large.", null, token, projectDir, enqueue, notice);
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    await replySettings(req, res, wantsJson, 413, "That request is too large.", null, token, projectDir, enqueue, notice);
+    dropRequest(req);
+    return;
+  }
+  const raw = capped.body.toString("utf8");
+  if (!settingsTokenOk(token, req.headers["x-hh-csrf"], raw, contentType)) {
+    await replySettings(
+      req,
+      res,
+      wantsJson,
+      403,
+      "The desk refused this request. Reload the page.",
+      null,
+      token,
+      projectDir,
+      enqueue,
+      notice,
+    );
+    return;
+  }
+  try {
+    const result = await enqueue(() => applySettingsPost(projectDir, raw, contentType));
+    const text = result.error ?? settingsSavedLine(result.view);
+    await replySettings(req, res, wantsJson, result.status, text, result, token, projectDir, enqueue, notice);
+  } catch (error: unknown) {
+    logDeskError(error);
+    await replySettings(req, res, wantsJson, 500, "Settings did not save.", null, token, projectDir, enqueue, notice);
+  }
+}
+
+async function replySettings(
+  req: IncomingMessage,
+  res: ServerResponse,
+  wantsJson: boolean,
+  status: number,
+  text: string,
+  result: { error: string | null; view: SettingsView } | null,
+  token: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  notice: string | null,
+): Promise<void> {
+  if (wantsJson) {
+    if (result === null || result.error !== null || status !== 200) {
+      sendJson(req, res, status, { error: text });
+      return;
+    }
+    sendJson(req, res, 200, {
+      ok: true,
+      voice: result.view.voice,
+      model: result.view.model,
+      effort: result.view.effort,
+      accepted: result.view.accepted,
+      restPerHour: result.view.restPerHour,
+      streamingPerHour: result.view.streamingPerHour,
+      restPriceText: result.view.restPriceText,
+      streamingPriceText: result.view.streamingPriceText,
+    });
+    return;
+  }
+  try {
+    const view = result?.view ?? (await enqueue(() => loadSettingsView(projectDir)));
+    const flash = status === 200 ? { kind: "ok" as const, text } : { kind: "warn" as const, text };
+    sendHtml(req, res, status, renderSettingsDocument(token, view, notice, flash));
+  } catch (error: unknown) {
+    logDeskError(error);
+    sendHtml(req, res, status, renderSettingsFailure(token, notice));
+  }
+}
+
+function settingsTokenOk(
+  token: string,
+  header: string | string[] | undefined,
+  raw: string,
+  contentType: string,
+): boolean {
+  if (typeof header === "string" && tokensMatch(token, header)) return true;
+  const fromBody = csrfField(raw, contentType);
+  return fromBody !== null && tokensMatch(token, fromBody);
+}
+
+function csrfField(raw: string, contentType: string): string | null {
+  const mime = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (mime === "application/json") {
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+      const csrf = (value as Record<string, unknown>).csrf;
+      return typeof csrf === "string" ? csrf : null;
+    } catch {
+      return null;
+    }
+  }
+  if (mime === "application/x-www-form-urlencoded") return new URLSearchParams(raw).get("csrf");
+  return null;
+}
+
+function routeNav(current: RouteName | null): string {
   const items = [
     ["/", "Desk"],
     ["/brand", "Brand kit"],

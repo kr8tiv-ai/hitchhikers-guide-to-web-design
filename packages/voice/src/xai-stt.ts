@@ -27,7 +27,11 @@ const USD_SCALE = 10_000;
 /** Redact only long secrets so a short substring cannot rewrite a status line. */
 const MIN_SECRET_LENGTH = 12;
 
-const RATES = {
+/**
+ * Hourly card for REST and streaming. quoteStt reads this object.
+ * Callers import it. Do not copy the numbers into another package.
+ */
+export const XAI_STT_RATES = {
   rest: { ratePerHour: 0.1, unitsPerHour: 1_000, priceText: "$0.10" },
   streaming: { ratePerHour: 0.2, unitsPerHour: 2_000, priceText: "$0.20" },
 } as const;
@@ -74,7 +78,7 @@ export function quoteStt(input: { seconds: number; mode: "rest" | "streaming" })
   if (input.mode !== "rest" && input.mode !== "streaming") {
     throw new Error("Speech-to-text mode must be rest or streaming.");
   }
-  const rate = RATES[input.mode];
+  const rate = XAI_STT_RATES[input.mode];
   const exactUnits = (input.seconds * rate.unitsPerHour) / SECONDS_PER_HOUR;
   if (!Number.isFinite(exactUnits)) {
     throw new Error("Speech-to-text duration is too large to quote.");
