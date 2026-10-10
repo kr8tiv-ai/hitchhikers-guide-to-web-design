@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -11,7 +12,9 @@ import {
   GrokUnavailableError,
   InterviewError,
   LockHeld,
+  replaceViaTemp,
   ThinkTimeoutError,
+  withStateLock,
   WHY_NUDGE,
   redact,
   chooseShortlist,
@@ -49,10 +52,12 @@ import {
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
 import {
+  compactMapLabel,
   depthTouched,
   deskStatus,
   mastLine,
   modeNote,
+  savedFooterLine,
   openRequiredCount,
   previousAssumption,
   questionNeedsConfirm,
@@ -281,10 +286,23 @@ function createLiveTurn(
     let finished: GuideTurn | null = null;
     try {
       const current = getInterview().next();
-      if (current === null) {
-        throw new InterviewError("finished", "The interview is finished.");
-      }
-      if (current.id !== input.questionId) {
+      if (current === null || current.id !== input.questionId) {
+        // A previous answer posts to the same /api/answer path. Same text stays
+        // "already saved". A different text replaces that record in place.
+        if (await editStoredAnswer(projectDir, input)) {
+          await reload();
+          const next = getInterview().next();
+          return {
+            next,
+            events: [
+              { type: "turn", kind: input.kind, questionId: input.questionId },
+              { type: "session", questionId: next === null ? null : next.id },
+            ],
+          };
+        }
+        if (current === null) {
+          throw new InterviewError("finished", "The interview is finished.");
+        }
         if (answerStored(projectDir, input.questionId)) {
           return aheadTurn(current, input, ALREADY_SAVED_MESSAGE);
         }
@@ -699,7 +717,7 @@ async function handleGet(
 ): Promise<void> {
   if (pathname === "/") {
     const session = view();
-    sendHtml(req, res, 200, renderDesk(token, session));
+    sendHtml(req, res, 200, renderDesk(token, session), foldStyleHeaders());
     return;
   }
   if (pathname === "/gallery") {
@@ -981,13 +999,8 @@ function buildSession(
     enterHint: true,
   };
   const compact = depthTouched(questions, answers);
-  let mapHtml: string;
-  try {
-    mapHtml = renderMap(state);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "The map could not be drawn.";
-    mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
-  }
+  const stepTotal = questions.length;
+  const stepIndex = counts === null ? (done ? stepTotal : 0) : counts.index;
   const calm = overlay.calm && overlay.message !== null;
   const baseStatus = calm
     ? (overlay.message ?? "")
@@ -996,6 +1009,17 @@ function buildSession(
       : "Ready.";
   const firstRun = answers.length === 0;
   const statusText = deskStatus({ base: baseStatus, firstRun, calm, preflight });
+  const footerText =
+    compact && !calm && question !== null && counts !== null && statusText === baseStatus
+      ? savedFooterLine(question.id, stepTotal - counts.index)
+      : statusText;
+  let mapHtml: string;
+  try {
+    mapHtml = renderDeskMap(renderMap(state), state.phase, compactMapLabel(state.phase, stepIndex, stepTotal));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "The map could not be drawn.";
+    mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
+  }
   const preflightHtml = preflight !== null && firstRun ? `${renderPreflight(preflight)}\n` : "";
   const transcript = `${preflightHtml}${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
   return {
@@ -1020,7 +1044,7 @@ function buildSession(
     mapHtml,
     guideHtml: renderGuideMap(answers, [...questions]),
     transcriptHtml: transcript,
-    statusHtml: statusSpans(statusText, notice, overlay.calm),
+    statusHtml: statusSpans(footerText, notice, overlay.calm),
     cardHtml: renderCard(card),
   };
 }
@@ -1032,28 +1056,124 @@ function statusSpans(text: string, notice: string | null | undefined, calm = fal
   return `<span>${escapeHtml(notice)}</span>${action}`;
 }
 
+const VISIBLE_TURNS = 3;
+
+interface LoggedTurn {
+  id: string;
+  ask: string | null;
+  value: string;
+}
+
 function renderTranscript(
   tree: readonly Question[],
   answers: readonly AnswerRecord[],
   _current: Question | null,
 ): string {
   const asks = new Map(tree.map((question) => [question.id, question.ask]));
-  const lines: string[] = [];
-  for (const answer of answers) {
-    const ask = asks.get(answer.id);
-    if (ask !== undefined) lines.push(turnLine("Guide", ask, false));
-    lines.push(turnLine("You", answer.value, true));
-  }
+  const turns: LoggedTurn[] = answers.map((answer) => ({
+    id: answer.id,
+    ask: asks.get(answer.id) ?? null,
+    value: answer.value,
+  }));
   // The card title is the current question. Repeating it here printed the ask twice.
-  if (lines.length === 0) {
+  if (turns.length === 0) {
     return turnLine("Guide", "Answers land here after you send one.", false);
   }
-  return lines.join("\n");
+  const splitAt = Math.max(0, turns.length - VISIBLE_TURNS);
+  const parts: string[] = [];
+  if (splitAt > 0) {
+    const earlier = turns
+      .slice(0, splitAt)
+      .map((turn, index) => renderLoggedTurn(turn, index))
+      .join("\n");
+    parts.push(
+      `<details class="hh-qcard__look" data-earlier><summary>Earlier</summary>\n${earlier}\n</details>`,
+    );
+  }
+  parts.push(
+    ...turns.slice(splitAt).map((turn, index) => renderLoggedTurn(turn, splitAt + index)),
+  );
+  return parts.join("\n");
+}
+
+function renderLoggedTurn(turn: LoggedTurn, index: number): string {
+  const ask = turn.ask === null ? "" : `${turnLine("Guide", turn.ask, false)}\n`;
+  const id = escapeHtml(turn.id);
+  const fieldId = `hh-edit-${index}`;
+  return `${ask}<div class="hh-turn hh-turn--you" data-answer-id="${id}">
+            <span class="hh-turn__who">You</span>
+            <span data-answer-text>${escapeHtml(turn.value)}</span>
+            <button type="button" class="hh-btn hh-btn--ghost" data-edit="${id}">Edit</button>
+            <form hidden class="hh-qcard__composer" data-edit-form="${id}">
+              <label class="hh-qcard__label" for="${fieldId}">Edit this answer</label>
+              <textarea class="hh-qcard__input" id="${fieldId}" data-edit-field="${id}" rows="3" autocomplete="off">${escapeHtml(turn.value)}</textarea>
+              <button type="button" class="hh-btn hh-btn--secondary" data-edit-save="${id}">Save this answer</button>
+            </form>
+          </div>`;
 }
 
 function turnLine(who: string, text: string, you: boolean): string {
   const cls = you ? "hh-turn hh-turn--you" : "hh-turn";
   return `<p class="${cls}"><span class="hh-turn__who">${escapeHtml(who)}</span> ${escapeHtml(text)}</p>`;
+}
+
+/**
+ * Phase names stay the locked six. Each one links to a desk that already
+ * exists. Mostly Harmless and So Long share Drive: the queue, the gates,
+ * and deploy are on /hh-dashboard. No new route.
+ */
+const PHASE_HREF: Readonly<Record<string, string>> = {
+  "Don't Panic": "/",
+  "Babel Fish": "/brand",
+  "Deep Thought": "/approve",
+  "Improbability Drive": "/hh-dashboard",
+  "Mostly Harmless": "/hh-dashboard",
+  "So Long and Thanks for All the Fish": "/hh-dashboard",
+};
+
+/**
+ * Under 720px the summary is the map and the list waits in the disclosure.
+ * 375 is inside max-width 719px. 1440 is not: the summary is hidden and the
+ * list stays in the rail. Author display beats the closed-details user-agent
+ * rule, so the wide map does not need the open attribute.
+ */
+const MAP_FOLD_CSS = `.hh-map-fold { margin: 0; min-width: 0; }
+.hh-map-fold > summary { display: none; }
+.hh-map a.hh-map__name { color: inherit; text-decoration: none; }
+.hh-map a.hh-map__name:hover { color: var(--color-accent); }
+.hh-map a.hh-map__name[aria-current=step] { box-shadow: inset 0 -2px 0 var(--color-accent); }
+.hh-turn form[hidden] { display: none; }
+@media (max-width: 719px) {
+  .hh-map-fold > summary {
+    display: list-item;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: var(--type-small);
+    line-height: 1.3;
+  }
+  .hh-map-fold:not([open]) > .hh-map { display: none; }
+}
+@media (min-width: 720px) {
+  .hh-map-fold > .hh-map { display: grid; }
+}`;
+
+function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): string {
+  const linked = mapHtml.replace(
+    /<span class="hh-map__name">([^<]*)<\/span>/g,
+    (_full, name: string) => {
+      const href = PHASE_HREF[name];
+      if (href === undefined) return `<span class="hh-map__name">${name}</span>`;
+      const current = name === phase ? ' aria-current="step"' : "";
+      return `<a class="hh-map__name" href="${href}"${current}>${name}</a>`;
+    },
+  );
+  return `<details class="hh-map-fold">
+            <summary>${escapeHtml(compactLabel)}</summary>
+            ${linked}
+          </details>`;
 }
 
 function renderDesk(token: string, session: DeskSession): string {
@@ -1100,7 +1220,7 @@ function renderDesk(token: string, session: DeskSession): string {
   html = mustReplace(
     html,
     '<link rel="stylesheet" href="src/shell.css" />',
-    '<link rel="stylesheet" href="src/shell.css" />\n    <link rel="stylesheet" href="src/card.css" />\n    <link rel="stylesheet" href="src/motion-previews/motion.css" />',
+    `<link rel="stylesheet" href="src/shell.css" />\n    <link rel="stylesheet" href="src/card.css" />\n    <link rel="stylesheet" href="src/motion-previews/motion.css" />\n    <style>${MAP_FOLD_CSS}</style>`,
     "shell css",
   );
   html = html.replaceAll('href="src/', 'href="/src/');
@@ -2329,11 +2449,88 @@ function nodeCode(error: unknown): string | undefined {
 }
 
 function answerStored(projectDir: string, questionId: string): boolean {
+  return latestStoredValue(projectDir, questionId) !== null;
+}
+
+function latestStoredValue(projectDir: string, questionId: string): string | null {
   try {
-    return readAnswers(projectDir).some((answer) => answer.id === questionId);
+    let value: string | null = null;
+    for (const answer of readAnswers(projectDir)) {
+      if (answer.id === questionId) value = answer.value;
+    }
+    return value;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * Edit posts to /api/answer with the earlier question id. The record is
+ * replaced in interview.json under the state lock. Nothing new is stored.
+ * Returns true only when the text actually changed.
+ */
+async function editStoredAnswer(
+  projectDir: string,
+  input: { kind: "answer" | "suggest" | "skip"; questionId: string; text?: string },
+): Promise<boolean> {
+  if (input.kind !== "answer" || typeof input.text !== "string") return false;
+  const latest = latestStoredValue(projectDir, input.questionId);
+  if (latest === null || latest === input.text) return false;
+  if (input.text.trim() === "") {
+    throw new InterviewError(
+      "empty-answer",
+      "An empty answer is not stored. Skip to keep the assumption.",
+    );
+  }
+  await reviseStoredAnswer(projectDir, input.questionId, input.text);
+  return true;
+}
+
+async function reviseStoredAnswer(projectDir: string, questionId: string, text: string): Promise<void> {
+  const file = path.join(projectDir, ".hitchhiker", "interview.json");
+  await withStateLock(projectDir, async () => {
+    const raw = readFileSync(file, "utf8").replace(/^\uFEFF/, "");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new InterviewError("corrupt-answers", "interview.json is not valid JSON.");
+    }
+    const next = replaceLatestAnswer(parsed, questionId, text);
+    if (next === null) {
+      throw new InterviewError("command", "That question is no longer on the desk.");
+    }
+    await replaceViaTemp(file, next);
+  });
+}
+
+function replaceLatestAnswer(parsed: unknown, questionId: string, text: string): string | null {
+  if (Array.isArray(parsed)) {
+    const index = lastAnswerIndex(parsed, questionId);
+    if (index < 0) return null;
+    const copy = parsed.slice();
+    const item = copy[index];
+    if (!isRecord(item)) return null;
+    copy[index] = { ...item, status: "ANSWERED", value: text };
+    return `${JSON.stringify(copy, null, 2)}\n`;
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.answers)) return null;
+  const index = lastAnswerIndex(parsed.answers, questionId);
+  if (index < 0) return null;
+  const item = parsed.answers[index];
+  if (!isRecord(item)) return null;
+  const answers = parsed.answers.slice();
+  answers[index] = { ...item, status: "ANSWERED", value: text };
+  return `${JSON.stringify({ ...parsed, answers }, null, 2)}\n`;
+}
+
+function lastAnswerIndex(list: readonly unknown[], questionId: string): number {
+  let found = -1;
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list[index];
+    if (isRecord(item) && item.id === questionId) found = index;
+  }
+  return found;
 }
 
 function logDeskError(error: unknown): void {
@@ -2401,6 +2598,20 @@ function sendHtml(
   headers?: Record<string, string>,
 ): void {
   sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(html), headers);
+}
+
+/**
+ * The fold sheet is inline so the closed map hides before desk.js runs.
+ * style-src stays 'self' plus the hash of that exact sheet. No unsafe-inline.
+ */
+function foldStyleHeaders(): Record<string, string> {
+  const hash = createHash("sha256").update(MAP_FOLD_CSS, "utf8").digest("base64");
+  return {
+    "content-security-policy": SAFE["content-security-policy"].replace(
+      "style-src 'self'",
+      `style-src 'self' 'sha256-${hash}'`,
+    ),
+  };
 }
 
 /**

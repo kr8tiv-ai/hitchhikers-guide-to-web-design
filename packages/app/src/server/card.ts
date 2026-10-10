@@ -180,3 +180,20 @@ export function mastLine(phase: string, questionId: string | null): string {
   if (questionId === null || questionId === "") return phase;
   return `${phase} · ${questionId}`;
 }
+
+/** Compact map line. index is the 1-based question, total is this depth. */
+export function compactMapLabel(phase: string, index: number, total: number): string {
+  if (total < 1) return phase;
+  const at = Number.isInteger(index) && index > 0 ? index : 0;
+  return `${phase} · ${at}/${total}`;
+}
+
+/**
+ * Footer once an answer in this depth is on disk.
+ * left is how many questions in the depth come after the current one.
+ * Shape: Saved · DP-0.2 · 20 left
+ */
+export function savedFooterLine(questionId: string, left: number): string {
+  const remaining = Number.isInteger(left) && left > 0 ? left : 0;
+  return `Saved · ${questionId} · ${remaining} left`;
+}

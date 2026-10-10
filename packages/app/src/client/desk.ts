@@ -240,8 +240,21 @@ export function mountDesk(env: DeskEnv): () => void {
   let voiceInterim = "";
   let voiceError: string | null = null;
   let skipConfirm = false;
+  const editing = new Set<string>();
 
   const onClick = (event: DeskEvent): void => {
+    const saveId = readMarked(event.target, "data-edit-save");
+    if (saveId !== null) {
+      event.preventDefault();
+      void saveEdit(saveId);
+      return;
+    }
+    const editId = readMarked(event.target, "data-edit");
+    if (editId !== null) {
+      event.preventDefault();
+      toggleEdit(editId);
+      return;
+    }
     const action = readAction(event.target);
     if (action === null) return;
     event.preventDefault();
@@ -735,7 +748,59 @@ export function mountDesk(env: DeskEnv): () => void {
       status.innerHTML = connection === null ? base : `<span>${escapeHtml(connection)}</span>${base}`;
     }
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
+    applyEdits();
     ensureMotion(env.document, view?.question?.id);
+  }
+
+  function toggleEdit(id: string): void {
+    if (!isQuestionId(id)) return;
+    if (editing.has(id)) editing.delete(id);
+    else editing.add(id);
+    const form = editNode(id, "data-edit-form");
+    if (form === null) return;
+    if (editing.has(id)) form.removeAttribute("hidden");
+    else form.setAttribute("hidden", "");
+  }
+
+  function applyEdits(): void {
+    for (const id of editing) {
+      editNode(id, "data-edit-form")?.removeAttribute("hidden");
+    }
+  }
+
+  async function saveEdit(id: string): Promise<void> {
+    if (pending || token === null || view === null || !isQuestionId(id)) return;
+    const field = editNode(id, "data-edit-field");
+    const text = field !== null && typeof field.value === "string" ? field.value : "";
+    if (text.trim() === "") {
+      error = EMPTY_ANSWER;
+      paint();
+      return;
+    }
+    pending = true;
+    error = null;
+    notice = null;
+    try {
+      const result = await postTurn("answer", token, { questionId: id, text }, env.fetch);
+      if (!result.ok) {
+        error = result.error;
+        return;
+      }
+      view = result.session;
+      editing.delete(id);
+      error = null;
+    } catch {
+      error = DRAFT_KEPT;
+    } finally {
+      pending = false;
+      paint();
+    }
+  }
+
+  function editNode(id: string, attribute: "data-edit-form" | "data-edit-field"): DeskElement | null {
+    const transcript = env.document.querySelector('[data-region="transcript"]');
+    if (transcript === null) return null;
+    return transcript.querySelector(`[${attribute}="${id}"]`);
   }
 }
 
@@ -832,15 +897,26 @@ function readToken(document: DeskDocument): string | null {
 }
 
 function readAction(start: DeskElement | null): "answer" | "suggest" | "skip" | null {
+  const action = readMarked(start, "data-action");
+  if (action === "answer" || action === "suggest" || action === "skip") return action;
+  return null;
+}
+
+function readMarked(start: DeskElement | null, name: string): string | null {
   let node = start;
   const seen = new Set<DeskElement>();
   while (node !== null && !seen.has(node)) {
     seen.add(node);
-    const action = node.getAttribute("data-action");
-    if (action === "answer" || action === "suggest" || action === "skip") return action;
+    if (typeof node.getAttribute !== "function") return null;
+    const value = node.getAttribute(name);
+    if (value !== null && value !== "") return value;
     node = node.parentElement;
   }
   return null;
+}
+
+function isQuestionId(value: string): boolean {
+  return /^[A-Za-z0-9._-]{1,64}$/.test(value);
 }
 
 function asQuestion(value: unknown): Question | null {
