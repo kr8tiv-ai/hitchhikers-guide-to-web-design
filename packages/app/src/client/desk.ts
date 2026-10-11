@@ -11,6 +11,7 @@ import {
 } from "./voice-engine.ts";
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
 import { handleTourKey, mountTour } from "./tour.ts";
+import { joinWords, settleVoice } from "./voice-text.ts";
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -30,7 +31,7 @@ export function replaceEmptyCard(html: string, questionId: string | null): strin
 export const TALK_NEEDS_CHROMIUM = "Talk needs Chrome or Edge";
 
 const HOLD_BUTTON =
-  /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="true")?(?: disabled)?>[^<]*<\/button>/;
+  /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="(?:true|false)")?(?: disabled)?>[\s\S]*?<\/button>/;
 
 /** Latest Guide line for the polite region. Empty when the desk has not asked. */
 export function guideTurnText(ask: string | null, done: boolean): string {
@@ -40,7 +41,7 @@ export function guideTurnText(ask: string | null, done: boolean): string {
 }
 
 /**
- * Moves Hold to talk beside the field and gives the question heading a focus target.
+ * Moves the voice button beside the field and gives the question heading a focus target.
  * When speech is missing, the mic is disabled and names Chrome or Edge.
  * The Answer row keeps Answer, Suggest, and Skip.
  */
@@ -231,23 +232,33 @@ function publicCardError(error: string): string {
 }
 
 /**
- * Hold to talk. Chrome and Edge speech recognition fills the draft while the
- * button is held. Nothing is submitted: the person still presses Answer.
+ * Click to talk. Chrome and Edge speech recognition fills the draft while
+ * listening is on. Nothing is submitted: the person still presses Answer.
  * This desk does not store the audio and does not send it to hh app.
  * Chrome's Web Speech API sends the microphone audio to Google's speech service.
  */
-/** Chrome can drop onend when stop() runs before onstart. Finish the hold anyway. */
-const VOICE_STOP_GRACE_MS = 400;
-export const VOICE_LISTENING = "Listening. Speak, then let go of the button.";
+/** How long a stop waits for the final result or onend before it keeps what it has. */
+export const VOICE_STOP_WAIT_MS = 2500;
+/** First delay before Chrome's own onend is started again. Doubles up to the ceiling. */
+export const VOICE_RESTART_BASE_MS = 250;
+export const VOICE_RESTART_MAX_MS = 2000;
+/** Empty onend cycles in a row. A cycle that produces a result resets the count. */
+export const VOICE_RESTART_CAP = 8;
+export const VOICE_LABEL_IDLE = "Click to talk";
+export const VOICE_LABEL_STOP = "Stop listening";
+export const VOICE_LIVE_STARTED = "Listening started";
+export const VOICE_LIVE_STOPPED = "Listening stopped";
+export const VOICE_CAP_NOTICE = "Listening stopped. Click the voice button to continue.";
+export const VOICE_LISTENING = "Listening. Click the button again when you are done.";
 export const VOICE_HEARD = "Heard you. Check the words, then press Answer.";
 export const VOICE_UNSUPPORTED = VOICE_FALLBACK;
 export const VOICE_BLOCKED =
-  "The microphone is blocked. Click the icon at the left of the address bar, allow the microphone, then hold the button again.";
+  "The microphone is blocked. Click the icon at the left of the address bar, allow the microphone, then click the voice button again.";
 export const VOICE_FIRST_ALLOW =
-  "If Chrome asks to use the microphone, press Allow. Then hold the button while you speak.";
-/** A release with no words. Not the microphone permission sentence. */
-export const VOICE_RELEASE_EMPTY = "Hold the button while you speak.";
-export const VOICE_SILENT = "Nothing was heard. Hold the button while you speak, then let go.";
+  "If Chrome asks to use the microphone, press Allow. Then click the voice button and speak.";
+/** A stop with no words. Not the microphone permission sentence. */
+export const VOICE_RELEASE_EMPTY = "Nothing was heard. Click the voice button and try again.";
+export const VOICE_SILENT = "Nothing was heard. Click the voice button and try again.";
 export const VOICE_NO_MIC = "No microphone was found. Plug one in, or type your answer.";
 export const VOICE_NETWORK =
   "Voice input could not reach the browser's speech service. Check the internet connection, or type your answer.";
@@ -334,12 +345,20 @@ interface DeskParent {
   appendChild(node: DeskElement): void;
 }
 
+interface DeskWindow {
+  addEventListener(type: string, listener: () => void): void;
+  removeEventListener(type: string, listener: () => void): void;
+}
+
 interface DeskDocument {
   querySelector(selector: string): DeskElement | null;
   addEventListener(type: string, listener: (event: DeskEvent) => void, capture?: boolean): void;
   removeEventListener(type: string, listener: (event: DeskEvent) => void, capture?: boolean): void;
   createElement?(tag: string): DeskElement;
   body?: DeskParent;
+  /** Present on a browser document. Harnesses omit it. */
+  defaultView?: DeskWindow | null;
+  visibilityState?: string;
 }
 
 interface DeskMessage {
@@ -447,17 +466,31 @@ export function mountDesk(env: DeskEnv): () => void {
   let streamFailures = 0;
   let connection: string | null = null;
   let listening = false;
-  let held = false;
+  /** The person clicked to listen and has not clicked to stop. */
+  let toggled = false;
   let voiceSession = false;
   let voiceDisclosed = false;
-  let restartQueued = false;
   let recognition: SpeechRecognitionLike | null = null;
+  /** Recognizer that may still deliver a final after stop, until the late window closes. */
+  let lateRec: SpeechRecognitionLike | null = null;
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
+  let restartTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopWait: { rec: SpeechRecognitionLike; resolve: () => void } | null = null;
+  let stopping: Promise<void> | null = null;
+  let committed = false;
   let heardStart = false;
   let voiceBase = "";
   let voiceFinal = "";
   let voiceInterim = "";
   let voiceError: string | null = null;
+  let userTouched = false;
+  let lastHeard = "";
+  let promotedUtterance = "";
+  let emptyRestarts = 0;
+  let restartDelay = VOICE_RESTART_BASE_MS;
+  let cycleHeard = false;
+  let capHit = false;
+  let voiceLive: DeskElement | null = null;
   let skipConfirm = false;
   /** True while Suggest must not replace the question card. */
   let cardHold = false;
@@ -470,6 +503,11 @@ export function mountDesk(env: DeskEnv): () => void {
 
   const onClick = (event: DeskEvent): void => {
     if (handleInstallClick(env, event)) return;
+    if (isVoiceTarget(event.target)) {
+      event.preventDefault();
+      toggleVoice();
+      return;
+    }
     const details = langDetails(event.target);
     if (details !== null) queueMicrotask(() => syncLanguage(details));
     const saveId = readMarked(event.target, "data-edit-save");
@@ -505,6 +543,7 @@ export function mountDesk(env: DeskEnv): () => void {
     const target = event.target;
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     draft = target.value ?? "";
+    if (voiceSession) userTouched = true;
     if (suggestHold !== null) {
       if (draft.trim() === suggestHold.suggestion.trim()) showAssumed(suggestHold.suggestion);
       else hideAssumed();
@@ -514,32 +553,22 @@ export function mountDesk(env: DeskEnv): () => void {
       const note = region()?.querySelector("[data-skip-confirm]");
       if (note !== null && note !== undefined && "textContent" in note) note.textContent = "";
     }
-    const button = region()?.querySelector('[data-action="answer"]');
-    if (button === null || button === undefined) return;
-    const locked = pending || draft.trim() === "";
-    button.disabled = locked;
-    if (locked) button.setAttribute("disabled", "");
-    else button.removeAttribute("disabled");
+    syncAnswerLock();
   };
 
-  const onPointerDown = (event: DeskEvent): void => {
-    if (!isVoiceTarget(event.target)) return;
-    if (event.button !== undefined && event.button !== 0) return;
-    event.preventDefault();
-    const button = holdButton(event.target);
-    if (button !== null) capturePointer(event, button);
-    if (held || recognition !== null) return;
-    held = true;
-    startVoice();
-  };
-  const onPointerUp = (): void => {
-    if (!held) return;
-    held = false;
-    stopVoice();
-  };
   const onKeyDown = (event: DeskEvent): void => {
     if (handleTourKey(env.document, event)) return;
     if (handleInstallKey(env, event)) return;
+    // Escape stops listening from the button or the draft. Idle Escape stays with choices.
+    if (
+      event.key === "Escape" &&
+      voiceActive() &&
+      (isVoiceTarget(event.target) || isDraftTarget(event.target))
+    ) {
+      event.preventDefault();
+      void stopVoice();
+      return;
+    }
     if (isTypingTarget(event.target)) {
       if (isDraftTarget(event.target) && event.key === "Enter") {
         // Shift+Enter is a newline. An open IME composition is not a submit.
@@ -591,21 +620,20 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     if (event.key !== " " && event.key !== "Enter") return;
     if (!isVoiceTarget(event.target)) return;
+    // One toggle per press. preventDefault so the key does not also click.
     event.preventDefault();
-    if (event.repeat === true || held || recognition !== null) return;
-    held = true;
-    startVoice();
-  };
-  const onKeyUp = (event: DeskEvent): void => {
-    if (event.key !== " " && event.key !== "Enter") return;
-    if (!held && recognition === null) return;
-    event.preventDefault();
-    held = false;
-    stopVoice();
+    if (event.repeat === true) return;
+    toggleVoice();
   };
   const onContextMenu = (event: DeskEvent): void => {
-    // A long press on a phone opens a menu. The hold is the gesture here.
+    // A long press on a phone opens a menu. The voice button is a toggle, not a hold.
     if (isVoiceTarget(event.target)) event.preventDefault();
+  };
+  const onPageHide = (): void => {
+    stopImmediately();
+  };
+  const onVisibility = (): void => {
+    if (env.document.visibilityState === "hidden") stopImmediately();
   };
 
   const onChange = (event: DeskEvent): void => {
@@ -640,12 +668,11 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("drop", onDrop);
   // toggle does not bubble. Capture still sees it when the summary opens.
   env.document.addEventListener("toggle", onToggle, true);
-  env.document.addEventListener("pointerdown", onPointerDown);
-  env.document.addEventListener("pointerup", onPointerUp);
-  env.document.addEventListener("pointercancel", onPointerUp);
   env.document.addEventListener("keydown", onKeyDown);
-  env.document.addEventListener("keyup", onKeyUp);
   env.document.addEventListener("contextmenu", onContextMenu);
+  env.document.addEventListener("visibilitychange", onVisibility);
+  const deskWindow = env.document.defaultView ?? null;
+  if (deskWindow !== null) deskWindow.addEventListener("pagehide", onPageHide);
   markTalkSupport();
   const stopTools = mountToolInstall(env);
   const stopTour = mountTour(env.document);
@@ -660,12 +687,10 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("dragover", onDragOver);
     env.document.removeEventListener("drop", onDrop);
     env.document.removeEventListener("toggle", onToggle, true);
-    env.document.removeEventListener("pointerdown", onPointerDown);
-    env.document.removeEventListener("pointerup", onPointerUp);
-    env.document.removeEventListener("pointercancel", onPointerUp);
     env.document.removeEventListener("keydown", onKeyDown);
-    env.document.removeEventListener("keyup", onKeyUp);
     env.document.removeEventListener("contextmenu", onContextMenu);
+    env.document.removeEventListener("visibilitychange", onVisibility);
+    if (deskWindow !== null) deskWindow.removeEventListener("pagehide", onPageHide);
     cancelVoice();
     source?.close();
   };
@@ -675,15 +700,23 @@ export function mountDesk(env: DeskEnv): () => void {
     if (field !== null && field !== undefined && typeof field.value === "string") draft = field.value;
   }
 
-  function startVoice(): void {
-    if (recognition !== null || voiceSession || !held) return;
-    if (pending || view === null || view.question === null) {
-      held = false;
+  function voiceActive(): boolean {
+    return voiceSession || toggled || recognition !== null || restartTimer !== null || stopping !== null;
+  }
+
+  function toggleVoice(): void {
+    if (stopping !== null || toggled || voiceSession || recognition !== null || restartTimer !== null) {
+      void stopVoice();
       return;
     }
+    startVoice();
+  }
+
+  function startVoice(): void {
+    if (recognition !== null || voiceSession || stopping !== null) return;
+    if (pending || view === null || view.question === null) return;
     const engineNow = activeEngine();
     if (engineNow !== "web-speech") {
-      held = false;
       notice = null;
       error = engineNow === "none" ? VOICE_UNSUPPORTED : null;
       paint();
@@ -691,30 +724,41 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const Recognition = env.SpeechRecognition ?? null;
     if (Recognition === null) {
-      held = false;
       notice = null;
       error = VOICE_UNSUPPORTED;
       paint();
       return;
     }
+    if (lateRec !== null) unhook(lateRec);
+    lateRec = null;
     readDraft();
-    voiceBase = draft.trim();
+    voiceBase = draft;
     voiceFinal = "";
     voiceInterim = "";
     voiceError = null;
     heardStart = false;
+    userTouched = false;
+    lastHeard = "";
+    promotedUtterance = "";
+    emptyRestarts = 0;
+    restartDelay = VOICE_RESTART_BASE_MS;
+    cycleHeard = false;
+    capHit = false;
+    committed = false;
     voiceSession = true;
+    toggled = true;
     listening = true;
     error = null;
     notice = VOICE_LISTENING;
     voiceDisclosed = true;
+    announceVoice(VOICE_LIVE_STARTED);
     if (!patchListening()) paint();
     beginRecognition();
-    if (recognition === null && !restartQueued) commitVoice();
+    if (recognition === null && restartTimer === null) commitVoice();
   }
 
   function beginRecognition(): "started" | "idle" {
-    if (recognition !== null || !held || !voiceSession) return "idle";
+    if (recognition !== null || !toggled || !voiceSession || committed) return "idle";
     const Recognition = env.SpeechRecognition ?? null;
     if (Recognition === null) {
       voiceError = VOICE_UNSUPPORTED;
@@ -723,9 +767,11 @@ export function mountDesk(env: DeskEnv): () => void {
     if (voiceInterim !== "") {
       voiceFinal = joinWords(voiceFinal, voiceInterim);
       voiceInterim = "";
-      draft = joinWords(voiceBase, voiceFinal);
-      patchDraft();
+      applyHeardToDraft();
     }
+    // A restart keeps earlier words. The next final is a new utterance, so it appends.
+    promotedUtterance = "";
+    cycleHeard = false;
     let rec: SpeechRecognitionLike;
     try {
       rec = new Recognition();
@@ -737,15 +783,19 @@ export function mountDesk(env: DeskEnv): () => void {
       return "idle";
     }
     rec.onstart = () => {
+      if (recognition !== rec) return;
       heardStart = true;
     };
     rec.onresult = (event) => {
+      if (recognition !== rec && lateRec !== rec) return;
       applyResult(event);
     };
     rec.onerror = (event) => {
-      // aborted is our own grace timer. no-speech is Chrome ending a pause.
+      if (recognition !== rec && lateRec !== rec) return;
+      // aborted is the empty-stop timeout. no-speech is Chrome ending a pause.
       if (event.error === "aborted" || event.error === "no-speech") return;
       voiceError = voiceMessage(event.error, heardStart);
+      toggled = false;
     };
     rec.onend = () => {
       endRecognition(rec);
@@ -764,67 +814,167 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function applyResult(event: SpeechResultEventLike): void {
     let interim = "";
+    let finals = "";
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
       if (result === undefined || result.length === 0) continue;
       const text = result[0]?.transcript ?? "";
-      if (result.isFinal) voiceFinal = joinWords(voiceFinal, text);
+      if (result.isFinal) finals = joinWords(finals, text);
       else interim = joinWords(interim, text);
     }
-    voiceInterim = interim;
-    draft = joinWords(voiceBase, joinWords(voiceFinal, voiceInterim));
-    if (!patchDraft()) paint();
+    if (finals !== "") {
+      voiceFinal = replacePromoted(voiceFinal, promotedUtterance, finals);
+      voiceInterim = "";
+      promotedUtterance = "";
+      cycleHeard = true;
+      emptyRestarts = 0;
+      restartDelay = VOICE_RESTART_BASE_MS;
+    } else {
+      voiceInterim = interim;
+      if (interim !== "") {
+        cycleHeard = true;
+        emptyRestarts = 0;
+        restartDelay = VOICE_RESTART_BASE_MS;
+      }
+    }
+    applyHeardToDraft();
+    if (finals !== "" && stopWait !== null) stopWait.resolve();
   }
 
-  function stopVoice(): void {
-    held = false;
+  function stopVoice(): Promise<void> {
+    if (stopping !== null) return stopping;
+    if (!voiceSession && !toggled && recognition === null && restartTimer === null) return Promise.resolve();
+    toggled = false;
+    stopping = finishStop().finally(() => {
+      stopping = null;
+    });
+    return stopping;
+  }
+
+  async function finishStop(): Promise<void> {
+    toggled = false;
+    clearRestartTimer();
     const rec = recognition;
-    if (rec === null) return;
+    if (rec === null) {
+      commitVoice();
+      return;
+    }
+    promoteInterim();
+    lateRec = rec;
+    const ended = waitForStop(rec);
     try {
       rec.stop();
     } catch {
-      endRecognition(rec);
-      return;
+      // stop throws once the recognizer has already ended.
     }
-    if (recognition === rec) armStopGrace(rec);
+    if (recognition === rec) await ended;
+    else if (stopWait?.rec === rec) await ended;
+    commitVoice();
+    sealLate(rec);
+  }
+
+  function waitForStop(rec: SpeechRecognitionLike): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearStopTimer();
+        if (stopWait?.rec === rec) stopWait = null;
+        resolve();
+      };
+      stopWait = { rec, resolve: finish };
+      stopTimer = setTimeout(() => {
+        stopTimer = null;
+        if (recognition === rec) {
+          const heard = joinWords(voiceFinal, voiceInterim) !== "";
+          if (!heard) {
+            try {
+              rec.abort();
+            } catch {
+              // abort throws once the recognizer has already ended.
+            }
+          }
+          recognition = null;
+        }
+        finish();
+      }, VOICE_STOP_WAIT_MS);
+    });
   }
 
   function endRecognition(rec: SpeechRecognitionLike): void {
-    clearStopTimer();
     if (recognition !== rec) return;
+    const heardCycle = cycleHeard;
     recognition = null;
+    if (stopWait !== null && stopWait.rec === rec) {
+      const wake = stopWait.resolve;
+      stopWait = null;
+      wake();
+      return;
+    }
     unhook(rec);
-    if (!voiceSession) return;
-    if (held && voiceError === null) {
-      queueRestart();
+    if (lateRec === rec) lateRec = null;
+    if (!voiceSession || committed) return;
+    if (toggled && voiceError === null) {
+      queueRestart(heardCycle);
       return;
     }
     commitVoice();
   }
 
-  function queueRestart(): void {
-    if (restartQueued) return;
-    restartQueued = true;
-    queueMicrotask(() => {
-      restartQueued = false;
-      if (!voiceSession || recognition !== null) return;
-      if (held && voiceError === null && beginRecognition() === "started") return;
-      commitVoice();
-    });
+  function queueRestart(hadResult: boolean): void {
+    if (restartTimer !== null || committed || !toggled || !voiceSession) return;
+    if (hadResult) {
+      emptyRestarts = 0;
+      restartDelay = VOICE_RESTART_BASE_MS;
+    } else {
+      emptyRestarts += 1;
+      if (emptyRestarts >= VOICE_RESTART_CAP) {
+        capHit = true;
+        toggled = false;
+        commitVoice();
+        return;
+      }
+    }
+    const delay = restartDelay;
+    if (!hadResult) restartDelay = Math.min(VOICE_RESTART_MAX_MS, restartDelay * 2);
+    restartTimer = setTimeout(() => {
+      restartTimer = null;
+      if (!toggled || !voiceSession || recognition !== null || committed || voiceError !== null) {
+        if (voiceSession && !committed && voiceError !== null) commitVoice();
+        return;
+      }
+      if (beginRecognition() !== "started") commitVoice();
+    }, delay);
   }
 
-  function armStopGrace(rec: SpeechRecognitionLike): void {
-    clearStopTimer();
-    stopTimer = setTimeout(() => {
-      stopTimer = null;
-      if (recognition !== rec) return;
-      try {
-        rec.abort();
-      } catch {
-        // abort throws once the recognizer has already ended.
-      }
-      if (recognition === rec) endRecognition(rec);
-    }, VOICE_STOP_GRACE_MS);
+  function promoteInterim(): void {
+    if (voiceInterim.trim() === "") return;
+    promotedUtterance = voiceInterim.trim();
+    voiceFinal = joinWords(voiceFinal, voiceInterim);
+    voiceInterim = "";
+    applyHeardToDraft();
+  }
+
+  function applyHeardToDraft(): void {
+    const heard = joinWords(voiceFinal, voiceInterim);
+    if (heard === "" && !userTouched) return;
+    readDraft();
+    if (!userTouched) draft = joinWords(voiceBase, heard);
+    else draft = mergeTyped(draft, heard);
+    lastHeard = heard;
+    if (!patchDraft()) paint();
+  }
+
+  function mergeTyped(typed: string, heard: string): string {
+    if (heard === "") return typed;
+    const trimmed = typed.trimEnd();
+    if (lastHeard !== "" && (trimmed === lastHeard || trimmed.endsWith(` ${lastHeard}`))) {
+      const head = trimmed === lastHeard ? "" : trimmed.slice(0, trimmed.length - lastHeard.length).trimEnd();
+      return joinWords(head, heard);
+    }
+    if (typed.includes(heard)) return typed;
+    return joinWords(typed, heard);
   }
 
   function clearStopTimer(): void {
@@ -833,56 +983,124 @@ export function mountDesk(env: DeskEnv): () => void {
     stopTimer = null;
   }
 
+  function clearRestartTimer(): void {
+    if (restartTimer === null) return;
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+
   function unhook(rec: SpeechRecognitionLike): void {
     rec.onstart = null;
     rec.onresult = null;
     rec.onerror = null;
     rec.onend = null;
+    if (lateRec === rec) lateRec = null;
+  }
+
+  function sealLate(rec: SpeechRecognitionLike): void {
+    const pending = promotedUtterance;
+    lateRec = rec;
+    rec.onstart = null;
+    rec.onerror = null;
+    rec.onend = null;
+    rec.onresult = (event) => {
+      if (lateRec !== rec) return;
+      const incoming = finalsFrom(event);
+      if (incoming === "") return;
+      voiceFinal = replacePromoted(voiceFinal, pending, incoming);
+      voiceInterim = "";
+      promotedUtterance = "";
+      readDraft();
+      const settled = settleVoice({ base: voiceBase, typed: draft, final: voiceFinal, interim: "" });
+      draft = settled.draft;
+      if (settled.heard && voiceError === null && !capHit) {
+        error = null;
+        notice = VOICE_HEARD;
+      }
+      if (!patchDraft()) paint();
+      unhook(rec);
+    };
+    setTimeout(() => {
+      if (lateRec === rec) unhook(rec);
+    }, VOICE_STOP_WAIT_MS);
   }
 
   function commitVoice(): void {
-    if (!voiceSession) return;
+    if (committed || !voiceSession) return;
+    committed = true;
     voiceSession = false;
-    restartQueued = false;
+    toggled = false;
     listening = false;
-    held = false;
     clearStopTimer();
-    const heard = joinWords(voiceFinal, voiceInterim);
-    if (heard !== "") {
-      draft = joinWords(voiceBase, heard);
+    clearRestartTimer();
+    readDraft();
+    const settled = settleVoice({
+      base: voiceBase,
+      typed: draft,
+      final: voiceFinal,
+      interim: voiceInterim,
+    });
+    draft = settled.draft;
+    if (voiceError !== null) {
+      notice = null;
+      error = voiceError;
+    } else if (capHit) {
+      error = null;
+      notice = VOICE_CAP_NOTICE;
+    } else if (settled.heard) {
       error = null;
       notice = VOICE_HEARD;
     } else {
-      draft = voiceBase;
       notice = null;
-      error = voiceError ?? VOICE_RELEASE_EMPTY;
+      error = VOICE_RELEASE_EMPTY;
     }
+    const extra = notice ?? error ?? "";
+    announceVoice(extra === "" ? VOICE_LIVE_STOPPED : `${VOICE_LIVE_STOPPED}. ${extra}`);
     paint();
   }
 
-  function cancelVoice(): void {
-    voiceSession = false;
-    restartQueued = false;
-    held = false;
-    listening = false;
-    clearStopTimer();
+  /** Page hide and unmount. Keeps heard words and does not abort when any were heard. */
+  function stopImmediately(): void {
+    if (!voiceSession && !toggled && recognition === null && restartTimer === null) return;
+    toggled = false;
+    clearRestartTimer();
+    promoteInterim();
     const rec = recognition;
-    if (rec === null) return;
-    recognition = null;
-    unhook(rec);
-    try {
-      rec.abort();
-    } catch {
-      // Already ended.
+    const heard = joinWords(voiceFinal, voiceInterim) !== "";
+    if (rec !== null) {
+      recognition = null;
+      lateRec = rec;
+      try {
+        if (heard) rec.stop();
+        else rec.abort();
+      } catch {
+        // Already ended.
+      }
     }
+    if (stopWait !== null) {
+      const wake = stopWait.resolve;
+      stopWait = null;
+      wake();
+    }
+    commitVoice();
+    if (rec !== null) sealLate(rec);
+  }
+
+  function cancelVoice(): void {
+    if (voiceActive()) {
+      stopImmediately();
+      return;
+    }
+    clearStopTimer();
+    clearRestartTimer();
   }
 
   function patchListening(): boolean {
     const question = region();
     if (question === null) return false;
     const button = question.querySelector('[data-voice="hold"]');
-    if (button === null || !("textContent" in button)) return false;
-    button.textContent = "Listening. Release to stop";
+    if (button === null) return false;
+    button.innerHTML = `<span class="hh-voice-pulse" data-voice-pulse aria-hidden="true"></span>${VOICE_LABEL_STOP}`;
     button.setAttribute("aria-pressed", "true");
     const cls = button.getAttribute("class") ?? "";
     if (!cls.split(/\s+/).includes("hh-btn--listening")) {
@@ -906,8 +1124,37 @@ export function mountDesk(env: DeskEnv): () => void {
     const field = question.querySelector("#hh-card-draft");
     if (field === null || typeof field.value !== "string") return false;
     field.value = draft;
+    syncAnswerLock();
     if (notice !== null && !patchNotice(question, notice)) return false;
     return true;
+  }
+
+  function syncAnswerLock(): void {
+    const button = region()?.querySelector('[data-action="answer"]');
+    if (button === null || button === undefined) return;
+    const locked = pending || draft.trim() === "";
+    button.disabled = locked;
+    if (locked) button.setAttribute("disabled", "");
+    else button.removeAttribute("disabled");
+  }
+
+  function announceVoice(text: string): void {
+    const doc = env.document;
+    if (typeof doc.createElement !== "function" || doc.body === undefined) return;
+    try {
+      if (voiceLive === null) {
+        const node = doc.createElement("div");
+        node.setAttribute("class", "hh-guide-live");
+        node.setAttribute("data-voice-live", "");
+        node.setAttribute("role", "status");
+        node.setAttribute("aria-live", "polite");
+        doc.body.appendChild(node);
+        voiceLive = node;
+      }
+      if ("textContent" in voiceLive) voiceLive.textContent = text;
+    } catch {
+      voiceLive = null;
+    }
   }
 
   function patchNotice(question: DeskElement, text: string): boolean {
@@ -1016,18 +1263,33 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     if (signature(session) === signature(view)) return;
+    if (voiceActive()) {
+      const next = session;
+      void (async () => {
+        await stopVoice();
+        if (view === null || signature(next) === signature(view)) return;
+        const kept = draft;
+        view = next;
+        draft = kept.trim() === "" ? "" : kept;
+        error = null;
+        pending = false;
+        skipConfirm = false;
+        paint();
+      })();
+      return;
+    }
     view = session;
     draft = "";
     error = null;
     notice = null;
     pending = false;
     skipConfirm = false;
-    cancelVoice();
     paint();
   }
 
   async function submit(action: "answer" | "suggest" | "skip"): Promise<void> {
     if (pending || token === null || view === null || view.question === null) return;
+    if (voiceActive()) await stopVoice();
     readDraft();
     if (action === "suggest") {
       if (suggestHold !== null) return;
@@ -1282,6 +1544,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   async function pickChoice(id: string): Promise<void> {
     if (pending || token === null) return;
+    if (voiceActive()) await stopVoice();
     if (id === "other") {
       ownWords = true;
       draft = "";
@@ -1808,7 +2071,7 @@ function insideAttribute(start: DeskElement | null, name: string): boolean {
 
 /**
  * Enter confirms the highlighted choice when focus is no longer on a radio.
- * Answer, Skip, hold-to-talk, and the tour's own buttons keep their keys.
+ * Answer, Skip, the voice button, and the tour's own buttons keep their keys.
  */
 function enterPicksSlippedChoice(start: DeskElement | null): boolean {
   if (start === null || insideChoices(start)) return false;
@@ -1905,22 +2168,42 @@ function isVoiceTarget(start: DeskElement | null): boolean {
   return button.getAttribute("disabled") === null;
 }
 
-function capturePointer(event: DeskEvent, button: DeskElement): void {
-  if (typeof button.setPointerCapture !== "function") return;
-  if (typeof event.pointerId !== "number") return;
-  try {
-    button.setPointerCapture(event.pointerId);
-  } catch {
-    // The document pointerup listener still stops the hold.
+function finalsFrom(event: SpeechResultEventLike): string {
+  let finals = "";
+  for (let index = event.resultIndex; index < event.results.length; index += 1) {
+    const result = event.results[index];
+    if (result === undefined || result.length === 0 || !result.isFinal) continue;
+    finals = joinWords(finals, result[0]?.transcript ?? "");
   }
+  return finals;
 }
 
-function joinWords(left: string, right: string): string {
-  const a = left.trim();
-  const b = right.trim();
-  if (a === "") return b;
-  if (b === "") return a;
-  return `${a} ${b}`;
+function sameUtterance(pending: string, incoming: string): boolean {
+  const left = pending.trim();
+  const right = incoming.trim();
+  if (left === "" || right === "") return false;
+  return left === right || right.startsWith(left) || left.startsWith(right);
+}
+
+function utteranceTail(existing: string, phrase: string): boolean {
+  const host = existing.trimEnd();
+  const tail = phrase.trim();
+  if (tail === "") return false;
+  return host === tail || host.endsWith(` ${tail}`);
+}
+
+/** A late final replaces the promoted interim for the same utterance. */
+function replacePromoted(existing: string, promoted: string, incoming: string): string {
+  const pending = promoted.trim();
+  const next = incoming.trim();
+  if (next === "") return existing;
+  if (pending !== "" && utteranceTail(existing, pending) && sameUtterance(pending, next)) {
+    const trimmed = existing.trimEnd();
+    const head = trimmed === pending ? "" : trimmed.slice(0, trimmed.length - pending.length).trimEnd();
+    return joinWords(head, next);
+  }
+  if (utteranceTail(existing, next)) return existing;
+  return joinWords(existing, next);
 }
 
 /** Chrome's SpeechRecognition error codes, in words a person can act on. */

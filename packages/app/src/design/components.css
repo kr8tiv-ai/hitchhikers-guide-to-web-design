@@ -262,6 +262,17 @@ textarea {
   box-sizing: border-box;
 }
 
+/* Listening pulse. Reduced motion keeps the dot and drops the animation. */
+.hh-voice-pulse {
+  display: inline-block;
+  width: var(--space-2);
+  height: var(--space-2);
+  margin-inline-end: var(--space-2);
+  vertical-align: middle;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+}
+
 @media (min-width: 720px) {
   .hh-qcard__entry {
     flex-wrap: nowrap;
@@ -958,13 +969,18 @@ p.hh-error__next {
   .hh-tour,
   .hh-btn[aria-busy="true"]::after,
   [aria-busy="true"] .hh-btn--primary::after,
-  .hh-qcard[aria-busy="true"] .hh-qcard__input {
+  .hh-qcard[aria-busy="true"] .hh-qcard__input,
+  .hh-voice-pulse {
     animation: none;
     transition: none;
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .hh-voice-pulse {
+    animation: hh-voice-pulse var(--motion-duration-slow) var(--motion-easing-in-out) infinite;
+  }
+
   .hh-rise {
     animation: hh-rise var(--motion-duration-fast) var(--motion-easing-out) both;
   }
@@ -979,6 +995,16 @@ p.hh-error__next {
 
   .hh-rise--4 {
     animation-delay: 210ms;
+  }
+}
+
+@keyframes hh-voice-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-warning);
+  }
+
+  100% {
+    box-shadow: 0 0 0 var(--space-2) transparent;
   }
 }
 

@@ -170,7 +170,7 @@ test("MISSING_BIN leaves the draft null and names the env vars", async () => {
 
   const html = renderCard(card(draft));
   assert.match(html, /<textarea\b[^>]*>typed on the keyboard<\/textarea>/);
-  assert.match(html, />Hold to talk</);
+  assert.match(html, />Click to talk</);
   assert.match(html, /data-action="answer"/);
   ptt.start();
   assert.equal(ptt.state(), "recording");
@@ -250,7 +250,7 @@ test("the wav path is not written into the card", async () => {
   assert.equal(html.includes(wavPath), false);
   assert.equal(html.includes("session-clip.wav"), false);
   assert.equal(html.includes(".wav"), false);
-  assert.match(html, /Hold to talk/);
+  assert.match(html, /Click to talk/);
   assert.match(html, /<textarea\b[^>]*>A tea shop on the corner\.<\/textarea>/);
 });
 
@@ -265,5 +265,9 @@ test("the controller does not import the xAI adapter or child_process", () => {
   assert.doesNotMatch(source, /api\.x\.ai/);
   assert.doesNotMatch(source, /xai-stt|createXaiTranscriber|XAI_API_KEY|apiKey/);
   assert.doesNotMatch(source, /from ["']@hitchhiker\/voice["']/);
-  assert.doesNotMatch(source, /Hold to talk!|Transcription failed!|Nothing was heard!/);
+  const shoutedTalk = ["Hold", "to", "talk!"].join(" ");
+  const shoutedClick = ["Click", "to", "talk!"].join(" ");
+  assert.equal(source.includes(shoutedTalk), false);
+  assert.equal(source.includes(shoutedClick), false);
+  assert.doesNotMatch(source, /Transcription failed!|Nothing was heard!/);
 });

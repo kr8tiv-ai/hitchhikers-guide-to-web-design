@@ -108,7 +108,7 @@ test("the card names the engine, and a browser without speech keeps the draft", 
   assert.match(ready, /data-voice-help[\s\S]*Google[\s\S]*Microsoft[\s\S]*may leave/);
   const entry = entryBlock(ready);
   assert.equal(entry.includes("data-voice-engine"), false);
-  assert.match(entry, />Hold to talk</);
+  assert.match(entry, />Click to talk</);
   assert.match(ready, /<textarea/);
   assert.equal(ready.includes("!"), false);
 
@@ -133,7 +133,7 @@ test("the card names the engine, and a browser without speech keeps the draft", 
   assert.match(paid, /Voice: xAI \(paid, accepted\)/);
   assert.match(paid, /does not send the microphone to a paid service/);
   assert.equal(paid.includes("data-voice-fallback"), false);
-  assert.match(entryBlock(paid), /disabled>Hold to talk</);
+  assert.match(entryBlock(paid), /disabled>Click to talk</);
 });
 
 function card(): CardState {

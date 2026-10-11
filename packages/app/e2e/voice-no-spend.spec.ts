@@ -45,7 +45,7 @@ test.afterAll(async () => {
   if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
 });
 
-test("default hold-to-talk and a conversational turn never call paid speech", async ({ page }) => {
+test("default click-to-toggle voice and a conversational turn never call paid speech", async ({ page }) => {
   const errors = trackErrors(page);
   const seen = await watchPaid(page);
   await page.addInitScript(installSpeech, "For myself.");
@@ -63,9 +63,8 @@ test("default hold-to-talk and a conversational turn never call paid speech", as
   await expectEngine(page, "Voice: browser (free)");
 
   const button = page.locator('[data-voice="hold"]');
-  await pointerDown(page, button);
+  await button.click();
   await expect(page.locator("#hh-card-draft")).toHaveValue("For myself.");
-  await page.mouse.up();
   await expect(page.locator("[data-voice-engine]")).toHaveText("Voice: browser (free)");
   await expect(page.locator('[data-action="answer"]')).toBeEnabled();
   await page.locator('[data-action="answer"]').click();
@@ -206,14 +205,6 @@ function installSpeech(transcript: string): void {
   };
   define("SpeechRecognition");
   define("webkitSpeechRecognition");
-}
-
-async function pointerDown(page: Page, button: ReturnType<Page["locator"]>): Promise<void> {
-  await button.scrollIntoViewIfNeeded();
-  const box = await button.boundingBox();
-  if (box === null) throw new Error("Hold to talk has no box");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
 }
 
 function trackErrors(page: Page): string[] {

@@ -185,6 +185,7 @@ const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
 const TOOL_SOURCE = path.resolve(SRC_ROOT, "client", "tool-install.ts");
 const SAVE_SOURCE = path.resolve(SRC_ROOT, "client", "save-status.ts");
 const VOICE_ENGINE_SOURCE = path.resolve(SRC_ROOT, "client", "voice-engine.ts");
+const VOICE_TEXT_SOURCE = path.resolve(SRC_ROOT, "client", "voice-text.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
 const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
@@ -1059,6 +1060,10 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(VOICE_ENGINE_SOURCE)));
     return;
   }
+  if (pathname === "/client/voice-text.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(VOICE_TEXT_SOURCE)));
+    return;
+  }
   if (pathname === "/client/brand.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(BRAND_SOURCE)));
     return;
@@ -1929,6 +1934,7 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
     .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
+    .replace(/from\s+["']\.\/voice-text\.ts["']/g, 'from "/client/voice-text.js"')
     .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"')
     .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"');
   moduleCache.set(filePath, js);

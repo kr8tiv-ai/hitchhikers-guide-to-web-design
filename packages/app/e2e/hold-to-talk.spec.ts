@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { TALK_NEEDS_CHROMIUM } from "../src/client/desk.ts";
+import { TALK_NEEDS_CHROMIUM, VOICE_STOP_WAIT_MS } from "../src/client/desk.ts";
 
 /**
- * Hold to talk against the served /client/desk.js. Chromium has no microphone
+ * Click to talk against the served /client/desk.js. Chromium has no microphone
  * here: addInitScript installs a fake webkitSpeechRecognition before the module
  * runs. The desk must not post /api/answer. HH_E2E_PROJECT keeps the Guide quiet,
  * the same gate answer-one uses, so a stray turn cannot call Grok.
@@ -15,7 +15,7 @@ import { TALK_NEEDS_CHROMIUM } from "../src/client/desk.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NOTE = "Chrome sends this audio to its speech service.";
-const RELEASE_EMPTY = "Hold the button while you speak.";
+const RELEASE_EMPTY = "Nothing was heard. Click the voice button and try again.";
 const BLOCKED = "The microphone is blocked.";
 type VoiceMode = "words" | "restart" | "stuck" | "fast" | "denied" | "missing";
 
@@ -47,7 +47,7 @@ test.afterAll(async () => {
   if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
 });
 
-test("mouse and keyboard holds fill the draft and do not submit", async ({ page }) => {
+test("mouse and keyboard toggles fill the draft and do not submit", async ({ page }) => {
   const errors = trackErrors(page);
   const answers: string[] = [];
   page.on("request", (request) => {
@@ -69,62 +69,64 @@ test("mouse and keyboard holds fill the draft and do not submit", async ({ page 
   expect(draftHandle).not.toBeNull();
   expect(buttonHandle).not.toBeNull();
 
-  await pointerDown(page, button);
-  await expect(button).toHaveText("Listening. Release to stop");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
   await expect(button).toHaveAttribute("aria-pressed", "true");
   await expect(draft).toHaveValue("Hello testing one two");
   await expect(page.locator("[data-voice-note]")).toHaveText(NOTE);
   const sameNodes = await page.evaluate(() => {
     const field = document.querySelector("#hh-card-draft");
-    const held = document.querySelector('[data-voice="hold"]');
+    const voice = document.querySelector('[data-voice="hold"]');
     const active = document.activeElement;
     const captured = (window as Window & { __hhVoiceCaptureEl?: Element }).__hhVoiceCaptureEl ?? null;
     return {
       field: field !== null,
-      held: held !== null,
-      focus: active === field || active === held,
-      capture: captured !== null && captured === held,
+      voice: voice !== null,
+      focus: active === field || active === voice,
+      capture: captured !== null && captured === voice,
     };
   });
   expect(sameNodes.focus).toBe(true);
-  expect(sameNodes.capture).toBe(true);
+  expect(sameNodes.voice).toBe(true);
+  expect(sameNodes.capture).toBe(false);
   expect(await draftHandle?.evaluate((el, other) => el === other, await draft.elementHandle())).toBe(true);
   expect(await buttonHandle?.evaluate((el, other) => el === other, await button.elementHandle())).toBe(true);
 
-  await page.mouse.up();
+  await button.click();
   await expect(draft).toHaveValue("Hello testing one two");
   await expect(page.locator("[data-card-notice]")).toHaveText(/Heard you/);
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("[data-voice-note]")).toHaveText(NOTE);
   expect(answers).toEqual([]);
 
   await draft.fill("");
   const keyboardButton = await button.elementHandle();
   await button.focus();
-  await page.keyboard.down(" ");
-  await expect(button).toHaveText("Listening. Release to stop");
+  await page.keyboard.press(" ");
+  await expect(button).toHaveText("Stop listening");
   await expect(button).toHaveAttribute("aria-pressed", "true");
   await expect(button).toBeFocused();
   expect(await keyboardButton?.evaluate((el, other) => el === other, await button.elementHandle())).toBe(true);
-  await page.keyboard.up(" ");
+  await page.keyboard.press(" ");
   await expect(draft).toHaveValue("testing one two");
   await expect(page.locator("[data-card-notice]")).toHaveText(/Heard you/);
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
   expect(answers).toEqual([]);
   expect(errors).toEqual([]);
 });
 
-test("recognition that ends while the button is held starts again", async ({ page }) => {
+test("recognition that ends while listening starts again", async ({ page }) => {
   const errors = trackErrors(page);
   await openDesk(page, "restart");
   const button = page.locator('[data-voice="hold"]');
   const handle = await button.elementHandle();
-  await pointerDown(page, button);
+  await button.click();
   await expect.poll(() => page.evaluate(() => (window as Window & { __hhVoiceStarts?: number }).__hhVoiceStarts ?? 0)).toBeGreaterThanOrEqual(2);
-  await expect(button).toHaveText("Listening. Release to stop");
+  await expect(button).toHaveText("Stop listening");
   await expect(button).toHaveAttribute("aria-pressed", "true");
   expect(await handle?.evaluate((el, other) => el === other, await button.elementHandle())).toBe(true);
-  await page.mouse.up();
+  await button.click();
   await expect(page.locator("#hh-card-draft")).toHaveValue("testing one two");
   await expect(page.locator("[data-card-notice]")).toHaveText(/Heard you/);
   expect(errors).toEqual([]);
@@ -134,47 +136,49 @@ test("a stop before onstart still releases the button", async ({ page }) => {
   const errors = trackErrors(page);
   await openDesk(page, "stuck");
   const button = page.locator('[data-voice="hold"]');
-  await pointerDown(page, button);
-  await expect(button).toHaveText("Listening. Release to stop");
-  await page.mouse.up();
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await button.click();
   await expect.poll(() => page.evaluate(() => (window as Window & { __hhVoiceAborts?: number }).__hhVoiceAborts ?? 0), {
-    timeout: 2_000,
+    timeout: VOICE_STOP_WAIT_MS + 1_500,
   }).toBeGreaterThanOrEqual(1);
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
   await expect(page.locator("#hh-card-error")).toHaveText(RELEASE_EMPTY);
   await expect(page.locator('[data-region="question"]')).not.toContainText("press Allow");
   await expect(page.locator('[data-region="question"]')).not.toContainText("allow the microphone");
 
-  await pointerDown(page, button);
+  await button.click();
   await expect.poll(() => page.evaluate(() => (window as Window & { __hhVoiceStarts?: number }).__hhVoiceStarts ?? 0)).toBeGreaterThanOrEqual(2);
-  await expect(button).toHaveText("Listening. Release to stop");
-  await page.mouse.up();
+  await expect(button).toHaveText("Stop listening");
+  await button.click();
   await expect(page.locator("#hh-card-draft")).toHaveValue("testing one two");
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
   expect(errors).toEqual([]);
 });
 
-test("a fast release with nothing heard does not ask for the microphone", async ({ page }) => {
+test("a stop with nothing heard does not ask for the microphone", async ({ page }) => {
   const errors = trackErrors(page);
   await openDesk(page, "fast");
   const button = page.locator('[data-voice="hold"]');
-  await pointerDown(page, button);
+  await button.click();
   await expect(button).toHaveAttribute("aria-pressed", "true");
-  await page.mouse.up();
+  await button.click();
   await expect(page.locator("#hh-card-error")).toHaveText(RELEASE_EMPTY);
   await expect(page.locator('[data-region="question"]')).not.toContainText("press Allow");
   await expect(page.locator('[data-region="question"]')).not.toContainText("allow the microphone");
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
   expect(errors).toEqual([]);
 });
 
 test("a blocked microphone shows the alert", async ({ page }) => {
   const errors = trackErrors(page);
   await openDesk(page, "denied");
-  await pointerDown(page, page.locator('[data-voice="hold"]'));
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
   await expect(page.locator("#hh-card-error")).toContainText(BLOCKED);
   await expect(page.locator('[role="alert"]')).toContainText(BLOCKED);
-  await page.mouse.up();
+  await expect(button).toHaveText("Click to talk");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("#hh-card-error")).toContainText(BLOCKED);
   expect(errors).toEqual([]);
 });
@@ -219,7 +223,8 @@ async function openDesk(page: Page, mode: VoiceMode): Promise<void> {
   }
   expect(boot.speech).toBe("FakeSpeech");
   expect(boot.webkit).toBe("FakeSpeech");
-  await expect(button).toHaveText("Hold to talk");
+  await expect(button).toHaveText("Click to talk");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
   await expect(button).toBeEnabled();
 }
 
@@ -302,15 +307,6 @@ function installVoice(mode: VoiceMode): void {
   define("SpeechRecognition", FakeSpeech);
   define("webkitSpeechRecognition", FakeSpeech);
   host.__hhVoiceBoot = mode;
-}
-
-async function pointerDown(page: Page, button: ReturnType<Page["locator"]>): Promise<void> {
-  // The card sits below a 720px viewport. A press outside the viewport hits <html>.
-  await button.scrollIntoViewIfNeeded();
-  const box = await button.boundingBox();
-  if (box === null) throw new Error("Hold to talk has no box");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
 }
 
 function trackErrors(page: Page): string[] {

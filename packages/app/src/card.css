@@ -81,7 +81,7 @@
   line-height: 1.4;
 }
 
-/* Hold to talk: no long-press menu, no text selection, no scroll while held. */
+/* Voice button: no long-press menu, no text selection while listening. */
 .hh-qcard [data-voice="hold"] {
   touch-action: none;
   user-select: none;

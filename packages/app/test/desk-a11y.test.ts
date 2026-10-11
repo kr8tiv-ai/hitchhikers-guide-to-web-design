@@ -72,7 +72,7 @@ test("the mic sits beside the field, and a save error stays under the draft", ()
   assert.equal(actionsBlock(html).includes("data-voice"), false);
 
   const ready = reshapeDeskCard(renderCard(failedCard("", null)), true);
-  assert.match(entryBlock(ready), />Hold to talk</);
+  assert.match(entryBlock(ready), />Click to talk</);
   assert.doesNotMatch(entryBlock(ready), /disabled/);
   assert.equal(actionsBlock(ready).includes("data-voice"), false);
 });
@@ -95,7 +95,7 @@ test("the desk page announces the question and keeps the mic off the action row"
     assert.equal(occurrences(question, ask), 1);
     assert.match(question, /id="hh-card-ask" tabindex="-1"/);
     assert.match(entryBlock(question), /data-voice="hold"/);
-    assert.match(entryBlock(question), />Hold to talk</);
+    assert.match(entryBlock(question), />Click to talk</);
     assert.equal(actionsBlock(question).includes("data-voice"), false);
     const live = /<p class="hh-guide-live" data-guide-live aria-live="polite">([^<]*)<\/p>/.exec(page.body);
     assert.equal(live?.[1], ask);
@@ -165,7 +165,7 @@ test("submit focuses the new question heading and updates the same live region",
 
 test("a missing speech API disables the mic with the Chrome or Edge line", async () => {
   const button = element({ "data-voice": "hold" });
-  button.textContent = "Hold to talk";
+  button.textContent = "Click to talk";
   const h = harness(async () => Response.json({}), { speech: false, talk: button });
   const stop = mountDesk(h.env);
   try {
@@ -176,7 +176,7 @@ test("a missing speech API disables the mic with the Chrome or Edge line", async
     assert.match(entryBlock(html), /data-voice="hold"[^>]*disabled/);
     assert.match(entryBlock(html), new RegExp(`>${TALK_NEEDS_CHROMIUM}</button>`));
     assert.equal(actionsBlock(html).includes("data-voice"), false);
-    assert.equal(html.includes("Hold to talk"), false);
+    assert.equal(html.includes("Click to talk"), false);
   } finally {
     stop();
   }

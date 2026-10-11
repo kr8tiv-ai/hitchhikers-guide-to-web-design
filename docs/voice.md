@@ -1,6 +1,8 @@
 # Voice
 
-Hold to talk and the interview use a speech engine. The default spends nothing.
+Click to talk and the interview use a speech engine. The default spends nothing.
+
+One click starts listening. A second click stops. Stopping keeps every word in the draft. The desk waits for the final result, or for the recognizer to end, before it finishes that stop. Nothing is submitted until you press Answer.
 
 ## Default
 
@@ -8,7 +10,7 @@ When the browser exposes `SpeechRecognition` or `webkitSpeechRecognition`, the d
 
 Browser speech recognition is free to you, and the browser vendor processes it. For example, Google does this in Chrome and Microsoft does this in Edge, so audio may leave this device.
 
-The same sentence is in the voice help under the hold control, and on Settings.
+The same sentence is in the voice help under the voice button, and on Settings.
 
 ## Local whisper
 

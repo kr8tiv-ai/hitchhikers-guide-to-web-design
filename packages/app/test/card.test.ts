@@ -90,7 +90,7 @@ test("an ask and a why that contain markup are escaped", () => {
   assert.doesNotMatch(html, /<\/textarea><script>/);
 });
 
-test("the speech-service note stays off the card until Hold to talk has been used", () => {
+test("the speech-service note stays off the card until the voice button has been used", () => {
   const plain = renderCard(state());
   assert.equal(plain.includes("data-voice-note"), false);
   const used = renderCard(state({ voiceNote: true }));
@@ -105,7 +105,7 @@ test("the card shows one question and the three exact actions", () => {
   assert.equal(html.match(/data-question-id=/g)?.length, 1);
   assert.match(html, /data-question-id="DP-1\.1"/);
   assert.equal(html.match(/<button\b/g)?.length, 4);
-  assert.match(html, /<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold">Hold to talk<\/button>/);
+  assert.match(html, /<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold" aria-pressed="false">Click to talk<\/button>/);
   assert.doesNotMatch(html, /style=/);
   assert.match(buttonTag(html, "answer"), /type="button"/);
   assert.match(buttonTag(html, "answer"), /\sdisabled(?:\s|>)/);

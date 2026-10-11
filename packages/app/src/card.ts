@@ -49,11 +49,11 @@ export interface CardState {
   done: boolean;
   /** True while a command is in flight. A second submit returns this same state. */
   pending: boolean;
-  /** True while the talk button is held and the browser is listening. */
+  /** True while the voice button is on and the browser is listening. */
   listening?: boolean;
   /** A calm line under the field: listening, heard, or how to fix the mic. */
   notice?: string | null;
-  /** True after Hold to talk has been used on this page. */
+  /** True after the voice button has been used on this page. */
   voiceNote?: boolean;
   /** Desk progress. Absent on the before-jump card, which keeps the id kicker. */
   counts?: CardCounts | null;
@@ -89,7 +89,7 @@ export type CardSession = Pick<InterviewSession, "command" | "next" | "lastPushb
 
 const EMPTY_ANSWER = "Write an answer or skip.";
 
-/** Shown under Hold to talk the first time that button is used. Chrome's Web Speech API uploads the audio. */
+/** Shown under the voice button the first time that button is used. Chrome's Web Speech API uploads the audio. */
 export const VOICE_SERVICE_NOTE = "Chrome sends this audio to its speech service.";
 const DONE_TITLE = "Guide Entry is next.";
 const DONE_WHY = "The questions on this desk are finished.";
@@ -213,13 +213,13 @@ function button(
   return `<button class="hh-btn hh-btn--${variant}" type="button" data-action="${action}"${flag}>${escapeHtml(label)}</button>`;
 }
 
-/** Hold fills the draft. It does not submit. Typing in the field still works. */
+/** Click fills the draft. It does not submit. Typing in the field still works. */
 function talkButton(disabled: boolean, listening: boolean): string {
   const flag = disabled ? " disabled" : "";
   if (listening) {
-    return `<button class="hh-btn hh-btn--secondary hh-btn--listening" type="button" data-voice="hold" aria-pressed="true"${flag}>Listening. Release to stop</button>`;
+    return `<button class="hh-btn hh-btn--secondary hh-btn--listening" type="button" data-voice="hold" aria-pressed="true"${flag}><span class="hh-voice-pulse" data-voice-pulse aria-hidden="true"></span>Stop listening</button>`;
   }
-  return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold"${flag}>Hold to talk</button>`;
+  return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold" aria-pressed="false"${flag}>Click to talk</button>`;
 }
 
 function noticeLine(notice: string | null): string {

@@ -181,7 +181,7 @@ A taste of the conversation:
 
 ## Talk to it
 
-You can talk the whole way through. Hold the push-to-talk button, ramble about your business like you would to a friend at a bar, let go. Plenty of the best brand insights hide in rambling.
+You can talk the whole way through. Click the voice button, ramble about your business like you would to a friend at a bar, then click it again. Plenty of the best brand insights hide in rambling. Stopping keeps the words in the draft. The desk waits for the final result before it finishes, and nothing is submitted until you press Answer.
 
 - **Browser speech (default, free to you).** When the browser exposes speech recognition, the desk uses it. The label reads `Voice: browser (free)`. Chrome and Edge do this. The browser vendor processes the audio, so it may leave the machine. It does not spend an xAI key. The order is in [docs/voice.md](docs/voice.md).
 - **Local whisper, when the browser cannot listen.** If speech recognition is missing and [whisper.cpp](https://github.com/ggml-org/whisper.cpp) is already installed, the label reads `Voice: local whisper`. The app does not download the binary or the weights.
