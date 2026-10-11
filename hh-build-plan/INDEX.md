@@ -194,5 +194,6 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 188 | So Long and Thanks for All the Fish | Forty-Two | Hold to talk keeps the spoken words after the button is released | Heart of Gold | xhigh |
 | 189 | So Long and Thanks for All the Fish | Forty-Two | UI redesign for clarity: interview first, one clear toolbar, explained controls | Heart of Gold | xhigh |
 | 190 | So Long and Thanks for All the Fish | Forty-Two | Fix the flaky gallery walk E2E test at its root | Heart of Gold | xhigh |
+| 191 | So Long and Thanks for All the Fish | Forty-Two | Final improve loop rerun in an isolated worktree, with a real baseline | Heart of Gold | xhigh |
 
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
