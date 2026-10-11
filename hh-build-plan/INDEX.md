@@ -198,5 +198,6 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 192 | So Long and Thanks for All the Fish | Forty-Two | Fix the flaky arrow keys choice E2E test at its root | Heart of Gold | xhigh |
 | 193 | So Long and Thanks for All the Fish | Forty-Two | Audit and fix every tool and model install | Heart of Gold | xhigh |
 | 194 | So Long and Thanks for All the Fish | Forty-Two | Second dictation keeps the text and appends to it | Heart of Gold | xhigh |
+| 195 | So Long and Thanks for All the Fish | Forty-Two | Fix the red engine unit test for Windows batch shims on Linux and macOS CI | Heart of Gold | xhigh |
 
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
