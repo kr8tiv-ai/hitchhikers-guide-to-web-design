@@ -110,3 +110,7 @@ n	command	exit	hook	note
 These stay on in code, including when `--always-approve` is set: protected paths, the evaluation hash, no force push, no `git reset --hard` except the experiment rollback on a tree that started clean, no deploy, no publish, no secret reads or prints, no edits outside the target area, no new dependency installs, no checkout away from the configured branch, no `--no-verify`. Caps, the stop file, and the push check are code too.
 
 `--deny` is grok configuration. If a session ignores it, the runner still discards a protected diff and still refuses its own force push. It cannot undo a push, a deploy, a secret already printed, or a package already fetched. The runbook names that split.
+
+## Final run
+
+Prompt 186 ran `hh improve` once, on `improve/2026-10-10-desk`, with `--max-experiments 5`. Experiment 0 crashed before a score. The note is `spawn EINVAL`: on Windows the evaluation spawns `pnpm.cmd` with the shell off, and Node rejects that. No later experiment ran. The evaluation, `improve/protected.json`, and the loop were not changed. The collection and the open bugs are in `improve/final-run.md`.
