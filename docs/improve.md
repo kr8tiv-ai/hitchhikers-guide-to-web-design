@@ -143,3 +143,7 @@ The `spawn EINVAL` crash was fixed by a human-approved change to the protected e
 ### Third run (prompt 187)
 
 The rerun after the Windows evaluation fix recorded a baseline of 0, crashed on every `cli-explorer` experiment, and was stopped by the user after the protected-path check tripped on a prompt file and a `.playwright-mcp` stray. The three causes above (spec-reporter parse, temporary-home login, main-tree run) were found by running the evaluation and the exact grok command line by hand. The evidence from that run is not committed. Prompt 191 is the rerun that uses the fixes.
+
+### Prompt 191
+
+`hh improve supervise --max-experiments 8 --wall-minutes 180` ran once from `main`, in worktree `hh-improve-20261011-150429`. Experiment 0 crashed: `FAILED: baseline has 2 failing tests. No experiment was started.` No agent started. The loop was not retried. The row is in `improve/results.tsv`. The collection and the open bugs are in `improve/final-run.md`.
