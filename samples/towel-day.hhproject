@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2020-01-01T00:00:00.000Z",
+  "savedAt": "2020-01-01T00:00:00.000Z",
+  "app": {
+    "name": "The Hitchhiker's Guide to Web Design",
+    "version": "0.0.0"
+  },
+  "projectId": "sample-towel-day",
+  "projectName": "Mostly Towels",
+  "sourceDir": ".",
+  "interview": {
+    "answers": [
+      {
+        "id": "DP-0.1",
+        "status": "ANSWERED",
+        "value": "For a client who sells towels.",
+        "assumption": false
+      }
+    ],
+    "currentQuestionId": "DP-0.2",
+    "index": 1,
+    "total": 40
+  },
+  "brief": {
+    "body": "Mostly Towels sells towels to hitchhikers who want to stay dry. The pages should feel calm, cream, and a little improbable. This brief is not approved.",
+    "approval": {
+      "approved": false,
+      "at": null
+    }
+  },
+  "brand": {
+    "body": null,
+    "sections": {},
+    "approval": {
+      "approved": false,
+      "at": null
+    }
+  },
+  "prd": {
+    "body": null,
+    "approval": {
+      "approved": false,
+      "at": null
+    }
+  },
+  "promptPackage": {
+    "body": null,
+    "approval": {
+      "approved": false,
+      "at": null
+    }
+  },
+  "elevate": {
+    "approved": false,
+    "at": null
+  },
+  "hostinger": {
+    "approved": false,
+    "at": null
+  },
+  "queue": {
+    "items": [],
+    "lastDone": "",
+    "currentPrompt": null,
+    "blockers": []
+  },
+  "state": {
+    "phase": "Don't Panic",
+    "slice": "Towel Day",
+    "promptId": "interview:DP-0.2",
+    "lastGoodCommit": "",
+    "blockers": [],
+    "nextAction": "Answer DP-0.2.",
+    "updatedAt": "2020-01-01T00:00:00.000Z"
+  },
+  "git": {
+    "present": false,
+    "branch": null,
+    "head": null,
+    "lastGoodCommit": null,
+    "remoteUrl": null
+  },
+  "settings": {},
+  "voice": null,
+  "uploads": [],
+  "references": [],
+  "snapshot": [
+    {
+      "path": "interview.json",
+      "text": "{\n  \"version\": 1,\n  \"answers\": [\n    {\n      \"id\": \"DP-0.1\",\n      \"status\": \"ANSWERED\",\n      \"value\": \"For a client who sells towels.\"\n    }\n  ],\n  \"cursor\": 1,\n  \"pushedIds\": []\n}\n"
+    },
+    {
+      "path": "SITE-BRIEF.md",
+      "text": "# Site brief\n\nMostly Towels sells towels to hitchhikers who want to stay dry. The pages should feel calm, cream, and a little improbable.\n\nThis brief is not approved.\n"
+    }
+  ],
+  "resumeMd": "# Resume\n\nProject: Mostly Towels\n\nThe next question is DP-0.2. The brief is not approved. Open this file from the desk.\n",
+  "resumePrompt": "Resume Mostly Towels. The next question is DP-0.2. The brief is not approved. Keep going from the saved project file.\n"
+}

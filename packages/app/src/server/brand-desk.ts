@@ -8,6 +8,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { renderFriendly } from "../friendly.ts";
 import path from "node:path";
 import {
   BRAND_SECTIONS,
@@ -104,12 +105,17 @@ export function renderBrandKitError(token: string, navHtml: string): string {
         ${navHtml}
       </header>
       <main id="main" class="hh-read" data-hh-ready>
-        <div class="hh-empty">
-          <h1 class="hh-empty__title">The brand kit file could not be read</h1>
-          <p>The file is on disk, and it is not a kit this desk can show.</p>
-        </div>
+        ${renderFriendly({
+          title: "The brand kit file could not be read",
+          happened: "The file is on disk, and it is not a kit this desk can show.",
+          next: "Open .hitchhiker/brand/brand-kit.json, fix the JSON, then load this page again.",
+          retryHref: "/brand",
+          retryLabel: "Try again",
+          copyText: "hh doctor",
+        })}
       </main>
     </div>
+    <script type="module" src="/client/save-status.js"></script>
   </body>
 </html>
 `;

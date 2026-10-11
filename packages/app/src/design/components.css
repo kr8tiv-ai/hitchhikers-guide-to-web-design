@@ -955,8 +955,10 @@ p.hh-error__next {
   .hh-qcard__input,
   .hh-site,
   .hh-skip,
+  .hh-tour,
   .hh-btn[aria-busy="true"]::after,
-  [aria-busy="true"] .hh-btn--primary::after {
+  [aria-busy="true"] .hh-btn--primary::after,
+  .hh-qcard[aria-busy="true"] .hh-qcard__input {
     animation: none;
     transition: none;
   }
@@ -993,5 +995,98 @@ p.hh-error__next {
 @keyframes hh-wait {
   to {
     transform: rotate(360deg);
+  }
+}
+
+.hh-tour {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 0 var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--color-line-strong);
+  border-left: var(--spine) solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.hh-tour:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.hh-tour__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hh-tour__steps li {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.hh-tour__steps li[hidden] {
+  display: none;
+}
+
+.hh-tour .hh-qcard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+[data-tour-current="true"] {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.hh-probe-note {
+  display: grid;
+  gap: var(--space-2);
+  max-width: var(--measure);
+  min-width: 0;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.hh-probe-note[hidden] {
+  display: none;
+}
+
+.hh-details {
+  margin-top: var(--space-3);
+  min-width: 0;
+}
+
+.hh-details__pre {
+  max-width: 100%;
+  margin: var(--space-3) 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--type-small);
+}
+
+.hh-qcard[aria-busy="true"] .hh-qcard__input {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-field),
+    color-mix(in srgb, var(--color-ink) 8%, var(--color-surface)),
+    var(--color-field)
+  );
+  background-size: 200% 100%;
+  animation: hh-skeleton var(--motion-duration-slow) linear infinite;
+}
+
+@keyframes hh-skeleton {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
   }
 }

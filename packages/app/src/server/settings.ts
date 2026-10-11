@@ -118,7 +118,7 @@ export function renderSettingsMain(
     : "";
   return `<form class="hh-qcard hh-rise hh-rise--2" method="post" action="/settings" data-settings-form data-accepted="${view.accepted ? "true" : "false"}">
       <h1 class="hh-qcard__title">Settings</h1>
-      <p class="hh-qcard__why">Voice, model, and effort for this project. The rate sits here before xAI speech-to-text can be turned on.</p>
+      <p class="hh-qcard__why">Voice, model, and effort for this project. The rate sits here before xAI speech-to-text can be turned on. The first-run tour is saved with these settings. Replay tour is in the menu.</p>
       ${flashHtml}
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
       <div data-settings="voice">

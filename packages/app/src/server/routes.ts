@@ -25,6 +25,7 @@ import {
   galleryCachePaths,
   guideThinkFromScript,
   loadConfig,
+  saveConfig,
   loadGallery,
   loadState,
   loadTree,
@@ -90,6 +91,8 @@ import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
+import { renderFriendly, splitPublicError } from "../friendly.ts";
+import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
@@ -580,6 +583,10 @@ async function handlePost(
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
     return;
   }
+  if (pathname === "/api/tour") {
+    await handleTourPost(req, res, token, projectDir, enqueue);
+    return;
+  }
   if (
     pathname === "/api/project/save" ||
     pathname === "/api/project/open" ||
@@ -899,7 +906,13 @@ async function handleGet(
   if (pathname === "/") {
     const session = view();
     const flags = await enqueue(() => readVoiceDeskFlags(projectDir));
-    await deliverHtml(req, res, 200, renderDesk(token, session, flags), projectDir, token, true, foldStyleHeaders());
+    let showTour = true;
+    try {
+      showTour = loadConfig(projectDir).tourSeen !== true;
+    } catch {
+      showTour = true;
+    }
+    await deliverHtml(req, res, 200, renderDesk(token, session, flags, showTour), projectDir, token, true, foldStyleHeaders());
     return;
   }
   if (pathname === "/gallery") {
@@ -973,7 +986,7 @@ async function handleGet(
       await deliverHtml(req, res, 200, html, projectDir, token, false);
       return;
     }
-    const nav = `${deskMenu(false)}\n        ${routeNav("/brand")}`;
+    const nav = `${deskMenu(false, token)}\n        ${routeNav("/brand")}`;
     if (loaded.kind === "bad") {
       await deliverHtml(req, res, 500, renderBrandKitError(token, nav), projectDir, token, false);
       return;
@@ -1002,7 +1015,7 @@ async function handleGet(
   if (pathname === "/hh-dashboard") {
     const drive = await readDashboard(projectDir, token);
     if (drive.kind === "html") {
-      await deliverHtml(req, res, drive.status, withDeskMenu(drive.html), projectDir, token, false);
+      await deliverHtml(req, res, drive.status, withDeskMenu(drive.html, token), projectDir, token, false);
       return;
     }
     sendDriveResult(req, res, drive);
@@ -1022,6 +1035,16 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/tour.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "client", "tour.ts"))),
+    );
     return;
   }
   if (pathname === "/client/tool-install.js") {
@@ -1227,7 +1250,11 @@ function buildSession(
     mapHtml = renderDeskMap(renderMap(state), state.phase, compactMapLabel(state.phase, stepIndex, stepTotal));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "The map could not be drawn.";
-    mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
+    const split = splitPublicError(message);
+    mapHtml =
+      split.detail === null
+        ? `<p class="hh-error" role="alert">${escapeHtml(split.summary)}</p>`
+        : `<div class="hh-error" role="alert"><p>${escapeHtml(split.summary)}</p><p>Reload the desk. The map is a guide, and the question still works.</p><details class="hh-details"><summary>Details</summary><pre class="hh-details__pre">${escapeHtml(split.detail)}</pre></details></div>`;
   }
   const showPreflight =
     preflight !== null && (firstRun || preflight.probes.some((probe) => probe.ok === false));
@@ -1400,7 +1427,7 @@ function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): st
           </details>`;
 }
 
-function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags): string {
+function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags, showTour = false): string {
   const voiceFlags = flags ?? { xaiSetting: false, rateAccepted: false, localWhisper: false };
   const engine = engineForDesk(voiceFlags, true);
   const chrome = voiceChromeFor(engine);
@@ -1444,7 +1471,7 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags)
         ${dek}${startInterview}
         </div>
         <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
-        ${deskMenu(false)}
+        ${deskMenu(false, token)}
         ${routeNav("/")}`,
     "mast",
   );
@@ -1458,14 +1485,14 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags)
   html = replaceBlock(
     html,
     /<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" aria-label="Transcript">[\s\S]*?<\/section>/,
-    `<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" aria-label="Transcript">\n            ${session.transcriptHtml}\n          </section>`,
+    `<section class="hh-log hh-rise hh-rise--2" id="transcript" data-region="transcript" data-tour-spot="transcript" aria-label="Transcript">\n            ${session.transcriptHtml}\n          </section>`,
     "transcript",
   );
   const guideLive = escapeHtml(guideTurnText(session.question?.ask ?? null, session.done));
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
   html = replaceBlock(
@@ -1477,13 +1504,16 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags)
   html = replaceBlock(
     html,
     /<footer class="hh-status" data-region="status">[\s\S]*?<\/footer>/,
-    `<footer class="hh-status" data-region="status">\n        ${session.statusHtml}\n      </footer>`,
+    `<footer class="hh-status" data-region="status" data-tour-spot="status">\n        ${session.statusHtml}\n      </footer>`,
     "status",
   );
   const motion =
     session.question?.id.startsWith("DP-6.") === true
       ? `    <script type="module" src="/client/motion.js"></script>\n`
       : "";
+  if (showTour && html.includes('<main class="hh-read">')) {
+    html = html.replace('<main class="hh-read">', `<main class="hh-read">\n          ${renderTour(token)}`);
+  }
   return html.replace(
     "</body>",
     `    <script type="module" src="/client/desk.js"></script>\n${motion}  </body>`,
@@ -1553,11 +1583,14 @@ function renderMissing(token: string, notice: string | null = null): string {
     current: "/",
     kicker: "Missing",
     status: "This address is not a route.",
-    main: `<div class="hh-empty">
-        <h1 class="hh-empty__title">This page is not on the desk</h1>
-        <p>The address does not match a route.</p>
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/">Back to the desk</a></p>
-      </div>`,
+    main: renderFriendly({
+      title: "This page is not on the desk",
+      happened: "The address does not match a route.",
+      next: "Go back to the desk and pick a page from the list.",
+      retryHref: "/",
+      retryLabel: "Back to the desk",
+      copyText: "Open the desk at /",
+    }),
   });
 }
 
@@ -1604,7 +1637,7 @@ ${extra}
           <p class="hh-kicker">Local desk</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
-        ${deskMenu(opts.onSettings === true)}
+        ${deskMenu(opts.onSettings === true, opts.token)}
         ${routeNav(opts.current)}
       </header>
       <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}" data-hh-ready>
@@ -1619,20 +1652,21 @@ ${script}  </body>
 `;
 }
 
-function deskMenu(onSettings: boolean): string {
+function deskMenu(onSettings: boolean, token: string): string {
   const open = onSettings ? " open" : "";
   const current = onSettings ? ' aria-current="page"' : "";
   return `<details class="hh-desk-menu hh-qcard__look"${open}>
           <summary class="hh-kicker">Desk menu</summary>
           <a class="hh-btn hh-btn--ghost" href="/settings"${current}>Settings</a>
+          ${renderReplayControl(token)}
         </details>`;
 }
 
-function withDeskMenu(html: string): string {
+function withDeskMenu(html: string, token: string): string {
   if (html.includes('class="hh-desk-menu')) return html;
   const mark = `<div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>`;
   if (!html.includes(mark)) return html;
-  return html.replace(mark, `${mark}\n        ${deskMenu(false)}`);
+  return html.replace(mark, `${mark}\n        ${deskMenu(false, token)}`);
 }
 
 function renderSettingsDocument(
@@ -1664,12 +1698,91 @@ function renderSettingsFailure(token: string, notice: string | null): string {
     onSettings: true,
     kicker: "Settings",
     status: "Settings could not be read.",
-    main: `<div class="hh-empty">
-        <h1 class="hh-empty__title">Settings could not be read</h1>
-        <p>The rate card stayed unread. Nothing was turned on.</p>
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/">Back to the desk</a></p>
-      </div>`,
+    main: renderFriendly({
+      title: "Settings could not be read",
+      happened: "The rate card stayed unread. Nothing was turned on.",
+      next: "Reload settings. If it fails again, run hh doctor and come back.",
+      retryHref: "/settings",
+      retryLabel: "Try again",
+      copyText: "hh doctor",
+      detail: "Settings read failed before the form was shown. xAI speech-to-text stayed off.",
+    }),
   });
+}
+
+async function handleTourPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendHtml(req, res, 413, tourErrorPage("That request is too large."));
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendHtml(req, res, 413, tourErrorPage("That request is too large."));
+    dropRequest(req);
+    return;
+  }
+  const raw = capped.body.toString("utf8");
+  const contentType = headerOne(req.headers["content-type"]);
+  if (!settingsTokenOk(token, req.headers["x-hh-csrf"], raw, contentType)) {
+    sendHtml(req, res, 403, tourErrorPage("The desk refused this request. Reload the page."));
+    return;
+  }
+  const tour = new URLSearchParams(raw).get("tour");
+  if (tour !== "seen" && tour !== "replay") {
+    sendHtml(req, res, 400, tourErrorPage("The tour action was not recognised."));
+    return;
+  }
+  try {
+    await enqueue(async () => {
+      const current = loadConfig(projectDir);
+      await saveConfig(projectDir, { ...current, tourSeen: tour === "seen" });
+    });
+  } catch (error: unknown) {
+    logDeskError(error);
+    const detail = error instanceof Error ? error.message : "The tour setting did not save.";
+    sendHtml(req, res, 500, tourErrorPage("The tour setting did not save.", detail));
+    return;
+  }
+  res.writeHead(303, { location: "/" });
+  res.end();
+}
+
+function tourErrorPage(happened: string, detail?: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tour</title>
+    <link rel="stylesheet" href="/src/design/tokens.css" />
+    <link rel="stylesheet" href="/src/design/type.css" />
+    <link rel="stylesheet" href="/src/design/components.css" />
+    <link rel="stylesheet" href="/src/shell.css" />
+  </head>
+  <body>
+    <div class="hh-shell">
+      <main id="main" class="hh-read">
+        ${renderFriendly({
+          title: "The tour did not update",
+          happened,
+          next: "Reload the desk and try Skip tour or Replay tour again.",
+          retryHref: "/",
+          retryLabel: "Back to the desk",
+          copyText: "Reload the desk",
+          ...(detail === undefined ? {} : { detail }),
+        })}
+      </main>
+    </div>
+    <script type="module" src="/client/save-status.js"></script>
+  </body>
+</html>`;
 }
 
 async function handleSettingsPost(
@@ -1797,8 +1910,9 @@ function routeNav(current: RouteName | null): string {
   ] as const;
   const links = items.map(([href, label]) => {
     const on = href === current;
+    const spot = href === "/approve" ? ' data-tour-spot="approve"' : "";
     const currentAttr = on ? ' aria-current="page"' : "";
-    return `<a href="${href}"${currentAttr}>${escapeHtml(label)}</a>`;
+    return `<a href="${href}"${currentAttr}${spot}>${escapeHtml(label)}</a>`;
   });
   return `<nav class="hh-routes" aria-label="Desk routes">${links.join("")}</nav>`;
 }
@@ -1815,7 +1929,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
     .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
-    .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"');
+    .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"')
+    .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"');
   moduleCache.set(filePath, js);
   return js;
 }

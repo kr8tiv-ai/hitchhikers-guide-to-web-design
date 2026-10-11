@@ -1,4 +1,4 @@
-import type { AnswerRecord } from "@hitchhiker/engine";
+import { explainTool, type AnswerRecord, type PathProbeName } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
 
 /**
@@ -78,6 +78,18 @@ export function deskStatus(input: {
   return input.base;
 }
 
+/** The same explainTool note the doctor prints, as a desk section. */
+export function renderProbeExplain(name: PathProbeName): string {
+  const note = explainTool(name);
+  return `<section class="hh-probe-note" data-probe-explain="${escapeHtml(name)}">
+      <h3 class="hh-small">${escapeHtml(name)}</h3>
+      <p>What it means: ${escapeHtml(note.means)}</p>
+      <p>Why it matters: ${escapeHtml(note.why)}</p>
+      <p>Fix: ${escapeHtml(note.fix)}</p>
+      <p>Doc: ${escapeHtml(note.doc)}</p>
+    </section>`;
+}
+
 export function renderPreflight(preflight: DeskPreflight): string {
   const byName = new Map(preflight.probes.map((probe) => [probe.name, probe]));
   const rows = PREFLIGHT_NAMES.map((name) => {
@@ -95,6 +107,9 @@ export function renderPreflight(preflight: DeskPreflight): string {
         <td data-label="Action">${action}</td>
       </tr>`;
   }).join("");
+  const notes = PREFLIGHT_NAMES.filter((name) => byName.get(name)?.ok !== true)
+    .map((name) => renderProbeExplain(name))
+    .join("");
   return `<div class="hh-table-wrap" data-region="preflight">
     <table class="hh-table" aria-label="Preflight">
       <thead>
@@ -104,6 +119,7 @@ export function renderPreflight(preflight: DeskPreflight): string {
         ${rows}
       </tbody>
     </table>
+    ${notes}
   </div>`;
 }
 

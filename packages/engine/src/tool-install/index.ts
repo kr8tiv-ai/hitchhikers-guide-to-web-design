@@ -3,6 +3,15 @@ export { createConfirmStore, planFingerprint, type ConfirmReject, type ConfirmSt
 export { assertRecipeUrl, assertRedirectUrl } from "./hosts.ts";
 export { installHints, type HintContext } from "./hints.ts";
 export {
+  DOCTOR_DOC,
+  explainDoctor,
+  explainRuntime,
+  explainTool,
+  formatProbeNotes,
+  type DoctorNoteInput,
+  type ProbeNote,
+} from "./explain.ts";
+export {
   buildInstallPlan,
   commandOnPath,
   displayArgv,

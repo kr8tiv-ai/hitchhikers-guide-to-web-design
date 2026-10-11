@@ -12,6 +12,8 @@ import {
   type CommandRunner,
   type DeskPreflightReport,
   type GuideConfig,
+  explainDoctor,
+  formatProbeNotes,
   type HintContext,
   type PathProbe,
   type SessionIdMode,
@@ -83,6 +85,7 @@ export function formatDoctor(report: DoctorReport, context?: HintContext): strin
     else lines.push(`warning: ${warning}`);
   }
   for (const hint of installHints(report, context)) lines.push(hint);
+  lines.push(...formatProbeNotes(explainDoctor(report, context)));
   return lines.join("\n");
 }
 

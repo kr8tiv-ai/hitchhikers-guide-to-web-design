@@ -202,6 +202,7 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
       </div>
     </div>
     <p class="hh-error" role="alert" data-install-error hidden></p>
+    <details class="hh-details" data-install-details hidden><summary>Details</summary><pre class="hh-details__pre" data-install-detail></pre></details>
     <textarea class="hh-install__manual" readonly data-install-manual>${escapeHtml(plan.manualCommand)}</textarea>
     <div class="hh-install__actions">
       <button class="hh-btn" type="button" data-install-copy>Copy</button>
@@ -276,6 +277,7 @@ function wireDialog(env: InstallEnv, dialog: InstallNode): void {
   dialog.addEventListener("cancel", onCancel);
   dialog.addEventListener("close", () => {
     restoreFocus();
+    setTimeout(restoreFocus, 0);
   });
 }
 
@@ -386,6 +388,11 @@ function paintProbe(root: InstallDocument, probe: ProbeView): void {
   if (result !== undefined) result.textContent = probe.detail;
   if (state !== undefined) state.textContent = probe.ok ? "Present" : "Missing";
   if (action !== undefined && probe.ok) action.innerHTML = "";
+  const note = root.querySelector(`[data-probe-explain="${probe.name}"]`);
+  if (note !== null) {
+    if (probe.ok) note.setAttribute("hidden", "");
+    else note.removeAttribute("hidden");
+  }
 }
 
 async function postCancel(env: InstallEnv, tool: string): Promise<void> {
@@ -446,11 +453,31 @@ async function readSse(
   }
 }
 
+const INSTALL_STACK = /(?:^|\n)\s*at\s+\S+/;
+
+function splitInstallError(error: string): { summary: string; detail: string | null } {
+  const text = error.replace(/\r\n/g, "\n").trim();
+  if (!INSTALL_STACK.test(text) && !text.includes("\n")) {
+    return { summary: error, detail: null };
+  }
+  const first = text.split("\n").find((line) => line.trim().length > 0 && !/^\s*at\s+\S+/.test(line)) ?? "";
+  const summary = first.trim().length > 0 ? first.trim() : "The install did not finish.";
+  return { summary, detail: text };
+}
+
+function installErrorHtml(error: string): string {
+  const split = splitInstallError(error);
+  if (split.detail === null) {
+    return `<p class="hh-error" role="alert" data-install-error>${escapeHtml(error)}</p>`;
+  }
+  return `<div class="hh-error" role="alert"><p data-install-error>${escapeHtml(split.summary)}</p><p>Retry the install, or copy the manual steps.</p><details class="hh-details"><summary>Details</summary><pre class="hh-details__pre">${escapeHtml(split.detail)}</pre></details></div>`;
+}
+
 function showFailure(env: InstallEnv, tool: string, error: string, manual: string, docs: string | null): void {
   const dialog = env.document.querySelector("[data-install-dialog]") ?? createDialog(env);
   if (dialog === null) return;
   dialog.innerHTML = `<h2 id="hh-install-title">Install ${escapeHtml(tool)}</h2>
-    <p class="hh-error" role="alert" data-install-error>${escapeHtml(error)}</p>
+    ${installErrorHtml(error)}
     <textarea class="hh-install__manual" readonly data-install-manual>${escapeHtml(manual)}</textarea>
     <div class="hh-install__actions">
       <button class="hh-btn" type="button" data-install-copy>Copy</button>
@@ -465,10 +492,24 @@ function showFailure(env: InstallEnv, tool: string, error: string, manual: strin
 
 function showDialogFailure(dialog: InstallNode, message: string): void {
   const error = dialog.querySelector("[data-install-error]");
+  const split = splitInstallError(message);
   if (error !== null) {
     error.hidden = false;
-    error.textContent = message;
+    error.textContent = split.summary;
     error.removeAttribute("hidden");
+  }
+  const details = dialog.querySelector("[data-install-details]");
+  const pre = dialog.querySelector("[data-install-detail]");
+  if (details !== null) {
+    if (split.detail === null) {
+      details.hidden = true;
+      details.setAttribute("hidden", "");
+      if (pre !== null) pre.textContent = "";
+    } else {
+      details.hidden = false;
+      details.removeAttribute("hidden");
+      if (pre !== null) pre.textContent = split.detail;
+    }
   }
   const retry = dialog.querySelector("[data-install-retry]");
   if (retry !== null) {
@@ -529,7 +570,23 @@ function closeDialog(dialog: InstallNode): void {
 }
 
 function restoreFocus(): void {
-  if (opener !== null && typeof opener.focus === "function") opener.focus();
+  const target = liveOpener();
+  if (target !== null && typeof target.focus === "function") target.focus();
+}
+
+/**
+ * The transcript repaints while a plan dialog is open, which detaches the
+ * button that opened it. Focus the button that is on the page now.
+ * A second pass runs after the dialog finishes its own focus restore.
+ */
+function liveOpener(): InstallNode | null {
+  const tool = opener?.getAttribute("data-install") ?? "";
+  const root = pageDocument();
+  if (tool.length > 0 && root !== null) {
+    const live = root.querySelector(`button[data-install="${tool}"]`);
+    if (live !== null) return live;
+  }
+  return opener;
 }
 
 function focusRow(env: InstallEnv, tool: string): void {

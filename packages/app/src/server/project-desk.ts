@@ -4,6 +4,8 @@
  */
 
 import { escapeHtml } from "../card.ts";
+import { renderFriendly, splitPublicError } from "../friendly.ts";
+import { SAMPLE_LABEL, sampleProjectFile } from "../sample.ts";
 import {
   fileExists,
   loadProjectFile,
@@ -90,10 +92,11 @@ function documentPage(title: string, main: string): string {
         <p class="hh-kicker">Project file</p>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
       </header>
-      <main id="main" class="hh-read">
+      <main id="main" class="hh-read" data-hh-ready>
         ${main}
       </main>
     </div>
+    <script type="module" src="/client/save-status.js"></script>
   </body>
 </html>
 `;
@@ -169,6 +172,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
     items.length === 0
       ? `<p class="hh-small">No saved project yet. A save writes one file you can open later.</p>`
       : `<ul class="hh-save-resume__list">${items}</ul>`;
+  const sample = sampleOffer(token, items.length === 0);
   const open = `<form method="post" action="/api/project/open" class="hh-save-open">
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
       <label class="hh-small" for="hh-open-file">Open project file</label>
@@ -179,6 +183,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
       <h2 class="hh-title" id="resume-title">Resume a project</h2>
       <p class="hh-small">Pick up a saved project, or open a project file.</p>
       ${list}
+      ${sample}
       ${open}
     </section>`;
   return `${section}${bar}`;
@@ -203,6 +208,21 @@ export function applyProjectChrome(html: string, chrome: string): string {
   }
   if (next.includes("</body>")) return next.replace("</body>", `${bar}</body>`);
   return `${next}${bar}`;
+}
+
+function sampleOffer(token: string, empty: boolean): string {
+  const file = sampleProjectFile();
+  const lead = empty
+    ? `<p class="hh-small">No saved project yet. A save writes one file you can open later. Or open the sample and look around.</p>`
+    : `<p class="hh-small">The sample is a towel shop you can open without leaving the desk.</p>`;
+  return `<div class="hh-empty" data-tour-spot="sample" data-empty-sample="${empty ? "true" : "false"}">
+      ${lead}
+      <form method="post" action="/api/project/open" class="hh-save-open" data-open-sample>
+        ${hidden(token, "path", file)}
+        <input type="hidden" name="prefer" value="file" />
+        <button class="hh-btn hh-btn--secondary" type="submit">${SAMPLE_LABEL}</button>
+      </form>
+    </div>`;
 }
 
 function isPrefer(value: string | null): value is RestorePrefer {
@@ -231,7 +251,20 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
     if (input.pathname === "/api/project/remove") {
       const target = form.get("path") ?? "";
       if (target.length === 0) {
-        return { type: "html", status: 400, html: documentPage("Missing path", "<p>Name the project file to remove from the list.</p>") };
+        return {
+          type: "html",
+          status: 400,
+          html: documentPage(
+            "Missing path",
+            renderFriendly({
+              title: "Name a project file",
+              happened: "Remove needs the project file path.",
+              next: "Go back to the desk and use Remove on the missing row.",
+              retryHref: "/",
+              retryLabel: "Back to the desk",
+            }),
+          ),
+        };
       }
       await removeRecentProject(target, projectHome(input.projectDir));
       return { type: "redirect" };
@@ -242,7 +275,17 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
         return {
           type: "html",
           status: 400,
-          html: documentPage("Missing path", `<div class="hh-empty"><h1 class="hh-empty__title">Name a project file</h1><p>Paste the path, then open it.</p></div>`),
+          html: documentPage(
+            "Missing path",
+            renderFriendly({
+              title: "Name a project file",
+              happened: "The open form did not include a path.",
+              next: "Paste the path of a .hhproject file, or use Open the sample on an empty desk.",
+              retryHref: "/",
+              retryLabel: "Back to the desk",
+              copyText: "Open the sample",
+            }),
+          ),
         };
       }
       const preferRaw = form.get("prefer");
@@ -258,11 +301,24 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
           ),
         };
       }
-      if (loaded.file === null) {
+      if (loaded.file === null || loaded.source === "live") {
+        const raw = loaded.message ?? "The project file could not be read.";
+        const split = splitPublicError(raw);
         return {
           type: "html",
           status: 400,
-          html: documentPage("Unreadable", `<div class="hh-empty"><h1 class="hh-empty__title">That file could not be opened</h1><p>${escapeHtml(loaded.message ?? "The project file could not be read.")}</p></div>`),
+          html: documentPage(
+            "Unreadable",
+            renderFriendly({
+              title: "That file could not be opened",
+              happened: split.summary,
+              next: "Check the path, or open the sample from the empty desk. A bad file is moved aside and is not deleted.",
+              retryHref: "/",
+              retryLabel: "Back to the desk",
+              copyText: target,
+              detail: split.detail ?? raw,
+            }),
+          ),
         };
       }
       const live = loadState(input.projectDir);
@@ -279,10 +335,22 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "The project file did not save.";
+    const split = splitPublicError(message);
     return {
       type: "html",
       status: 500,
-      html: documentPage("Not saved", `<div class="hh-empty"><h1 class="hh-empty__title">Not saved</h1><p>${escapeHtml(message)}</p></div>`),
+      html: documentPage(
+        "Not saved",
+        renderFriendly({
+          title: "Not saved",
+          happened: split.summary,
+          next: "Try Save again. The previous file, if there was one, is still on disk.",
+          retryHref: "/",
+          retryLabel: "Back to the desk",
+          copyText: "Save the project again",
+          detail: split.detail,
+        }),
+      ),
     };
   }
   return { type: "json", status: 404, body: { error: "That route is not on the desk." } };

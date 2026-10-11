@@ -36,6 +36,7 @@ export const SETTINGS_KEYS = [
   "ai",
   "integrations",
   "toolInstalls",
+  "tourSeen",
 ] as const;
 
 const INSTALL_KEYS = ["tool", "version", "installPath", "installedAt", "recipeId", "source"] as const;

@@ -302,7 +302,8 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <p class="hh-kicker">Queue file</p>
         <h2 class="hh-error__title">The queue file could not be read.</h2>
         <p>${escapeHtml(message)}</p>
-        <p class="hh-error__next">It was left on disk.</p>
+        <p class="hh-error__next">It was left on disk. Fix the JSON, then load this page again.</p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard">Try again</a></p>
       </article>
       </main>
       <footer class="hh-status">

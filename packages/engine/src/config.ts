@@ -62,6 +62,8 @@ export interface GuideConfig {
   ai: AiConfig;
   integrations: IntegrationsConfig;
   toolInstalls: ToolInstallRecord[];
+  /** True after the first-five-minutes tour is skipped or finished. */
+  tourSeen: boolean;
 }
 
 /**
@@ -108,6 +110,7 @@ const TOP_KEYS = [
   "ai",
   "integrations",
   "toolInstalls",
+  "tourSeen",
 ] as const;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
@@ -404,6 +407,7 @@ export function defaultConfig(): GuideConfig {
       pinterestCapture: PINTEREST_CAPTURE_DEFAULT,
     },
     toolInstalls: [],
+    tourSeen: false,
   };
 }
 
@@ -464,6 +468,7 @@ export function parseConfig(raw: unknown): GuideConfig {
     ai: readAi(Object.hasOwn(raw, "ai") ? raw.ai : undefined, model, effort),
     integrations: readOptional(raw, "integrations", defaults.integrations, readIntegrations),
     toolInstalls: readOptional(raw, "toolInstalls", defaults.toolInstalls, readInstalls),
+    tourSeen: readOptional(raw, "tourSeen", defaults.tourSeen, (value) => readBoolean("tourSeen", value)),
   };
 }
 

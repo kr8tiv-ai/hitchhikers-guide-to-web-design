@@ -10,6 +10,7 @@ import {
   type VoiceEngineId,
 } from "./voice-engine.ts";
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
+import { handleTourKey, mountTour } from "./tour.ts";
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -216,6 +217,19 @@ export const DESK_OFFLINE =
   "The desk lost its connection to hh app. Is the PowerShell window still open?";
 const STREAM_FAILURES = 3;
 
+const STACK_LINE = /(?:^|\n)\s*at\s+\S+/;
+
+/** One-line card failures stay a single sentence. A stack goes behind Details. */
+function publicCardError(error: string): string {
+  const text = error.replace(/\r\n/g, "\n").trim();
+  if (!STACK_LINE.test(text) && !text.includes("\n")) {
+    return `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
+  }
+  const first = text.split("\n").find((line) => line.trim().length > 0 && !/^\s*at\s+\S+/.test(line)) ?? "";
+  const summary = first.trim().length > 0 ? first.trim() : "Something on the desk did not finish.";
+  return `<div class="hh-error" role="alert"><p>${escapeHtml(summary)}</p><p>Reload the desk and try that answer again.</p><details class="hh-details"><summary>Details</summary><pre class="hh-details__pre">${escapeHtml(text)}</pre></details></div>`;
+}
+
 /**
  * Hold to talk. Chrome and Edge speech recognition fills the draft while the
  * button is held. Nothing is submitted: the person still presses Answer.
@@ -299,6 +313,8 @@ interface DeskElement {
   setPointerCapture?(pointerId: number): void;
   insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
   focus?(): void;
+  /** Set on real elements. The desk harness omits it. */
+  tagName?: string;
 }
 
 interface DeskEvent {
@@ -522,6 +538,7 @@ export function mountDesk(env: DeskEnv): () => void {
     stopVoice();
   };
   const onKeyDown = (event: DeskEvent): void => {
+    if (handleTourKey(env.document, event)) return;
     if (handleInstallKey(env, event)) return;
     if (isTypingTarget(event.target)) {
       if (isDraftTarget(event.target) && event.key === "Enter") {
@@ -562,6 +579,14 @@ export function mountDesk(env: DeskEnv): () => void {
           if (current !== null) void pickChoice(current);
           return;
         }
+      }
+      // Arrow moves the radios, then focus can land back on Suggest.
+      // That button's Enter would no-op while a suggestion is open.
+      if (key === "Enter" && enterPicksSlippedChoice(event.target)) {
+        event.preventDefault();
+        const current = currentChoiceId();
+        if (current !== null) void pickChoice(current);
+        return;
       }
     }
     if (event.key !== " " && event.key !== "Enter") return;
@@ -623,9 +648,11 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("contextmenu", onContextMenu);
   markTalkSupport();
   const stopTools = mountToolInstall(env);
+  const stopTour = mountTour(env.document);
   void load();
 
   return () => {
+    stopTour();
     stopTools();
     env.document.removeEventListener("click", onClick);
     env.document.removeEventListener("input", onInput);
@@ -1597,7 +1624,7 @@ export function mountDesk(env: DeskEnv): () => void {
           : withInterviewExtras(card, view.question, saved);
       if (!refillSameCard(question, html)) question.innerHTML = html;
     } else if (question !== null && error !== null) {
-      question.innerHTML = `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
+      question.innerHTML = publicCardError(error);
     }
     const map = env.document.querySelector('[data-region="map"]');
     if (map !== null && view !== null) map.innerHTML = view.mapHtml;
@@ -1606,7 +1633,10 @@ export function mountDesk(env: DeskEnv): () => void {
     const status = env.document.querySelector('[data-region="status"]');
     if (status !== null && (view !== null || connection !== null)) {
       const base = view?.statusHtml ?? "";
-      status.innerHTML = connection === null ? base : `<span>${escapeHtml(connection)}</span>${base}`;
+      status.innerHTML =
+        connection === null
+          ? base
+          : `<span>${escapeHtml(connection)}</span><a class="hh-btn hh-btn--ghost" href="/">Reload</a>${base}`;
     }
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
     applyEdits();
@@ -1749,12 +1779,66 @@ function letterChoice(key: string): "A" | "B" | "C" | "D" | null {
 }
 
 function insideChoices(start: DeskElement | null): boolean {
+  return insideAttribute(start, "data-choices");
+}
+
+function insideQuestion(start: DeskElement | null): boolean {
   let node = start;
   const seen = new Set<DeskElement>();
   while (node !== null && !seen.has(node)) {
     seen.add(node);
     if (typeof node.getAttribute !== "function") return false;
-    if (node.getAttribute("data-choices") !== null) return true;
+    if (node.getAttribute("data-region") === "question") return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
+function insideAttribute(start: DeskElement | null, name: string): boolean {
+  let node = start;
+  const seen = new Set<DeskElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    if (typeof node.getAttribute !== "function") return false;
+    if (node.getAttribute(name) !== null) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
+/**
+ * Enter confirms the highlighted choice when focus is no longer on a radio.
+ * Answer, Skip, hold-to-talk, and the tour's own buttons keep their keys.
+ */
+function enterPicksSlippedChoice(start: DeskElement | null): boolean {
+  if (start === null || insideChoices(start)) return false;
+  if (isVoiceTarget(start)) return false;
+  const action = readAction(start);
+  if (action === "answer" || action === "skip") return false;
+  if (tourControl(start)) return false;
+  if (insideQuestion(start) || insideAttribute(start, "data-tour")) return true;
+  const tag = (start.tagName ?? "").toUpperCase();
+  return tag === "BODY" || tag === "HTML";
+}
+
+function tourControl(start: DeskElement | null): boolean {
+  let node = start;
+  const seen = new Set<DeskElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    if (typeof node.getAttribute !== "function") return false;
+    const tag = (node.tagName ?? "").toUpperCase();
+    if (
+      tag === "BUTTON" ||
+      tag === "A" ||
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      tag === "SUMMARY"
+    ) {
+      return insideAttribute(node, "data-tour");
+    }
+    if (node.getAttribute("data-tour") !== null) return false;
     node = node.parentElement;
   }
   return false;

@@ -124,7 +124,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     app.close();
     if (errorCode(error) === "EADDRINUSE") {
       throw new Error(
-        `Port ${requestedPort} is already in use. Leave the port unset, or stop the other desk.`,
+        `Port ${requestedPort} is already in use. Leave --port unset so the desk picks a free port, or stop the other process that has it. Doc: docs/dont-panic.md.`,
       );
     }
     throw error;
