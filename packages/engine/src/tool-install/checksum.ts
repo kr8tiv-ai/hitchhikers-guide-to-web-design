@@ -31,7 +31,9 @@ export async function commitHashedFile(
   if (actual.toLowerCase() !== expected.toLowerCase()) {
     await rm(partial, { force: true });
     await rm(dest, { force: true });
-    throw new Error(`SHA-256 mismatch. Expected ${expected}. Actual ${actual}.`);
+    throw new Error(
+      `The download did not match the checksum we expected, so we deleted it. Nothing was installed. Try again, or install by hand with the steps below. SHA-256 mismatch. Expected ${expected}. Actual ${actual}.`,
+    );
   }
   await rename(partial, dest);
 }

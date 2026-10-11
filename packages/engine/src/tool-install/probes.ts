@@ -5,8 +5,11 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import { hiddenChildOptions } from "../hidden-child.ts";
+import { launchSpec } from "./win-spawn.ts";
 
 export interface CommandResult {
   status: number | null;
@@ -40,7 +43,13 @@ export interface DeskPreflightReport {
   probes: Array<{ name: PathProbeName; ok: boolean; detail: string }>;
 }
 
-export function probePathTools(runner: CommandRunner): PathProbe[] {
+export interface ProbeOptions {
+  /** When set, whisper uses `WHISPER_CPP_BIN` if that file exists. */
+  env?: NodeJS.ProcessEnv;
+}
+
+export function probePathTools(runner: CommandRunner, options: ProbeOptions = {}): PathProbe[] {
+  const env = options.env ?? {};
   const grok = probeGrok(runner);
   const probes: PathProbe[] = [
     {
@@ -52,7 +61,7 @@ export function probePathTools(runner: CommandRunner): PathProbe[] {
   ];
   for (const tool of OPTIONAL_TOOLS) {
     const args = tool === "pdftotext" ? ["-v"] : ["--version"];
-    const ok = commandFound(runner.run(tool, args));
+    const ok = tool === "whisper" ? whisperFound(runner, env, args) : commandFound(runner.run(tool, args));
     probes.push({
       name: tool,
       ok,
@@ -61,6 +70,23 @@ export function probePathTools(runner: CommandRunner): PathProbe[] {
     });
   }
   return probes;
+}
+
+function whisperFound(runner: CommandRunner, env: NodeJS.ProcessEnv, args: readonly string[]): boolean {
+  const configured = env.WHISPER_CPP_BIN;
+  if (typeof configured === "string" && isExecutableFile(configured)) {
+    if (commandFound(runner.run(configured, args))) return true;
+  }
+  return commandFound(runner.run("whisper", args));
+}
+
+function isExecutableFile(filePath: string): boolean {
+  if (!path.isAbsolute(filePath) || !existsSync(filePath)) return false;
+  try {
+    return statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** Structured preflight for the desk. `grokOk` is the grok probe, not the other three. */
@@ -72,12 +98,19 @@ export function deskPreflight(runner: CommandRunner): DeskPreflightReport {
   };
 }
 
-/** Spawn with shell off, stdin ignored, and a 10 second timeout. PATH is the process PATH. */
-export function spawnProbe(command: string, args: readonly string[]): CommandResult {
-  const result = spawnSync(command, [...args], hiddenChildOptions({
+/** Spawn with shell off, stdin ignored, and a 10 second timeout. PATH comes from `env`. */
+export function spawnProbe(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): CommandResult {
+  const spec = launchSpec(command, args, env, process.platform);
+  const result = spawnSync(spec.file, spec.args, hiddenChildOptions({
     shell: false,
     timeout: SPAWN_TIMEOUT_MS,
     encoding: "utf8",
+    env,
+    windowsVerbatimArguments: spec.verbatim,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
   }));
   return {

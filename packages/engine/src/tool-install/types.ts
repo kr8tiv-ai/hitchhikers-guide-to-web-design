@@ -20,6 +20,8 @@ export interface PlanStep {
   sha256: string | null;
   bytes: number | null;
   label: string;
+  /** Bytes to reserve before a package-manager step. Downloads use `bytes`. */
+  spaceBytes?: number;
   cwd?: string;
   placeAs?: string;
 }
@@ -52,6 +54,9 @@ export interface InstallPlan {
   selectedModel: string | null;
   note: string;
   workspace: string | null;
+  allowedHosts: readonly string[];
+  verificationState: "pass" | "fail-fixed" | "unverified";
+  verificationNote: string;
 }
 
 export interface PlanContext {

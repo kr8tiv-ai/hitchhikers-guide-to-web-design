@@ -80,6 +80,9 @@ interface PlanView {
   selectedModel: string | null;
   note: string;
   workspace: string | null;
+  allowedHosts: string[];
+  verificationState: string;
+  verificationNote: string;
 }
 
 interface ProbeView {
@@ -177,12 +180,18 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
       }).join("")}</select></label>`;
   const docs = plan.docsUrl === null
     ? ""
-    : `<a class="hh-btn" href="${escapeHtml(plan.docsUrl)}" data-install-docs>Open docs</a>`;
+    : `<a class="hh-btn hh-btn--secondary" href="${escapeHtml(plan.docsUrl)}" data-install-docs>Open docs</a>`;
   const signIn = plan.signIn === null ? "" : `<p data-install-signin>${escapeHtml(plan.signIn)}</p>`;
   const workspace = plan.workspace === null ? "" : `<p>Runs in ${escapeHtml(plan.workspace)}</p>`;
-  const runDisabled = plan.canRun ? "" : " disabled";
+  const runAttrs = plan.canRun ? "" : ` disabled aria-disabled="true" aria-describedby="hh-install-run-reason"`;
+  const reasonHidden = plan.canRun ? " hidden" : "";
+  const againHidden = plan.canRun ? " hidden" : "";
+  const verified = plan.verificationNote.length === 0
+    ? ""
+    : `<p data-install-verified>${escapeHtml(plan.verificationNote)}</p>`;
   dialog.setAttribute("data-tool", plan.tool);
   dialog.setAttribute("data-token", token);
+  dialog.setAttribute("data-can-run", plan.canRun ? "true" : "false");
   dialog.removeAttribute("data-running");
   dialog.innerHTML = `<h2 id="hh-install-title">${escapeHtml(plan.title)}</h2>
     <p>These steps run on this machine after you confirm.</p>
@@ -194,6 +203,7 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
     ${workspace}
     ${signIn}
     <p>${escapeHtml(plan.note)}</p>
+    ${verified}
     ${models}
     <div data-install-live aria-live="polite">
       <p data-install-status></p>
@@ -202,15 +212,22 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
       </div>
     </div>
     <p class="hh-error" role="alert" data-install-error hidden></p>
+    <p data-install-next hidden></p>
     <details class="hh-details" data-install-details hidden><summary>Details</summary><pre class="hh-details__pre" data-install-detail></pre></details>
+    <details class="hh-install__logs" data-install-logs>
+      <summary>Logs</summary>
+      <pre class="hh-details__pre" data-install-log></pre>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-log-copy>Copy logs</button>
+    </details>
+    <p id="hh-install-run-reason" data-install-run-reason${reasonHidden}>${escapeHtml(plan.note)}</p>
     <textarea class="hh-install__manual" readonly data-install-manual>${escapeHtml(plan.manualCommand)}</textarea>
     <div class="hh-install__actions">
-      <button class="hh-btn" type="button" data-install-copy>Copy</button>
+      <button class="hh-btn hh-btn--primary" type="button" data-install-run${runAttrs}>Run these steps</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-copy>Copy</button>
       ${docs}
-      <button class="hh-btn" type="button" data-install-run${runDisabled}>Run these steps</button>
-      <button class="hh-btn" type="button" data-install-dismiss>Cancel</button>
-      <button class="hh-btn" type="button" data-install-retry hidden>Retry</button>
-      <button class="hh-btn" type="button" data-install-again${plan.canRun ? " hidden" : ""}>Check again</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-retry hidden>Retry</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-again${againHidden}>Check again</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-dismiss>Cancel</button>
     </div>`;
   const copy = dialog.querySelector("[data-install-copy]");
   if (copy !== null) copy.setAttribute("data-copy", plan.manualCommand);
@@ -257,6 +274,13 @@ function wireDialog(env: InstallEnv, dialog: InstallNode): void {
     }
     if (host.getAttribute("data-install-copy") !== null) {
       event.preventDefault();
+      markCopied(host);
+      return;
+    }
+    if (host.getAttribute("data-install-log-copy") !== null) {
+      event.preventDefault();
+      const pre = dialog.querySelector("[data-install-log]");
+      host.setAttribute("data-copy", pre?.textContent ?? "");
       markCopied(host);
     }
   };
@@ -326,7 +350,10 @@ async function runPlan(env: InstallEnv, dialog: InstallNode, tool: string): Prom
     }
     if (name === "stdout" || name === "stderr" || name === "step") {
       const text = typeof payload.text === "string" ? payload.text.trim() : "";
-      if (text.length > 0) setStatus(dialog, text);
+      if (text.length > 0) {
+        setStatus(dialog, text);
+        if (name !== "step") appendLog(dialog, text);
+      }
       return;
     }
     if (name === "done") applyRunDone(env, dialog, tool, payload as DoneView);
@@ -340,6 +367,7 @@ function applyRunDone(env: InstallEnv, dialog: InstallNode, tool: string, done: 
   if (done.status === "cancelled") {
     setStatus(dialog, "Cancelled.");
     hideError(dialog);
+    enableRun(dialog);
     restoreFocus();
     return;
   }
@@ -477,13 +505,19 @@ function showFailure(env: InstallEnv, tool: string, error: string, manual: strin
   const dialog = env.document.querySelector("[data-install-dialog]") ?? createDialog(env);
   if (dialog === null) return;
   dialog.innerHTML = `<h2 id="hh-install-title">Install ${escapeHtml(tool)}</h2>
-    ${installErrorHtml(error)}
+    ${installErrorHtml(plainInstallError(error))}
+    <p data-install-next>${escapeHtml(NEXT_STEP)}</p>
+    <details class="hh-install__logs" data-install-logs>
+      <summary>Logs</summary>
+      <pre class="hh-details__pre" data-install-log></pre>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-log-copy>Copy logs</button>
+    </details>
     <textarea class="hh-install__manual" readonly data-install-manual>${escapeHtml(manual)}</textarea>
     <div class="hh-install__actions">
-      <button class="hh-btn" type="button" data-install-copy>Copy</button>
-      ${docs === null ? "" : `<a class="hh-btn" href="${escapeHtml(docs)}">Open docs</a>`}
-      <button class="hh-btn" type="button" data-install-retry>Retry</button>
-      <button class="hh-btn" type="button" data-install-dismiss>Cancel</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-copy>Copy</button>
+      ${docs === null ? "" : `<a class="hh-btn hh-btn--secondary" href="${escapeHtml(docs)}" data-install-docs>Open docs</a>`}
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-retry>Retry</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-install-dismiss>Cancel</button>
     </div>`;
   dialog.setAttribute("data-tool", tool);
   wireDialog(env, dialog);
@@ -491,12 +525,25 @@ function showFailure(env: InstallEnv, tool: string, error: string, manual: strin
 }
 
 function showDialogFailure(dialog: InstallNode, message: string): void {
+  const plain = plainInstallError(message);
   const error = dialog.querySelector("[data-install-error]");
-  const split = splitInstallError(message);
+  const split = splitInstallError(plain);
   if (error !== null) {
     error.hidden = false;
     error.textContent = split.summary;
     error.removeAttribute("hidden");
+  }
+  const next = dialog.querySelector("[data-install-next]");
+  if (next !== null) {
+    if (needsNextStep(split.summary)) {
+      next.hidden = false;
+      next.removeAttribute("hidden");
+      next.textContent = NEXT_STEP;
+    } else {
+      next.hidden = true;
+      next.setAttribute("hidden", "");
+      next.textContent = "";
+    }
   }
   const details = dialog.querySelector("[data-install-details]");
   const pre = dialog.querySelector("[data-install-detail]");
@@ -516,7 +563,50 @@ function showDialogFailure(dialog: InstallNode, message: string): void {
     retry.hidden = false;
     retry.removeAttribute("hidden");
   }
+  const run = dialog.querySelector("[data-install-run]");
+  if (run !== null) {
+    run.disabled = true;
+    run.setAttribute("disabled", "");
+    run.setAttribute("aria-disabled", "true");
+  }
+  const reason = dialog.querySelector("[data-install-run-reason]");
+  if (reason !== null) {
+    reason.hidden = false;
+    reason.removeAttribute("hidden");
+    reason.textContent = "The last attempt failed. Use Retry for a fresh plan, or install by hand with the steps below.";
+  }
   setStatus(dialog, "");
+}
+
+function enableRun(dialog: InstallNode): void {
+  if (dialog.getAttribute("data-can-run") !== "true") return;
+  const run = dialog.querySelector("[data-install-run]");
+  if (run === null) return;
+  run.disabled = false;
+  run.removeAttribute("disabled");
+  run.removeAttribute("aria-disabled");
+}
+
+function appendLog(dialog: InstallNode, text: string): void {
+  const pre = dialog.querySelector("[data-install-log]");
+  if (pre === null) return;
+  const prior = pre.textContent ?? "";
+  pre.textContent = prior.length === 0 ? text : `${prior}\n${text}`;
+}
+
+const NEXT_STEP = "Try again, or install by hand with the steps below.";
+
+function plainInstallError(message: string): string {
+  const match = /^Host (\S+) is not an official install source\.?$/.exec(message.trim());
+  if (match?.[1] !== undefined) {
+    return `The download was sent to a server we do not recognize (${match[1]}), so we stopped. Nothing was installed. Try again, or install by hand with the steps below.`;
+  }
+  return message;
+}
+
+function needsNextStep(message: string): boolean {
+  const lower = message.toLowerCase();
+  return !lower.includes("try again") && !lower.includes("steps below") && !lower.includes("check again");
 }
 
 function hideError(dialog: InstallNode): void {
@@ -630,6 +720,7 @@ function quoteArg(arg: string): string {
 }
 
 function sourceHosts(plan: PlanView): string {
+  if (plan.allowedHosts.length > 0) return plan.allowedHosts.join(", ");
   const hosts = new Set<string>();
   if (plan.sourceHost.length > 0) hosts.add(plan.sourceHost);
   for (const step of plan.runSteps) {
@@ -693,7 +784,19 @@ function readPlan(value: unknown): PlanView | null {
     selectedModel: typeof value.selectedModel === "string" ? value.selectedModel : null,
     note: typeof value.note === "string" ? value.note : "",
     workspace: typeof value.workspace === "string" ? value.workspace : null,
+    allowedHosts: readStrings(value.allowedHosts),
+    verificationState: typeof value.verificationState === "string" ? value.verificationState : "",
+    verificationNote: typeof value.verificationNote === "string" ? value.verificationNote : "",
   };
+}
+
+function readStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const hosts: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.length > 0) hosts.push(item);
+  }
+  return hosts;
 }
 
 function marked(target: InstallClick["target"], attr: string): InstallNode | null {

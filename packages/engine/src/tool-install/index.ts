@@ -1,6 +1,29 @@
 export { commitHashedFile, sha256File } from "./checksum.ts";
 export { createConfirmStore, planFingerprint, type ConfirmReject, type ConfirmStore, type IssuedConfirm } from "./confirm.ts";
-export { assertRecipeUrl, assertRedirectUrl } from "./hosts.ts";
+export {
+  checksumMessage,
+  diskSpaceMessage,
+  downloadVerifiedFile,
+  freeBytesAt,
+  InstallCancelled,
+  offlineMessage,
+  sizeMessage,
+  type DownloadOptions,
+  type DownloadRequester,
+  type VerifiedDownload,
+} from "./download.ts";
+export {
+  allowedHostsForTool,
+  assertRecipeUrl,
+  assertRedirectUrl,
+  hostAllowed,
+  insecureHopMessage,
+  policyForHost,
+  SOURCE_POLICIES,
+  unrecognizedHostMessage,
+  type HostPattern,
+  type SourcePolicy,
+} from "./hosts.ts";
 export { installHints, type HintContext } from "./hints.ts";
 export {
   DOCTOR_DOC,
@@ -50,6 +73,13 @@ export {
   type WhisperModelPin,
 } from "./recipes.ts";
 export {
+  expandWindowsEnv,
+  mergePathEntries,
+  parseRegPath,
+  refreshWindowsPath,
+  restoreInstallEnv,
+} from "./path-env.ts";
+export {
   mergeInstall,
   publicInstallRecord,
   readToolInstalls,
@@ -57,6 +87,8 @@ export {
   ToolInstallRecordError,
   type ToolInstallRecord,
 } from "./record.ts";
+export { launchSpec, quoteCmdArg, resolveOnPath, type LaunchSpec } from "./win-spawn.ts";
+export { AUDIT_ENTRIES, auditIdsFor, describeVerification, type AuditEntry, type AuditState } from "./audit.ts";
 export {
   executePlan,
   killProcessTree,

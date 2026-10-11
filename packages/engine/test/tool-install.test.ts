@@ -164,9 +164,36 @@ test("every recipe URL is on an allow-listed host and another host fails", () =>
   for (const url of urls) assert.doesNotThrow(() => assertRecipeUrl(url), url);
   assert.throws(() => assertRecipeUrl("https://evil.example/tool"), /evil\.example/);
   assert.throws(() => assertRecipeUrl("http://github.com/ggml-org/whisper.cpp"), /https/);
-  assert.throws(() => assertRedirectUrl("https://evil.example/file"), /evil\.example/);
-  assert.doesNotThrow(() => assertRedirectUrl("https://release-assets.githubusercontent.com/abc"));
+  const github = "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip";
+  const hugging = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+  assert.throws(() => assertRedirectUrl("https://evil.example/file", github), /evil\.example/);
+  assert.throws(() => assertRedirectUrl("https://evilhf.co/file", hugging), /evilhf\.co/);
+  assert.throws(() => assertRedirectUrl("https://hf.co.evil.com/file", hugging), /hf\.co\.evil\.com/);
+  assert.throws(() => assertRedirectUrl("https://not-hf.co/file", hugging), /not-hf\.co/);
+  assert.throws(() => assertRedirectUrl("http://us.aws.cdn.hf.co/file", hugging), /https/);
+  assert.throws(() => assertRedirectUrl("https://evil.githubusercontent.com/file", github), /evil\.githubusercontent\.com/);
+  assert.throws(() => assertRedirectUrl("https://us.aws.cdn.hf.co/file", github), /us\.aws\.cdn\.hf\.co/);
+  assert.doesNotThrow(() => assertRedirectUrl("https://release-assets.githubusercontent.com/abc", github));
+  assert.doesNotThrow(() => assertRedirectUrl("https://objects.githubusercontent.com/abc", github));
+  assert.doesNotThrow(() => assertRedirectUrl("https://us.aws.cdn.hf.co/file", hugging));
+  assert.doesNotThrow(() => assertRedirectUrl("https://cdn-lfs.huggingface.co/file", hugging));
+  assert.throws(() => assertRedirectUrl("https://evil.huggingface.co/file", hugging), /evil\.huggingface\.co/);
   assert.throws(() => buildInstallPlan("nope", null, ctx("linux", [])), /Unknown tool/);
+});
+
+test("each tool carries only its own redirect hosts", () => {
+  const whisper = buildInstallPlan("whisper", "ggml-base.bin", ctx("win32", ["tar"]));
+  assert.equal(whisper.allowedHosts.includes("us.aws.cdn.hf.co"), true);
+  assert.equal(whisper.allowedHosts.includes("*.hf.co"), true);
+  assert.equal(whisper.allowedHosts.includes("release-assets.githubusercontent.com"), true);
+  assert.equal(whisper.allowedHosts.includes("objects.githubusercontent.com"), true);
+  assert.equal(whisper.allowedHosts.includes("registry.npmjs.org"), false);
+  assert.equal(whisper.verificationState === "pass" || whisper.verificationState === "fail-fixed" || whisper.verificationState === "unverified", true);
+  if (whisper.verificationState === "unverified") assert.match(whisper.verificationNote, /^Unverified\./);
+  const grok = buildInstallPlan("grok", null, ctx("win32", ["npm"]));
+  assert.equal(grok.allowedHosts.includes("registry.npmjs.org"), true);
+  assert.equal(grok.allowedHosts.includes("us.aws.cdn.hf.co"), false);
+  assert.equal(grok.allowedHosts.includes("github.com"), false);
 });
 
 test("a matching hash passes and a mismatch deletes the file", async () => {

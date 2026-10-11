@@ -3,6 +3,7 @@
  * for that plan. The runner is the caller's, so tests never download.
  */
 
+import { existsSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import {
@@ -16,7 +17,9 @@ import {
   playwrightBrowsersCache,
   probePathTools,
   publicInstallRecord,
+  refreshWindowsPath,
   rememberInstallPath,
+  restoreInstallEnv,
   saveConfig,
   saveProjectFile,
   spawnProbe,
@@ -72,7 +75,11 @@ export function productionRuntime(env: NodeJS.ProcessEnv = process.env): ToolRun
       return executePlan(plan, ctx);
     },
     recheck() {
-      const probes = probePathTools({ run: spawnProbe });
+      refreshWindowsPath(env);
+      prependPlaywrightShim(env);
+      const probes = probePathTools({
+        run: (command, args) => spawnProbe(command, args, env),
+      }, { env });
       return {
         grokOk: probes.some((probe) => probe.name === "grok" && probe.ok),
         probes: probes.map((probe) => ({
@@ -257,6 +264,7 @@ function cancelRoute(
 }
 
 function recheckRoute(res: ServerResponse, runtime: ToolRuntime, options: ToolDeskOptions): void {
+  prepareDeskEnv(options);
   const report = runtime.recheck();
   options.setPreflight(report);
   const payload = {
@@ -277,9 +285,6 @@ async function settle(
   runtime: ToolRuntime,
 ): Promise<Record<string, unknown>> {
   const env = options.env ?? process.env;
-  if (result.installPath !== null && path.isAbsolute(result.installPath)) {
-    rememberInstallPath(env, result.installPath);
-  }
   if (plan.tool === "whisper") {
     if (result.installPath !== null && path.isAbsolute(result.installPath)) {
       env.WHISPER_CPP_BIN = result.installPath;
@@ -287,6 +292,10 @@ async function settle(
     if (result.modelPath !== null && result.modelPath.length > 0) {
       env.WHISPER_CPP_MODEL = result.modelPath;
     }
+  }
+  prepareDeskEnv(options);
+  if (result.installPath !== null && path.isAbsolute(result.installPath)) {
+    rememberInstallPath(env, result.installPath);
   }
   const report = runtime.recheck();
   const probe = report.probes.find((item) => item.name === plan.tool);
@@ -350,7 +359,31 @@ function copyStep(step: InstallPlan["runSteps"][number]): InstallPlan["runSteps"
   };
   if (step.cwd !== undefined) copy.cwd = step.cwd;
   if (step.placeAs !== undefined) copy.placeAs = step.placeAs;
+  if (step.spaceBytes !== undefined) copy.spaceBytes = step.spaceBytes;
   return copy;
+}
+
+/**
+ * Saved installs and a Windows PATH refresh apply only to the real runner.
+ * Tests inject a runtime and keep the process PATH they set up themselves.
+ */
+function prepareDeskEnv(options: ToolDeskOptions): void {
+  if (options.runtime !== undefined) return;
+  const env = options.env ?? process.env;
+  try {
+    restoreInstallEnv(loadConfig(options.projectDir).toolInstalls, env);
+  } catch {
+    // A project without a config still re-checks the current PATH.
+  }
+  refreshWindowsPath(env);
+  prependPlaywrightShim(env);
+}
+
+function prependPlaywrightShim(env: NodeJS.ProcessEnv): void {
+  const workspace = path.resolve(import.meta.dirname, "..", "..", "..", "..");
+  const name = process.platform === "win32" ? "playwright.cmd" : "playwright";
+  const shim = path.join(workspace, "node_modules", ".bin", name);
+  if (existsSync(shim)) rememberInstallPath(env, shim);
 }
 
 function parseJson(raw: string): Record<string, unknown> | null {

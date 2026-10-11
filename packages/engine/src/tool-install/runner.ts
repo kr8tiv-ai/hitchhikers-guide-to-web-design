@@ -4,19 +4,16 @@
  * and deletes partial downloads.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createWriteStream, readdirSync, type Dirent } from "node:fs";
-import { chmod, copyFile, mkdir, rename, rm, stat } from "node:fs/promises";
-import { request as httpsRequest } from "node:https";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { readdirSync, type Dirent } from "node:fs";
+import { chmod, copyFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { finished } from "node:stream/promises";
 import { hiddenChildOptions } from "../hidden-child.ts";
-import { assertRecipeUrl, assertRedirectUrl } from "./hosts.ts";
+import { diskSpaceMessage, downloadVerifiedFile, freeBytesAt, InstallCancelled } from "./download.ts";
 import type { InstallEvent, InstallPlan, PlanStep, RunResult } from "./types.ts";
+import { launchSpec } from "./win-spawn.ts";
 
 const ELEVATION = new Set(["sudo", "su", "runas", "gsudo", "pkexec", "doas"]);
-const MAX_REDIRECTS = 5;
 
 export interface DownloadContext {
   signal: AbortSignal;
@@ -30,13 +27,8 @@ export interface ExecuteOptions {
   emit: (event: InstallEvent) => void;
   download?: (step: PlanStep, ctx: DownloadContext) => Promise<void>;
   spawnImpl?: typeof spawn;
-}
-
-class InstallCancelled extends Error {
-  constructor() {
-    super("Cancelled.");
-    this.name = "InstallCancelled";
-  }
+  /** Test seam. Omitted, the check reads the filesystem. */
+  freeBytes?: (dir: string) => Promise<number>;
 }
 
 export function stepIsBlocked(argv: readonly string[]): string | null {
@@ -88,7 +80,7 @@ export async function executePlan(plan: InstallPlan, options: ExecuteOptions): P
       tracked.delete(file);
     },
   };
-  const download = options.download ?? downloadStep;
+  const download = options.download ?? ((step, downloadCtx) => downloadStep(step, downloadCtx, options));
   const spawnImpl = options.spawnImpl ?? spawn;
   let installPath: string | null = null;
   let modelPath: string | null = null;
@@ -100,9 +92,11 @@ export async function executePlan(plan: InstallPlan, options: ExecuteOptions): P
         await download(step, ctx);
         if (step.id === "whisper-model" && step.dest !== null) modelPath = step.dest;
       } else if (step.kind === "extract") {
+        await ensureSpace(step, options);
         await runSpawn(step, options, spawnImpl, children);
         installPath = await placeBinary(step);
       } else {
+        await ensureSpace(step, options);
         const outcome = await runSpawn(step, options, spawnImpl, children);
         if (installPath === null) installPath = outcome.installPath;
       }
@@ -162,7 +156,7 @@ async function runSpawn(
     detached: process.platform !== "win32",
   };
   if (step.cwd !== undefined && step.cwd.length > 0) extra.cwd = step.cwd;
-  const child = spawnImpl(command, [...args], hiddenChildOptions(extra));
+  const child = startChild(command, args, extra, spawnImpl);
   children.add(child);
   let stderr = "";
   const stdoutChunks: string[] = [];
@@ -200,138 +194,68 @@ async function runSpawn(
   if (code !== 0) {
     throw new Error(`exit ${code ?? "null"}: ${tail(stderr)}`);
   }
+  if (step.id === "grok-npm" && spawnImpl === spawn) {
+    return { installPath: npmGlobalBin() };
+  }
   return { installPath: null };
 }
 
-async function downloadStep(step: PlanStep, ctx: DownloadContext): Promise<void> {
+function startChild(
+  command: string,
+  args: readonly string[],
+  extra: { stdio: ["ignore", "pipe", "pipe"]; detached: boolean; cwd?: string },
+  spawnImpl: typeof spawn,
+): ChildProcess {
+  if (spawnImpl !== spawn) return spawnImpl(command, [...args], hiddenChildOptions(extra));
+  const spec = launchSpec(command, args, process.env, process.platform);
+  return spawn(spec.file, spec.args, hiddenChildOptions({ ...extra, windowsVerbatimArguments: spec.verbatim }));
+}
+
+async function downloadStep(step: PlanStep, ctx: DownloadContext, options: ExecuteOptions): Promise<void> {
   if (step.url === null || step.dest === null || step.sha256 === null) {
     throw new Error("The download step is missing a source, destination, or checksum.");
   }
-  assertRecipeUrl(step.url);
   const partial = `${step.dest}.partial`;
-  await mkdir(path.dirname(step.dest), { recursive: true });
-  const opened = createWriteStream(partial, { flags: "w" });
-  opened.end();
-  await finished(opened);
   ctx.track(partial);
-  let actual = "";
   try {
-    actual = await downloadUrl(step.url, partial, ctx.signal, (received, total) => {
-      ctx.emit({ type: "download", text: "", received, total });
+    await downloadVerifiedFile(step.url, step.dest, {
+      signal: ctx.signal,
+      expectedSha256: step.sha256,
+      expectedBytes: step.bytes,
+      ...(options.freeBytes !== undefined ? { freeBytes: options.freeBytes } : {}),
+      onProgress(received, total) {
+        ctx.emit({ type: "download", text: "", received, total });
+      },
     });
-  } catch (error: unknown) {
-    await rm(partial, { force: true });
+  } finally {
     ctx.untrack(partial);
-    throw error;
   }
-  if (actual.toLowerCase() !== step.sha256.toLowerCase()) {
-    await rm(partial, { force: true });
-    await rm(step.dest, { force: true });
-    ctx.untrack(partial);
-    throw new Error(`SHA-256 mismatch. Expected ${step.sha256}. Actual ${actual}.`);
-  }
-  await rename(partial, step.dest);
-  ctx.untrack(partial);
 }
 
-async function downloadUrl(
-  url: string,
-  partial: string,
-  signal: AbortSignal,
-  onProgress: (received: number, total: number | null) => void,
-): Promise<string> {
-  let current = new URL(url);
-  for (let hop = 0; hop < MAX_REDIRECTS; hop += 1) {
-    if (signal.aborted) throw new InstallCancelled();
-    if (hop === 0) assertRecipeUrl(current.href);
-    else assertRedirectUrl(current.href);
-    const response = await requestOnce(current, signal);
-    const status = response.statusCode ?? 0;
-    if (status >= 300 && status < 400) {
-      const location = response.headers.location;
-      response.resume();
-      if (typeof location !== "string" || location.length === 0) {
-        throw new Error(`Download redirect from ${current.hostname} had no location.`);
-      }
-      current = new URL(location, current);
-      continue;
-    }
-    if (status < 200 || status >= 300) {
-      response.resume();
-      throw new Error(`Download failed with HTTP ${status} from ${current.hostname}.`);
-    }
-    const lengthHeader = response.headers["content-length"];
-    const total = typeof lengthHeader === "string" && /^\d+$/.test(lengthHeader) ? Number(lengthHeader) : null;
-    return await writeBody(response, partial, signal, total, onProgress);
+async function ensureSpace(step: PlanStep, options: ExecuteOptions): Promise<void> {
+  const need = step.spaceBytes ?? null;
+  if (need === null || need <= 0) return;
+  const dir = step.cwd !== undefined && step.cwd.length > 0 ? step.cwd : process.cwd();
+  let free = 0;
+  try {
+    free = options.freeBytes !== undefined ? await options.freeBytes(dir) : await freeBytesAt(dir);
+  } catch {
+    return;
   }
-  throw new Error("Download followed too many redirects.");
+  if (free < need) throw new Error(diskSpaceMessage(need, free));
 }
 
-function requestOnce(target: URL, signal: AbortSignal): Promise<import("node:http").IncomingMessage> {
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(target, { method: "GET", headers: { "user-agent": "hitchhiker-tool-install" } }, resolve);
-    const onAbort = (): void => {
-      req.destroy(new InstallCancelled());
-    };
-    if (signal.aborted) {
-      onAbort();
-    } else {
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-    req.on("error", (error) => {
-      signal.removeEventListener("abort", onAbort);
-      reject(error);
-    });
-    req.on("close", () => {
-      signal.removeEventListener("abort", onAbort);
-    });
-    req.end();
-  });
-}
-
-function writeBody(
-  response: import("node:http").IncomingMessage,
-  partial: string,
-  signal: AbortSignal,
-  total: number | null,
-  onProgress: (received: number, total: number | null) => void,
-): Promise<string> {
-  const hash = createHash("sha256");
-  const stream = createWriteStream(partial, { flags: "w" });
-  let received = 0;
-  return new Promise((resolve, reject) => {
-    const fail = (error: Error): void => {
-      response.destroy();
-      stream.destroy();
-      reject(error);
-    };
-    const onAbort = (): void => {
-      fail(new InstallCancelled());
-    };
-    if (signal.aborted) {
-      fail(new InstallCancelled());
-      return;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-    response.on("data", (chunk: Buffer | string) => {
-      const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-      hash.update(buf);
-      received += buf.length;
-      if (!stream.write(buf)) response.pause();
-      onProgress(received, total);
-    });
-    stream.on("drain", () => {
-      response.resume();
-    });
-    response.on("error", fail);
-    stream.on("error", fail);
-    response.on("end", () => {
-      signal.removeEventListener("abort", onAbort);
-      stream.end(() => {
-        resolve(hash.digest("hex"));
-      });
-    });
-  });
+function npmGlobalBin(): string | null {
+  const spec = launchSpec("npm", ["prefix", "-g"], process.env, process.platform);
+  const result = spawnSync(spec.file, spec.args, hiddenChildOptions({
+    encoding: "utf8",
+    windowsVerbatimArguments: spec.verbatim,
+    stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+  }));
+  if (result.status !== 0 || typeof result.stdout !== "string") return null;
+  const line = result.stdout.trim().split(/\r?\n/).pop()?.trim() ?? "";
+  if (line.length === 0) return null;
+  return process.platform === "win32" ? line : path.join(line, "bin");
 }
 
 async function placeBinary(step: PlanStep): Promise<string | null> {
@@ -340,20 +264,34 @@ async function placeBinary(step: PlanStep): Promise<string | null> {
   if (found === null) {
     throw new Error(`The archive did not contain whisper-cli. Looked in ${step.dest}.`);
   }
-  if (path.resolve(found) !== path.resolve(step.placeAs)) {
-    await copyFile(found, step.placeAs);
+  const home = path.dirname(found);
+  const binaryName = process.platform === "win32" ? "whisper.exe" : "whisper";
+  const placed = path.join(home, binaryName);
+  if (path.resolve(found) !== path.resolve(placed)) {
+    await copyFile(found, placed);
     if (process.platform !== "win32") {
       const info = await stat(found);
-      await chmod(step.placeAs, info.mode | 0o755);
+      await chmod(placed, info.mode | 0o755);
     }
   }
-  return step.placeAs;
+  const aliasName = process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli";
+  const alias = path.join(home, aliasName);
+  if (path.resolve(found) !== path.resolve(alias) && path.resolve(placed) !== path.resolve(alias)) {
+    await copyFile(found, alias);
+    if (process.platform !== "win32") {
+      const info = await stat(found);
+      await chmod(alias, info.mode | 0o755);
+    }
+  }
+  return placed;
 }
 
+const WHISPER_BINARY_RANK = ["whisper-cli.exe", "whisper-cli", "whisper.exe", "whisper", "main.exe", "main"];
+
 function findWhisperBinary(root: string): string | null {
-  const names = new Set(["whisper-cli", "whisper-cli.exe", "main", "main.exe"]);
-  const stack = [root];
+  const found = new Map<string, string>();
   const seen: string[] = [];
+  const stack = [root];
   while (stack.length > 0) {
     const dir = stack.pop();
     if (dir === undefined) break;
@@ -368,9 +306,14 @@ function findWhisperBinary(root: string): string | null {
       if (entry.isDirectory()) stack.push(full);
       else {
         seen.push(entry.name);
-        if (names.has(entry.name)) return full;
+        const key = entry.name.toLowerCase();
+        if (!found.has(key) && WHISPER_BINARY_RANK.includes(key)) found.set(key, full);
       }
     }
+  }
+  for (const name of WHISPER_BINARY_RANK) {
+    const hit = found.get(name);
+    if (hit !== undefined) return hit;
   }
   if (seen.length > 0) {
     throw new Error(`The archive did not contain whisper-cli. Found: ${seen.slice(0, 12).join(", ")}.`);

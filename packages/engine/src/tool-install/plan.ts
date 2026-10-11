@@ -6,7 +6,8 @@
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertRecipeUrl } from "./hosts.ts";
+import { auditIdsFor, describeVerification } from "./audit.ts";
+import { allowedHostsForTool, assertRecipeUrl } from "./hosts.ts";
 import {
   DEFAULT_WHISPER_MODEL,
   GROK_DOCS,
@@ -184,8 +185,11 @@ function finish(input: {
   selectedModel: string | null;
   note: string;
   workspace: string | null;
+  auditIds: readonly string[];
 }): InstallPlan {
   const canRun = input.runSteps.length > 0 && !input.needsAdmin;
+  const urls = [input.sourceUrl, ...input.runSteps.map((step) => step.url ?? "")];
+  const verification = describeVerification(input.auditIds);
   return {
     recipeId: input.recipeId,
     tool: input.tool,
@@ -208,6 +212,9 @@ function finish(input: {
     selectedModel: input.selectedModel,
     note: input.note,
     workspace: input.workspace,
+    allowedHosts: allowedHostsForTool(input.tool, urls),
+    verificationState: verification.state,
+    verificationNote: verification.note,
   };
 }
 
@@ -226,7 +233,8 @@ function grokPlan(ctx: PlanContext): InstallPlan {
     dest: null,
     sha256: null,
     bytes: null,
-    label: "Install the official grok package.",
+    spaceBytes: 64 * 1024 * 1024,
+    label: "Install the grok package from the npm registry.",
   };
   return finish({
     recipeId: npm ? "grok-npm" : "grok-manual",
@@ -249,6 +257,7 @@ function grokPlan(ctx: PlanContext): InstallPlan {
       ? "The vendor pipe stays in the copy box. The desk does not run it."
       : NOTHING_RUNS,
     workspace: null,
+    auditIds: auditIdsFor("grok", ctx.platform, ctx.arch, null),
   });
 }
 
@@ -263,6 +272,7 @@ function playwrightPlan(ctx: PlanContext): InstallPlan {
     dest: null,
     sha256: null,
     bytes: null,
+    spaceBytes: 400 * 1024 * 1024,
     label: "Install the Chromium build Playwright ships.",
     cwd: ctx.workspaceDir,
   };
@@ -285,6 +295,7 @@ function playwrightPlan(ctx: PlanContext): InstallPlan {
     selectedModel: null,
     note: pnpm ? "Runs in the Guide workspace." : NOTHING_RUNS,
     workspace: pnpm ? ctx.workspaceDir : null,
+    auditIds: auditIdsFor("playwright", ctx.platform, ctx.arch, null),
   });
 }
 
@@ -316,6 +327,7 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
       selectedModel: null,
       note: "pdftotext comes from poppler.",
       workspace: null,
+      auditIds: auditIdsFor("pdftotext", ctx.platform, ctx.arch, null),
     });
   }
   const manual = chosen?.manual ?? fallback?.manual ?? "Install poppler from the official source.";
@@ -339,6 +351,7 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
     selectedModel: null,
     note: chosen === null ? NOTHING_RUNS : ADMIN_LABEL,
     workspace: null,
+    auditIds: auditIdsFor("pdftotext", ctx.platform, ctx.arch, null),
   });
 }
 
@@ -352,6 +365,7 @@ function managerStep(recipe: ManagerRecipe): PlanStep {
     dest: null,
     sha256: null,
     bytes: null,
+    spaceBytes: 80 * 1024 * 1024,
     label: "Install poppler so pdftotext is on PATH.",
   };
 }
@@ -394,6 +408,7 @@ function whisperPlan(modelId: string | null, ctx: PlanContext): InstallPlan {
         ? "This OS has no prebuilt whisper.cpp binary in the pinned release. Nothing runs from the desk."
         : "tar is not on PATH, so the archive cannot be extracted. Nothing runs from the desk.",
       workspace: null,
+      auditIds: auditIdsFor("whisper", ctx.platform, ctx.arch, model.label),
     });
   }
   const archiveUrl = whisperAssetUrl(archive.file);
@@ -421,6 +436,7 @@ function whisperPlan(modelId: string | null, ctx: PlanContext): InstallPlan {
     dest: destDir,
     sha256: null,
     bytes: null,
+    spaceBytes: archive.bytes * 3,
     label: "Extract the archive and copy the binary.",
     placeAs,
   };
@@ -456,5 +472,6 @@ function whisperPlan(modelId: string | null, ctx: PlanContext): InstallPlan {
     selectedModel: model.id,
     note: `The binary is copied to ${binaryName} in the install folder so the check can see it.`,
     workspace: null,
+    auditIds: auditIdsFor("whisper", ctx.platform, ctx.arch, model.label),
   });
 }
