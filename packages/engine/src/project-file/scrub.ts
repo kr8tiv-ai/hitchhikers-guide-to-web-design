@@ -35,7 +35,10 @@ export const SETTINGS_KEYS = [
   "gates",
   "ai",
   "integrations",
+  "toolInstalls",
 ] as const;
+
+const INSTALL_KEYS = ["tool", "version", "installPath", "installedAt", "recipeId", "source"] as const;
 
 const GATE_KEYS = [
   "phonePerfMin",
@@ -104,6 +107,16 @@ export function allowSettings(value: unknown): Record<string, unknown> {
     picked.integrations = typeof flag === "boolean" ? { pinterestCapture: flag } : {};
   } else {
     delete picked.integrations;
+  }
+  if (Array.isArray(picked.toolInstalls)) {
+    const next: Record<string, unknown>[] = [];
+    for (const item of picked.toolInstalls) {
+      if (!isRecord(item)) continue;
+      next.push(copyAllow(item, INSTALL_KEYS));
+    }
+    picked.toolInstalls = next;
+  } else {
+    delete picked.toolInstalls;
   }
   const scrubbed = scrubValue(picked);
   return isRecord(scrubbed) ? scrubbed : {};

@@ -14,6 +14,7 @@ export interface PreflightProbe {
   name: PreflightName;
   ok: boolean;
   detail: string;
+  version?: string | null;
 }
 
 export interface DeskPreflight {
@@ -84,16 +85,20 @@ export function renderPreflight(preflight: DeskPreflight): string {
     const ok = probe?.ok === true;
     const detail = probe?.detail ?? (name === "grok" ? "grok: not on PATH" : `${name}: not installed`);
     const state = ok ? "Present" : "Missing";
+    const action = ok
+      ? ""
+      : `<button class="hh-btn" type="button" data-install="${escapeHtml(name)}">Install ${escapeHtml(name)}</button>`;
     return `<tr data-probe="${escapeHtml(name)}" data-probe-state="${ok ? "ok" : "missing"}">
         <td data-label="Check">${escapeHtml(name)}</td>
         <td data-label="Result">${escapeHtml(detail)}</td>
         <td data-label="State">${state}</td>
+        <td data-label="Action">${action}</td>
       </tr>`;
   }).join("");
   return `<div class="hh-table-wrap" data-region="preflight">
     <table class="hh-table" aria-label="Preflight">
       <thead>
-        <tr><th>Check</th><th>Result</th><th>State</th></tr>
+        <tr><th>Check</th><th>Result</th><th>State</th><th>Action</th></tr>
       </thead>
       <tbody>
         ${rows}

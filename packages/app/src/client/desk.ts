@@ -9,6 +9,7 @@ import {
   type VoiceDeskFlags,
   type VoiceEngineId,
 } from "./voice-engine.ts";
+import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -330,7 +331,7 @@ interface DeskMessage {
 }
 
 interface DeskSource {
-  addEventListener(type: "session", listener: (event: DeskMessage) => void): void;
+  addEventListener(type: "session" | "tools", listener: (event: DeskMessage) => void): void;
   addEventListener(type: "error", listener: () => void): void;
   close(): void;
 }
@@ -452,6 +453,7 @@ export function mountDesk(env: DeskEnv): () => void {
   let logoSaved: { id: string; text: string } | null = null;
 
   const onClick = (event: DeskEvent): void => {
+    if (handleInstallClick(env, event)) return;
     const details = langDetails(event.target);
     if (details !== null) queueMicrotask(() => syncLanguage(details));
     const saveId = readMarked(event.target, "data-edit-save");
@@ -520,6 +522,7 @@ export function mountDesk(env: DeskEnv): () => void {
     stopVoice();
   };
   const onKeyDown = (event: DeskEvent): void => {
+    if (handleInstallKey(env, event)) return;
     if (isTypingTarget(event.target)) {
       if (isDraftTarget(event.target) && event.key === "Enter") {
         // Shift+Enter is a newline. An open IME composition is not a submit.
@@ -619,9 +622,11 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("keyup", onKeyUp);
   env.document.addEventListener("contextmenu", onContextMenu);
   markTalkSupport();
+  const stopTools = mountToolInstall(env);
   void load();
 
   return () => {
+    stopTools();
     env.document.removeEventListener("click", onClick);
     env.document.removeEventListener("input", onInput);
     env.document.removeEventListener("change", onChange);
@@ -954,6 +959,9 @@ export function mountDesk(env: DeskEnv): () => void {
       if (streamFailures < STREAM_FAILURES || connection !== null) return;
       connection = DESK_OFFLINE;
       paint();
+    });
+    source.addEventListener("tools", (event) => {
+      applyToolsEvent(event.data);
     });
   }
 

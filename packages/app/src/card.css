@@ -326,3 +326,101 @@
     transition: none;
   }
 }
+
+.hh-install {
+  width: min(36rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  max-height: min(40rem, calc(100vh - 2rem));
+  overflow: auto;
+  margin: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  padding: var(--space-5);
+  font-family: var(--font-text);
+}
+
+.hh-install::backdrop {
+  background: color-mix(in srgb, var(--color-ink) 42%, transparent);
+}
+
+.hh-install h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--type-title);
+  letter-spacing: -0.03em;
+}
+
+.hh-install p,
+.hh-install li {
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+.hh-install__cmds {
+  margin: 0 0 var(--space-4);
+  padding-left: 1.2rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.hh-install__cmds code,
+.hh-install__manual {
+  display: block;
+  width: 100%;
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-text);
+  font-size: var(--type-small);
+}
+
+.hh-install__manual {
+  box-sizing: border-box;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-plate);
+  color: var(--color-ink);
+  resize: none;
+}
+
+.hh-install__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.hh-install .hh-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.hh-install__track {
+  height: 0.5rem;
+  margin: 0 0 var(--space-3);
+  border: 1px solid var(--color-line);
+  background: var(--color-plate);
+}
+
+.hh-install__fill {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  accent-color: var(--color-accent);
+}
+
+[data-region="preflight"] .hh-btn {
+  white-space: normal;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hh-install__fill {
+    transition: none;
+  }
+}

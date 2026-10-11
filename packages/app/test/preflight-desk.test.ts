@@ -70,6 +70,10 @@ test("a first run with grok missing lists the four probes and does not say Ready
     assert.match(html, /pdftotext: not installed/);
     assert.match(html, /data-region="status"[\s\S]*Grok is not on PATH\./);
     assert.doesNotMatch(html, /\bReady\b/);
+    assert.match(html, /<button[^>]*data-install="grok"[^>]*>Install grok<\/button>/);
+    assert.match(html, /<button[^>]*data-install="playwright"[^>]*>Install playwright<\/button>/);
+    assert.match(html, /<button[^>]*data-install="whisper"[^>]*>Install whisper<\/button>/);
+    assert.match(html, /<button[^>]*data-install="pdftotext"[^>]*>Install pdftotext<\/button>/);
     assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
   });
 });
@@ -86,6 +90,7 @@ test("a first run with every probe present says Ready and lists the four results
     assert.match(html, /whisper: installed/);
     assert.match(html, /pdftotext: installed/);
     assert.match(html, /data-region="status"[\s\S]*<span>Ready\.<\/span>/);
+    assert.equal(html.includes("data-install="), false);
   });
 });
 

@@ -50,6 +50,35 @@ function gitOk(): Record<string, CommandResult> {
   return { "git --version": command(0, "git version 2.49.0\n") };
 }
 
+test("formatDoctor points a missing tool at the desk Install button", () => {
+  const text = formatDoctor(
+    {
+      nodeOk: true,
+      nodeVersion: "22.14.0",
+      gitOk: true,
+      grokOnPath: false,
+      grokVersion: null,
+      auth: "skipped",
+      sessionIdMode: "unknown",
+      effortFlag: false,
+      cassette: "off",
+      warnings: ["session probe skipped", "playwright: not installed", "whisper: not installed", "pdftotext: not installed"],
+    },
+    {
+      platform: "linux",
+      arch: "x64",
+      managers: ["apt-get"],
+      dataDir: "/var/hitchhiker/tools",
+      browsersDir: "/var/cache/ms-playwright",
+      workspaceDir: "/work/guide",
+    },
+  );
+  assert.match(text, /^hint: Install pdftotext from the desk Install button\. Manual: sudo apt-get install -y poppler-utils$/m);
+  assert.match(text, /^hint: Install grok from the desk Install button\. Manual: curl -fsSL https:\/\/x\.ai\/cli\/install\.sh \| bash$/m);
+  assert.equal(text.includes("!"), false);
+  assert.equal(text.includes("/var/hitchhiker"), false);
+});
+
 test("nodeIsSupported accepts major 22 and above", () => {
   assert.equal(nodeIsSupported("22.0.0"), true);
   assert.equal(nodeIsSupported("v22.0.0"), true);

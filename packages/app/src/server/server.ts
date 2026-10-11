@@ -4,6 +4,7 @@ import path from "node:path";
 import { openBrowser, type BrowserSpawn } from "./open-browser.ts";
 import type { DeskPreflight } from "./card.ts";
 import { createDeskApp, type GuideThink, type TurnHandler } from "./routes.ts";
+import type { ToolRuntime } from "./tool-desk.ts";
 
 export type { TurnHandler } from "./routes.ts";
 
@@ -37,6 +38,10 @@ export interface StartServerOptions {
   openBrowser?: (url: string) => Promise<boolean>;
   /** PATH report from the CLI doctor probes. Omitted, the desk does not claim Ready from a guess. */
   preflight?: DeskPreflight;
+  /** Replaces plan, run, and recheck. Omitted, the desk uses the real recipes. */
+  tools?: ToolRuntime;
+  /** Clock for the install confirm token. Tests move it to prove expiry. */
+  toolNow?: () => number;
 }
 
 /**
@@ -77,6 +82,8 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     ...(opts.cassetteNotice === undefined ? {} : { cassetteNotice: opts.cassetteNotice }),
     ...(opts.guideThink === undefined ? {} : { guideThink: opts.guideThink }),
     ...(opts.preflight === undefined ? {} : { preflight: opts.preflight }),
+    ...(opts.tools === undefined ? {} : { tools: opts.tools }),
+    ...(opts.toolNow === undefined ? {} : { toolNow: opts.toolNow }),
   });
   let dispatch: (req: IncomingMessage, res: ServerResponse) => Promise<void> = async () => undefined;
   const server = createServer((req, res) => {

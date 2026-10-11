@@ -104,6 +104,7 @@ import {
   type SettingsView,
 } from "./settings.ts";
 import { readVoiceDeskFlags, type VoiceDeskFlags } from "./voice-flags.ts";
+import { createToolHandler, type ToolDeskOptions, type ToolRuntime } from "./tool-desk.ts";
 import {
   MAX_UPLOAD_BYTES,
   acceptAudio,
@@ -178,6 +179,7 @@ const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const TOOL_SOURCE = path.resolve(SRC_ROOT, "client", "tool-install.ts");
 const SAVE_SOURCE = path.resolve(SRC_ROOT, "client", "save-status.ts");
 const VOICE_ENGINE_SOURCE = path.resolve(SRC_ROOT, "client", "voice-engine.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
@@ -232,6 +234,9 @@ export async function createDeskApp(opts: {
    * Omitted, the desk does not invent a second probe.
    */
   preflight?: DeskPreflight;
+  /** Replaces plan, run, and recheck. Omitted, the desk uses the real recipes. */
+  tools?: ToolRuntime;
+  toolNow?: () => number;
 }): Promise<DeskApp> {
   const projectDir = path.resolve(opts.projectDir);
   const depth = loadConfig(projectDir).interviewDepth;
@@ -268,9 +273,21 @@ export async function createDeskApp(opts: {
   };
 
   const notice = opts.cassetteNotice ?? null;
-  const preflight = opts.preflight ?? null;
+  let preflight = opts.preflight ?? null;
   const view = (): DeskSession =>
     buildSession(projectDir, interview, questions, overlay, notice, preflight, depth);
+  const toolOptions: ToolDeskOptions = {
+    projectDir,
+    getPreflight: () => preflight,
+    setPreflight(next) {
+      preflight = next;
+    },
+    statusHtml: () => view().statusHtml,
+    publish: (name, data) => hub.publish(name, data),
+    ...(opts.tools === undefined ? {} : { runtime: opts.tools }),
+    ...(opts.toolNow === undefined ? {} : { now: opts.toolNow }),
+  };
+  const handleTools = createToolHandler(toolOptions);
 
   return {
     token,
@@ -289,7 +306,7 @@ export async function createDeskApp(opts: {
         return;
       }
       if (method === "POST") {
-        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice, reloadInterview);
+        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice, reloadInterview, handleTools);
         return;
       }
       await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/", notice);
@@ -557,6 +574,7 @@ async function handlePost(
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
   notice: string | null,
   reloadInterview: () => Promise<void>,
+  handleTools: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void>,
 ): Promise<void> {
   if (pathname === "/settings") {
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
@@ -601,6 +619,10 @@ async function handlePost(
   }
   if (pathname === "/api/brand") {
     await handleBrandPost(req, res, projectDir);
+    return;
+  }
+  if (pathname.startsWith("/api/tools")) {
+    await handleTools(req, res, pathname);
     return;
   }
   sendJson(req, res, 404, { error: "That route is not on the desk." });
@@ -1002,6 +1024,10 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
     return;
   }
+  if (pathname === "/client/tool-install.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(TOOL_SOURCE)));
+    return;
+  }
   if (pathname === "/client/save-status.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(SAVE_SOURCE)));
     return;
@@ -1203,7 +1229,9 @@ function buildSession(
     const message = error instanceof Error ? error.message : "The map could not be drawn.";
     mapHtml = `<p class="hh-error" role="alert">${escapeHtml(message)}</p>`;
   }
-  const preflightHtml = preflight !== null && firstRun ? `${renderPreflight(preflight)}\n` : "";
+  const showPreflight =
+    preflight !== null && (firstRun || preflight.probes.some((probe) => probe.ok === false));
+  const preflightHtml = showPreflight && preflight !== null ? `${renderPreflight(preflight)}\n` : "";
   const transcript = `${preflightHtml}${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
   const renderedCard = renderCard(card);
   const cardHtml = renderedCard.includes("No question yet.")
@@ -1786,7 +1814,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
-    .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"');
+    .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
+    .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"');
   moduleCache.set(filePath, js);
   return js;
 }

@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { replaceViaTemp, withStateLock } from "./lock.ts";
+import {
+  ToolInstallRecordError,
+  readToolInstalls,
+  type ToolInstallRecord,
+} from "./tool-install/record.ts";
 
 export type Effort = "medium" | "high" | "xhigh";
 export type InterviewDepth = "express" | "standard" | "deep";
@@ -56,6 +61,7 @@ export interface GuideConfig {
   };
   ai: AiConfig;
   integrations: IntegrationsConfig;
+  toolInstalls: ToolInstallRecord[];
 }
 
 /**
@@ -101,6 +107,7 @@ const TOP_KEYS = [
   "gates",
   "ai",
   "integrations",
+  "toolInstalls",
 ] as const;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
@@ -361,6 +368,15 @@ function readAi(value: unknown, modelFallback: string, effortFallback: Effort): 
   return { model, effort, timeoutMs };
 }
 
+function readInstalls(value: unknown): ToolInstallRecord[] {
+  try {
+    return readToolInstalls(value);
+  } catch (error: unknown) {
+    if (error instanceof ToolInstallRecordError) fail("toolInstalls", error.message);
+    throw error;
+  }
+}
+
 export function defaultConfig(): GuideConfig {
   return {
     model: "grok-4.7",
@@ -387,6 +403,7 @@ export function defaultConfig(): GuideConfig {
     integrations: {
       pinterestCapture: PINTEREST_CAPTURE_DEFAULT,
     },
+    toolInstalls: [],
   };
 }
 
@@ -446,6 +463,7 @@ export function parseConfig(raw: unknown): GuideConfig {
     gates: readOptional(raw, "gates", defaults.gates, readGates),
     ai: readAi(Object.hasOwn(raw, "ai") ? raw.ai : undefined, model, effort),
     integrations: readOptional(raw, "integrations", defaults.integrations, readIntegrations),
+    toolInstalls: readOptional(raw, "toolInstalls", defaults.toolInstalls, readInstalls),
   };
 }
 
