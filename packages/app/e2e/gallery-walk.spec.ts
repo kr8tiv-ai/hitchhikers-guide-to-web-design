@@ -92,9 +92,9 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", "0");
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "walking");
 
-    await keepLove(page, WHYS[0] ?? "", true);
+    await keepLove(page, WHYS[0] ?? "", true, 1);
     for (let index = 1; index < WHYS.length; index += 1) {
-      await keepLove(page, WHYS[index] ?? "", false);
+      await keepLove(page, WHYS[index] ?? "", false, index + 1);
     }
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "narrowing");
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", "10");
@@ -189,14 +189,27 @@ async function seedRobotsPlaceholder(cacheDir: string, url: string): Promise<voi
   );
 }
 
-async function keepLove(page: Page, why: string, alreadyChosen: boolean): Promise<void> {
-  const card = page.locator("#hh-gallery .hh-site").first();
-  await card.waitFor();
+function quoteAttr(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+async function keepLove(page: Page, why: string, alreadyChosen: boolean, lovesAfter: number): Promise<void> {
+  // walk.js is a module. The new love count is in the HTML before that script binds clicks.
+  await page.waitForLoadState("domcontentloaded");
+  const open = page.locator("#hh-gallery .hh-site").first();
+  await open.waitFor();
+  const url = await open.getAttribute("data-url");
+  if (url === null || url.length === 0) throw new Error("the card being kept has no url");
+  const card = page.locator(`#hh-gallery .hh-site[data-url="${quoteAttr(url)}"]`);
   if (!alreadyChosen) await card.locator('[data-vote="love"]').click();
   await expect(card.locator('[data-vote="love"]')).toHaveAttribute("aria-pressed", "true");
   await card.locator("textarea").fill(why);
   await card.locator("[data-keep]").click();
-  await page.locator("#hh-gallery").waitFor();
+  // The verdict reloads /gallery. A second post of this url is stored only once,
+  // so the next keep waits until the count moves, the script has bound, and this card is gone.
+  await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", String(lovesAfter));
+  await page.waitForLoadState("domcontentloaded");
+  await expect(card).toHaveCount(0);
 }
 
 async function columnCount(page: Page): Promise<number> {
