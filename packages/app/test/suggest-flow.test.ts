@@ -296,6 +296,89 @@ test("a picked choice posts the original question as assumed", async () => {
   }
 });
 
+test("arrow keys while suggest is still pending still pick the second choice", async () => {
+  const bodies: string[] = [];
+  const picked = "Show the tin photo large on the page.";
+  let release: (response: Response) => void = () => {};
+  const suggested = {
+    ...nextSession,
+    assumption: { kind: "suggested" as const, value: SUGGESTION },
+    choices: {
+      forId: "DP-0.1",
+      origin: "model" as const,
+      items: [
+        {
+          id: "A" as const,
+          label: "A quiet order page for the shop.",
+          why: "The industry is tea.",
+          source: "industry:tea",
+        },
+        {
+          id: "B" as const,
+          label: picked,
+          why: "The upload is a photo of the tins.",
+          source: "upload:tins.jpg",
+        },
+      ],
+    },
+  };
+  const afterPick = {
+    ...nextSession,
+    assumption: { kind: "suggested" as const, value: picked },
+    choices: null,
+  };
+  const h = harness(async (input, init) => {
+    const url = requestUrl(input);
+    if (url === "/api/session") return Response.json(opening);
+    if (url === "/api/suggest") {
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    }
+    if (url === "/api/answer") {
+      bodies.push(String(init?.body ?? ""));
+      return Response.json({ session: afterPick });
+    }
+    throw new Error(`unexpected ${url}`);
+  });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    const article = h.region.querySelector("[data-question-id]");
+    assert.ok(article);
+    h.fire("click", { target: h.region.querySelector('[data-action="suggest"]') });
+    await settle();
+    assert.equal(h.region.querySelector('[data-action="suggest"]')?.getAttribute("disabled"), "");
+    // The server publishes the session before the POST body arrives.
+    h.source.session(JSON.stringify(suggested));
+    assert.equal(article.getAttribute("aria-busy"), "true");
+    assert.equal(article.getAttribute("data-question-id"), "DP-0.1");
+    const first = article.querySelector('[data-choice-id="A"]');
+    const second = article.querySelector('[data-choice-id="B"]');
+    assert.ok(first);
+    assert.ok(second);
+    h.fire("keydown", { target: first, key: "ArrowDown" });
+    assert.equal(second.getAttribute("tabindex"), "0");
+    assert.equal(second.getAttribute("aria-checked"), "true");
+    h.fire("keydown", { target: second, key: "Enter" });
+    await settle();
+    assert.equal(bodies.length, 0);
+    assert.equal(article.isConnected, true);
+
+    release(Response.json({ session: suggested }));
+    await settle();
+    assert.equal(bodies.length, 1);
+    const body = JSON.parse(bodies[0] ?? "{}") as { questionId?: string; text?: string; assumed?: boolean };
+    assert.equal(body.questionId, "DP-0.1");
+    assert.equal(body.text, picked);
+    assert.equal(body.assumed, true);
+    assert.equal(h.region.querySelector("[data-question-id]")?.getAttribute("data-question-id"), "DP-0.2");
+    assert.equal(h.region.querySelector("[data-assumed='suggested']")?.textContent, `Assumed: ${picked}`);
+  } finally {
+    stop();
+  }
+});
+
 function card(overrides: Partial<CardState> = {}): CardState {
   return {
     question: {
@@ -353,7 +436,7 @@ function harness(fetchImpl: DeskEnv["fetch"]): {
   status: MiniEl;
   source: RecordingSource;
   focused: number;
-  fire(type: string, event: { target: MiniEl | null }): void;
+  fire(type: string, event: { target: MiniEl | null; key?: string }): void;
 } {
   let focused = 0;
   const region = element("section", () => {

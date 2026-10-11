@@ -463,6 +463,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let draft = "";
   let error: string | null = null;
   let pending = false;
+  /** Latest choice pressed while the suggest POST is still pending. */
+  let choiceWait: string | null = null;
   let ready = false;
   let source: DeskSource | null = null;
   let notice: string | null = null;
@@ -1371,6 +1373,7 @@ export function mountDesk(env: DeskEnv): () => void {
   async function requestSuggestion(questionId: string): Promise<void> {
     if (token === null) return;
     pending = true;
+    choiceWait = null;
     error = null;
     notice = null;
     cardHold = true;
@@ -1387,14 +1390,17 @@ export function mountDesk(env: DeskEnv): () => void {
       // A session event may already have placed the suggestion. Do not paint over it.
       if (suggestHold !== null) {
         setBusy(false);
+        resumeChoice();
         return;
       }
+      choiceWait = null;
       cardHold = false;
       showSuggestFailure(result.error);
       setBusy(false);
       return;
     }
     placeSuggestion(result.session, questionId);
+    resumeChoice();
   }
 
   async function acceptSuggestion(): Promise<void> {
@@ -1555,8 +1561,21 @@ export function mountDesk(env: DeskEnv): () => void {
     }
   }
 
+  function resumeChoice(): void {
+    const id = choiceWait;
+    choiceWait = null;
+    if (id === null || pending || token === null || !choicesOpen()) return;
+    void pickChoice(id);
+  }
+
   async function pickChoice(id: string): Promise<void> {
-    if (pending || token === null) return;
+    if (token === null) return;
+    if (pending) {
+      // The session stream shows choices before the suggest POST settles.
+      if (choicesOpen()) choiceWait = id;
+      return;
+    }
+    choiceWait = null;
     if (voiceActive()) await stopVoice();
     if (id === "other") {
       ownWords = true;
