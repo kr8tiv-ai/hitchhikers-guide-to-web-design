@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { hiddenChildOptions, RESULTS_COLUMNS, score, type EvalResult } from "@hitchhiker/engine";
 import { runCli } from "../src/main.ts";
 import { runImprove } from "../src/improve/run.ts";
+import { buildPnpmInvocation, quoteCmdArg } from "../src/improve/pnpm-command.ts";
 import {
   GROK_DENY_RULES,
   buildImproveArgv,
@@ -629,4 +630,44 @@ test("the improve docs teach the run and stay inside the voice", () => {
   assert.equal(guide.includes("git merge --no-ff"), true);
   assert.equal(guide.includes("docs/improve.md") || guide.includes("improve-runbook.md"), true);
   assert.equal(readFileSync(path.join(repoRoot, "README.md"), "utf8").includes("docs/improve.md"), true);
+});
+
+test("quoteCmdArg quotes spaces and refuses cmd metacharacters", () => {
+  assert.equal(quoteCmdArg("--filter"), "--filter");
+  assert.equal(quoteCmdArg("C:\\Program Files\\x"), '"C:\\Program Files\\x"');
+  assert.equal(quoteCmdArg("a b\\"), '"a b\\\\"');
+  assert.equal(quoteCmdArg(""), '""');
+  for (const bad of ["a&b", "a|b", "%PATH%", 'a"b', "a^b", "a>b", "a\nb", "!x!"]) {
+    assert.throws(() => quoteCmdArg(bad), /metacharacters/);
+  }
+});
+
+test("buildPnpmInvocation keeps pnpm direct off Windows", () => {
+  for (const platform of ["linux", "darwin"] as const) {
+    const inv = buildPnpmInvocation(["-r", "test"], platform);
+    assert.deepEqual(inv, { command: "pnpm", args: ["-r", "test"], verbatim: false });
+  }
+});
+
+test("buildPnpmInvocation runs pnpm.cmd through cmd.exe on Windows without a bare .cmd spawn", () => {
+  const inv = buildPnpmInvocation(["exec", "tsc", "-b", "my dir"], "win32", "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(inv.command, "C:\\Windows\\System32\\cmd.exe");
+  assert.deepEqual(inv.args, ["/d", "/s", "/c", '"pnpm.cmd exec tsc -b "my dir""']);
+  assert.equal(inv.verbatim, true);
+  assert.ok(!inv.command.toLowerCase().endsWith(".cmd"));
+  assert.equal(buildPnpmInvocation(["-v"], "win32", "").command, "cmd.exe");
+  assert.throws(() => buildPnpmInvocation(["x&calc"], "win32"), /metacharacters/);
+});
+
+test("the evaluation can spawn pnpm on this platform (EINVAL regression)", { skip: process.platform !== "win32" }, () => {
+  const inv = buildPnpmInvocation(["--version"]);
+  const result = spawnSync(inv.command, inv.args, hiddenChildOptions({ encoding: "utf8", windowsVerbatimArguments: inv.verbatim }));
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+/);
+});
+
+test("spawning pnpm.cmd with the shell off fails on Windows (documents the bug)", { skip: process.platform !== "win32" }, () => {
+  const result = spawnSync("pnpm.cmd", ["--version"], hiddenChildOptions({ encoding: "utf8" }));
+  assert.ok(result.error, "expected spawn to be refused");
 });

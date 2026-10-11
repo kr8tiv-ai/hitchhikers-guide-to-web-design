@@ -12,6 +12,7 @@ import {
 } from "@hitchhiker/engine";
 import { hiddenChildOptions } from "@hitchhiker/engine";
 import { readTargetText } from "./files.ts";
+import { buildPnpmInvocation } from "./pnpm-command.ts";
 
 interface Captured {
   status: number | null;
@@ -19,15 +20,24 @@ interface Captured {
   stderr: string;
 }
 
-function pnpmCommand(): string {
-  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+function capturePnpm(args: readonly string[], cwd: string, timeoutMs: number): Promise<Captured> {
+  const inv = buildPnpmInvocation(args);
+  return capture(inv.command, inv.args, cwd, timeoutMs, inv.verbatim);
 }
 
-function capture(command: string, args: readonly string[], cwd: string, timeoutMs: number): Promise<Captured> {
+function capture(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  timeoutMs: number,
+  verbatim = false,
+): Promise<Captured> {
   return new Promise((resolve) => {
     const child = spawn(command, [...args], hiddenChildOptions({
       cwd,
       stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+      windowsVerbatimArguments: verbatim,
     }));
     let stdout = "";
     let stderr = "";
@@ -74,7 +84,7 @@ async function loadLint(cwd: string): Promise<(text: string) => number> {
 
 /** Pass count, doctor, tsc, and anti-slop hits in the target copy. */
 export async function runEvaluation(cwd: string, targets: readonly string[]): Promise<EvalResult> {
-  const tests = await capture(pnpmCommand(), ["-r", "test"], cwd, 45 * 60 * 1000);
+  const tests = await capturePnpm(["-r", "test"], cwd, 45 * 60 * 1000);
   const counts = parseTestCounts(`${tests.stdout}\n${tests.stderr}`);
   const doctor = await capture(
     process.execPath,
@@ -82,7 +92,7 @@ export async function runEvaluation(cwd: string, targets: readonly string[]): Pr
     cwd,
     60_000,
   );
-  const tsc = await capture(pnpmCommand(), ["exec", "tsc", "-b", "--pretty", "false"], cwd, 15 * 60 * 1000);
+  const tsc = await capturePnpm(["exec", "tsc", "-b", "--pretty", "false"], cwd, 15 * 60 * 1000);
   const lint = await loadLint(cwd);
   let antiSlopHits = 0;
   for (const file of readTargetText(cwd, targets)) {
@@ -118,8 +128,7 @@ export function openBugCountFromDisk(cwd: string): number {
 /** Polish e2e passes plus the anti-slop suite. A missing suite counts as 0. */
 async function measureUx(cwd: string): Promise<number> {
   try {
-    const anti = await capture(
-      pnpmCommand(),
+    const anti = await capturePnpm(
       [
         "--filter",
         "@hitchhiker/qa",
@@ -132,8 +141,7 @@ async function measureUx(cwd: string): Promise<number> {
       cwd,
       10 * 60 * 1000,
     );
-    const polish = await capture(
-      pnpmCommand(),
+    const polish = await capturePnpm(
       [
         "--filter",
         "@hitchhiker/app",

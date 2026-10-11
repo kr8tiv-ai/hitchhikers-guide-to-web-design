@@ -114,3 +114,7 @@ These stay on in code, including when `--always-approve` is set: protected paths
 ## Final run
 
 Prompt 186 ran `hh improve` once, on `improve/2026-10-10-desk`, with `--max-experiments 5`. Experiment 0 crashed before a score. The note is `spawn EINVAL`: on Windows the evaluation spawns `pnpm.cmd` with the shell off, and Node rejects that. No later experiment ran. The evaluation, `improve/protected.json`, and the loop were not changed. The collection and the open bugs are in `improve/final-run.md`.
+
+### Windows evaluation fix
+
+The `spawn EINVAL` crash was fixed by a human-approved change to the protected evaluation file (`packages/cli/src/improve/evaluate.ts`) and a new protected helper (`packages/cli/src/improve/pnpm-command.ts`), made on 2026-10-11. On Windows the evaluation now runs pnpm as `cmd.exe /d /s /c "pnpm.cmd ..."` with verbatim arguments. Each argument is quoted, and any argument holding a cmd metacharacter (ampersand, pipe, angle brackets, caret, percent, bang, a double quote, or a newline) is refused, so nothing can inject a command. Linux and macOS still spawn `pnpm` directly. `improve/protected.json` needed no edit: the evaluation hash is computed from the files its globs cover, so the new helper is covered and the hash changes once, at this commit. Tests are in `packages/cli/test/improve.test.ts`.
