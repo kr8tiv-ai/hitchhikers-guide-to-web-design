@@ -63,6 +63,7 @@ export {
 export type { ProtectedList } from "./protected.ts";
 export {
   NORMAL_PUSH_ARGS,
+  WORKTREE_PUSH_ARGS,
   assertNormalPush,
   assertSupervisorGit,
   decidePushVerify,

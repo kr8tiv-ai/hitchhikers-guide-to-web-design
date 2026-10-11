@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { hiddenChildOptions, isUnsafeRepoPath } from "@hitchhiker/engine";
 import type { AgentBrief } from "@hitchhiker/engine";
-import { budgetMs, buildImproveArgv, killProcessTree } from "./session.ts";
+import { budgetMs, buildImproveArgv, exitNote, killProcessTree } from "./session.ts";
 
 /**
  * Extra deny rules for a test agent. The improve loop's deny list still applies.
@@ -56,6 +56,12 @@ export function agentEnv(
 ): NodeJS.ProcessEnv {
   const env = { ...base };
   if (home === "temporary") {
+    // A temporary HOME has no grok login, and grok exits "Not signed in" within seconds.
+    // Keep the real grok home so the agent uses the same login as the driver.
+    if (env.GROK_HOME === undefined || env.GROK_HOME.length === 0) {
+      const real = base.USERPROFILE ?? base.HOME ?? os.homedir();
+      env.GROK_HOME = path.join(real, ".grok");
+    }
     env.HOME = temporaryHome;
     env.USERPROFILE = temporaryHome;
   }
@@ -185,7 +191,7 @@ export async function runTestAgent(command: string, request: AgentRunRequest): P
       return { timedOut: false, exitCode: null, note: "grok did not start", log: result.log };
     }
     if (result.exitCode !== 0) {
-      return { timedOut: false, exitCode: result.exitCode, note: "grok exited non-zero", log: result.log };
+      return { timedOut: false, exitCode: result.exitCode, note: exitNote("grok exited non-zero", result.log), log: result.log };
     }
     return { timedOut: false, exitCode: result.exitCode, note: "", log: result.log };
   } finally {

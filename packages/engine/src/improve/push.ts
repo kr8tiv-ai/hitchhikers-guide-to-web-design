@@ -8,6 +8,8 @@ import { assertGitAllowed } from "./policy.ts";
 const HEX_COMMIT = /^[0-9a-f]{40}$/;
 
 export const NORMAL_PUSH_ARGS = ["push", "origin", "main"] as const;
+/** An isolated supervisor worktree sits on an improve branch and publishes it to main. */
+export const WORKTREE_PUSH_ARGS = ["push", "origin", "HEAD:main"] as const;
 
 export interface PushVerifyInput {
   pushExit: number;
@@ -37,14 +39,13 @@ export function usesNoVerify(args: readonly string[]): boolean {
   return args.some((arg) => arg === "--no-verify" || arg.includes("--no-verify"));
 }
 
-/** Only `git push origin main`, with no force flag and no + refspec. */
+/** Only `git push origin main` or `git push origin HEAD:main`, with no force flag and no + refspec. */
 export function assertNormalPush(args: readonly string[]): void {
   const marker = forceMarker(args);
   if (marker !== null) throw new Error(`Refusing force push (${marker}).`);
-  if (
-    args.length !== NORMAL_PUSH_ARGS.length ||
-    args.some((arg, index) => arg !== NORMAL_PUSH_ARGS[index])
-  ) {
+  const same = (want: readonly string[]): boolean =>
+    args.length === want.length && args.every((arg, index) => arg === want[index]);
+  if (!same(NORMAL_PUSH_ARGS) && !same(WORKTREE_PUSH_ARGS)) {
     throw new Error("Only git push origin main is allowed.");
   }
 }

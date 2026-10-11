@@ -50,7 +50,7 @@ test("parseProgram reads the shipped desk program", () => {
   const markdown = readFileSync(path.join(repoRoot, "improve", "program.md"), "utf8");
   const program = parseProgram(markdown);
   assert.equal(program.tag, "desk");
-  assert.equal(program.model, "grok-4.7");
+  assert.equal(program.model, "grok-4.7-build-fast");
   assert.equal(program.effort, "xhigh");
   assert.equal(program.minutes, 10);
   assert.equal(program.turns, 40);
@@ -124,6 +124,29 @@ test("parseTestCounts sums package summaries and strips color", () => {
   assert.deepEqual(parseTestCounts(output), { passed: 5, failed: 1 });
 });
 
+test("parseTestCounts reads the node:test spec reporter that pnpm prints on Node 24", () => {
+  const output = [
+    "packages/knowledge test: \u2139 tests 40",
+    "packages/knowledge test: \u2139 suites 1",
+    "packages/knowledge test: \u2139 pass 40",
+    "packages/knowledge test: \u2139 fail 0",
+    "packages/engine test: \u2139 pass 676",
+    "packages/engine test: \u2139 fail 2",
+    "packages/engine test: \u2139 cancelled 0",
+    "packages/engine test: \u2714 a test named pass 12 (0.2ms)",
+    "\u001b[34m\u2139 pass 4\u001b[39m\r",
+  ].join("\n");
+  assert.deepEqual(parseTestCounts(output), { passed: 720, failed: 2 });
+});
+
+test("parseTestCounts ignores test titles that merely mention pass or fail", () => {
+  const output = [
+    "packages/qa test: \u2714 every failure is listed together (0.2ms)",
+    "packages/qa test:   pass 9",
+    "packages/qa test: ok 1 - fail 3",
+  ].join("\n");
+  assert.deepEqual(parseTestCounts(output), { passed: 0, failed: 0 });
+});
 test("decide keeps only a strict improvement", () => {
   assert.equal(decide(5, 4), "keep");
   assert.equal(decide(4, 4), "discard");

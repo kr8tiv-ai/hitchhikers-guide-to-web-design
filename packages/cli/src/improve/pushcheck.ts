@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { hiddenChildOptions, NORMAL_PUSH_ARGS, assertSupervisorGit, decidePushVerify } from "@hitchhiker/engine";
+import { hiddenChildOptions, NORMAL_PUSH_ARGS, WORKTREE_PUSH_ARGS, assertSupervisorGit, decidePushVerify } from "@hitchhiker/engine";
 import { detectHook } from "./hooks.ts";
 
 export interface GitText {
@@ -51,6 +51,7 @@ export function verifyKeptCommit(
   cwd: string,
   commit: string,
   run: GitRunner = runSupervisorGit,
+  isolated = false,
 ): PushCheck {
   if (!HEX_COMMIT.test(commit)) {
     return {
@@ -66,7 +67,7 @@ export function verifyKeptCommit(
   let ancestorExit = 1;
   let forceRefused = false;
   try {
-    const push = run(cwd, [...NORMAL_PUSH_ARGS]);
+    const push = run(cwd, isolated ? [...WORKTREE_PUSH_ARGS] : [...NORMAL_PUSH_ARGS]);
     chunks.push(push.stdout, push.stderr);
     pushExit = push.status ?? 1;
     if (pushExit === 0) {

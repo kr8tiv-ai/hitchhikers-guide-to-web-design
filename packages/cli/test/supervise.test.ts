@@ -9,6 +9,7 @@ import { SUPERVISE_RESULTS_COLUMNS, score, type EvalResult } from "@hitchhiker/e
 import { runCli } from "../src/main.ts";
 import {
   SUPERVISOR_DENY_RULES,
+  agentEnv,
   agentPrompt,
   buildAgentArgv,
   runBoundedProcess,
@@ -18,6 +19,8 @@ import {
 import { openBugCountFromDisk } from "../src/improve/evaluate.ts";
 import { runSupervisorGit, verifyKeptCommit, type GitText } from "../src/improve/pushcheck.ts";
 import { runSupervise } from "../src/improve/supervisor.ts";
+import { baselineProblem } from "../src/improve/baseline.ts";
+import { exitNote, failureHint } from "../src/improve/session.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
@@ -245,7 +248,7 @@ test("dry-run stays quiet, lists both agents, and enforces the ceilings", async 
   assert.match(outcome.stdout, /desk-explorer/);
   assert.match(outcome.stdout, /cli-explorer/);
   assert.match(outcome.stdout, /always-approve: on/);
-  assert.match(outcome.stdout, /push: git push origin main/);
+  assert.match(outcome.stdout, /isolation: own worktree on a new improve branch\n[\s\S]*push: git push origin HEAD:main/);
   assert.match(outcome.stdout, /max-failures: 3/);
   assert.match(outcome.stdout, /wall-minutes: 60/);
   const capped = await runSupervise(["--dry-run", "--max-experiments", "50"], { cwd: repoRoot });
@@ -767,5 +770,147 @@ test("open bug count reads the bug scan and findings files", () => {
     assert.equal(openBugCountFromDisk(cwd), 2);
   } finally {
     remove(cwd);
+  }
+});
+
+test("a temporary-home agent keeps the real grok login through GROK_HOME", () => {
+  const env = agentEnv("temporary", { USERPROFILE: "C:\\Users\\me", PATH: "p" }, "T:\\tmp-home");
+  assert.equal(env.HOME, "T:\\tmp-home");
+  assert.equal(env.USERPROFILE, "T:\\tmp-home");
+  assert.equal(env.GROK_HOME, path.join("C:\\Users\\me", ".grok"));
+  const kept = agentEnv("temporary", { USERPROFILE: "C:\\Users\\me", GROK_HOME: "D:\\g" }, "T:\\t");
+  assert.equal(kept.GROK_HOME, "D:\\g");
+  const repo = agentEnv("repo", { USERPROFILE: "C:\\Users\\me" }, "T:\\t");
+  assert.equal(repo.GROK_HOME, undefined);
+  assert.equal(repo.USERPROFILE, "C:\\Users\\me");
+});
+
+test("a crash note carries one short reason from the grok log", () => {
+  const log = "\u001b[31mNot signed in. To authenticate\u001b[0m\nrun grok login\nAlternatively, set XAI_API_KEY\n";
+  assert.equal(failureHint(log), "Not signed in. To authenticate");
+  assert.equal(exitNote("grok exited non-zero", log), "grok exited non-zero: Not signed in. To authenticate");
+  assert.equal(exitNote("grok exited non-zero", ""), "grok exited non-zero");
+  assert.equal(failureHint("a\n\nlast line\t here\n"), "last line here");
+  assert.equal(failureHint(`error ${"x".repeat(400)}`).length, 160);
+  assert.equal(failureHint("tab\tseparated error").includes("\t"), false);
+});
+
+test("a baseline must be a real positive number", () => {
+  const green = { testsPassed: 1800, testsFailed: 0, doctorExit: 0, tscExit: 0, antiSlopHits: 27 };
+  assert.equal(baselineProblem(green), null);
+  assert.match(baselineProblem({ ...green, testsPassed: 0 }) ?? "", /0 passing tests/);
+  assert.match(baselineProblem({ ...green, testsFailed: 2 }) ?? "", /2 failing tests/);
+  assert.match(baselineProblem({ ...green, doctorExit: 1 }) ?? "", /doctor exited 1/);
+  assert.match(baselineProblem({ ...green, tscExit: 2 }) ?? "", /typecheck exited 2/);
+});
+
+test("an unreal baseline stops the run and reports, before any agent starts", async () => {
+  const work = initRepo("main");
+  try {
+    seed(work);
+    let agents = 0;
+    const outcome = await runSupervise(["--max-experiments", "3"], {
+      cwd: work,
+      now: () => FROZEN,
+      requireRealBaseline: true,
+      runAgent: async () => {
+        agents += 1;
+        return { timedOut: false, exitCode: 0, note: "", log: "" };
+      },
+      evaluate: async () => baseResult(0, 0, 0),
+    });
+    assert.equal(outcome.exitCode, 1);
+    assert.match(outcome.stdout, /FAILED: baseline counted 0 passing tests/);
+    assert.equal(agents, 0);
+    const parsed = rows(work);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0]?.[5], "crash");
+  } finally {
+    remove(work);
+  }
+});
+
+test("an isolated run scores and pushes from its own worktree and leaves the main tree alone", async () => {
+  const { work, origin } = initPair();
+  const root = mkdtempSync(path.join(os.tmpdir(), "hh-wt-root-"));
+  let treeDir = "";
+  try {
+    seed(work);
+    git(work, ["push", "-u", "origin", "main"]);
+    const prior = head(work);
+    // The human and the driver keep working in the main tree during the run.
+    writeFileSync(path.join(work, "late-prompt.md"), "added mid-run\n", "utf8");
+    mkdirSync(path.join(work, "hh-build-plan", "prompts"), { recursive: true });
+    writeFileSync(path.join(work, "hh-build-plan", "prompts", "188-x.md"), "protected path\n", "utf8");
+    let evaluations = 0;
+    const cwds: string[] = [];
+    const outcome = await runSupervise(["--max-experiments", "1"], {
+      cwd: work,
+      now: () => FROZEN,
+      isolate: true,
+      installDeps: false,
+      worktreeRoot: root,
+      runAgent: async (request) => {
+        cwds.push(request.cwd);
+        mkdirSync(path.join(request.cwd, ".playwright-mcp"), { recursive: true });
+        writeFileSync(path.join(request.cwd, ".playwright-mcp", "page.yml"), "stray\n", "utf8");
+        commitFile(request.cwd, "copy.txt", "v2 desk\n", "clearer desk line");
+        return { timedOut: false, exitCode: 0, note: "", log: "" };
+      },
+      evaluate: async () => {
+        evaluations += 1;
+        return baseResult(0, 0, evaluations === 1 ? 10 : 12);
+      },
+    });
+    assert.equal(outcome.exitCode, 0, outcome.stdout);
+    const match = /^worktree: (.+)$/m.exec(outcome.stdout);
+    treeDir = match?.[1] ?? "";
+    assert.notEqual(treeDir, "");
+    assert.notEqual(path.resolve(cwds[0] ?? ""), path.resolve(work));
+    assert.equal(path.resolve(cwds[0] ?? ""), path.resolve(treeDir));
+    assert.match(outcome.stdout, /branch: improve\/supervise-20261010-/);
+    const parsed = rows(treeDir);
+    assert.equal(parsed[1]?.[5], "keep");
+    assert.equal(parsed[1]?.[8], "yes");
+    assert.equal(existsSync(path.join(treeDir, ".playwright-mcp")), false);
+    // origin/main moved to the kept commit and the main tree was never touched.
+    const originHead = git(origin, ["rev-parse", "refs/heads/main"]).trim();
+    assert.notEqual(originHead, prior);
+    assert.equal(git(origin, ["log", "-1", "--format=%s", "refs/heads/main"]).trim(), "clearer desk line");
+    assert.equal(head(work), prior);
+    assert.equal(existsSync(path.join(work, "late-prompt.md")), true);
+    assert.equal(existsSync(path.join(work, "improve", "results.tsv")), false);
+    assert.equal(git(work, ["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "main");
+  } finally {
+    if (treeDir.length > 0) {
+      spawnSync("git", ["worktree", "remove", "--force", treeDir], { cwd: work, windowsHide: true });
+    }
+    remove(root);
+    remove(work);
+    remove(origin);
+  }
+});
+
+test("an isolated run still refuses when the main tree is not on the configured branch", async () => {
+  const work = initRepo("main");
+  const root = mkdtempSync(path.join(os.tmpdir(), "hh-wt-root-"));
+  try {
+    seed(work);
+    git(work, ["checkout", "-b", "improve/other"]);
+    const outcome = await runSupervise(["--max-experiments", "1"], {
+      cwd: work,
+      now: () => FROZEN,
+      isolate: true,
+      installDeps: false,
+      worktreeRoot: root,
+      runAgent: idle(),
+      evaluate: async () => baseResult(0, 0),
+    });
+    assert.equal(outcome.exitCode, 2);
+    assert.match(outcome.stdout, /Refusing to start: branch is improve\/other/);
+    assert.equal(existsSync(path.join(root, "hh-improve-20261010-150000")), false);
+  } finally {
+    remove(root);
+    remove(work);
   }
 });

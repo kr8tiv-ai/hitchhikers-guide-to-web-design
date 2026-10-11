@@ -19,7 +19,7 @@ hh improve [--program improve/program.md] [--max-experiments N] [--branch name] 
 
 A live run refuses to start on `main` or `master`, on a detached HEAD, or on a dirty tree. `improve/results.tsv` and `improve/STOP` do not count as dirt. A missing program or a missing `improve/protected.json` also refuses.
 
-The model and effort come from the program. The shipped file uses `grok-4.7` and `xhigh`.
+The model and effort come from the program. The shipped file uses `grok-4.7-build-fast` and `xhigh`, the same model as the build driver.
 
 ## Files
 
@@ -59,19 +59,38 @@ The runner already sends `--always-approve` to grok, together with the deny rule
 
 ## hh improve supervise
 
-`hh improve supervise` is the standing loop. It starts on `main` (or on an `improve/...` branch when `--branch` says so). It does not check out another branch. A dirty tree or a detached HEAD is refused. `improve/results.tsv`, `improve/STOP`, `improve/hook-log.tsv`, `improve/PUSH-FAILED.txt`, and `improve/findings/` do not count as dirt.
+`hh improve supervise` is the standing loop. It starts from `main` (or from an `improve/...` branch when `--branch` says so). A detached HEAD or the wrong branch is refused. By default it runs in its own worktree (see Isolation below), so a dirty main tree does not stop it. With `--in-place` it runs in the main tree and refuses a dirty tree. `improve/results.tsv`, `improve/STOP`, `improve/hook-log.tsv`, `improve/PUSH-FAILED.txt`, and `improve/findings/` do not count as dirt.
 
 ```text
-hh improve supervise [--program improve/program.md] [--max-experiments N] [--branch main] [--minutes M] [--turns T] [--max-failures N] [--wall-minutes N] [--always-approve] [--dry-run]
+hh improve supervise [--program improve/program.md] [--max-experiments N] [--branch main] [--minutes M] [--turns T] [--max-failures N] [--wall-minutes N] [--in-place] [--always-approve] [--dry-run]
 ```
 
 - `--max-experiments` defaults to 5. The ceiling is 50. The baseline does not count.
 - `--max-failures` defaults to 3. The ceiling is 50. That many discards, crashes, or violations in a row stop the loop with a FAILED line.
 - `--wall-minutes` defaults to 60. The ceiling is 180. The whole run stops when the clock is used up.
+- `--in-place` skips the worktree and runs in the main tree, as the first version did. Use it only when nothing else touches the main tree.
 - `--always-approve` is accepted and is already on. There is no off switch. Deny rules still go out with the agent, and the rules below are code.
 - `--dry-run` prints the plan, including a live refusal, and does not spawn, push, or write the log.
 
 Each experiment spawns one test agent from `improve/program.md`, then scores the same protected evaluation as `hh improve`. A keep requires a strictly higher score. Anything else resets only to the commit this experiment started from, and only when the tree was clean at the start. The supervisor never passes `--no-verify`, `--force`, `-f`, `--force-with-lease`, or a `+refs` refspec to git.
+
+### Isolation
+
+A live run cuts a worktree from the main tree's HEAD, on a new branch `improve/supervise-<yyyymmdd-HHMMSS>`, in `~/hh-improve-worktrees/hh-improve-<stamp>`. It runs `pnpm install --frozen-lockfile` there, then reads the program and the protected list from that copy and runs every agent, evaluation, reset, and push from it. The human and the build driver can add prompts or edit files in the main tree while it runs. None of that reaches the experiment, so a new prompt file can no longer trip the protected-path check. The first version ran in the main tree, and a prompt file that the driver added mid-run was scored as the agent's change.
+
+The branch is not `main`, so a keep is published with `git push origin HEAD:main`, still a normal push with the same verification (fetch, then `merge-base --is-ancestor`). If `origin/main` moved in the meantime the push is rejected and the run stops with FAILED, as before. The run prints `worktree:`, `branch:`, and `results:` lines. `improve/results.tsv` and the other logs stay in the worktree. Remove it afterward with `git worktree remove --force <path>`.
+
+Agents write tool output such as `.playwright-mcp/` into their working directory. In an isolated run that folder is removed after each agent, because it is never part of an experiment.
+
+### Baseline
+
+Experiment 0 must produce a real positive score. If it counted no passing tests, has a failing test, a bad doctor exit, a failed typecheck, or a score of 0 or less, the run records a `crash` row with the reason, prints `FAILED: baseline ...`, and starts no agent. Before this check a baseline of 0 was recorded as a keep, and every later experiment was compared against noise.
+
+The evaluation reads node:test summaries. On Node 24 with piped output the reporter prints `ℹ pass 40` (U+2139) instead of TAP `# pass 40`, and pnpm adds a `packages/x test: ` prefix. The parser used to accept only `# pass`, so it counted 0 passing tests on a healthy tree, and the red-test floor then scored the whole run as 0. It now accepts both forms.
+
+### Agent login and crash notes
+
+The `cli-explorer` agent runs with `HOME` and `USERPROFILE` set to an empty temporary directory. grok found no login there and exited with "Not signed in" within seconds, so every `cli-explorer` experiment was a crash. The agent now also gets `GROK_HOME` pointing at the real `.grok` folder (an existing `GROK_HOME` is kept), so it uses the same login as the driver and nothing else from the real home. When grok exits non-zero, the results note carries one short line from its output after `grok exited non-zero:`.
 
 ### Score
 
@@ -79,7 +98,7 @@ Green score is `testsPassed * 1000 - antiSlopHits + uxPassed * 10 - bugCount * 1
 
 ### Agents
 
-`## Test agents` in the program lists two or more briefs. The shipped briefs are `desk-explorer` (Playwright, repo home) and `cli-explorer` (temporary `HOME` and `USERPROFILE`). Each brief names a findings file under `improve/findings/`. The header is `id`, `status`, `area`, `summary`. Status is `open` or `fixed`. The agent may edit only the target area, and only when the brief asks it to fix. The minute budget and `--max-turns` are the same caps as `hh improve`. At the limit the process tree is killed.
+`## Test agents` in the program lists two or more briefs. The shipped briefs are `desk-explorer` (Playwright, repo home) and `cli-explorer` (temporary `HOME` and `USERPROFILE`, real `GROK_HOME`). Each brief names a findings file under `improve/findings/`. The header is `id`, `status`, `area`, `summary`. Status is `open` or `fixed`. The agent may edit only the target area, and only when the brief asks it to fix. The minute budget and `--max-turns` are the same caps as `hh improve`. At the limit the process tree is killed.
 
 ### results.tsv
 
@@ -91,7 +110,9 @@ n	started	commit	score	best	status	seconds	note	pushed	hooks_ok
 
 `pushed` and `hooks_ok` are `yes` or `no`. `status` adds `failed` for a push that did not land. A 173 log is refused, not appended to. One row per experiment, including the baseline. The baseline is `keep`, `pushed` no.
 
-### Push
++
++
++After a keep, the supervisor runs `git push origin main`, then
 
 After a keep, the supervisor runs `git push origin main`, then `git fetch origin main`, then `git merge-base --is-ancestor <commit> origin/main`. Both checks must exit 0. A rejection or a failed ancestor check writes `improve/PUSH-FAILED.txt`, marks the row `failed`, prints a FAILED line, and exits nonzero. It does not retry and it does not force-push. Start the supervisor on `main`. A keep on any other branch cannot become an ancestor of `origin/main` through this push, so the loop stops.
 
@@ -118,3 +139,7 @@ Prompt 186 ran `hh improve` once, on `improve/2026-10-10-desk`, with `--max-expe
 ### Windows evaluation fix
 
 The `spawn EINVAL` crash was fixed by a human-approved change to the protected evaluation file (`packages/cli/src/improve/evaluate.ts`) and a new protected helper (`packages/cli/src/improve/pnpm-command.ts`), made on 2026-10-11. On Windows the evaluation now runs pnpm as `cmd.exe /d /s /c "pnpm.cmd ..."` with verbatim arguments. Each argument is quoted, and any argument holding a cmd metacharacter (ampersand, pipe, angle brackets, caret, percent, bang, a double quote, or a newline) is refused, so nothing can inject a command. Linux and macOS still spawn `pnpm` directly. `improve/protected.json` needed no edit: the evaluation hash is computed from the files its globs cover, so the new helper is covered and the hash changes once, at this commit. Tests are in `packages/cli/test/improve.test.ts`.
+
+### Third run (prompt 187)
+
+The rerun after the Windows evaluation fix recorded a baseline of 0, crashed on every `cli-explorer` experiment, and was stopped by the user after the protected-path check tripped on a prompt file and a `.playwright-mcp` stray. The three causes above (spec-reporter parse, temporary-home login, main-tree run) were found by running the evaluation and the exact grok command line by hand. The evidence from that run is not committed. Prompt 191 is the rerun that uses the fixes.

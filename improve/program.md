@@ -6,7 +6,7 @@ targets:
   - packages/app/src/server/card.ts
 minutes: 10
 turns: 40
-model: grok-4.7
+model: grok-4.7-build-fast
 effort: xhigh
 ---
 

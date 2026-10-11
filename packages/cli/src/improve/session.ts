@@ -126,6 +126,28 @@ export function killProcessTree(pid: number): void {
   }
 }
 
+/**
+ * One short line from a grok log that says why it failed. Prefers the first line
+ * that names an error, else the last non-empty line. No tabs, 160 characters at most.
+ */
+export function failureHint(log: string): string {
+  const lines = log
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) return "";
+  const named = lines.find((line) => /error|fail|not signed in|denied|invalid|unauthori[sz]ed|limit|quota/i.test(line));
+  const line = named ?? lines[lines.length - 1] ?? "";
+  return line.length > 160 ? `${line.slice(0, 157)}...` : line;
+}
+
+/** `grok exited non-zero` plus the reason from its log, when there is one. */
+export function exitNote(base: string, log: string): string {
+  const hint = failureHint(log);
+  return hint.length === 0 ? base : `${base}: ${hint}`;
+}
+
 function cap(text: string, chunk: string): string {
   if (text.length >= 32_000) return text;
   return `${text}${chunk}`.slice(0, 32_000);
@@ -176,6 +198,6 @@ export async function runGrokSession(
     return { timedOut: true, exitCode, note: "minute budget killed the grok process" };
   }
   if (exitCode === null) return { timedOut: false, exitCode: null, note: "grok did not start" };
-  if (exitCode !== 0) return { timedOut: false, exitCode, note: "grok exited non-zero" };
+  if (exitCode !== 0) return { timedOut: false, exitCode, note: exitNote("grok exited non-zero", sink) };
   return { timedOut: false, exitCode, note: "" };
 }

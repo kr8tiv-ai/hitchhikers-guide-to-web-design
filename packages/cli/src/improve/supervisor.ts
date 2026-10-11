@@ -42,6 +42,8 @@ import { readEvaluationFiles } from "./files.ts";
 import { HOOK_LOG_REL, PUSH_FAILED_REL, agentCommandFailed, agentHookFailed, observeCommand, rowsFromAgentLog } from "./hooks.ts";
 import { RESULTS_REL, STOP_REL } from "./loop.ts";
 import { runSupervisorGit, verifyKeptCommit, type GitText, type PushCheck } from "./pushcheck.ts";
+import { baselineProblem } from "./baseline.ts";
+import { STRAY_DIRS, createSupervisorWorktree, type SupervisorWorktree } from "./worktree.ts";
 
 export interface SuperviseHooks {
   now: () => Date;
@@ -64,6 +66,10 @@ export interface SuperviseLoopInput {
   minutes: number;
   turns: number;
   hooks: SuperviseHooks;
+  /** Stop and report unless the baseline is a real positive score. Fakes in tests leave this off. */
+  requireRealBaseline?: boolean;
+  /** The loop runs in its own worktree: tool strays are removed after each agent. */
+  isolated?: boolean;
 }
 
 interface SuperviseArgs {
@@ -75,6 +81,7 @@ interface SuperviseArgs {
   turns?: number;
   maxFailures: number;
   wallMinutes: number;
+  inPlace: boolean;
 }
 
 function calm(text: string): string {
@@ -111,6 +118,7 @@ export function parseSuperviseArgs(argv: readonly string[]): SuperviseArgs {
   let failures: number | undefined;
   let wall: number | undefined;
   let dryRun = false;
+  let inPlace = false;
   let sawApprove = false;
   let sawBranch = false;
   for (let index = 0; index < argv.length; index += 1) {
@@ -118,6 +126,11 @@ export function parseSuperviseArgs(argv: readonly string[]): SuperviseArgs {
     if (arg === "--dry-run") {
       if (dryRun) throw new Error("Unexpected argument.");
       dryRun = true;
+      continue;
+    }
+    if (arg === "--in-place") {
+      if (inPlace) throw new Error("Unexpected argument.");
+      inPlace = true;
       continue;
     }
     if (arg === "--always-approve") {
@@ -175,6 +188,7 @@ export function parseSuperviseArgs(argv: readonly string[]): SuperviseArgs {
     program,
     maxExperiments: resolveMaxExperiments(max),
     dryRun,
+    inPlace,
     branch,
     maxFailures: resolveConsecutiveFailures(failures),
     wallMinutes: resolveWallMinutes(wall),
@@ -204,7 +218,7 @@ function splitLines(text: string): string[] {
   return lines;
 }
 
-function inspectTree(cwd: string, branch: string): { ok: true } | { ok: false; error: string } {
+function inspectTree(cwd: string, branch: string, requireClean = true): { ok: true } | { ok: false; error: string } {
   const current = gitText(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (current.status !== 0) return { ok: false, error: "not a git repository" };
   const name = current.stdout.trim();
@@ -212,7 +226,7 @@ function inspectTree(cwd: string, branch: string): { ok: true } | { ok: false; e
   const status = gitText(cwd, ["status", "--porcelain"]);
   if (status.status !== 0) return { ok: false, error: "not a git repository" };
   const dirty = dirtyPaths(status.stdout, []).filter((file) => !isSupervisorArtifact(file));
-  if (dirty.length > 0) return { ok: false, error: "the work tree is dirty" };
+  if (requireClean && dirty.length > 0) return { ok: false, error: "the work tree is dirty" };
   if (name !== branch) return { ok: false, error: `branch is ${name}` };
   return { ok: true };
 }
@@ -399,8 +413,13 @@ export async function runSuperviseLoop(
     if (!sameHash()) throw new Error("evaluation hash changed before the baseline.");
     baseline = await input.hooks.evaluate();
     if (!sameHash()) throw new Error("evaluation hash changed before the baseline.");
+    if (input.requireRealBaseline === true) {
+      const problem = baselineProblem(baseline);
+      if (problem !== null) throw new Error(problem);
+    }
   } catch (error: unknown) {
     const note = error instanceof Error ? error.message : "baseline evaluation failed";
+    lines.push(`FAILED: ${note}. No experiment was started.`);
     record({
       started: runStarted.toISOString(),
       commit: shortHead(),
@@ -488,6 +507,9 @@ export async function runSuperviseLoop(
         note: error instanceof Error ? error.message : "agent failed",
         log: "",
       };
+    }
+    if (input.isolated === true) {
+      for (const stray of STRAY_DIRS) rmSync(path.join(input.cwd, stray), { recursive: true, force: true });
     }
     const seconds = Math.max(0, Math.round((input.hooks.now().getTime() - startedAt.getTime()) / 1000));
     const started = startedAt.toISOString();
@@ -636,6 +658,14 @@ export interface SuperviseOptions {
   runAgent?: (request: AgentRunRequest) => Promise<AgentRunResult>;
   evaluate?: () => Promise<EvalResult>;
   verifyPush?: (commit: string) => PushCheck;
+  /** Run in a fresh worktree. Defaults to on for a live grok run and off when a fake agent is injected. */
+  isolate?: boolean;
+  /** Where worktrees go. Defaults to ~/hh-improve-worktrees. */
+  worktreeRoot?: string;
+  /** Stop unless the baseline is a real positive score. Defaults to on when the real evaluation runs. */
+  requireRealBaseline?: boolean;
+  /** Skip `pnpm install` in the worktree. Tests only. */
+  installDeps?: boolean;
 }
 
 /**
@@ -684,9 +714,10 @@ export async function runSupervise(
     return finish(2, [message]);
   }
 
+  const isolate = !args.inPlace && (options.isolate ?? options.runAgent === undefined);
   let git: { ok: true } | { ok: false; error: string };
   try {
-    git = inspectTree(cwd, args.branch);
+    git = inspectTree(cwd, args.branch, !isolate);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "not a git repository";
     git = { ok: false, error: message };
@@ -707,12 +738,13 @@ export async function runSupervise(
       `max-experiments: ${args.maxExperiments}`,
       `max-failures: ${args.maxFailures}`,
       `wall-minutes: ${args.wallMinutes}`,
+      `isolation: ${isolate ? "own worktree on a new improve branch" : "in place"}`,
       `minutes: ${minutes}`,
       `turns: ${turns}`,
       `model: ${program.model}`,
       `effort: ${program.effort}`,
       "always-approve: on",
-      "push: git push origin main",
+      isolate ? "push: git push origin HEAD:main" : "push: git push origin main",
       "agents:",
       ...(briefs.length === 0 ? ["  none"] : briefs.map((brief) => `  ${brief.id}`)),
       "targets:",
@@ -734,25 +766,66 @@ export async function runSupervise(
     }
   }
 
+  let tree: SupervisorWorktree | null = null;
+  if (isolate) {
+    try {
+      tree = createSupervisorWorktree({
+        repo: cwd,
+        now: now(),
+        ...(options.worktreeRoot === undefined ? {} : { root: options.worktreeRoot }),
+        ...(options.installDeps === undefined ? {} : { install: options.installDeps }),
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "The worktree was not created.";
+      return finish(1, [`Refusing to start: ${message}`]);
+    }
+  }
+  const loopCwd = tree === null ? cwd : tree.dir;
+  const loopBranch = tree === null ? args.branch : tree.branch;
+  const loopProgramPath = tree === null ? programPath : path.resolve(loopCwd, args.program);
+  if (tree !== null) {
+    // The worktree is the tree that is scored, so read its copy of the program and protected list.
+    try {
+      program = parseProgram(readFileSync(loopProgramPath, "utf8"));
+      briefs = parseAgentBriefs(readFileSync(loopProgramPath, "utf8"));
+      protectedList = parseProtected(readFileSync(path.join(loopCwd, "improve", "protected.json"), "utf8"));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "program.md could not be read.";
+      return finish(2, [message]);
+    }
+  }
+  const runProgram = program;
+  const runList = protectedList;
+
   const outcome = await runSuperviseLoop({
-    cwd,
-    branch: args.branch,
-    programPath,
-    program,
+    cwd: loopCwd,
+    branch: loopBranch,
+    programPath: loopProgramPath,
+    program: runProgram,
     briefs,
-    protectedList,
+    protectedList: runList,
     maxExperiments: args.maxExperiments,
     maxFailures: args.maxFailures,
     wallMinutes: args.wallMinutes,
     minutes,
     turns,
+    requireRealBaseline: options.requireRealBaseline ?? options.evaluate === undefined,
+    isolated: tree !== null,
     hooks: {
       now,
       runAgent: options.runAgent ?? ((request: AgentRunRequest) => runTestAgent(resolveGrokCommand(env), request)),
-      evaluate: options.evaluate ?? (() => runSupervisorEvaluation(cwd, program.targets)),
-      readEvaluation: () => readEvaluationFiles(cwd, protectedList.evaluation),
-      verifyPush: options.verifyPush ?? ((commit: string) => verifyKeptCommit(cwd, commit)),
+      evaluate: options.evaluate ?? (() => runSupervisorEvaluation(loopCwd, runProgram.targets)),
+      readEvaluation: () => readEvaluationFiles(loopCwd, runList.evaluation),
+      verifyPush: options.verifyPush ?? ((commit: string) => verifyKeptCommit(loopCwd, commit, runSupervisorGit, tree !== null)),
     },
   });
-  return finish(outcome.exitCode, outcome.lines);
+  const extra = tree === null
+    ? []
+    : [
+        `worktree: ${tree.dir}`,
+        `branch: ${tree.branch} (cut from ${tree.base.slice(0, 12)})`,
+        `results: ${path.join(tree.dir, "improve", "results.tsv")}`,
+        `remove with: git worktree remove --force "${tree.dir}"`,
+      ];
+  return finish(outcome.exitCode, [...outcome.lines, ...extra]);
 }

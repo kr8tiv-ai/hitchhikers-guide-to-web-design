@@ -35,20 +35,27 @@ function nonNegative(value: number, label: string): number {
   return value;
 }
 
-/** Sum node:test TAP summaries. pnpm prefixes each package line. */
-export function parseTestCounts(output: string): TestCounts {
-  const text = output.replace(/\u001b\[[0-9;]*m/g, "");
-  let passed = 0;
-  let failed = 0;
-  for (const match of text.matchAll(/(?:^|\s)#\s+pass\s+(\d+)\b/gi)) {
-    passed += Number(match[1] ?? 0);
-  }
-  for (const match of text.matchAll(/(?:^|\s)#\s+fail\s+(\d+)\b/gi)) {
-    failed += Number(match[1] ?? 0);
-  }
-  return { passed, failed };
+/**
+ * One `pass N` or `fail N` summary line. node:test prints `# pass 3` as TAP and
+ * `ℹ pass 3` (U+2139) with the spec reporter, which Node 24 uses on Windows
+ * when stdout is piped. pnpm prefixes each line with `packages/x test: `.
+ */
+function summaryPattern(word: "pass" | "fail"): RegExp {
+  return new RegExp(
+    `^(?:[\\w@./-]+ test:\\s+|\\s*)(?:#|[^\\w\\s]{1,4})\\s+${word}\\s+(\\d+)\\s*$`,
+    "gim",
+  );
 }
 
+/** Sum node:test summaries, TAP or spec reporter. pnpm prefixes each package line. */
+export function parseTestCounts(output: string): TestCounts {
+  const text = output.replace(/\u001b\[[0-9;]*m/g, "").replace(/\r/g, "");
+  let passed = 0;
+  let failed = 0;
+  for (const match of text.matchAll(summaryPattern("pass"))) passed += Number(match[1] ?? 0);
+  for (const match of text.matchAll(summaryPattern("fail"))) failed += Number(match[1] ?? 0);
+  return { passed, failed };
+}
 /**
  * A non-zero test exit with no parsed failure still counts as one red test,
  * so a missed summary cannot outscore the baseline.

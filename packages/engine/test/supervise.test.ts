@@ -11,6 +11,7 @@ import {
   MAX_EXPERIMENTS_CEILING,
   NORMAL_PUSH_ARGS,
   SUPERVISE_RESULTS_COLUMNS,
+  WORKTREE_PUSH_ARGS,
   UX_SCORE_UNIT,
   appendHookLog,
   appendSuperviseResults,
@@ -266,4 +267,19 @@ test("supervisor results and the hook log keep their columns", () => {
   assert.equal(found[0]?.exit, 1);
   assert.equal(logUsesNoVerify("git commit --no-verify"), true);
   assert.equal(logUsesNoVerify("Do not skip git hooks."), false);
+});
+
+test("an isolated worktree may publish HEAD:main and nothing else new", () => {
+  assert.deepEqual([...WORKTREE_PUSH_ARGS], ["push", "origin", "HEAD:main"]);
+  assert.doesNotThrow(() => assertNormalPush([...WORKTREE_PUSH_ARGS]));
+  assert.doesNotThrow(() => assertSupervisorGit([...WORKTREE_PUSH_ARGS]));
+  assert.throws(() => assertGitAllowed([...WORKTREE_PUSH_ARGS]), /not allowed/);
+  for (const args of [
+    ["push", "origin", "HEAD:master"],
+    ["push", "origin", "HEAD:refs/heads/other"],
+    ["push", "origin", "+HEAD:main"],
+    ["push", "origin", "HEAD:main", "--force"],
+  ]) {
+    assert.throws(() => assertSupervisorGit(args), undefined, args.join(" "));
+  }
 });
