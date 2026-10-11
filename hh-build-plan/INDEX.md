@@ -190,5 +190,6 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 184 | So Long and Thanks for All the Fish | Forty-Two | Install missing tools from the desk and refresh when done | Heart of Gold | xhigh |
 | 185 | So Long and Thanks for All the Fish | Forty-Two | Showcase pass: make the Guide spectacular for the Grok team | Heart of Gold | xhigh |
 | 186 | So Long and Thanks for All the Fish | Forty-Two | Final improve loop: errors, fixes, and new-user bug finds | Heart of Gold | xhigh |
+| 187 | So Long and Thanks for All the Fish | Forty-Two | Rerun the improve loop for real after the Windows evaluation fix | Heart of Gold | xhigh |
 
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
