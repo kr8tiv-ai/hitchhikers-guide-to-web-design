@@ -495,6 +495,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let restartDelay = VOICE_RESTART_BASE_MS;
   let cycleHeard = false;
   let capHit = false;
+  /** Bumped on each click-to-talk. Handlers from an older id ignore the new session. */
+  let voiceEpoch = 0;
   let voiceLive: DeskElement | null = null;
   let skipConfirm = false;
   /** True while Suggest must not replace the question card. */
@@ -720,7 +722,7 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function toggleVoice(): void {
-    if (stopping !== null || toggled || voiceSession || recognition !== null || restartTimer !== null) {
+    if (stopping !== null || toggled || voiceSession) {
       void stopVoice();
       return;
     }
@@ -728,7 +730,7 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function startVoice(): void {
-    if (recognition !== null || voiceSession || stopping !== null) return;
+    if (voiceSession || stopping !== null || toggled) return;
     if (pending || view === null || view.question === null) return;
     const engineNow = activeEngine();
     if (engineNow !== "web-speech") {
@@ -744,8 +746,10 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       return;
     }
-    if (lateRec !== null) unhook(lateRec);
-    lateRec = null;
+    voiceEpoch += 1;
+    const epoch = voiceEpoch;
+    // A stop that ended on a final result used to leave the old recognizer here.
+    if (recognition !== null) recognition = null;
     readDraft();
     voiceBase = draft;
     voiceFinal = "";
@@ -768,11 +772,11 @@ export function mountDesk(env: DeskEnv): () => void {
     voiceDisclosed = true;
     announceVoice(VOICE_LIVE_STARTED);
     if (!patchListening()) paint();
-    beginRecognition();
-    if (recognition === null && restartTimer === null) commitVoice();
+    beginRecognition(epoch);
+    if (recognition === null && restartTimer === null) commitVoice(null);
   }
 
-  function beginRecognition(): "started" | "idle" {
+  function beginRecognition(epoch: number = voiceEpoch): "started" | "idle" {
     if (recognition !== null || !toggled || !voiceSession || committed) return "idle";
     const Recognition = env.SpeechRecognition ?? null;
     if (Recognition === null) {
@@ -798,14 +802,16 @@ export function mountDesk(env: DeskEnv): () => void {
       return "idle";
     }
     rec.onstart = () => {
-      if (recognition !== rec) return;
+      if (epoch !== voiceEpoch || recognition !== rec) return;
       heardStart = true;
     };
     rec.onresult = (event) => {
+      if (epoch !== voiceEpoch) return;
       if (recognition !== rec && lateRec !== rec) return;
       applyResult(event);
     };
     rec.onerror = (event) => {
+      if (epoch !== voiceEpoch) return;
       if (recognition !== rec && lateRec !== rec) return;
       // aborted is the empty-stop timeout. no-speech is Chrome ending a pause.
       if (event.error === "aborted" || event.error === "no-speech") return;
@@ -813,6 +819,7 @@ export function mountDesk(env: DeskEnv): () => void {
       toggled = false;
     };
     rec.onend = () => {
+      if (epoch !== voiceEpoch) return;
       endRecognition(rec);
     };
     recognition = rec;
@@ -871,7 +878,8 @@ export function mountDesk(env: DeskEnv): () => void {
     clearRestartTimer();
     const rec = recognition;
     if (rec === null) {
-      commitVoice();
+      if (voiceSession && !committed) commitVoice(null);
+      else resetVoiceSession(null);
       return;
     }
     promoteInterim();
@@ -882,10 +890,14 @@ export function mountDesk(env: DeskEnv): () => void {
     } catch {
       // stop throws once the recognizer has already ended.
     }
-    if (recognition === rec) await ended;
-    else if (stopWait?.rec === rec) await ended;
-    commitVoice();
-    sealLate(rec);
+    if (recognition === rec || stopWait?.rec === rec) await ended;
+    const pending = promotedUtterance;
+    const contributed = joinWords(voiceFinal, voiceInterim);
+    const capped = capHit;
+    const failed = voiceError !== null;
+    if (voiceSession && !committed) commitVoice(rec);
+    else resetVoiceSession(rec);
+    sealLate(rec, pending, contributed, capped, failed);
   }
 
   function waitForStop(rec: SpeechRecognitionLike): Promise<void> {
@@ -934,7 +946,7 @@ export function mountDesk(env: DeskEnv): () => void {
       queueRestart(heardCycle);
       return;
     }
-    commitVoice();
+    commitVoice(rec);
   }
 
   function queueRestart(hadResult: boolean): void {
@@ -947,7 +959,7 @@ export function mountDesk(env: DeskEnv): () => void {
       if (emptyRestarts >= VOICE_RESTART_CAP) {
         capHit = true;
         toggled = false;
-        commitVoice();
+        commitVoice(null);
         return;
       }
     }
@@ -956,10 +968,10 @@ export function mountDesk(env: DeskEnv): () => void {
     restartTimer = setTimeout(() => {
       restartTimer = null;
       if (!toggled || !voiceSession || recognition !== null || committed || voiceError !== null) {
-        if (voiceSession && !committed && voiceError !== null) commitVoice();
+        if (voiceSession && !committed && voiceError !== null) commitVoice(recognition);
         return;
       }
-      if (beginRecognition() !== "started") commitVoice();
+      if (beginRecognition() !== "started") commitVoice(null);
     }, delay);
   }
 
@@ -975,8 +987,12 @@ export function mountDesk(env: DeskEnv): () => void {
     const heard = joinWords(voiceFinal, voiceInterim);
     if (heard === "" && !userTouched) return;
     readDraft();
-    if (!userTouched) draft = joinWords(voiceBase, heard);
-    else draft = mergeTyped(draft, heard);
+    const typed = draft;
+    if (!userTouched) {
+      draft = settleVoice({ base: voiceBase, typed, final: voiceFinal, interim: voiceInterim }).draft;
+    } else {
+      draft = mergeTyped(typed, heard);
+    }
     lastHeard = heard;
     if (!patchDraft()) paint();
   }
@@ -1012,42 +1028,88 @@ export function mountDesk(env: DeskEnv): () => void {
     if (lateRec === rec) lateRec = null;
   }
 
-  function sealLate(rec: SpeechRecognitionLike): void {
-    const pending = promotedUtterance;
-    lateRec = rec;
-    rec.onstart = null;
-    rec.onerror = null;
-    rec.onend = null;
-    rec.onresult = (event) => {
-      if (lateRec !== rec) return;
+  function sealLate(
+    rec: SpeechRecognitionLike,
+    pending: string,
+    contributed: string,
+    capped: boolean,
+    failed: boolean,
+  ): void {
+    let alive = true;
+    let anchor = pending.trim();
+    let heard = contributed.trim();
+    const handler = (event: SpeechResultEventLike): void => {
+      if (!alive) return;
       const incoming = finalsFrom(event);
       if (incoming === "") return;
-      voiceFinal = replacePromoted(voiceFinal, pending, incoming);
-      voiceInterim = "";
-      promotedUtterance = "";
       readDraft();
-      const settled = settleVoice({ base: voiceBase, typed: draft, final: voiceFinal, interim: "" });
-      draft = settled.draft;
-      if (settled.heard && voiceError === null && !capHit) {
+      const next = placeLateFinal(draft, heard, anchor, incoming);
+      const changed = next !== draft;
+      draft = next;
+      heard = incoming.trim();
+      anchor = "";
+      // A new session owns the notice. This result only edits its own utterance.
+      if (changed && !voiceSession && !capped && !failed) {
         error = null;
         notice = VOICE_HEARD;
       }
       if (!patchDraft()) paint();
-      unhook(rec);
+      close();
     };
+    const close = (): void => {
+      if (!alive) return;
+      alive = false;
+      if (rec.onresult === handler) {
+        rec.onstart = null;
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+      }
+      if (lateRec === rec) lateRec = null;
+    };
+    lateRec = rec;
+    rec.onstart = null;
+    rec.onerror = null;
+    rec.onend = null;
+    rec.onresult = handler;
     setTimeout(() => {
-      if (lateRec === rec) unhook(rec);
+      close();
     }, VOICE_STOP_WAIT_MS);
   }
 
-  function commitVoice(): void {
-    if (committed || !voiceSession) return;
-    committed = true;
+  /**
+   * Drops every flag from the dictation that just ended.
+   * The draft is left alone. `owner` is cleared only when it is still current,
+   * so a newer recognizer is not dropped.
+   */
+  function resetVoiceSession(owner: SpeechRecognitionLike | null): void {
+    if (recognition !== null && (owner === null || recognition === owner)) recognition = null;
+    const waiter = stopWait;
+    stopWait = null;
+    clearStopTimer();
+    clearRestartTimer();
+    userTouched = false;
+    lastHeard = "";
+    promotedUtterance = "";
+    heardStart = false;
+    emptyRestarts = 0;
+    restartDelay = VOICE_RESTART_BASE_MS;
+    cycleHeard = false;
+    capHit = false;
+    voiceError = null;
+    voiceFinal = "";
+    voiceInterim = "";
+    voiceBase = "";
     voiceSession = false;
     toggled = false;
     listening = false;
-    clearStopTimer();
-    clearRestartTimer();
+    committed = true;
+    if (waiter !== null) waiter.resolve();
+  }
+
+  function commitVoice(owner: SpeechRecognitionLike | null): void {
+    if (committed || !voiceSession) return;
+    committed = true;
     readDraft();
     const settled = settleVoice({
       base: voiceBase,
@@ -1056,13 +1118,17 @@ export function mountDesk(env: DeskEnv): () => void {
       interim: voiceInterim,
     });
     draft = settled.draft;
-    if (voiceError !== null) {
+    const failure = voiceError;
+    const capped = capHit;
+    const heard = settled.heard;
+    resetVoiceSession(owner);
+    if (failure !== null) {
       notice = null;
-      error = voiceError;
-    } else if (capHit) {
+      error = failure;
+    } else if (capped) {
       error = null;
       notice = VOICE_CAP_NOTICE;
-    } else if (settled.heard) {
+    } else if (heard) {
       error = null;
       notice = VOICE_HEARD;
     } else {
@@ -1077,14 +1143,16 @@ export function mountDesk(env: DeskEnv): () => void {
   /** Page hide and unmount. Keeps heard words and does not abort when any were heard. */
   function stopImmediately(): void {
     if (!voiceSession && !toggled && recognition === null && restartTimer === null) return;
-    toggled = false;
-    clearRestartTimer();
-    promoteInterim();
     const rec = recognition;
-    const heard = joinWords(voiceFinal, voiceInterim) !== "";
+    toggled = false;
+    promoteInterim();
+    const pending = promotedUtterance;
+    const contributed = joinWords(voiceFinal, voiceInterim);
+    const heard = contributed !== "";
+    const capped = capHit;
+    const failed = voiceError !== null;
+    if (rec !== null && recognition === rec) recognition = null;
     if (rec !== null) {
-      recognition = null;
-      lateRec = rec;
       try {
         if (heard) rec.stop();
         else rec.abort();
@@ -1097,8 +1165,9 @@ export function mountDesk(env: DeskEnv): () => void {
       stopWait = null;
       wake();
     }
-    commitVoice();
-    if (rec !== null) sealLate(rec);
+    if (voiceSession && !committed) commitVoice(rec);
+    else resetVoiceSession(rec);
+    if (rec !== null) sealLate(rec, pending, contributed, capped, failed);
   }
 
   function cancelVoice(): void {
@@ -2212,6 +2281,42 @@ function finalsFrom(event: SpeechResultEventLike): string {
     finals = joinWords(finals, result[0]?.transcript ?? "");
   }
   return finals;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Replace one whole-phrase occurrence. Null when the phrase is not in the draft. */
+function replacePhrase(host: string, phrase: string, incoming: string): string | null {
+  const needle = phrase.trim();
+  const next = incoming.trim();
+  if (needle === "" || next === "") return null;
+  const match = new RegExp(`(^|\\s)${escapeRegExp(needle)}(?=\\s|$)`).exec(host);
+  if (match === null) return null;
+  const at = match.index + (match[1]?.length ?? 0);
+  return `${host.slice(0, at)}${next}${host.slice(at + needle.length)}`;
+}
+
+/**
+ * A late final edits the utterance that produced it.
+ * It replaces that promoted interim in the current draft, or appends once.
+ */
+function placeLateFinal(current: string, contributed: string, pending: string, incoming: string): string {
+  const next = incoming.trim();
+  if (next === "") return current;
+  const pendingText = pending.trim();
+  if (pendingText !== "" && sameUtterance(pendingText, next)) {
+    const replaced = replacePhrase(current, pendingText, next);
+    if (replaced !== null) return replaced;
+  }
+  const heard = contributed.trim();
+  if (heard !== "" && heard !== pendingText && sameUtterance(heard, next)) {
+    const replaced = replacePhrase(current, heard, next);
+    if (replaced !== null) return replaced;
+  }
+  if (replacePhrase(current, next, next) !== null) return current;
+  return joinWords(current, next);
 }
 
 function sameUtterance(pending: string, incoming: string): boolean {

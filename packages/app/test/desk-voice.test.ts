@@ -67,9 +67,16 @@ function element(attrs: Record<string, string> = {}): FakeEl {
   };
 }
 
+/** How Chrome delivers events after stop(). `manual` leaves the test in charge. */
+type StopOrder = "manual" | "final-then-end" | "end-then-final" | "final-only" | "end-only";
+
 class FakeRecognition implements SpeechRecognitionLike {
   static last: FakeRecognition | null = null;
   static all: FakeRecognition[] = [];
+  /** Chosen order for the next stop(). Default keeps the older tests in charge of events. */
+  static stopOrder: StopOrder = "manual";
+  /** Final transcript stop() delivers when the order is not manual or end-only. */
+  static pendingFinal = "";
   lang = "";
   continuous = false;
   interimResults = false;
@@ -87,8 +94,41 @@ class FakeRecognition implements SpeechRecognitionLike {
   start(): void {
     this.started = true;
   }
+  /**
+   * Chrome calls stop(), then the final result, then onend — or the reverse.
+   * The final is queued so it runs after finishStop is already waiting, which
+   * is the order that leaves onend unhooked when the final wins the race.
+   */
   stop(): void {
     this.stopped = true;
+    const order = FakeRecognition.stopOrder;
+    const text = FakeRecognition.pendingFinal;
+    if (order === "manual") return;
+    const deliverFinal = (): void => {
+      if (text === "") return;
+      this.say(text, true);
+    };
+    if (order === "final-then-end" || order === "final-only") {
+      queueMicrotask(() => {
+        deliverFinal();
+        if (order === "final-then-end") queueMicrotask(() => {
+          this.onend?.();
+        });
+      });
+      return;
+    }
+    if (order === "end-then-final") {
+      queueMicrotask(() => {
+        this.onend?.();
+        queueMicrotask(() => {
+          deliverFinal();
+        });
+      });
+      return;
+    }
+    queueMicrotask(() => {
+      this.onend?.();
+    });
   }
   abort(): void {
     this.aborted = true;
@@ -100,14 +140,44 @@ class FakeRecognition implements SpeechRecognitionLike {
   }
 }
 
+function decodeEntities(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'");
+}
+
+function renderedDraft(html: string): string {
+  const match = /<textarea\b[^>]*>([\s\S]*?)<\/textarea>/.exec(html);
+  return match?.[1] === undefined ? "" : decodeEntities(match[1]);
+}
+
 function harness(Recognition: DeskEnv["SpeechRecognition"]) {
   const meta = element({ content: "csrf-token" });
   const field = element({ id: "hh-card-draft" });
   field.value = "";
   const region = element({ "data-region": "question" });
+  // Paint replaces the article. The live textarea value has to follow that HTML,
+  // or the next readDraft() still sees the empty field from before the paint.
+  let regionHtml = "";
+  Object.defineProperty(region, "innerHTML", {
+    configurable: true,
+    get() {
+      return regionHtml;
+    },
+    set(value: string) {
+      regionHtml = value;
+      const match = /<textarea\b[^>]*>([\s\S]*?)<\/textarea>/.exec(value);
+      if (match?.[1] !== undefined) field.value = decodeEntities(match[1]);
+    },
+  });
   region.querySelector = (selector) => (selector === "#hh-card-draft" ? field : null);
   const listeners = new Map<string, Listener>();
   let sessionListener: ((event?: { data?: string }) => void) | null = null;
+  let errorListener: (() => void) | null = null;
+  const posts: { url: string; body: string }[] = [];
   const doc = {
     querySelector(selector: string): FakeEl | null {
       if (selector === 'meta[name="hh-csrf"]') return meta;
@@ -126,11 +196,26 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
     EventSource: class {
       addEventListener(type: string, listener: (event?: { data?: string }) => void): void {
         if (type === "session") sessionListener = listener;
+        if (type === "error") errorListener = listener as () => void;
       }
       close(): void {}
     },
-    fetch: async () =>
-      Response.json({
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("/api/answer") || url.includes("/api/skip") || url.includes("/api/suggest")) {
+        posts.push({ url, body: typeof init?.body === "string" ? init.body : "" });
+        return Response.json({
+          session: {
+            question: null,
+            pushback: null,
+            done: true,
+            mapHtml: "",
+            transcriptHtml: "",
+            statusHtml: "",
+          },
+        });
+      }
+      return Response.json({
         question: {
           id: "DP-1.2",
           module: "towel-check",
@@ -146,7 +231,8 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
         mapHtml: "",
         transcriptHtml: "",
         statusHtml: "",
-      }),
+      });
+    },
     SpeechRecognition: Recognition,
     lang: "en-CA",
   };
@@ -156,7 +242,10 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
   const emitSession = (data: string): void => {
     sessionListener?.({ data });
   };
-  return { env, region, field, fire, listeners, emitSession };
+  const fireError = (): void => {
+    errorListener?.();
+  };
+  return { env, region, field, fire, listeners, emitSession, posts, fireError };
 }
 
 const talk = (): FakeEl => element({ "data-voice": "hold" });
@@ -503,6 +592,339 @@ test("service-not-allowed shows the blocked alert and does not restart while lis
     assert.equal(voiceMessage("no-speech", true), VOICE_SILENT);
     assert.equal(voiceMessage("no-speech", false), VOICE_RELEASE_EMPTY);
   } finally {
+    stop();
+  }
+});
+
+interface VoiceHarness {
+  region: { innerHTML: string };
+  field: { value?: string; getAttribute(name: string): string | null };
+  fire(type: string, event?: Partial<FakeEvent>): void;
+  posts: { url: string; body: string }[];
+  fireError(): void;
+}
+
+function liveCount(): number {
+  return FakeRecognition.all.filter((item) => item.started && !item.stopped && !item.aborted).length;
+}
+
+function answerPosts(h: VoiceHarness): { url: string; body: string }[] {
+  return h.posts.filter((item) => item.url.includes("/api/answer"));
+}
+
+function assertDraft(h: VoiceHarness, value: string): void {
+  assert.equal(renderedDraft(h.region.innerHTML), value);
+  assert.equal(h.field.value, value);
+  assert.equal(answerPosts(h).length, 0);
+}
+
+/**
+ * One click-to-talk cycle. The stop order is Chrome's, not the manual onend
+ * the older tests fire in the same turn as the click.
+ */
+async function dictate(
+  h: VoiceHarness,
+  order: Exclude<StopOrder, "manual">,
+  text: string,
+  during?: string,
+): Promise<FakeRecognition> {
+  FakeRecognition.stopOrder = order;
+  FakeRecognition.pendingFinal = order === "end-only" ? "" : text;
+  const before = FakeRecognition.all.length;
+  h.fire("click", { target: talk(), button: 0 });
+  const rec = FakeRecognition.last;
+  assert.ok(rec, "a click to talk creates a recognizer");
+  assert.equal(rec.started, true);
+  assert.equal(FakeRecognition.all.length, before + 1, "the click starts one new recognizer");
+  assert.equal(liveCount(), 1, "one recognizer is live");
+  assert.match(h.region.innerHTML, /Stop listening/);
+  rec.onstart?.();
+  if (order === "end-only") rec.say(text, false);
+  if (during !== undefined) {
+    h.field.value = during;
+    h.fire("input", { target: h.field });
+  }
+  h.fire("click", { target: talk() });
+  await settle();
+  assert.equal(answerPosts(h).length, 0);
+  return rec;
+}
+
+function useVoiceHarness(): { h: ReturnType<typeof harness>; stop(): void } {
+  FakeRecognition.all = [];
+  FakeRecognition.last = null;
+  FakeRecognition.stopOrder = "manual";
+  FakeRecognition.pendingFinal = "";
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  return { h, stop };
+}
+
+test("multi-cycle: three dictations append one, then one two, then one two three", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-then-end", "one");
+    assertDraft(h, "one");
+    await dictate(h, "final-then-end", "two");
+    assertDraft(h, "one two");
+    await dictate(h, "final-then-end", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: three dictations append when the final arrives and then onend", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-then-end", "one");
+    assertDraft(h, "one");
+    await dictate(h, "final-then-end", "two");
+    assertDraft(h, "one two");
+    await dictate(h, "final-then-end", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: three dictations append when onend arrives and then the final", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "end-then-final", "one");
+    assertDraft(h, "one");
+    await dictate(h, "end-then-final", "two");
+    assertDraft(h, "one two");
+    await dictate(h, "end-then-final", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: three dictations append when the final arrives and onend never fires", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-only", "one");
+    assertDraft(h, "one");
+    await dictate(h, "final-only", "two");
+    assertDraft(h, "one two");
+    await dictate(h, "final-only", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: three dictations append when only onend fires", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "end-only", "one");
+    assertDraft(h, "one");
+    await dictate(h, "end-only", "two");
+    assertDraft(h, "one two");
+    await dictate(h, "end-only", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: text typed between dictations stays, then the next words append once", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-then-end", "one");
+    assertDraft(h, "one");
+    h.field.value = "one typed in the middle";
+    h.fire("input", { target: h.field });
+    await dictate(h, "final-then-end", "two");
+    assertDraft(h, "one typed in the middle two");
+    assert.equal(renderedDraft(h.region.innerHTML).split("typed in the middle").length - 1, 1);
+    assert.equal(renderedDraft(h.region.innerHTML).split("two").length - 1, 1);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: text typed during the second dictation stays with the spoken words", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-then-end", "one");
+    assertDraft(h, "one");
+    await dictate(h, "final-then-end", "two", "one friend");
+    assertDraft(h, "one friend two");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: a late final from the first recognizer does not erase or duplicate the second", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    const first = await dictate(h, "end-only", "alpha");
+    assertDraft(h, "alpha");
+    FakeRecognition.stopOrder = "manual";
+    FakeRecognition.pendingFinal = "";
+    h.fire("click", { target: talk(), button: 0 });
+    const second = FakeRecognition.last;
+    assert.ok(second);
+    assert.notEqual(second, first);
+    assert.equal(second.started, true);
+    second.onstart?.();
+    second.say("beta", true);
+    assert.equal(renderedDraft(h.region.innerHTML), "alpha beta");
+    first.say("alpha expanded", true);
+    assert.equal(renderedDraft(h.region.innerHTML), "alpha expanded beta");
+    assert.equal(renderedDraft(h.region.innerHTML).includes("alpha alpha"), false);
+    assert.equal(renderedDraft(h.region.innerHTML).split("beta").length - 1, 1);
+    FakeRecognition.stopOrder = "end-only";
+    h.fire("click", { target: talk() });
+    await settle();
+    assertDraft(h, "alpha expanded beta");
+    assert.equal(second.stopped, true);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: a stale onend and onerror from the first recognizer are ignored", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const first = FakeRecognition.last;
+    assert.ok(first);
+    const staleEnd = first.onend;
+    const staleError = first.onerror;
+    first.onstart?.();
+    FakeRecognition.stopOrder = "final-then-end";
+    FakeRecognition.pendingFinal = "one";
+    h.fire("click", { target: talk() });
+    await settle();
+    assertDraft(h, "one");
+    h.fire("click", { target: talk(), button: 0 });
+    const second = FakeRecognition.last;
+    assert.ok(second);
+    assert.notEqual(second, first);
+    second.onstart?.();
+    second.say("two", false);
+    const count = FakeRecognition.all.length;
+    staleEnd?.();
+    staleError?.({ error: "network" });
+    await new Promise((resolve) => setTimeout(resolve, VOICE_RESTART_BASE_MS + 80));
+    assert.equal(FakeRecognition.all.length, count);
+    assert.equal(second.stopped, false);
+    assert.equal(liveCount(), 1);
+    assert.match(h.region.innerHTML, /Stop listening/);
+    assert.equal(h.region.innerHTML.includes("could not reach"), false);
+    assert.equal(answerPosts(h).length, 0);
+    FakeRecognition.stopOrder = "final-then-end";
+    FakeRecognition.pendingFinal = "two";
+    h.fire("click", { target: talk() });
+    await settle();
+    assertDraft(h, "one two");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: a dictation that hears nothing keeps the earlier text and says so", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-then-end", "one");
+    assertDraft(h, "one");
+    await dictate(h, "end-only", "");
+    assert.equal(renderedDraft(h.region.innerHTML), "one");
+    assert.match(h.region.innerHTML, new RegExp(VOICE_RELEASE_EMPTY.replaceAll(".", "\\.")));
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: the next click after a final-only stop starts one recognizer immediately", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-only", "one");
+    assertDraft(h, "one");
+    const before = FakeRecognition.all.length;
+    h.fire("click", { target: talk(), button: 0 });
+    assert.equal(FakeRecognition.all.length, before + 1);
+    assert.equal(FakeRecognition.last?.started, true);
+    assert.equal(liveCount(), 1);
+    assert.match(h.region.innerHTML, /Stop listening/);
+    h.fire("click", { target: talk() });
+    assert.equal(FakeRecognition.all.length, before + 1, "a second quick click does not start another");
+    assert.equal(liveCount(), 0);
+    await settle();
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: ten dictations then Answer submits every word in order once", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    const words = ["n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10"];
+    let expected = "";
+    for (const word of words) {
+      expected = expected === "" ? word : `${expected} ${word}`;
+      await dictate(h, "final-then-end", word);
+      assertDraft(h, expected);
+    }
+    h.fire("click", { target: element({ "data-action": "answer" }) });
+    await settle();
+    const posts = answerPosts(h);
+    assert.equal(posts.length, 1);
+    const body = JSON.parse(posts[0]?.body ?? "{}") as { text?: string };
+    assert.equal(body.text, expected);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("multi-cycle: a paint between dictations still appends the later words", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await dictate(h, "final-only", "one");
+    assertDraft(h, "one");
+    h.fireError();
+    h.fireError();
+    h.fireError();
+    assertDraft(h, "one");
+    await dictate(h, "final-only", "two");
+    assertDraft(h, "one two");
+    h.fireError();
+    assertDraft(h, "one two");
+    await dictate(h, "final-only", "three");
+    assertDraft(h, "one two three");
+  } finally {
+    FakeRecognition.stopOrder = "manual";
     stop();
   }
 });

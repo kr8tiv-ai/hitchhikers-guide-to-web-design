@@ -16,6 +16,9 @@ import {
  * Click to talk. The fake recognizer can deliver a final after stop(), and it
  * can end itself during a long session the way Chrome does. Nothing here posts
  * /api/answer unless a test clicks Answer or presses Enter.
+ *
+ * Stop orders model Chrome: the final can win the race and leave onend unhooked,
+ * onend can win, the final can be the only event, or onend can be the only event.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -546,6 +549,176 @@ test("safari and a missing speech API keep the disabled chrome or edge line", as
   await expect(page.locator("#hh-card-draft")).toHaveValue("Still typed");
 });
 
+test("multi-cycle: three dictations append one, then one two, then one two three", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-then-end", ["one", "two", "three"]);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: three dictations append when the final arrives and then onend", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-then-end", ["one", "two", "three"]);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: three dictations append when onend arrives and then the final", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "end-then-final", ["one", "two", "three"]);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: three dictations append when the final arrives and onend never fires", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-only", ["one", "two", "three"]);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: three dictations append when only onend fires", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "end-only", ["one", "two", "three"]);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: text typed between dictations stays, then the next words append once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-then-end", ["one"]);
+  await page.locator("#hh-card-draft").fill("one typed in the middle");
+  await dictateCycles(page, "final-then-end", ["two"], "one typed in the middle");
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one typed in the middle two");
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: text typed during the second dictation stays with the spoken words", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-then-end", ["one"]);
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  await page.locator("#hh-card-draft").fill("one friend");
+  await setStopOrder(page, "final-then-end", "two");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one friend two");
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: a late final from the first recognizer does not erase or duplicate the second", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  await emit(page, "alpha", false);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("alpha");
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  await emit(page, "beta", true);
+  await expect(draft).toHaveValue("alpha beta");
+  await emitAt(page, 0, "alpha expanded", true);
+  await expect(draft).toHaveValue("alpha expanded beta");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("alpha expanded beta");
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: a stale onend and onerror from the first recognizer are ignored", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  await setStopOrder(page, "final-then-end", "one");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one");
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  const starts = (await counts(page)).starts;
+  await page.evaluate(() => {
+    const host = window as Window & {
+      __hhHandlers?: { onend: (() => void) | null; onerror: ((event: { error: string }) => void) | null }[];
+    };
+    const saved = host.__hhHandlers?.[0];
+    saved?.onend?.();
+    saved?.onerror?.({ error: "network" });
+  });
+  await page.waitForTimeout(VOICE_RESTART_BASE_MS + 80);
+  expect(await counts(page)).toMatchObject({ starts });
+  await expect(button).toHaveText("Stop listening");
+  await expect(page.locator("#hh-card-error")).not.toContainText("could not reach");
+  await emit(page, "two", true);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one two");
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: a dictation that hears nothing keeps the earlier text and says so", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-then-end", ["one"]);
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one");
+  await expect(page.locator("#hh-card-error")).toHaveText(NOTHING);
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: the next click after a final-only stop starts one recognizer immediately", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-only", ["one"]);
+  const before = await counts(page);
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  const started = await counts(page);
+  expect(started.starts).toBe(before.starts + 1);
+  expect(await maxLive(page)).toBe(1);
+  await button.click();
+  expect((await counts(page)).starts).toBe(before.starts + 1);
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  expect(answers).toEqual([]);
+});
+
+test("multi-cycle: ten dictations then Answer submits every word in order once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const words = ["n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10"];
+  await dictateCycles(page, "final-then-end", words);
+  await page.locator('[data-action="answer"]').click();
+  await expect.poll(async () => (await fetchMark(page)).draft).toBe(words.join(" "));
+  expect((await fetchMark(page)).url).toContain("/api/answer");
+  expect(answers).toHaveLength(1);
+});
+
+test("multi-cycle: a paint between dictations still appends the later words", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await dictateCycles(page, "final-only", ["one"]);
+  await paintFromStream(page);
+  await expect(page.locator("#hh-card-draft")).toHaveValue("one");
+  await dictateCycles(page, "final-only", ["two", "three"], "one");
+  expect(answers).toEqual([]);
+});
+
 async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<void> {
   await page.addInitScript(installVoice, mode);
   if (clock) await page.clock.install();
@@ -568,6 +741,57 @@ async function speak(page: Page, text: string, isFinal: boolean): Promise<void> 
 
 async function stop(page: Page): Promise<void> {
   await page.locator('[data-voice="hold"]').click();
+}
+
+async function setStopOrder(page: Page, order: string, pending: string): Promise<void> {
+  await page.evaluate(
+    ({ order, pending }) => {
+      const host = window as Window & { __hhOrder?: string; __hhPending?: string };
+      host.__hhOrder = order;
+      host.__hhPending = pending;
+    },
+    { order, pending },
+  );
+}
+
+async function emitAt(page: Page, index: number, text: string, isFinal: boolean): Promise<void> {
+  await page.evaluate(
+    ({ index, heard, final }) => {
+      const host = window as Window & {
+        __hhEmitAt?: (at: number, value: string, done: boolean) => void;
+      };
+      host.__hhEmitAt?.(index, heard, final);
+    },
+    { index, heard: text, final: isFinal },
+  );
+}
+
+async function maxLive(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const host = window as Window & { __hhMaxLive?: number };
+    return host.__hhMaxLive ?? 0;
+  });
+}
+
+/** One or more click-to-talk cycles. `prefix` is text already in the box. */
+async function dictateCycles(page: Page, order: string, words: string[], prefix = ""): Promise<void> {
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  let expected = prefix;
+  for (const word of words) {
+    await button.click();
+    await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+    if (order === "end-only") {
+      await emit(page, word, false);
+      await setStopOrder(page, "end-only", "");
+    } else {
+      await setStopOrder(page, order, word);
+    }
+    await button.click();
+    expected = expected === "" ? word : `${expected} ${word}`;
+    await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+    await expect(draft).toHaveValue(expected);
+  }
 }
 
 async function emit(page: Page, text: string, isFinal: boolean): Promise<void> {
@@ -660,6 +884,20 @@ function installVoice(mode: VoiceMode): void {
     __hhFetchUrl?: string;
     __hhDraftAtFetch?: string;
     __hhStopsAtFetch?: number;
+    __hhOrder?: string;
+    __hhPending?: string;
+    __hhList?: {
+      onresult: ((event: unknown) => void) | null;
+      onend: (() => void) | null;
+      onerror: ((event: { error: string }) => void) | null;
+      started: boolean;
+      stopped: boolean;
+    }[];
+    __hhHandlers?: {
+      onend: (() => void) | null;
+      onerror: ((event: { error: string }) => void) | null;
+    }[];
+    __hhMaxLive?: number;
     SpeechRecognition?: unknown;
     webkitSpeechRecognition?: unknown;
   };
@@ -695,6 +933,10 @@ function installVoice(mode: VoiceMode): void {
     return;
   }
 
+  host.__hhList = [];
+  host.__hhHandlers = [];
+  let live = 0;
+
   class FakeSpeech {
     lang = "";
     continuous = false;
@@ -703,12 +945,22 @@ function installVoice(mode: VoiceMode): void {
     onresult: ((event: unknown) => void) | null = null;
     onerror: ((event: { error: string }) => void) | null = null;
     onend: (() => void) | null = null;
+    started = false;
+    stopped = false;
+
+    constructor() {
+      host.__hhList?.push(this);
+    }
 
     start(): void {
+      this.started = true;
+      live += 1;
+      host.__hhMaxLive = Math.max(host.__hhMaxLive ?? 0, live);
       host.__hhStarts = (host.__hhStarts ?? 0) + 1;
       host.__hhCurrent = this;
       host.__hhContinuous = this.continuous;
       host.__hhInterim = this.interimResults;
+      host.__hhHandlers?.push({ onend: this.onend, onerror: this.onerror });
       this.onstart?.();
       if (mode === "denied") {
         this.onerror?.({ error: "not-allowed" });
@@ -724,11 +976,51 @@ function installVoice(mode: VoiceMode): void {
     }
 
     stop(): void {
+      this.stopped = true;
+      live = Math.max(0, live - 1);
       host.__hhStops = (host.__hhStops ?? 0) + 1;
-      if (mode === "auto" || mode === "denied") this.onend?.();
+      if (mode === "auto" || mode === "denied") {
+        this.onend?.();
+        return;
+      }
+      const order = host.__hhOrder ?? "manual";
+      const text = host.__hhPending ?? "";
+      const deliverFinal = (): void => {
+        if (text === "") return;
+        this.onresult?.({
+          resultIndex: 0,
+          results: { length: 1, 0: { isFinal: true, length: 1, 0: { transcript: text } } },
+        });
+      };
+      // The final is queued so it lands after the desk is already waiting on stop.
+      if (order === "final-then-end" || order === "final-only") {
+        queueMicrotask(() => {
+          deliverFinal();
+          if (order === "final-then-end") queueMicrotask(() => {
+            this.onend?.();
+          });
+        });
+        return;
+      }
+      if (order === "end-then-final") {
+        queueMicrotask(() => {
+          this.onend?.();
+          queueMicrotask(() => {
+            deliverFinal();
+          });
+        });
+        return;
+      }
+      if (order === "end-only") {
+        queueMicrotask(() => {
+          this.onend?.();
+        });
+      }
     }
 
     abort(): void {
+      this.stopped = true;
+      live = Math.max(0, live - 1);
       host.__hhAborts = (host.__hhAborts ?? 0) + 1;
       if (mode === "auto" || mode === "denied") this.onend?.();
     }
@@ -743,6 +1035,13 @@ function installVoice(mode: VoiceMode): void {
   host.__hhEnd = (): void => {
     host.__hhCurrent?.onend?.();
   };
+  const emitOn = (index: number, text: string, isFinal: boolean): void => {
+    host.__hhList?.[index]?.onresult?.({
+      resultIndex: 0,
+      results: { length: 1, 0: { isFinal, length: 1, 0: { transcript: text } } },
+    });
+  };
+  (host as Window & { __hhEmitAt?: typeof emitOn }).__hhEmitAt = emitOn;
   define("SpeechRecognition", FakeSpeech);
   define("webkitSpeechRecognition", FakeSpeech);
 }

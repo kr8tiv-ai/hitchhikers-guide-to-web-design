@@ -4,6 +4,8 @@ Click to talk and the interview use a speech engine. The default spends nothing.
 
 One click starts listening. A second click stops. Stopping keeps every word in the draft. The desk waits for the final result, or for the recognizer to end, before it finishes that stop. Nothing is submitted until you press Answer.
 
+Each later dictation in the same question appends to the text already in the box. Words you typed or edited between dictations, or during one, stay in place. A stop ends that dictation only. It does not clear the box, and it does not submit.
+
 ## Default
 
 When the browser exposes `SpeechRecognition` or `webkitSpeechRecognition`, the desk uses that. Chrome and Edge do. The label reads `Voice: browser (free)`.
