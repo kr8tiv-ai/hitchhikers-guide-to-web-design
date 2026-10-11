@@ -31,7 +31,7 @@ export function replaceEmptyCard(html: string, questionId: string | null): strin
 export const TALK_NEEDS_CHROMIUM = "Talk needs Chrome or Edge";
 
 const HOLD_BUTTON =
-  /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="(?:true|false)")?(?: disabled)?>[\s\S]*?<\/button>/;
+  /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="(?:true|false)")?(?: data-tip="[^"]*")?(?: disabled)?>[\s\S]*?<\/button>/;
 
 /** Latest Guide line for the polite region. Empty when the desk has not asked. */
 export function guideTurnText(ask: string | null, done: boolean): string {
@@ -326,6 +326,9 @@ interface DeskElement {
   focus?(): void;
   /** Set on real elements. The desk harness omits it. */
   tagName?: string;
+  /** Present on `<dialog>`. The desk harness omits both. */
+  showModal?(): void;
+  close?(): void;
 }
 
 interface DeskEvent {
@@ -502,6 +505,16 @@ export function mountDesk(env: DeskEnv): () => void {
   let logoSaved: { id: string; text: string } | null = null;
 
   const onClick = (event: DeskEvent): void => {
+    if (readMarked(event.target, "data-restart-open") !== null) {
+      event.preventDefault();
+      env.document.querySelector("[data-restart-dialog]")?.showModal?.();
+      return;
+    }
+    if (readMarked(event.target, "data-restart-cancel") !== null) {
+      event.preventDefault();
+      env.document.querySelector("[data-restart-dialog]")?.close?.();
+      return;
+    }
     if (handleInstallClick(env, event)) return;
     if (isVoiceTarget(event.target)) {
       event.preventDefault();
@@ -1899,7 +1912,11 @@ export function mountDesk(env: DeskEnv): () => void {
       status.innerHTML =
         connection === null
           ? base
-          : `<span>${escapeHtml(connection)}</span><a class="hh-btn hh-btn--ghost" href="/">Reload</a>${base}`;
+          : `<span>${escapeHtml(connection)}</span><a class="hh-btn hh-btn--ghost" href="/" data-tip="Loads the desk again.">Reload</a>${base}`;
+    }
+    const progress = env.document.querySelector("[data-progress]");
+    if (progress !== null && view?.counts != null) {
+      progress.textContent = `Question ${view.counts.index} of ${view.counts.total}`;
     }
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
     applyEdits();

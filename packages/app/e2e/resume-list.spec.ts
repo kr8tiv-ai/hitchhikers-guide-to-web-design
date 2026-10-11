@@ -103,6 +103,7 @@ test("the first screen lists a save, opens the file, and drops a missing row", a
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(url);
     await expect(page.locator("[data-question-id='DP-0.3']")).toBeVisible();
+    await page.getByRole("button", { name: "Resume project" }).click();
     await expect(page.getByRole("heading", { name: "Resume a project" })).toBeVisible();
     await expect(page.getByText("Towel Desk")).toBeVisible();
     await expect(page.locator("[data-missing='true']")).toContainText("Missing");
@@ -122,12 +123,13 @@ test("the first screen lists a save, opens the file, and drops a missing row", a
 
     await page.locator("[data-missing='true']").getByRole("button", { name: "Remove" }).click();
     await expect(page.getByText("Gone Desk")).toHaveCount(0);
+    await page.getByRole("button", { name: "Resume project" }).click();
     await expect(page.getByText("Towel Desk")).toBeVisible();
     expect(await readFile(kept, "utf8")).toBe("{}\n");
     await expect(page.locator("[data-question-id='DP-0.3']")).toBeVisible();
 
     await page.locator("#hh-open-file").fill(filePath);
-    await page.getByRole("button", { name: "Open project file" }).click();
+    await page.getByRole("button", { name: "Open project folder" }).click();
     await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
     await expect(page.locator("[data-save-status]")).toContainText("Saved ·");
     const restored = await readFile(path.join(projectDir, ".hitchhiker", "STATE.md"), "utf8");

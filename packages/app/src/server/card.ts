@@ -99,7 +99,7 @@ export function renderPreflight(preflight: DeskPreflight): string {
     const state = ok ? "Present" : "Missing";
     const action = ok
       ? ""
-      : `<button class="hh-btn" type="button" data-install="${escapeHtml(name)}">Install ${escapeHtml(name)}</button>`;
+      : `<button class="hh-btn hh-btn--secondary" type="button" data-install="${escapeHtml(name)}" data-tip="Writes an install plan for ${escapeHtml(name)}, then runs it after you confirm.">Install ${escapeHtml(name)}</button>`;
     return `<tr data-probe="${escapeHtml(name)}" data-probe-state="${ok ? "ok" : "missing"}">
         <td data-label="Check">${escapeHtml(name)}</td>
         <td data-label="Result">${escapeHtml(detail)}</td>
@@ -204,7 +204,7 @@ export function renderEmptyBrand(questionId: string | null, intake: LogoIntake |
         <p class="hh-specimen__text">Palette, letters, and voice land on this plate after the brief is approved.</p>${logoBlock}
       </section>
       <div class="hh-empty hh-rise hh-rise--3">
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${EMPTY_BRAND_ACTION}</a></p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}" data-tip="Opens the question that has to be answered before the kit can print.">${EMPTY_BRAND_ACTION}</a></p>
         <p><a class="hh-btn hh-btn--ghost" href="${href}">${escapeHtml(label)}</a></p>
       </div>`;
 }

@@ -73,7 +73,11 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
     const token = "csrf-token";
     const before = await projectChrome(dir, token, true);
     assert.match(before, /Not saved · No save yet/);
+    assert.match(before, />Save project</);
+    assert.match(before, />Resume project</);
+    assert.match(before, />Open project folder</);
     assert.match(before, /Resume a project/);
+    assert.equal(before.includes("hh-btn--primary"), false);
     const saved = await runProjectPost({
       pathname: "/api/project/save",
       projectDir: dir,
@@ -107,20 +111,29 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
     assert.match(chrome, /Gone Desk/);
     assert.match(chrome, /data-missing="true"/);
     assert.match(chrome, />Remove</);
-    assert.match(chrome, /Open project file/);
+    assert.match(chrome, />Open project folder</);
+    assert.match(chrome, />Save project</);
+    assert.match(chrome, />Resume project</);
     assert.match(chrome, /Copy path/);
+    assert.equal(chrome.includes("hh-btn--primary"), false);
+    assert.equal((chrome.match(/role="region" aria-label="Project save"/g) ?? []).length, 1);
     assert.equal(chrome.includes("!"), false);
     const html = applyProjectChrome(
-      "<body><div class=\"hh-columns\"></div><footer>Ready.</footer></body>",
+      '<body><main><section data-region="question"></section><div data-project-slot></div><section id="transcript"></section></main><footer>Ready.</footer></body>',
       chrome,
     );
-    const columns = html.indexOf("hh-columns");
-    const resume = html.indexOf("Resume a project");
-    const footer = html.indexOf("</footer>");
+    const question = html.indexOf('data-region="question"');
     const line = html.indexOf("hh-save-line");
-    assert.ok(resume >= 0 && resume < columns);
-    assert.ok(line > footer);
-    assert.match(html, /class="hh-save-line" role="region" aria-label="Project save"/);
+    const transcript = html.indexOf('id="transcript"');
+    const footer = html.indexOf("</footer>");
+    assert.ok(question >= 0 && question < line && line < transcript && transcript < footer);
+    assert.equal(html.includes("data-project-slot"), false);
+    assert.equal((html.match(/role="region" aria-label="Project save"/g) ?? []).length, 1);
+    const legacy = applyProjectChrome(
+      '<body><div class="hh-columns"></div><footer>Ready.</footer></body>',
+      chrome,
+    );
+    assert.ok(legacy.lastIndexOf("hh-save-line") > legacy.lastIndexOf("</footer>"));
     const removed = await runProjectPost({
       pathname: "/api/project/remove",
       projectDir: dir,

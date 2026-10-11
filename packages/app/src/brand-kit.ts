@@ -351,7 +351,7 @@ function sectionBody(id: string, title: string, body: string): string {
 
 function actions(id: string): string {
   const safe = escapeHtml(id);
-  return `<div class="hh-approval"><button class="hh-btn hh-btn--primary" type="button" data-approve="${safe}" aria-label="Approve ${safe}">Approve</button><button class="hh-btn hh-btn--secondary" type="button" data-redo="${safe}" aria-label="Redo ${safe}">Redo</button></div>`;
+  return `<div class="hh-approval"><button class="hh-btn hh-btn--primary" type="button" data-approve="${safe}" aria-label="Approve ${safe}" data-tip="Records a yes for this part of the kit.">Approve</button><button class="hh-btn hh-btn--secondary" type="button" data-redo="${safe}" aria-label="Redo ${safe}" data-tip="Asks for this part of the kit again.">Redo</button></div>`;
 }
 
 function figure(image: string): string {

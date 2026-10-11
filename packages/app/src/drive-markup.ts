@@ -110,7 +110,7 @@ export function queueBodyHtml(items: readonly DriveItem[]): string {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>
             <p>${DRIVE_EMPTY_COPY}</p>
-            <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/approve">Approve the prompts</a></p>
+            <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/approve" data-tip="Opens Approvals, where a plan waits for a yes.">Approve the prompts</a></p>
           </div>`;
   }
   const rows = items.map((item) => row(item)).join("\n");
@@ -279,7 +279,7 @@ export function renderDriveDocument(
         <span>Drive</span>
         <span>On this machine</span>
         <span class="hh-status__spacer"></span>
-        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle>Night desk</button>
+        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
       </footer>
     </div>`;
   return documentShell("Drive", body, options);
@@ -303,7 +303,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <h2 class="hh-error__title">The queue file could not be read.</h2>
         <p>${escapeHtml(message)}</p>
         <p class="hh-error__next">It was left on disk. Fix the JSON, then load this page again.</p>
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard">Try again</a></p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard" data-tip="Loads Drive again after the queue file is fixed.">Try again</a></p>
       </article>
       </main>
       <footer class="hh-status">
@@ -311,7 +311,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <span>Drive</span>
         <span>On this machine</span>
         <span class="hh-status__spacer"></span>
-        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle>Night desk</button>
+        <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
       </footer>
     </div>`;
   return documentShell("Drive", body, options, false);
@@ -324,7 +324,8 @@ function documentShell(
   allowModule = true,
 ): string {
   const moduleTag = allowModule ? moduleScript(options?.scriptUrl) : THEME_MODULE;
-  const tail = moduleTag === null ? `${INLINE_THEME}\n` : `    ${moduleTag}\n`;
+  const themeTail = moduleTag === null ? `${INLINE_THEME}\n` : `    ${moduleTag}\n`;
+  const tail = `    <script type="module" src="/client/tooltip.js"></script>\n${themeTail}`;
   return `<!DOCTYPE html>
 <html lang="en">
   <head>

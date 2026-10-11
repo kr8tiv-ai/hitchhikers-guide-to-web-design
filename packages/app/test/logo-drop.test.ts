@@ -296,7 +296,9 @@ test("a logo file stays in the project and the brand plate reads it", async () =
     assert.match(empty, new RegExp(safeName));
     assert.match(empty, /href="\/src\/brand-kit\.css"/);
     assert.match(empty, /Approve the brief to print the kit/);
-    assert.equal(empty.includes("<svg"), false);
+    const logoFigure = /<figure[\s\S]*?<\/figure>/.exec(empty)?.[0] ?? "";
+    assert.equal(logoFigure.includes("<svg"), false);
+    assert.match(empty, /<svg class="hh-nav__icon"[^>]*aria-hidden="true"/);
     const bytes = await fetch(new URL("/brand/logo", handle.url));
     assert.equal(bytes.status, 200);
     assert.match(bytes.headers.get("content-type") ?? "", /^image\/png/);
@@ -320,12 +322,13 @@ test("a logo file stays in the project and the brand plate reads it", async () =
     const named = await (await fetch(new URL("/brand", handle.url))).text();
     assert.match(named, new RegExp(`Logo on file: ${svgName}`));
     assert.equal(named.includes("src=\"/brand/logo\""), false);
-    assert.equal(named.includes("<svg"), false);
+    const namedIntake = /data-logo-intake[\s\S]{0,500}/.exec(named)?.[0] ?? "";
+    assert.equal(namedIntake.includes("<svg"), false);
     const hidden = await fetch(new URL("/brand/logo", handle.url));
     const hiddenBody = await hidden.text();
     assert.equal(hidden.status, 404);
     assert.equal((hidden.headers.get("content-type") ?? "").includes("image/svg+xml"), false);
-    assert.equal(hiddenBody.includes("<svg"), false);
+    assert.equal(hiddenBody.replace(/<svg class="hh-nav__icon"[\s\S]*?<\/svg>/g, "").includes("<svg"), false);
     assert.equal(hiddenBody.includes(SVG.toString("utf8")), false);
 
     const assets = await postFile(handle, token, "assets.png", "image/png", PNG, "DP-0.4");

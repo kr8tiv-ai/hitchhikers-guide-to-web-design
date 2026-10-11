@@ -82,7 +82,6 @@ import {
   openQuestionHref,
   renderEmptyInterview,
   renderPreflight,
-  renderStartInterview,
   type DeskPreflight,
   type InterviewMode,
 } from "./card.ts";
@@ -96,6 +95,7 @@ import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
+import { restartInterview } from "./restart.ts";
 import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
@@ -216,7 +216,15 @@ const SAFE = {
   "cross-origin-resource-policy": "same-origin",
 } as const;
 
-type RouteName = "/" | "/brand" | "/approve" | "/hh-dashboard" | "/gallery" | "/motion";
+type RouteName =
+  | "/"
+  | "/brand"
+  | "/approve"
+  | "/hh-dashboard"
+  | "/gallery"
+  | "/motion"
+  | "/settings"
+  | "/tools";
 
 const moduleCache = new Map<string, string>();
 
@@ -253,6 +261,9 @@ export async function createDeskApp(opts: {
     interview = await openInterview(projectDir, depth);
   };
   let overlay: LiveOverlay = emptyOverlay();
+  const resetLive = (): void => {
+    overlay = emptyOverlay();
+  };
   const rawTurn =
     opts.turnHandler ??
     createLiveTurn(projectDir, depth, () => interview, (next) => {
@@ -310,10 +321,36 @@ export async function createDeskApp(opts: {
         return;
       }
       if (method === "POST") {
-        await handlePost(req, res, pathname, token, projectDir, turn, view, hub, enqueue, notice, reloadInterview, handleTools);
+        await handlePost(
+          req,
+          res,
+          pathname,
+          token,
+          projectDir,
+          turn,
+          view,
+          hub,
+          enqueue,
+          notice,
+          reloadInterview,
+          handleTools,
+          resetLive,
+        );
         return;
       }
-      await handleGet(req, res, pathname, token, view, hub, projectDir, enqueue, req.url ?? "/", notice);
+      await handleGet(
+        req,
+        res,
+        pathname,
+        token,
+        view,
+        hub,
+        projectDir,
+        enqueue,
+        req.url ?? "/",
+        notice,
+        () => preflight,
+      );
     },
   };
 }
@@ -579,6 +616,7 @@ async function handlePost(
   notice: string | null,
   reloadInterview: () => Promise<void>,
   handleTools: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void>,
+  resetLive: () => void,
 ): Promise<void> {
   if (pathname === "/settings") {
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
@@ -594,6 +632,10 @@ async function handlePost(
     pathname === "/api/project/remove"
   ) {
     await handleProjectRoute(req, res, pathname, token, projectDir, reloadInterview);
+    return;
+  }
+  if (pathname === "/api/interview/restart") {
+    await handleRestart(req, res, token, projectDir, enqueue, reloadInterview, resetLive);
     return;
   }
   const header = req.headers["x-hh-csrf"];
@@ -675,6 +717,74 @@ async function handleProjectRoute(
     return;
   }
   sendJson(req, res, result.status, result.body);
+}
+
+async function handleRestart(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  reloadInterview: () => Promise<void>,
+  resetLive: () => void,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendHtml(req, res, 413, restartErrorPage("That request is too large."));
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendHtml(req, res, 413, restartErrorPage("That request is too large."));
+    dropRequest(req);
+    return;
+  }
+  const raw = capped.body.toString("utf8");
+  const contentType = headerOne(req.headers["content-type"]);
+  if (!settingsTokenOk(token, req.headers["x-hh-csrf"], raw, contentType)) {
+    sendHtml(req, res, 403, restartErrorPage("The desk refused this request. Reload the page."));
+    return;
+  }
+  try {
+    await enqueue(() => restartInterview(projectDir));
+  } catch (error: unknown) {
+    logDeskError(error);
+    sendHtml(req, res, 500, restartErrorPage("The project could not be saved, so the interview was not restarted."));
+    return;
+  }
+  resetLive();
+  await reloadInterview();
+  res.writeHead(303, { location: "/" });
+  res.end();
+}
+
+function restartErrorPage(happened: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Restart</title>
+    <link rel="stylesheet" href="/src/design/tokens.css" />
+    <link rel="stylesheet" href="/src/design/type.css" />
+    <link rel="stylesheet" href="/src/design/components.css" />
+    <link rel="stylesheet" href="/src/shell.css" />
+  </head>
+  <body>
+    <div class="hh-shell">
+      <main id="main" class="hh-read">
+        ${renderFriendly({
+          title: "The interview was not restarted",
+          happened,
+          next: "Reload the desk. The interview is still on the question you had.",
+          retryHref: "/",
+          retryLabel: "Back to the desk",
+          copyText: "Reload the desk",
+        })}
+      </main>
+    </div>
+  </body>
+</html>`;
 }
 
 async function handleBrandPost(
@@ -903,6 +1013,7 @@ async function handleGet(
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
   rawUrl: string,
   notice: string | null = null,
+  getPreflight: () => DeskPreflight | null = () => null,
 ): Promise<void> {
   if (pathname === "/") {
     const session = view();
@@ -987,7 +1098,7 @@ async function handleGet(
       await deliverHtml(req, res, 200, html, projectDir, token, false);
       return;
     }
-    const nav = `${deskMenu(false, token)}\n        ${routeNav("/brand")}`;
+    const nav = `${deskMenu(token)}\n        ${routeNav("/brand")}`;
     if (loaded.kind === "bad") {
       await deliverHtml(req, res, 500, renderBrandKitError(token, nav), projectDir, token, false);
       return;
@@ -1001,6 +1112,18 @@ async function handleGet(
   }
   if (pathname === "/approve") {
     await deliverHtml(req, res, 200, renderApprove(token, notice, view().question?.id ?? null), projectDir, token, false);
+    return;
+  }
+  if (pathname === "/tools") {
+    await deliverHtml(
+      req,
+      res,
+      200,
+      renderTools(token, getPreflight(), notice, view().question?.id ?? null),
+      projectDir,
+      token,
+      false,
+    );
     return;
   }
   if (pathname === "/settings") {
@@ -1032,6 +1155,16 @@ async function handleGet(
   }
   if (pathname === "/api/events") {
     streamEvents(req, res, view, hub);
+    return;
+  }
+  if (pathname === "/client/tooltip.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "client", "tooltip.ts"))),
+    );
     return;
   }
   if (pathname === "/client/desk.js") {
@@ -1300,8 +1433,9 @@ function buildSession(
 function statusSpans(text: string, notice: string | null | undefined, calm = false): string {
   const calmAttr = calm ? ' data-calm="true"' : "";
   const action = `<span${calmAttr}>${escapeHtml(text)}</span>`;
-  if (notice === null || notice === undefined || notice.length === 0) return action;
-  return `<span>${escapeHtml(notice)}</span>${action}`;
+  const chip = `<span tabindex="0" data-tip="Where the desk is right now.">${action}</span>`;
+  if (notice === null || notice === undefined || notice.length === 0) return chip;
+  return `<span tabindex="0" data-tip="A note from the last action.">${escapeHtml(notice)}</span>${chip}`;
 }
 
 const VISIBLE_TURNS = 3;
@@ -1438,10 +1572,6 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags,
   const chrome = voiceChromeFor(engine);
   let html = renderShell();
   const dek = `<p class="hh-dek">Don't Panic. One question at a time. The work saves on this machine.</p>`;
-  const startInterview =
-    session.question !== null && session.mastCompact !== true && session.counts?.index === 1
-      ? `\n        <p class="hh-empty__next">${renderStartInterview(session.question.id)}</p>`
-      : "";
   const fullHidden = session.mastCompact ? " hidden" : "";
   const lineHidden = session.mastCompact ? "" : " hidden";
   const mastAttr = session.mastCompact ? ' data-mast="line"' : "";
@@ -1466,17 +1596,17 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags,
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
         ${dek}`,
-    `<header class="hh-mast hh-rise"${mastAttr}>
+    `<header class="hh-mast hh-mast--desk hh-rise"${mastAttr}>
         <div data-mast-full${fullHidden}>
         <div class="hh-mast__row">
           <h1 class="hh-kicker">The Hitchhiker's Guide to Web Design</h1>
           <p class="hh-kicker">Desk</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
-        ${dek}${startInterview}
+        ${dek}
         </div>
         <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
-        ${deskMenu(false, token)}
+        ${deskMenu(token)}
         ${routeNav("/")}`,
     "mast",
   );
@@ -1500,6 +1630,12 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags,
     `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
     "question",
   );
+  html = mustReplace(
+    html,
+    '<div class="hh-interview__head" data-interview-head></div>',
+    interviewHead(token, session),
+    "interview head",
+  );
   html = replaceBlock(
     html,
     /<nav class="hh-rise hh-rise--4" aria-label="Guide map">[\s\S]*?<\/nav>/,
@@ -1516,13 +1652,34 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags,
     session.question?.id.startsWith("DP-6.") === true
       ? `    <script type="module" src="/client/motion.js"></script>\n`
       : "";
-  if (showTour && html.includes('<main class="hh-read">')) {
-    html = html.replace('<main class="hh-read">', `<main class="hh-read">\n          ${renderTour(token)}`);
+  if (showTour) {
+    html = html.replace(
+      '<section class="hh-log hh-rise hh-rise--2" id="transcript"',
+      `${renderTour(token)}\n          <section class="hh-log hh-rise hh-rise--2" id="transcript"`,
+    );
   }
   return html.replace(
     "</body>",
-    `    <script type="module" src="/client/desk.js"></script>\n${motion}  </body>`,
+    `    <script type="module" src="/client/tooltip.js"></script>\n    <script type="module" src="/client/desk.js"></script>\n${motion}  </body>`,
   );
+}
+
+function interviewHead(token: string, session: DeskSession): string {
+  const index = session.counts?.index ?? 1;
+  const total = session.counts?.total ?? 1;
+  return `<div class="hh-interview__head" data-interview-head>
+            <p class="hh-progress" data-progress>Question ${index} of ${total}</p>
+            <button class="hh-btn hh-btn--secondary" type="button" data-restart-open="restart" data-tip="Saves the project file, then returns the interview to the first question.">Restart the interview</button>
+          </div>
+          <dialog class="hh-dialog" data-restart-dialog aria-labelledby="hh-restart-title">
+            <h2 class="hh-title" id="hh-restart-title">Restart the interview</h2>
+            <p>Progress is saved. The project file keeps what you already wrote. The interview returns to the first question.</p>
+            <form method="post" action="/api/interview/restart" class="hh-dialog__actions">
+              <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+              <button class="hh-btn hh-btn--secondary" type="button" data-restart-cancel="cancel" autofocus data-tip="Closes this dialog. The interview stays on this question.">Cancel</button>
+              <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Saves the project, then starts again at the first question.">Restart the interview</button>
+            </form>
+          </dialog>`;
 }
 
 function renderBrand(
@@ -1558,8 +1715,33 @@ function renderApprove(token: string, notice: string | null = null, questionId: 
     main: `<div class="hh-empty hh-rise hh-rise--2">
         <h1 class="hh-empty__title">Nothing is waiting for a yes</h1>
         <p>A plate shows up here when a brief or a prompt is ready for a decision.</p>
-        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}">${APPROVE_EMPTY_ACTION}</a></p>
+        <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}" data-tip="Opens the question that is still waiting.">${APPROVE_EMPTY_ACTION}</a></p>
       </div>`,
+  });
+}
+
+function renderTools(
+  token: string,
+  preflight: DeskPreflight | null,
+  notice: string | null,
+  questionId: string | null,
+): string {
+  const href = escapeHtml(openQuestionHref(questionId));
+  const back = `<p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}" data-tip="Returns to the interview question.">Back to the interview</a></p>`;
+  const main =
+    preflight === null
+      ? `<div class="hh-empty hh-rise hh-rise--2"><h1 class="hh-empty__title">Install tools</h1><p>No tool report is on this desk yet.</p>${back}</div>`
+      : `<div class="hh-rise hh-rise--2"><h1 class="hh-title">Install tools</h1><p>These checks match the doctor. An install stays on this machine and waits for a yes.</p>${renderPreflight(preflight)}${back}</div>`;
+  return renderPanel({
+    notice,
+    token,
+    title: "Install tools",
+    description: "Which tools are on this machine, and how to install a missing one.",
+    current: "/tools",
+    kicker: "Install tools",
+    status: preflight === null ? "No tool report is on this desk yet." : "Tool report for this machine.",
+    script: "/client/desk.js",
+    main,
   });
 }
 
@@ -1611,13 +1793,13 @@ function renderPanel(opts: {
   extraCss?: readonly string[];
   script?: string;
   board?: boolean;
-  onSettings?: boolean;
 }): string {
   const extra = (opts.extraCss ?? [])
     .map((href) => `    <link rel="stylesheet" href="${escapeHtml(href)}" />`)
     .join("\n");
-  const script =
+  const pageScript =
     opts.script === undefined ? "" : `    <script type="module" src="${escapeHtml(opts.script)}"></script>\n`;
+  const script = `    <script type="module" src="/client/tooltip.js"></script>\n${pageScript}`;
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1636,13 +1818,13 @@ ${extra}
   <body>
     <a class="hh-skip" href="#main">Skip to the panel</a>
     <div class="hh-shell">
-      <header class="hh-mast hh-rise">
+      <header class="hh-mast hh-mast--desk hh-rise">
         <div class="hh-mast__row">
           <p class="hh-kicker">${escapeHtml(opts.kicker)}</p>
           <p class="hh-kicker">Local desk</p>
         </div>
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
-        ${deskMenu(opts.onSettings === true, opts.token)}
+        ${deskMenu(opts.token)}
         ${routeNav(opts.current)}
       </header>
       <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}" data-hh-ready>
@@ -1657,12 +1839,9 @@ ${script}  </body>
 `;
 }
 
-function deskMenu(onSettings: boolean, token: string): string {
-  const open = onSettings ? " open" : "";
-  const current = onSettings ? ' aria-current="page"' : "";
-  return `<details class="hh-desk-menu hh-qcard__look"${open}>
-          <summary class="hh-kicker">Desk menu</summary>
-          <a class="hh-btn hh-btn--ghost" href="/settings"${current}>Settings</a>
+function deskMenu(token: string): string {
+  return `<details class="hh-desk-menu hh-qcard__look">
+          <summary class="hh-kicker" data-tip="Replay the first five minutes. Settings live in the route list.">Desk menu</summary>
           ${renderReplayControl(token)}
         </details>`;
 }
@@ -1671,7 +1850,10 @@ function withDeskMenu(html: string, token: string): string {
   if (html.includes('class="hh-desk-menu')) return html;
   const mark = `<div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>`;
   if (!html.includes(mark)) return html;
-  return html.replace(mark, `${mark}\n        ${deskMenu(false, token)}`);
+  return html.replace(
+    mark,
+    `${mark}\n        ${deskMenu(token)}\n        ${routeNav("/hh-dashboard")}`,
+  );
 }
 
 function renderSettingsDocument(
@@ -1685,8 +1867,7 @@ function renderSettingsDocument(
     token,
     title: "Settings",
     description: "Voice, model, and effort. The speech-to-text rate is shown before xAI can be turned on.",
-    current: null,
-    onSettings: true,
+    current: "/settings",
     kicker: "Settings",
     status: flash?.text ?? settingsStatus(view),
     main: renderSettingsMain(view, token, flash),
@@ -1699,8 +1880,7 @@ function renderSettingsFailure(token: string, notice: string | null): string {
     token,
     title: "Settings",
     description: "Settings could not be read.",
-    current: null,
-    onSettings: true,
+    current: "/settings",
     kicker: "Settings",
     status: "Settings could not be read.",
     main: renderFriendly({
@@ -1904,20 +2084,37 @@ function csrfField(raw: string, contentType: string): string | null {
   return null;
 }
 
+function navIcon(name: string): string {
+  const paths: Record<string, string> = {
+    desk: "M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5",
+    brand: "M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z",
+    approve: "M5 12l4 4 10-10",
+    drive: "M4 16l4-8h8l4 8z",
+    settings: "M4 8h8 M16 8h4 M4 16h4 M12 16h8",
+    tools: "M14 6l4 4-8 8H6v-4z",
+    gallery: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z",
+    motion: "M3 15c2.5 0 2.5-6 5-6s2.5 6 5 6 2.5-6 5-6 2.5 6 5 6",
+  };
+  const d = paths[name] ?? paths.desk ?? "M5 4h14v16H5z";
+  return `<svg class="hh-nav__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 function routeNav(current: RouteName | null): string {
   const items = [
-    ["/", "Desk"],
-    ["/brand", "Brand kit"],
-    ["/approve", "Approvals"],
-    ["/hh-dashboard", "Drive"],
-    ["/gallery", "Gallery"],
-    ["/motion", "Motion"],
+    { href: "/", label: "Desk", icon: "desk", tip: "The interview. One question, then the next." },
+    { href: "/brand", label: "Brand", icon: "brand", tip: "The brand kit. Palette, letters, and voice after the brief is approved." },
+    { href: "/approve", label: "Approvals", icon: "approve", tip: "Decisions waiting for a yes. The queue does not start without one." },
+    { href: "/hh-dashboard", label: "Drive", icon: "drive", tip: "The local queue. Pause, cost, and what the build is doing." },
+    { href: "/settings", label: "Settings", icon: "settings", tip: "Voice, model, and effort for this project." },
+    { href: "/tools", label: "Install tools", icon: "tools", tip: "Which tools are on this machine, and how to install a missing one." },
+    { href: "/gallery", label: "Gallery", icon: "gallery", tip: "Reference sites. Keep the ones that fit." },
+    { href: "/motion", label: "Motion", icon: "motion", tip: "Short motion loops, then a number for how much the site should move." },
   ] as const;
-  const links = items.map(([href, label]) => {
-    const on = href === current;
-    const spot = href === "/approve" ? ' data-tour-spot="approve"' : "";
+  const links = items.map((item) => {
+    const on = item.href === current;
+    const spot = item.href === "/approve" ? ' data-tour-spot="approve"' : "";
     const currentAttr = on ? ' aria-current="page"' : "";
-    return `<a href="${href}"${currentAttr}${spot}>${escapeHtml(label)}</a>`;
+    return `<a href="${item.href}"${currentAttr}${spot} data-tip="${escapeHtml(item.tip)}">${navIcon(item.icon)}<span>${escapeHtml(item.label)}</span></a>`;
   });
   return `<nav class="hh-routes" aria-label="Desk routes">${links.join("")}</nav>`;
 }

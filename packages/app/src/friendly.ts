@@ -42,11 +42,11 @@ export function renderFriendly(input: FriendlyInput): string {
       : "";
   const retry =
     input.retryHref !== null && input.retryHref !== undefined && input.retryHref.length > 0
-      ? `<a class="hh-btn hh-btn--primary" href="${escapeHtml(input.retryHref)}">${escapeHtml(input.retryLabel ?? "Try again")}</a>`
+      ? `<a class="hh-btn hh-btn--primary" href="${escapeHtml(input.retryHref)}" data-tip="Goes to the page named on this link.">${escapeHtml(input.retryLabel ?? "Try again")}</a>`
       : "";
   const copy =
     input.copyText !== null && input.copyText !== undefined && input.copyText.length > 0
-      ? `<button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(input.copyText)}">Copy the next step</button>`
+      ? `<button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(input.copyText)}" data-tip="Copies the next step so you can paste it.">Copy the next step</button>`
       : "";
   const actions = retry.length > 0 || copy.length > 0 ? `<p class="hh-empty__next">${retry}${copy}</p>` : "";
   return `<div class="hh-error" role="alert">

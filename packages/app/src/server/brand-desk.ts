@@ -82,7 +82,10 @@ export function dressBrandKit(html: string, token: string, navHtml: string): str
   if (next.includes("</main>")) {
     next = next.replace("</main>", `${fileGate()}\n        </main>`);
   }
-  return next.replace("</body>", `    <script type="module" src="/client/brand.js"></script>\n  </body>`);
+  return next.replace(
+    "</body>",
+    `    <script type="module" src="/client/tooltip.js"></script>\n    <script type="module" src="/client/brand.js"></script>\n  </body>`,
+  );
 }
 
 export function renderBrandKitError(token: string, navHtml: string): string {
@@ -154,7 +157,7 @@ export async function postBrandDecision(
 function fileGate(): string {
   const rows = BRAND_SECTIONS.map((section) => {
     const label = section.slice(0, 1).toUpperCase() + section.slice(1);
-    return `<div class="bk-story"><h2 class="hh-title" id="file-${section}-title">${label}</h2><div class="hh-approval"><button class="hh-btn hh-btn--primary" type="button" data-approve="${section}" aria-label="Approve ${label}">Approve</button><button class="hh-btn hh-btn--secondary" type="button" data-redo="${section}" aria-label="Redo ${label}">Redo</button></div></div>`;
+    return `<div class="bk-story"><h2 class="hh-title" id="file-${section}-title">${label}</h2><div class="hh-approval"><button class="hh-btn hh-btn--primary" type="button" data-approve="${section}" aria-label="Approve ${label}" data-tip="Records a yes for this part of the kit.">Approve</button><button class="hh-btn hh-btn--secondary" type="button" data-redo="${section}" aria-label="Redo ${label}" data-tip="Asks for this part of the kit again.">Redo</button></div></div>`;
   }).join("");
   return `<section class="bk-section" aria-labelledby="file-gate-title"><h2 class="hh-title" id="file-gate-title">Brand file</h2><p class="bk-copy">The brand file has six sections. Approve each one here. A redo clears that section, and the file stays draft until all six are approved.</p>${rows}<p class="hh-approval__note" data-brand-note hidden></p></section>`;
 }

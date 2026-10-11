@@ -203,6 +203,12 @@ function attr(name: string, value: string): string {
   return ` ${name}="${escapeHtml(value)}"`;
 }
 
+const ACTION_TIP = {
+  answer: "Sends this answer and opens the next question.",
+  suggest: "Writes a marked assumption you can edit, replace, or keep.",
+  skip: "Skips this question and marks an assumption. A required question asks you to confirm.",
+} as const;
+
 function button(
   action: "answer" | "suggest" | "skip",
   label: string,
@@ -210,16 +216,16 @@ function button(
   disabled: boolean,
 ): string {
   const flag = disabled ? " disabled" : "";
-  return `<button class="hh-btn hh-btn--${variant}" type="button" data-action="${action}"${flag}>${escapeHtml(label)}</button>`;
+  return `<button class="hh-btn hh-btn--${variant}" type="button" data-action="${action}" data-tip="${escapeHtml(ACTION_TIP[action])}"${flag}>${escapeHtml(label)}</button>`;
 }
 
 /** Click fills the draft. It does not submit. Typing in the field still works. */
 function talkButton(disabled: boolean, listening: boolean): string {
   const flag = disabled ? " disabled" : "";
   if (listening) {
-    return `<button class="hh-btn hh-btn--secondary hh-btn--listening" type="button" data-voice="hold" aria-pressed="true"${flag}><span class="hh-voice-pulse" data-voice-pulse aria-hidden="true"></span>Stop listening</button>`;
+    return `<button class="hh-btn hh-btn--secondary hh-btn--listening" type="button" data-voice="hold" aria-pressed="true" data-tip="Stops listening and keeps every word heard so far."${flag}><span class="hh-voice-pulse" data-voice-pulse aria-hidden="true"></span>Stop listening</button>`;
   }
-  return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold" aria-pressed="false"${flag}>Click to talk</button>`;
+  return `<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold" aria-pressed="false" data-tip="Starts listening. Click again to stop. Spoken words stay in the answer."${flag}>Click to talk</button>`;
 }
 
 function noticeLine(notice: string | null): string {
@@ -277,6 +283,7 @@ function kickerBlock(question: Question, counts: CardCounts | null | undefined):
   return `  <p class="hh-kicker" data-card-kicker>${escapeHtml(line)}</p>
   <p class="hh-qcard__count" data-open-required>${counts.openRequired} required still open</p>
   <p class="hh-qcard__mode" data-interview-mode="${escapeHtml(counts.mode)}">${escapeHtml(counts.modeNote)}</p>
+  <p class="hh-progress" data-card-progress>Question ${counts.index} of ${counts.total}</p>
 `;
 }
 

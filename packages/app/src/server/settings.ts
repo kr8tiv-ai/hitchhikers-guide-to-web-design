@@ -157,7 +157,7 @@ export function renderSettingsMain(
         </div>
       </div>
       <div class="hh-qcard__actions">
-        <button class="hh-btn hh-btn--primary" type="submit">Save settings</button>
+        <button class="hh-btn hh-btn--primary" type="submit" data-tip="Writes voice, model, and effort for this project.">Save settings</button>
       </div>
     </form>`;
 }
@@ -211,9 +211,13 @@ export async function applySettingsPost(
 }
 
 function choice(name: string, value: string, label: string, on: boolean): string {
-  const tone = on ? "hh-btn hh-btn--primary" : "hh-btn hh-btn--secondary";
+  const tone = on ? "hh-btn hh-btn--chosen" : "hh-btn hh-btn--secondary";
   const mark = on ? " checked" : "";
-  return `<label class="${tone}"><input type="radio" name="${name}" value="${value}"${mark} /> ${label}</label>`;
+  const tip =
+    name === "voice"
+      ? "Picks the speech-to-text engine for this project."
+      : "Picks how much effort the Guide spends on an answer.";
+  return `<label class="${tone}"><input type="radio" name="${name}" value="${value}"${mark} data-tip="${tip}" /> ${label}</label>`;
 }
 
 async function loadXaiSttRates(): Promise<XaiSttRates> {

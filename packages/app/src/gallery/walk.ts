@@ -57,7 +57,7 @@ function renderWalking(view: GalleryView): string {
   const cards = view.cards.map((card, index) => renderCard(card, view, index === 0)).join("\n");
   const empty =
     view.cards.length === 0
-      ? `<div class="hh-empty"><h2 class="hh-empty__title">No sites matched</h2><p>The pack has nothing left to show. Widen the industry filter if you need a wider set.</p><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/gallery">Reload the gallery</a></p></div>`
+      ? `<div class="hh-empty"><h2 class="hh-empty__title">No sites matched</h2><p>The pack has nothing left to show. Widen the industry filter if you need a wider set.</p><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/gallery" data-tip="Loads the gallery again.">Reload the gallery</a></p></div>`
       : "";
   return `<p class="hh-dek">Four sites at a time, two from Godly and two from Awwwards. Mark each one love, meh, or hate, and say why.</p>
 ${note}
@@ -97,14 +97,14 @@ function renderCard(card: GalleryCardModel, view: GalleryView, active: boolean):
     ${shotNote}
     <div class="hh-gallery__tools">${link}</div>
     <div class="hh-site__votes" role="group" aria-label="${escapeHtml(card.name)}">
-      <button class="hh-vote" type="button" data-vote="love" aria-pressed="false">Love</button>
-      <button class="hh-vote" type="button" data-vote="meh" aria-pressed="false">Meh</button>
-      <button class="hh-vote" type="button" data-vote="hate" aria-pressed="false">Hate</button>
+      <button class="hh-vote" type="button" data-vote="love" aria-pressed="false" data-tip="Marks this site as one to keep in mind.">Love</button>
+      <button class="hh-vote" type="button" data-vote="meh" aria-pressed="false" data-tip="Marks this site as neither a love nor a miss.">Meh</button>
+      <button class="hh-vote" type="button" data-vote="hate" aria-pressed="false" data-tip="Marks this site as a miss.">Hate</button>
     </div>
     <label class="hh-qcard__label" for="${fieldId(card.url)}">Why this one</label>
     <textarea class="hh-qcard__input hh-gallery__why" id="${fieldId(card.url)}" rows="3"></textarea>
     ${nudge}
-    <button class="hh-btn hh-btn--primary" type="button" data-keep>Keep this</button>
+    <button class="hh-btn hh-btn--primary" type="button" data-keep data-tip="Keeps this site and the reason you wrote.">Keep this</button>
   </div>
 </article>`;
 }
@@ -142,7 +142,7 @@ function renderNarrow(view: GalleryView): string {
 <label class="hh-qcard__label" for="hh-thread">${label}</label>
 <textarea class="hh-qcard__input" id="hh-thread" rows="4">${escapeHtml(view.thread)}</textarea>
 <p class="hh-error" data-shortlist-error role="alert" hidden></p>
-<button class="hh-btn hh-btn--primary" type="button" data-shortlist>${button}</button>`;
+<button class="hh-btn hh-btn--primary" type="button" data-shortlist data-tip="Writes the shortlist from the loves you picked.">${button}</button>`;
 }
 
 function renderDone(view: GalleryView): string {

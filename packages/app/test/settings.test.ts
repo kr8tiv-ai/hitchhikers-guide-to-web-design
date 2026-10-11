@@ -10,7 +10,8 @@ import { startServer, type ServerHandle } from "../src/server/server.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const voiceUrl = new URL("../../voice/src/xai-stt.ts", import.meta.url);
-const ROUTES = ["/", "/brand", "/approve", "/hh-dashboard", "/gallery", "/motion"] as const;
+const ROUTES = ["/", "/brand", "/approve", "/hh-dashboard", "/settings", "/tools", "/gallery", "/motion"] as const;
+const ROUTE_LABELS = ["Desk", "Brand", "Approvals", "Drive", "Settings", "Install tools", "Gallery", "Motion"] as const;
 
 interface RateCard {
   rest: { ratePerHour: number; priceText: string };
@@ -74,20 +75,18 @@ function deskMenu(html: string): string {
   return menu[0];
 }
 
-function assertSixRoutes(html: string): void {
+function assertDeskRoutes(html: string, current: string): void {
   const nav = routeNav(html);
-  const links = [...nav.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map(
+  const links = [...nav.matchAll(/<a href="([^"]+)"[^>]*>[\s\S]*?<span>([^<]+)<\/span>/g)].map(
     (match) => `${match[1]} ${match[2]}`,
   );
   assert.deepEqual(
     links,
-    ROUTES.map((href, index) => {
-      const labels = ["Desk", "Brand kit", "Approvals", "Drive", "Gallery", "Motion"];
-      return `${href} ${labels[index]}`;
-    }),
+    ROUTES.map((href, index) => `${href} ${ROUTE_LABELS[index]}`),
   );
-  assert.equal(nav.includes("/settings"), false);
-  assert.equal(nav.includes("Settings"), false);
+  assert.equal(nav.includes('aria-hidden="true"'), true);
+  assert.match(nav, new RegExp(`href="${current.replace("/", "\\/")}" aria-current="page"`));
+  assert.equal(nav.match(/aria-current="page"/g)?.length, 1);
 }
 
 async function get(handle: ServerHandle, pathname: string): Promise<string> {
@@ -144,27 +143,34 @@ test("GET /settings shows voice, model, effort, and both rates, with xAI off", a
     assert.match(html, /hh-wordmark/);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", STT_QUOTE_FILENAME)), false);
     assert.equal(loadConfig(dir).voiceEngine, "local");
-    assertSixRoutes(html);
+    assertDeskRoutes(html, "/settings");
     const menu = deskMenu(html);
-    assert.match(menu, /href="\/settings"/);
-    assert.match(menu, /aria-current="page"/);
-    assert.equal(routeNav(html).includes("aria-current"), false);
+    assert.equal(menu.includes('href="/settings"'), false);
+    assert.match(menu, /Replay tour/);
+    assert.doesNotMatch(menu, /aria-current/);
   });
 });
 
-test("the desk menu holds settings and the route nav stays at six items", async () => {
+test("the desk menu holds Replay tour and the route nav lists every desk page", async () => {
   await withDesk(async (handle) => {
-    for (const pathname of ["/", "/brand", "/approve", "/gallery", "/motion", "/hh-dashboard"]) {
+    const pages: ReadonlyArray<readonly [string, string]> = [
+      ["/", "/"],
+      ["/brand", "/brand"],
+      ["/approve", "/approve"],
+      ["/gallery", "/gallery"],
+      ["/motion", "/motion"],
+      ["/hh-dashboard", "/hh-dashboard"],
+      ["/settings", "/settings"],
+      ["/tools", "/tools"],
+    ];
+    for (const [pathname, current] of pages) {
       const html = await get(handle, pathname);
       const menu = deskMenu(html);
-      assert.match(menu, /href="\/settings"/);
+      assert.equal(menu.includes('href="/settings"'), false);
+      assert.match(menu, /Replay tour/);
       assert.doesNotMatch(menu, /aria-current/);
-      if (html.includes('class="hh-routes"')) {
-        assertSixRoutes(html);
-        assert.equal(menu.includes(routeNav(html)), false);
-      } else {
-        assert.equal(pathname, "/hh-dashboard");
-      }
+      assertDeskRoutes(html, current);
+      assert.equal(menu.includes(routeNav(html)), false);
     }
     const home = await get(handle, "/");
     const map = /<nav class="hh-rise hh-rise--4"[\s\S]*?<\/nav>/.exec(home);

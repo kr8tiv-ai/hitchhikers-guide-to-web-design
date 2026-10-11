@@ -46,8 +46,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "saves",
     title: "Where saves live",
-    body: "Save writes one pretty JSON file named after the project, with the extension hhproject. The usual place is your Desktop. If that folder is missing, the file goes in your home folder and the desk says where. The line at the bottom names the file.",
-    target: "status",
+    body: "Save project writes one pretty JSON file named after the project, with the extension hhproject. The usual place is your Desktop. If that folder is missing, the file goes in your home folder and the desk says where. The project bar names the file.",
+    target: "project",
   },
 ];
 
@@ -64,9 +64,9 @@ export function renderTour(token: string): string {
     <ol class="hh-tour__steps">${steps}</ol>
     <p class="hh-small" data-tour-count>1 of ${TOUR_STEPS.length}</p>
     <div class="hh-qcard__actions">
-      <button class="hh-btn hh-btn--ghost" type="button" data-tour-back>Back</button>
-      <button class="hh-btn hh-btn--secondary" type="button" data-tour-next>Next</button>
-      <button class="hh-btn hh-btn--ghost" type="submit" form="hh-tour-skip">Skip tour</button>
+      <button class="hh-btn hh-btn--ghost" type="button" data-tour-back data-tip="Goes back one step in the first five minutes.">Back</button>
+      <button class="hh-btn hh-btn--secondary" type="button" data-tour-next data-tip="Goes to the next step in the first five minutes.">Next</button>
+      <button class="hh-btn hh-btn--ghost" type="submit" form="hh-tour-skip" data-tip="Closes the tour and remembers that you saw it.">Skip tour</button>
     </div>
     <form id="hh-tour-skip" method="post" action="/api/tour">
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
@@ -83,6 +83,6 @@ export function renderReplayControl(token: string): string {
   return `<form method="post" action="/api/tour">
     <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
     <input type="hidden" name="tour" value="replay" />
-    <button class="hh-btn hh-btn--ghost" type="submit">Replay tour</button>
+    <button class="hh-btn hh-btn--ghost" type="submit" data-tip="Shows the first five minutes again.">Replay tour</button>
   </form>`;
 }

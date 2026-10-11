@@ -569,3 +569,16 @@ Take it, fork it, ship it, build something brilliant with it. Vendored third-par
 <br>
 
 </div>
+
+## Desk clarity, before and after
+
+The interview is the first object on the desk. Project actions sit in one bar. Every control explains itself on hover, focus, and touch.
+
+The same twelve states were shot at 375, 768, and 1440, in light and dark.
+
+- Before: [docs/assets/ui-before/](docs/assets/ui-before/)
+- After: [docs/assets/ui-after/](docs/assets/ui-after/)
+
+Each file is `{state}-{width}-{theme}.png`. States: `desk-first`, `desk-mid`, `desk-resumed`, `desk-tour`, `brand-empty`, `approve-empty`, `drive-empty`, `drive-error`, `settings`, `install-tools`, `gallery-empty`, `missing-error`.
+
+The before `install-tools` frames are the top of the desk, because that page did not exist yet. The after frames are `/tools`. The notes are in [docs/design/ui-audit.md](docs/design/ui-audit.md) and [docs/design/ui-research.md](docs/design/ui-research.md).

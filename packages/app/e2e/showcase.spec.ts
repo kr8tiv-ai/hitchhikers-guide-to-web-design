@@ -63,7 +63,7 @@ test("the first screen is finished at 375 and 1440, and the tour and sample work
     const bad = path.join(projectDir, "bad.hhproject");
     await writeFile(bad, "{\n  \"schemaVersion\": 1,\n    at explode (bad.ts:2:1)\n}\n");
     await page.locator("#hh-open-file").fill(bad);
-    await page.getByRole("button", { name: "Open project file" }).click();
+    await page.getByRole("button", { name: "Open project folder" }).click();
     await expect(page.getByRole("heading", { name: "That file could not be opened" })).toBeVisible();
     await expect(page.getByText("Details")).toBeVisible();
     const visible = await page.locator(".hh-error").first().evaluate((node) => {

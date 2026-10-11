@@ -150,13 +150,13 @@ test("a failed answer leaves pending clear, keeps the draft, and accepts a secon
     await settle();
     assert.equal(posts, 1);
     assert.match(h.region.innerHTML, /aria-busy="true"/);
-    assert.match(h.region.innerHTML, /data-action="answer" disabled/);
+    assert.match(h.region.innerHTML, /data-action="answer"[^>]*\sdisabled[\s>]/);
     assert.match(h.region.innerHTML, /A brass wordmark\./);
 
     rejectFirst(new Error("socket closed"));
     await settle();
     assert.equal(h.region.innerHTML.includes('aria-busy="true"'), false);
-    assert.equal(/data-action="answer" disabled/.test(h.region.innerHTML), false);
+    assert.equal(/data-action="answer"[^>]*\sdisabled[\s>]/.test(h.region.innerHTML), false);
     assert.match(h.region.innerHTML, /A brass wordmark\./);
     assert.match(h.region.innerHTML, /Your draft is still here/);
 
@@ -164,7 +164,7 @@ test("a failed answer leaves pending clear, keeps the draft, and accepts a secon
     await settle();
     assert.equal(posts, 2);
     assert.equal(h.region.innerHTML.includes('aria-busy="true"'), false);
-    assert.equal(/data-action="answer" disabled/.test(h.region.innerHTML), false);
+    assert.equal(/data-action="answer"[^>]*\sdisabled[\s>]/.test(h.region.innerHTML), false);
     assert.match(h.region.innerHTML, /A brass wordmark\./);
     assert.match(h.region.innerHTML, /took too long/);
     assert.equal(bodies[0]?.includes("A brass wordmark."), true);

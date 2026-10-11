@@ -3,6 +3,7 @@
  * The same saveProjectFile call as `hh save`. Remove drops the index row only.
  */
 
+import path from "node:path";
 import { escapeHtml } from "../card.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { SAMPLE_LABEL, sampleProjectFile } from "../sample.ts";
@@ -130,16 +131,17 @@ export async function projectChrome(projectDir: string, token: string, firstScre
   const mine = rows.find((row) => row.sourceDir === projectDir);
   const filePath = notice?.filePath ?? mine?.filePath ?? null;
   const savedAt = notice?.ok === true ? notice.savedAt : mine?.savedAt ?? null;
+  const statusTip = "Where the desk is right now.";
   let line: string;
   if (notice !== null && notice.ok === false) {
     const reason = notice.reason ?? "The last save did not finish.";
-    line = `<p class="hh-small" data-save-status>Not saved · ${escapeHtml(reason)}</p>`;
+    line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · ${escapeHtml(reason)}</p>`;
   } else if (filePath !== null && savedAt !== null) {
     const place = locationLabel(filePath);
-    line = `<p class="hh-small" data-save-status title="${escapeHtml(filePath)}">Saved · ${escapeHtml(savedStamp(savedAt))} · ${escapeHtml(place)}</p>
-      <button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(filePath)}">Copy path</button>`;
+    line = `<p class="hh-small" data-save-status data-tip="${statusTip}" title="${escapeHtml(filePath)}">Saved · ${escapeHtml(savedStamp(savedAt))} · ${escapeHtml(place)}</p>
+      <button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(filePath)}" data-tip="Copies the project file path.">Copy path</button>`;
   } else {
-    line = `<p class="hh-small" data-save-status>Not saved · No save yet</p>`;
+    line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · No save yet</p>`;
   }
   const prompt = mine === undefined ? "" : "";
   let resumePrompt = "";
@@ -147,11 +149,12 @@ export async function projectChrome(projectDir: string, token: string, firstScre
     const loaded = await loadProjectFile(filePath, { liveDir: projectDir }).catch(() => null);
     const text = loaded?.file?.resumePrompt ?? "";
     if (text.length > 0) {
-      resumePrompt = `<button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(text)}">Copy resume prompt</button>`;
+      resumePrompt = `<button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(text)}" data-tip="Copies the resume prompt for this project.">Copy resume prompt</button>`;
     }
   }
-  const saveForm = `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit">Save</button></form>`;
-  const bar = `<div class="hh-save-line" role="region" aria-label="Project save">${line}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
+  const saveForm = `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit" data-tip="Writes one project file on this machine. The interview stays where it is.">Save project</button></form>`;
+  const name = `<p class="hh-project__name">${escapeHtml(path.basename(projectDir))}</p>`;
+  const bar = `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
   if (!firstScreen) return bar;
   const items = rows
     .map((row) => {
@@ -159,7 +162,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
       const when = savedStamp(row.savedAt);
       const state = missing ? "Missing" : escapeHtml(row.progress);
       const remove = missing
-        ? `<form method="post" action="/api/project/remove">${hidden(token, "path", row.filePath)}<button class="hh-btn hh-btn--ghost" type="submit">Remove</button></form>`
+        ? `<form method="post" action="/api/project/remove">${hidden(token, "path", row.filePath)}<button class="hh-btn hh-btn--ghost" type="submit" data-tip="Drops this missing project from the list. The file is already gone.">Remove</button></form>`
         : "";
       return `<li class="hh-save-resume__row"${missing ? ' data-missing="true"' : ""}>
         <p class="hh-title">${escapeHtml(row.name)}</p>
@@ -175,21 +178,22 @@ export async function projectChrome(projectDir: string, token: string, firstScre
   const sample = sampleOffer(token, items.length === 0);
   const open = `<form method="post" action="/api/project/open" class="hh-save-open">
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
-      <label class="hh-small" for="hh-open-file">Open project file</label>
-      <input id="hh-open-file" name="path" type="text" autocomplete="off" />
-      <button class="hh-btn hh-btn--primary" type="submit">Open project file</button>
+      <label class="hh-small" for="hh-open-file">Project file path</label>
+      <input id="hh-open-file" name="path" type="text" autocomplete="off" data-tip="Path of a project file on this machine." />
+      <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Opens a project file from a path on this machine. The interview switches to that file.">Open project folder</button>
     </form>`;
-  const section = `<section class="hh-save-resume" aria-labelledby="resume-title">
+  const resume = `<details class="hh-project__resume">
+      <summary class="hh-btn hh-btn--secondary" role="button" data-tip="Shows project files saved on this machine.">Resume project</summary>
       <h2 class="hh-title" id="resume-title">Resume a project</h2>
       <p class="hh-small">Pick up a saved project, or open a project file.</p>
       ${list}
-      ${sample}
-      ${open}
-    </section>`;
-  return `${section}${bar}`;
+    </details>`;
+  return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${saveForm}${resume}${sample}${open}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
 }
 
 export function applyProjectChrome(html: string, chrome: string): string {
+  const slot = "<div data-project-slot></div>";
+  if (html.includes(slot)) return html.replace(slot, chrome);
   let next = html;
   const marker = '<div class="hh-columns">';
   const sectionEnd = chrome.indexOf('<div class="hh-save-line"');
@@ -220,7 +224,7 @@ function sampleOffer(token: string, empty: boolean): string {
       <form method="post" action="/api/project/open" class="hh-save-open" data-open-sample>
         ${hidden(token, "path", file)}
         <input type="hidden" name="prefer" value="file" />
-        <button class="hh-btn hh-btn--secondary" type="submit">${SAMPLE_LABEL}</button>
+        <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Opens the towel shop sample through the same project file the desk uses for every save.">${SAMPLE_LABEL}</button>
       </form>
     </div>`;
 }

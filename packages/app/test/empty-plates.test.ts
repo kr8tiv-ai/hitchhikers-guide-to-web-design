@@ -113,15 +113,21 @@ test("a queue on disk enables the four gates and still omits the disclaimer", as
   });
 });
 
-test("a fresh desk shows Start the interview on the first question route", async () => {
+test("a fresh desk leads with the open question, not a start link", async () => {
   await withDesk(async (handle) => {
     const html = await (await fetch(handle.url)).text();
-    assert.match(html, new RegExp(`>${START_INTERVIEW_LABEL}</a>`));
-    assert.match(html, /class="hh-btn hh-btn--primary" href="\/\?question=DP-0\.1"/);
+    assert.equal(html.includes(`>${START_INTERVIEW_LABEL}</a>`), false);
     assert.equal(html.includes("No question yet"), false);
     assert.match(html, /Is this site for you, or for a client\?/);
+    assert.match(html, /Question 1 of /);
+    assert.match(html, /Restart the interview/);
+    const interview = html.indexOf("data-interview");
+    const transcript = html.indexOf('id="transcript"');
+    assert.ok(interview >= 0 && interview < transcript);
     const question = /data-region="question"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
     assert.equal(question.includes(START_INTERVIEW_LABEL), false);
+    assert.equal(question.match(/hh-btn--primary/g)?.length, 1);
+    assert.equal(html.match(/hh-btn--primary/g)?.length, 1);
   });
 });
 

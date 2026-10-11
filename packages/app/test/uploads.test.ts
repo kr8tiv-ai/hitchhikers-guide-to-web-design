@@ -158,7 +158,7 @@ test("an exe is rejected and a traversal name is stored under uploads", async ()
     assert.equal(fetched.status, 404);
     assert.equal((fetched.headers.get("content-type") ?? "").includes("image/svg+xml"), false);
     assert.equal(body.includes(marker), false);
-    assert.equal(body.includes("<svg"), false);
+    assert.equal(body.replace(/<svg class="hh-nav__icon"[\s\S]*?<\/svg>/g, "").includes("<svg"), false);
   });
 });
 
