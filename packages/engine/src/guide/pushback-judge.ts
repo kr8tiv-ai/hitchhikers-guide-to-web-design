@@ -1,7 +1,8 @@
 import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
 import type { think } from "../ai/think.ts";
-import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type Facts } from "./schemas.ts";
+import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
+import { choiceSetFrom } from "./suggest.ts";
 import { validateGuideMessage } from "./validators.ts";
 
 /**
@@ -23,6 +24,9 @@ export interface PushJudgement {
   message: string;
   /** True when 019's phrase list matched. The engine stores SOFT itself only then. */
   floor: boolean;
+  /** Present on a push. Model choices, or one fallback. Never on accept or soft. */
+  choices?: SuggestChoice[];
+  choicesOrigin?: ChoiceOrigin;
 }
 
 export async function judgePushback(
@@ -33,9 +37,12 @@ export async function judgePushback(
 ): Promise<PushJudgement> {
   const floor = pushbackFor(question, text) !== null;
   const prior = pushes < 0 ? 0 : pushes;
+  const language = deps.language ?? "en";
+  const facts = deps.facts ?? { answers: [], uploads: [], crawlNotes: [] };
   let modelVague = false;
   let quote = "";
   let sharper = "";
+  let raw: unknown = null;
   try {
     const result = await deps.think(
       {
@@ -49,10 +56,13 @@ export async function judgePushback(
           "User answer:",
           text,
           "Say whether the answer is vague. Quote their words. Offer one sharper question.",
+          "Also return 2 to 4 choices with ids A, B, C, D. Put the sharper question first when it is one of them.",
+          "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts.",
         ].join("\n"),
       },
       deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
     );
+    raw = result.value;
     const value = asVerdict(result.value);
     if (value !== null) {
       modelVague = value.vague;
@@ -61,6 +71,7 @@ export async function judgePushback(
     }
   } catch {
     modelVague = false;
+    raw = null;
   }
   const vague = modelVague || floor;
   const safeQuote = cleanQuote(quote, text);
@@ -70,13 +81,71 @@ export async function judgePushback(
   if (prior >= PUSH_CAP) {
     return { action: "soft", count: prior, quote: safeQuote, message: "", floor };
   }
+  const message = sharperLine(sharper, question, text, language, facts);
+  const follow = followUpChoices(raw, message, facts, language);
   return {
     action: "push",
     count: prior + 1,
     quote: safeQuote,
-    message: sharperLine(sharper, question, text, deps.language ?? "en", deps.facts),
+    message,
     floor,
+    choices: follow.choices,
+    choicesOrigin: follow.origin,
   };
+}
+
+const SHARPER_WHY = "A sharper question for this answer.";
+
+/**
+ * A push carries 2 to 4 model choices, with the sharper line first when it is valid.
+ * A fallback set stays one choice: the sharper line, not a second option beside it.
+ * Bad choice JSON does not change the vague, quote, or sharper fields already read.
+ */
+export function followUpChoices(
+  value: unknown,
+  message: string,
+  facts: Facts,
+  language: string,
+): { choices: SuggestChoice[]; origin: ChoiceOrigin } {
+  const standing = { label: message, why: SHARPER_WHY, source: "question:suggest" };
+  const present = isRecord(value) && Object.hasOwn(value, "choices");
+  const set = present
+    ? choiceSetFrom(value, facts, language, standing)
+    : choiceSetFrom(undefined, facts, language, standing);
+  return withSharperFirst(set, message, facts, language);
+}
+
+function withSharperFirst(
+  set: { choices: SuggestChoice[]; origin: ChoiceOrigin },
+  sharper: string,
+  facts: Facts,
+  language: string,
+): { choices: SuggestChoice[]; origin: ChoiceOrigin } {
+  const line = sharper.trim();
+  const valid = line !== "" && validateGuideMessage(line, { language, facts }).length === 0;
+  if (!valid) return set;
+  if (set.origin === "fallback") {
+    return {
+      origin: "fallback",
+      choices: [{ id: "A", label: line, why: SHARPER_WHY, source: "question:suggest" }],
+    };
+  }
+  if (set.choices[0]?.label === line) return set;
+  const rest = set.choices.filter((item) => item.label !== line);
+  const merged = [{ label: line, why: SHARPER_WHY, source: "question:suggest" }, ...rest].slice(0, 4);
+  const choices: SuggestChoice[] = [];
+  const ids = ["A", "B", "C", "D"] as const;
+  for (let index = 0; index < merged.length; index += 1) {
+    const item = merged[index];
+    const id = ids[index];
+    if (item === undefined || id === undefined) continue;
+    choices.push({ id, label: item.label, why: item.why, source: item.source });
+  }
+  return { origin: "model", choices };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function sharperLine(

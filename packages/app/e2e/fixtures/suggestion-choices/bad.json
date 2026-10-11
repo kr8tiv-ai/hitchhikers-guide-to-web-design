@@ -1,0 +1,18 @@
+{
+  "suggest": [
+    {
+      "result": {
+        "choices": [{ "id": "Z", "label": "Nope", "why": "Nope", "source": "upload:missing.jpg" }]
+      }
+    }
+  ],
+  "guide-message": [
+    {
+      "result": {
+        "message": "What should the shop keep next?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    }
+  ]
+}

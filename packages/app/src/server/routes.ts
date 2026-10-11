@@ -50,7 +50,14 @@ import {
   type WalkQuery,
   type WalkState,
 } from "@hitchhiker/engine";
-import { escapeHtml, renderCard, type CardAssumption, type CardCounts, type CardState } from "../card.ts";
+import {
+  escapeHtml,
+  renderCard,
+  type CardAssumption,
+  type CardChoiceSet,
+  type CardCounts,
+  type CardState,
+} from "../card.ts";
 import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
@@ -115,12 +122,16 @@ interface LiveOverlay {
   status: "asked" | "pushed" | "soft" | "done" | null;
   cards: Array<{ name: string; url: string; source: string }>;
   options: Array<{ label: string; why: string; source: string }>;
+  /** Null when this turn has no picks. forId is the question the picks belong to. */
+  choices: CardChoiceSet | null;
 }
 
 export type TurnHandler = (input: {
   kind: "answer" | "suggest" | "skip";
   questionId: string;
   text?: string;
+  /** Pick on the spot. The stored status stays SUGGESTED. */
+  assumed?: boolean;
 }) => Promise<{ next: unknown; events: unknown[]; live?: LiveOverlay }>;
 
 export interface DeskProgress {
@@ -150,6 +161,8 @@ export interface DeskSession {
   transcriptHtml: string;
   statusHtml: string;
   cardHtml: string;
+  /** Picks for choices.forId. The card renders them only when that id is current. */
+  choices: CardChoiceSet | null;
 }
 
 export interface DeskApp {
@@ -285,7 +298,16 @@ export async function createDeskApp(opts: {
 }
 
 function emptyOverlay(): LiveOverlay {
-  return { forId: null, message: null, quote: null, calm: false, status: null, cards: [], options: [] };
+  return {
+    forId: null,
+    message: null,
+    quote: null,
+    calm: false,
+    status: null,
+    cards: [],
+    options: [],
+    choices: null,
+  };
 }
 
 function createLiveTurn(
@@ -334,11 +356,14 @@ function createLiveTurn(
         pushes: {},
       };
       started = true;
-      finished = await runTurn(
-        session,
-        input.text === undefined ? { kind: input.kind } : { kind: input.kind, text: input.text },
-        { think: model },
-      );
+      const turnInput: {
+        kind: "answer" | "suggest" | "skip";
+        text?: string;
+        assumed?: boolean;
+      } = { kind: input.kind };
+      if (input.text !== undefined) turnInput.text = input.text;
+      if (input.assumed === true) turnInput.assumed = true;
+      finished = await runTurn(session, turnInput, { think: model });
       await reload();
       return {
         next: getInterview().next(),
@@ -401,6 +426,7 @@ function aheadTurn(
       status: next === null ? "done" : "asked",
       cards: [],
       options: [],
+      choices: null,
     },
   };
 }
@@ -418,7 +444,26 @@ function overlayFrom(result: GuideTurn): LiveOverlay {
     status: result.status,
     cards,
     options: [...(result.options ?? [])],
+    choices: copyChoices(result),
   };
+}
+
+function copyChoices(result: GuideTurn): CardChoiceSet | null {
+  const items = result.choices;
+  const forId = result.choicesForId;
+  if (items === undefined || forId === undefined || items.length < 1) return null;
+  const origin = result.choicesOrigin === "fallback" ? "fallback" : "model";
+  const ids = ["A", "B", "C", "D"] as const;
+  const kept: CardChoiceSet["items"] = [];
+  for (let index = 0; index < items.length && index < ids.length; index += 1) {
+    const item = items[index];
+    const id = ids[index];
+    if (item === undefined || id === undefined || item.id !== id) return null;
+    if (item.label.trim() === "") return null;
+    kept.push({ id, label: item.label, why: item.why, source: item.source });
+  }
+  if (kept.length < 1) return null;
+  return { forId, origin, items: kept };
 }
 
 /**
@@ -461,11 +506,6 @@ function renderLiveExtras(overlay: LiveOverlay, done: boolean): string {
     if (!isHttpUrl(card.url)) continue;
     parts.push(
       `<a class="hh-btn hh-btn--secondary" data-gallery="${escapeHtml(card.source)}" href="${escapeHtml(card.url)}">${escapeHtml(card.name)}</a>`,
-    );
-  }
-  for (const option of overlay.options) {
-    parts.push(
-      `<p class="hh-turn" data-suggest-option="${escapeHtml(option.source)}"><span class="hh-turn__who">Suggest</span> ${escapeHtml(option.label)}. ${escapeHtml(option.why)}</p>`,
     );
   }
   if (parts.length === 0) return "";
@@ -660,6 +700,7 @@ async function handleTurn(
           kind,
           questionId: parsed.questionId,
           ...(parsed.text === undefined ? {} : { text: parsed.text }),
+          ...(parsed.assumed === true ? { assumed: true } : {}),
         }),
       );
       const session = view();
@@ -1123,6 +1164,10 @@ function buildSession(
         };
   const assumption = previousAssumption(questions, answers, question?.id ?? null);
   const required = questionNeedsConfirm(question, requiredList);
+  const choices =
+    question !== null && overlay.choices !== null && overlay.choices.forId === question.id
+      ? overlay.choices
+      : null;
   const card: CardState = {
     question,
     draft: "",
@@ -1134,6 +1179,7 @@ function buildSession(
     assumption,
     required,
     enterHint: true,
+    choices,
   };
   const compact = depthTouched(questions, answers);
   const stepTotal = questions.length;
@@ -1187,6 +1233,7 @@ function buildSession(
     transcriptHtml: transcript,
     statusHtml: statusSpans(footerText, notice, overlay.calm),
     cardHtml,
+    choices: overlay.choices,
   };
 }
 
@@ -2509,7 +2556,7 @@ function normalizePath(url: string): string | null {
 function parseTurnBody(
   raw: string,
   kind: "answer" | "suggest" | "skip",
-): { questionId: string; text?: string } | { error: string } {
+): { questionId: string; text?: string; assumed?: boolean } | { error: string } {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -2527,8 +2574,9 @@ function parseTurnBody(
   if (kind === "answer" && typeof text !== "string") {
     return { error: "Write an answer or skip." };
   }
-  const body: { questionId: string; text?: string } = { questionId };
+  const body: { questionId: string; text?: string; assumed?: boolean } = { questionId };
   if (typeof text === "string") body.text = text;
+  if (kind === "answer" && value.assumed === true) body.assumed = true;
   return body;
 }
 
@@ -2633,7 +2681,7 @@ function latestStoredValue(projectDir: string, questionId: string): string | nul
  */
 async function editStoredAnswer(
   projectDir: string,
-  input: { kind: "answer" | "suggest" | "skip"; questionId: string; text?: string },
+  input: { kind: "answer" | "suggest" | "skip"; questionId: string; text?: string; assumed?: boolean },
 ): Promise<boolean> {
   if (input.kind !== "answer" || typeof input.text !== "string") return false;
   const latest = latestStoredValue(projectDir, input.questionId);
@@ -2644,11 +2692,16 @@ async function editStoredAnswer(
       "An empty answer is not stored. Skip to keep the assumption.",
     );
   }
-  await reviseStoredAnswer(projectDir, input.questionId, input.text);
+  await reviseStoredAnswer(projectDir, input.questionId, input.text, input.assumed === true);
   return true;
 }
 
-async function reviseStoredAnswer(projectDir: string, questionId: string, text: string): Promise<void> {
+async function reviseStoredAnswer(
+  projectDir: string,
+  questionId: string,
+  text: string,
+  assumed: boolean,
+): Promise<void> {
   const file = path.join(projectDir, ".hitchhiker", "interview.json");
   await withStateLock(projectDir, async () => {
     const raw = readFileSync(file, "utf8").replace(/^\uFEFF/, "");
@@ -2658,7 +2711,7 @@ async function reviseStoredAnswer(projectDir: string, questionId: string, text: 
     } catch {
       throw new InterviewError("corrupt-answers", "interview.json is not valid JSON.");
     }
-    const next = replaceLatestAnswer(parsed, questionId, text);
+    const next = replaceLatestAnswer(parsed, questionId, text, assumed);
     if (next === null) {
       throw new InterviewError("command", "That question is no longer on the desk.");
     }
@@ -2666,14 +2719,20 @@ async function reviseStoredAnswer(projectDir: string, questionId: string, text: 
   });
 }
 
-function replaceLatestAnswer(parsed: unknown, questionId: string, text: string): string | null {
+function replaceLatestAnswer(
+  parsed: unknown,
+  questionId: string,
+  text: string,
+  assumed: boolean,
+): string | null {
+  const status = assumed ? "SUGGESTED" : "ANSWERED";
   if (Array.isArray(parsed)) {
     const index = lastAnswerIndex(parsed, questionId);
     if (index < 0) return null;
     const copy = parsed.slice();
     const item = copy[index];
     if (!isRecord(item)) return null;
-    copy[index] = { ...item, status: "ANSWERED", value: text };
+    copy[index] = { ...item, status, value: text };
     return `${JSON.stringify(copy, null, 2)}\n`;
   }
   if (!isRecord(parsed) || !Array.isArray(parsed.answers)) return null;
@@ -2682,7 +2741,7 @@ function replaceLatestAnswer(parsed: unknown, questionId: string, text: string):
   const item = parsed.answers[index];
   if (!isRecord(item)) return null;
   const answers = parsed.answers.slice();
-  answers[index] = { ...item, status: "ANSWERED", value: text };
+  answers[index] = { ...item, status, value: text };
   return `${JSON.stringify({ ...parsed, answers }, null, 2)}\n`;
 }
 

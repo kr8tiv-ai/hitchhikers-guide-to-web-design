@@ -1,0 +1,73 @@
+{
+  "pushback-judge": [
+    {
+      "result": {
+        "vague": true,
+        "quote": "it's fine",
+        "sharperChoice": "What is one concrete detail the shop site should keep?",
+        "choices": [
+          {
+            "id": "A",
+            "label": "What is one concrete detail the shop site should keep?",
+            "why": "The answer needs one concrete detail the shop can use.",
+            "source": "industry:tea"
+          },
+          {
+            "id": "B",
+            "label": "A menu page is the one page to keep.",
+            "why": "The crawl notes a menu the shop already has.",
+            "source": "crawl:menu"
+          },
+          {
+            "id": "C",
+            "label": "Show the tin photo as the concrete detail.",
+            "why": "The upload is a photo of the tins.",
+            "source": "upload:tins.jpg"
+          }
+        ]
+      }
+    }
+  ],
+  "guide-message": [
+    {
+      "result": {
+        "message": "Have you built a website before, and which parts still feel like yours?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    },
+    {
+      "result": {
+        "message": "What should the shop keep on the next card?",
+        "explanationLevel": "beginner",
+        "joke": false
+      }
+    }
+  ],
+  "suggest": [
+    {
+      "result": {
+        "choices": [
+          {
+            "id": "A",
+            "label": "A quiet order page for the shop.",
+            "why": "The industry is tea and the page can stay quiet.",
+            "source": "industry:tea"
+          },
+          {
+            "id": "B",
+            "label": "Show the tin photo large on the page.",
+            "why": "The upload is a photo of the tins.",
+            "source": "upload:tins.jpg"
+          },
+          {
+            "id": "C",
+            "label": "Keep the menu note from the crawl.",
+            "why": "The crawl notes a simple menu.",
+            "source": "crawl:menu"
+          }
+        ]
+      }
+    }
+  ]
+}

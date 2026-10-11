@@ -117,19 +117,22 @@ export { briefLoop, isApproval, renderSiteBrief } from "./guide/brief-loop.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback } from "./guide/pushback-judge.ts";
 export { mirrorCue, requestMirror } from "./guide/mirror.ts";
-export { isTasteId, loadFacts, loadGallery, referenceCards, suggest } from "./guide/suggest.ts";
+export { choiceSetFrom, isTasteId, loadFacts, loadGallery, referenceCards, suggest, suggestOffer } from "./guide/suggest.ts";
 export { detectLanguage, guideTextIssues, lintClaims, questionCount, validateGuideMessage } from "./guide/validators.ts";
-export type { GuideAcp, GuideSession, GuideTurn, GuideTurnDeps } from "./guide/live-turn.ts";
+export type { GuideAcp, GuideSession, GuideTurn, GuideTurnDeps, GuideTurnInput } from "./guide/live-turn.ts";
 export type { MirrorCue } from "./guide/mirror.ts";
 export type { PushJudgement } from "./guide/pushback-judge.ts";
 export type {
   BriefKey,
+  ChoiceId,
+  ChoiceOrigin,
   Facts,
   GalleryEntry,
   GuideMessage,
   MirrorVerdict,
   PushbackVerdict,
   SiteBrief,
+  SuggestChoice,
   SuggestOption,
 } from "./guide/schemas.ts";
 export {

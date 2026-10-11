@@ -114,6 +114,8 @@
 .hh-qcard button:focus-visible,
 .hh-qcard textarea:focus,
 .hh-qcard textarea:focus-visible,
+.hh-qcard .hh-choice:focus,
+.hh-qcard .hh-choice:focus-visible,
 .hh-qcard__look a:focus,
 .hh-qcard__look a:focus-visible,
 .hh-qcard__look summary:focus,
@@ -230,6 +232,64 @@
   background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
   color: var(--color-ink);
   overflow-wrap: break-word;
+}
+
+.hh-choices {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hh-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-field);
+  color: var(--color-ink);
+  font-family: var(--font-text);
+  font-size: var(--type-body);
+  line-height: 1.4;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.hh-choice[aria-checked="true"] {
+  border-color: var(--color-accent);
+}
+
+.hh-choice__key {
+  flex: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.hh-choice__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hh-choices__live {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--type-small);
+  line-height: 1.4;
+}
+
+.hh-qcard__retry {
+  margin: 0;
+}
+
+.hh-qcard__retry .hh-btn {
+  min-height: 44px;
 }
 
 .hh-mast__line {

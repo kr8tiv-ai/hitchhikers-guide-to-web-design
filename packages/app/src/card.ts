@@ -23,6 +23,24 @@ export interface CardAssumption {
   kind: "suggested" | "skipped";
 }
 
+export type CardChoiceId = "A" | "B" | "C" | "D";
+
+export interface CardChoice {
+  id: CardChoiceId;
+  label: string;
+  why: string;
+  source: string;
+}
+
+/** Shared by Suggest and a weak-answer follow-up. `origin` says model or fallback. */
+export interface CardChoiceSet {
+  forId: string;
+  origin: "model" | "fallback";
+  items: CardChoice[];
+}
+
+export const OTHER_CHOICE_LABEL = "Other: I'll write my own";
+
 export interface CardState {
   question: Question | null;
   draft: string;
@@ -46,6 +64,8 @@ export interface CardState {
   skipConfirm?: boolean;
   /** True on the desk, where Enter submits and Shift+Enter adds a line. */
   enterHint?: boolean;
+  /** Picks under the question. Absent when this card has nothing to choose. */
+  choices?: CardChoiceSet | null;
 }
 
 /**
@@ -277,6 +297,30 @@ function sampleAnswer(question: Question): string {
   return suggest === "" ? PLACEHOLDER_FALLBACK : suggest;
 }
 
+const CHOICE_IDS: readonly CardChoiceId[] = ["A", "B", "C", "D"];
+
+/**
+ * Radiogroup under the question. Letter picks plus Other.
+ * The live line counts lettered choices only.
+ */
+export function renderChoiceGroup(set: CardChoiceSet): string {
+  const items = set.items.filter((item, index) => item.id === CHOICE_IDS[index]).slice(0, 4);
+  if (items.length < 1) return "";
+  const radios = items.map((item, index) => {
+    const tab = index === 0 ? "0" : "-1";
+    const checked = index === 0 ? "true" : "false";
+    const name = `${item.id}. ${item.label}`;
+    return `    <div class="hh-choice" role="radio" aria-checked="${checked}" tabindex="${tab}" data-choice-id="${item.id}" data-choice-label="${escapeHtml(item.label)}" data-suggest-option="${escapeHtml(item.source)}" aria-label="${escapeHtml(name)}"><span class="hh-choice__key">${item.id}</span><span class="hh-choice__label">${escapeHtml(item.label)}</span></div>`;
+  });
+  radios.push(
+    `    <div class="hh-choice" role="radio" aria-checked="false" tabindex="-1" data-choice-id="other" aria-label="${escapeHtml(OTHER_CHOICE_LABEL)}"><span class="hh-choice__label">${escapeHtml(OTHER_CHOICE_LABEL)}</span></div>`,
+  );
+  return `  <div class="hh-choices" role="radiogroup" aria-labelledby="hh-card-ask" data-choices data-choices-for="${escapeHtml(set.forId)}" data-choices-origin="${set.origin}" tabindex="-1">
+${radios.join("\n")}
+  </div>
+  <p class="hh-choices__live" data-choices-live aria-live="polite">Options ready: ${items.length} choices</p>`;
+}
+
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
   if (state.done) return heading(DONE_TITLE, DONE_WHY, true);
@@ -305,12 +349,20 @@ export function renderCard(state: CardState): string {
   const hintLine = hint
     ? `  <p class="hh-qcard__hint" id="hh-card-hint">${escapeHtml(ANSWER_HINT)}</p>\n`
     : "";
+  const choiceSet = state.choices;
+  const choicesHtml =
+    choiceSet !== undefined &&
+    choiceSet !== null &&
+    choiceSet.forId === question.id &&
+    choiceSet.items.length > 0
+      ? `${renderChoiceGroup(choiceSet)}\n`
+      : "";
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
   <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
 ${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
-  <label class="hh-qcard__field">
+${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
   </label>

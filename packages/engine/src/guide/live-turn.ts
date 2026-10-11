@@ -22,8 +22,10 @@ import { judgePushback } from "./pushback-judge.ts";
 import {
   GUIDE_MESSAGE_SCHEMA,
   GUIDE_MESSAGE_TASK,
+  type ChoiceOrigin,
   type Facts,
   type GalleryEntry,
+  type SuggestChoice,
   type SuggestOption,
 } from "./schemas.ts";
 import {
@@ -32,7 +34,7 @@ import {
   loadFacts,
   loadGallery,
   referenceCards,
-  suggest,
+  suggestOffer,
 } from "./suggest.ts";
 import { detectLanguage, validateGuideMessage } from "./validators.ts";
 
@@ -64,12 +66,23 @@ export interface GuideTurnDeps {
   galleryFile?: string;
 }
 
+export interface GuideTurnInput {
+  kind: "answer" | "suggest" | "skip";
+  text?: string;
+  /** A pick on the spot. Stored as SUGGESTED, not judged again. */
+  assumed?: boolean;
+}
+
 export interface GuideTurn {
   message: string;
   questionId: string | null;
   status: "asked" | "pushed" | "soft" | "done";
   cards?: GalleryEntry[];
   options?: SuggestOption[];
+  /** Picks for the question in choicesForId. Model or the single fallback. */
+  choices?: SuggestChoice[];
+  choicesOrigin?: ChoiceOrigin;
+  choicesForId?: string;
   quote?: string;
   calm?: boolean;
 }
@@ -82,7 +95,7 @@ const SESSION_FILE = "guide-session.json";
 
 export async function runTurn(
   s: GuideSession,
-  input: { kind: "answer" | "suggest" | "skip"; text?: string },
+  input: GuideTurnInput,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
   await hydrate(s);
@@ -157,7 +170,7 @@ export function guideThinkFromScript(jsonText: string): typeof think {
 
 async function perform(
   s: GuideSession,
-  input: { kind: "answer" | "suggest" | "skip"; text?: string },
+  input: GuideTurnInput,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
   if (input.kind === "answer" && (input.text ?? "").trim() === "") {
@@ -177,6 +190,7 @@ async function perform(
     await interview.command({ type: "skip" });
     return advance(s, current, false, deps);
   }
+  if (input.assumed === true) return answerAssumed(s, current, input.text ?? "", deps);
   return answerText(s, current, input.text ?? "", deps);
 }
 
@@ -197,12 +211,18 @@ async function answerText(
   if (judgement.action === "push") {
     if (judgement.floor) await storeFloorHold(s, text);
     s.pushes[current.id] = judgement.count;
-    return {
+    const turn: GuideTurn = {
       message: judgement.message,
       questionId: current.id,
       status: "pushed",
       quote: judgement.quote,
     };
+    if (judgement.choices !== undefined && judgement.choicesOrigin !== undefined) {
+      turn.choices = judgement.choices;
+      turn.choicesOrigin = judgement.choicesOrigin;
+      turn.choicesForId = current.id;
+    }
+    return turn;
   }
   if (judgement.action === "soft" && judgement.floor) await storeSoftFloor(s, text);
   else await storePlain(s, text);
@@ -217,10 +237,11 @@ async function answerSuggest(
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
   const facts = loadFacts(s.projectDir);
-  const options = await suggest(current.id, facts, {
+  const offer = await suggestOffer(current.id, facts, {
     think: deps.think,
     projectDir: s.projectDir,
     language: s.language,
+    fallbackLabel: current.suggest ?? "",
   });
   let cards: GalleryEntry[] | undefined;
   if (isTasteId(current.id)) {
@@ -231,9 +252,24 @@ async function answerSuggest(
   }
   await storeCommand(s, { type: "suggest" });
   const turn = await advance(s, current, false, deps);
-  turn.options = options;
+  turn.options = offer.options;
+  turn.choices = offer.choices;
+  turn.choicesOrigin = offer.origin;
+  turn.choicesForId = current.id;
   if (cards !== undefined) turn.cards = cards;
   return turn;
+}
+
+/** A picked choice. Stored as SUGGESTED with the choice text, then the next ask. */
+async function answerAssumed(
+  s: GuideSession,
+  current: Question,
+  text: string,
+  deps: GuideTurnDeps,
+): Promise<GuideTurn> {
+  await storeCommand(s, { type: "suggest" });
+  await rewriteSuggestedValue(s.projectDir, current.id, text);
+  return advance(s, current, false, deps);
 }
 
 async function advance(
@@ -451,6 +487,30 @@ async function storeSoftFloor(s: GuideSession, text: string): Promise<void> {
 async function storeCommand(s: GuideSession, command: { type: "suggest" } | { type: "skip" }): Promise<void> {
   const interview = await openInterview(s.projectDir, s.depth);
   await interview.command(command);
+}
+
+/** Keeps status SUGGESTED. Skips the write when the stored line already matches. */
+async function rewriteSuggestedValue(projectDir: string, id: string, text: string): Promise<void> {
+  const trimmed = text.trim();
+  if (trimmed === "") return;
+  await withStateLock(projectDir, async () => {
+    const saved = readInterviewFile(projectDir);
+    let index = -1;
+    for (let cursor = 0; cursor < saved.answers.length; cursor += 1) {
+      if (saved.answers[cursor]?.id === id) index = cursor;
+    }
+    const record = index >= 0 ? saved.answers[index] : undefined;
+    if (record === undefined || record.status !== "SUGGESTED") return;
+    if (record.value.trim() === trimmed) return;
+    const answers = saved.answers.map((answer, cursor) =>
+      cursor === index ? { id: answer.id, status: "SUGGESTED" as const, value: trimmed } : answer,
+    );
+    await writeFile(
+      path.join(projectDir, ".hitchhiker", "interview.json"),
+      `${JSON.stringify({ version: 1, answers, cursor: saved.cursor, pushedIds: saved.pushedIds }, null, 2)}\n`,
+      "utf8",
+    );
+  });
 }
 
 function personaSkillPath(): string {

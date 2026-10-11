@@ -99,14 +99,18 @@ for (const viewport of VIEWPORTS) {
       expect(page.url()).toBe(before);
       await expect(page.locator("#hh-card-draft")).toHaveValue(DRAFT);
       await expect(page.locator("[data-question-id='DP-0.1']")).toBeVisible();
-      const alert = page.locator('[data-region="question"] [data-card-error][role="alert"]');
-      await expect(alert).toContainText("The suggestion did not save.");
+      const notice = page.locator('[data-region="question"] [data-card-notice]');
+      await expect(notice).toContainText("The suggestion did not save.");
+      await expect(notice).not.toHaveAttribute("role", "alert");
+      await expect(page.locator('[data-region="question"] [data-card-error][role="alert"]')).toHaveCount(0);
+      await expect(page.locator('[data-region="question"] .hh-error')).toHaveCount(0);
+      await expect(page.locator('[data-retry="suggest"]')).toBeVisible();
       await expect(page.locator("#hh-card-ask")).toContainText("Is this site for you, or for a client?");
       const fieldBox = await page.locator("#hh-card-draft").boundingBox();
-      const alertBox = await alert.boundingBox();
+      const noticeBox = await notice.boundingBox();
       expect(fieldBox).not.toBeNull();
-      expect(alertBox).not.toBeNull();
-      if (fieldBox !== null && alertBox !== null) expect(alertBox.y).toBeGreaterThan(fieldBox.y);
+      expect(noticeBox).not.toBeNull();
+      if (fieldBox !== null && noticeBox !== null) expect(noticeBox.y).toBeGreaterThan(fieldBox.y);
       // Chromium logs the injected 500. Any other console or page error is a desk failure.
       expect(errors).toEqual([
         "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",

@@ -22,6 +22,46 @@ export const GUIDE_MESSAGE_SCHEMA: JsonSchema = {
   },
 };
 
+const CHOICE_ITEM_SCHEMA: JsonSchema = {
+  type: "object",
+  required: ["id", "label", "why", "source"],
+  properties: {
+    id: { type: "string", enum: ["A", "B", "C", "D"] },
+    label: { type: "string", maxLength: 160 },
+    why: { type: "string", maxLength: 280 },
+    source: { type: "string", maxLength: 160 },
+  },
+};
+
+/** 2 to 4 labelled choices. Ids must also be A, B, C, D in order; the parser checks that. */
+export const CHOICES_SCHEMA: JsonSchema = {
+  type: "object",
+  required: ["choices"],
+  properties: {
+    choices: {
+      type: "array",
+      minItems: 2,
+      maxItems: 4,
+      items: CHOICE_ITEM_SCHEMA,
+    },
+  },
+};
+
+const OPTION_LIST_SCHEMA: JsonSchema = {
+  type: "array",
+  minItems: 2,
+  maxItems: 4,
+  items: {
+    type: "object",
+    required: ["label", "why", "source"],
+    properties: {
+      label: { type: "string", maxLength: 160 },
+      why: { type: "string", maxLength: 280 },
+      source: { type: "string", maxLength: 160 },
+    },
+  },
+};
+
 export const PUSHBACK_SCHEMA: JsonSchema = {
   type: "object",
   required: ["vague", "quote", "sharperChoice"],
@@ -29,27 +69,15 @@ export const PUSHBACK_SCHEMA: JsonSchema = {
     vague: { type: "boolean" },
     quote: { type: "string", maxLength: 240 },
     sharperChoice: { type: "string", maxLength: 400 },
+    choices: CHOICES_SCHEMA.properties?.choices ?? { type: "array" },
   },
 };
 
 export const SUGGEST_SCHEMA: JsonSchema = {
   type: "object",
-  required: ["options"],
   properties: {
-    options: {
-      type: "array",
-      minItems: 2,
-      maxItems: 4,
-      items: {
-        type: "object",
-        required: ["label", "why", "source"],
-        properties: {
-          label: { type: "string", maxLength: 160 },
-          why: { type: "string", maxLength: 280 },
-          source: { type: "string", maxLength: 160 },
-        },
-      },
-    },
+    options: OPTION_LIST_SCHEMA,
+    choices: CHOICES_SCHEMA.properties?.choices ?? { type: "array" },
   },
 };
 
@@ -122,6 +150,18 @@ export interface PushbackVerdict {
 }
 
 export interface SuggestOption {
+  label: string;
+  why: string;
+  source: string;
+}
+
+export type ChoiceId = "A" | "B" | "C" | "D";
+
+export type ChoiceOrigin = "model" | "fallback";
+
+/** One pick-on-the-spot choice. `origin` on the set says model or fallback. */
+export interface SuggestChoice {
+  id: ChoiceId;
   label: string;
   why: string;
   source: string;

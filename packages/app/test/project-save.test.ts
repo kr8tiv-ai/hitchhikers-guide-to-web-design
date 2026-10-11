@@ -120,6 +120,7 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
     const line = html.indexOf("hh-save-line");
     assert.ok(resume >= 0 && resume < columns);
     assert.ok(line > footer);
+    assert.match(html, /class="hh-save-line" role="region" aria-label="Project save"/);
     const removed = await runProjectPost({
       pathname: "/api/project/remove",
       projectDir: dir,

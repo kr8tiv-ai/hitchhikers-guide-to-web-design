@@ -192,7 +192,7 @@ test("an edited suggestion posts the original question and still leaves the card
   }
 });
 
-test("a failed suggest keeps the draft and shows the error under the field", async () => {
+test("a failed suggest keeps the draft and shows a retryable notice under the field", async () => {
   const h = harness(async (input) => {
     const url = requestUrl(input);
     if (url === "/api/session") return Response.json(opening);
@@ -211,16 +211,86 @@ test("a failed suggest keeps the draft and shows the error under the field", asy
     field.value = "A shop for myself, still a draft.";
     h.fire("click", { target: h.region.querySelector('[data-action="suggest"]') });
     await settle();
+    const notice = h.region.querySelector("[data-card-notice]");
     const errorNode = h.region.querySelector("[data-card-error]");
     assert.equal(article.isConnected, true);
     assert.equal(h.region.querySelector("[data-question-id]"), article);
     assert.equal(field.value, "A shop for myself, still a draft.");
-    assert.equal(errorNode?.textContent, "The suggestion did not save.");
-    assert.equal(errorNode?.getAttribute("role"), "alert");
-    assert.equal(errorNode?.getAttribute("class"), "hh-error hh-qcard__error");
-    assert.equal(orderOf(h.region, field, errorNode), true);
+    assert.equal(notice?.textContent, "The suggestion did not save.");
+    assert.equal(notice?.getAttribute("role"), "status");
+    assert.equal(notice?.getAttribute("class"), "hh-qcard__notice");
+    assert.equal(errorNode?.getAttribute("role"), null);
+    assert.equal(errorNode?.getAttribute("class")?.includes("hh-error"), false);
+    assert.equal(h.region.querySelector("[data-retry='suggest']")?.textContent, "Retry");
+    assert.equal(orderOf(h.region, field, notice), true);
     assert.equal(h.focused, 0);
     assert.equal(h.region.querySelector("[data-assumed='suggested']"), null);
+  } finally {
+    stop();
+  }
+});
+
+test("a picked choice posts the original question as assumed", async () => {
+  const bodies: string[] = [];
+  const picked = "Show the tin photo large on the page.";
+  const suggested = {
+    ...nextSession,
+    assumption: { kind: "suggested" as const, value: SUGGESTION },
+    choices: {
+      forId: "DP-0.1",
+      origin: "model" as const,
+      items: [
+        {
+          id: "A" as const,
+          label: "A quiet order page for the shop.",
+          why: "The industry is tea.",
+          source: "industry:tea",
+        },
+        {
+          id: "B" as const,
+          label: picked,
+          why: "The upload is a photo of the tins.",
+          source: "upload:tins.jpg",
+        },
+      ],
+    },
+  };
+  const afterPick = {
+    ...nextSession,
+    assumption: { kind: "suggested" as const, value: picked },
+    choices: null,
+  };
+  const h = harness(async (input, init) => {
+    const url = requestUrl(input);
+    if (url === "/api/session") return Response.json(opening);
+    if (url === "/api/suggest") return Response.json({ session: suggested });
+    if (url === "/api/answer") {
+      bodies.push(String(init?.body ?? ""));
+      return Response.json({ session: afterPick });
+    }
+    throw new Error(`unexpected ${url}`);
+  });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    const article = h.region.querySelector("[data-question-id]");
+    assert.ok(article);
+    h.fire("click", { target: h.region.querySelector('[data-action="suggest"]') });
+    await settle();
+    assert.equal(article.isConnected, true);
+    const group = article.querySelector("[role='radiogroup']");
+    assert.ok(group);
+    assert.equal(h.region.querySelector("#transcript, [data-region='transcript'] [role='radiogroup']"), null);
+    assert.equal(h.transcript.querySelector("[role='radiogroup']"), null);
+    h.fire("click", { target: article.querySelector('[data-choice-id="B"]') });
+    await settle();
+    assert.equal(bodies.length, 1);
+    const body = JSON.parse(bodies[0] ?? "{}") as { questionId?: string; text?: string; assumed?: boolean };
+    assert.equal(body.questionId, "DP-0.1");
+    assert.equal(body.text, picked);
+    assert.equal(body.assumed, true);
+    assert.equal(h.region.querySelector("[data-question-id]")?.getAttribute("data-question-id"), "DP-0.2");
+    assert.equal(h.region.querySelector("[data-assumed='suggested']")?.textContent, `Assumed: ${picked}`);
   } finally {
     stop();
   }

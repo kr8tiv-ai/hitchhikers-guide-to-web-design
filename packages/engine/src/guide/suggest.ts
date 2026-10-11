@@ -1,11 +1,16 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { think } from "../ai/think.ts";
+import { validateJson } from "../ai/schema-validate.ts";
 import {
+  CHOICES_SCHEMA,
   SUGGEST_SCHEMA,
   SUGGEST_TASK,
+  type ChoiceId,
+  type ChoiceOrigin,
   type Facts,
   type GalleryEntry,
+  type SuggestChoice,
   type SuggestOption,
 } from "./schemas.ts";
 import { guideTextIssues } from "./validators.ts";
@@ -34,11 +39,41 @@ export function isTasteId(questionId: string): boolean {
   return questionId.startsWith("DP-5.");
 }
 
+const CHOICE_IDS: readonly ChoiceId[] = ["A", "B", "C", "D"];
+const STANDING_WHY = "This is the standing suggestion for the question.";
+const EMPTY_LABEL = "A short answer in your own words.";
+
+export interface ChoiceSet {
+  choices: SuggestChoice[];
+  origin: ChoiceOrigin;
+}
+
+export interface SuggestOffer {
+  options: SuggestOption[];
+  choices: SuggestChoice[];
+  origin: ChoiceOrigin;
+}
+
 export async function suggest(
   questionId: string,
   facts: Facts,
-  deps: { think: typeof think; projectDir?: string; language?: string },
+  deps: { think: typeof think; projectDir?: string; language?: string; fallbackLabel?: string },
 ): Promise<SuggestOption[]> {
+  const offer = await suggestOffer(questionId, facts, deps);
+  return offer.options;
+}
+
+/**
+ * One model call. `options` stays the grounded list suggest() already returned.
+ * `choices` is 2 to 4 labelled picks, or exactly one fallback. Bad JSON never throws.
+ */
+export async function suggestOffer(
+  questionId: string,
+  facts: Facts,
+  deps: { think: typeof think; projectDir?: string; language?: string; fallbackLabel?: string },
+): Promise<SuggestOffer> {
+  const language = deps.language ?? "en";
+  const fallback = { label: deps.fallbackLabel ?? "" };
   let value: unknown;
   try {
     const result = await deps.think(
@@ -48,7 +83,8 @@ export async function suggest(
         effort: "medium",
         input: [
           `Question id: ${questionId}`,
-          "Return 2 to 4 options.",
+          "Return 2 to 4 choices with ids A, B, C, D in that order.",
+          "Each choice has id, label, why, and source.",
           "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts below.",
           "Do not cite a file, answer, note, or industry that is not listed.",
           renderFacts(facts),
@@ -58,9 +94,49 @@ export async function suggest(
     );
     value = result.value;
   } catch {
-    return [];
+    const set = choiceSetFrom(undefined, facts, language, fallback);
+    return { options: [], choices: set.choices, origin: set.origin };
   }
-  return groundedOptions(value, facts, deps.language ?? "en").slice(0, 4);
+  const set = choiceSetFrom(value, facts, language, fallback);
+  return {
+    options: groundedOptions(value, facts, language).slice(0, 4),
+    choices: set.choices,
+    origin: set.origin,
+  };
+}
+
+/**
+ * Valid 2 to 4 ordered choices become a model set.
+ * Bad JSON, a schema miss, or fewer than 2 grounded rows become exactly one fallback.
+ * A present `choices` key that fails the schema does not fall through to `options`.
+ */
+export function choiceSetFrom(
+  value: unknown,
+  facts: Facts,
+  language: string,
+  fallback: { label: string; why?: string; source?: string },
+): ChoiceSet {
+  const standing = fallbackSet(fallback);
+  if (!isRecord(value)) return standing;
+  if (Object.hasOwn(value, "choices")) {
+    if (validateJson({ choices: value.choices }, CHOICES_SCHEMA).length > 0) return standing;
+    const list = value.choices;
+    if (!Array.isArray(list) || !idsInOrder(list)) return standing;
+    const grounded = groundList(list, facts, language);
+    if (grounded.length >= 2) return { origin: "model", choices: assignIds(grounded) };
+    if (grounded.length === 1) return { origin: "fallback", choices: assignIds(grounded) };
+    return standing;
+  }
+  if (!Object.hasOwn(value, "options") || !Array.isArray(value.options)) return standing;
+  const options = value.options;
+  if (options.length < 2 || options.length > 4) return standing;
+  for (const item of options) {
+    if (asOption(item) === null) return standing;
+  }
+  const grounded = groundList(options, facts, language);
+  if (grounded.length >= 2) return { origin: "model", choices: assignIds(grounded) };
+  if (grounded.length === 1) return { origin: "fallback", choices: assignIds(grounded) };
+  return standing;
 }
 
 export function referenceCards(
@@ -146,6 +222,57 @@ function asOption(value: unknown): SuggestOption | null {
   if (typeof record.why !== "string" || record.why.trim() === "") return null;
   if (typeof record.source !== "string" || record.source.trim() === "") return null;
   return { label: record.label.trim(), why: record.why.trim(), source: record.source.trim() };
+}
+
+function fallbackSet(fallback: { label: string; why?: string; source?: string }): ChoiceSet {
+  const label = fallback.label.trim() === "" ? EMPTY_LABEL : fallback.label.trim();
+  const why = fallback.why?.trim() ?? "";
+  const source = fallback.source?.trim() ?? "";
+  return {
+    origin: "fallback",
+    choices: [
+      {
+        id: "A",
+        label,
+        why: why === "" ? STANDING_WHY : why,
+        source: source === "" ? "question:suggest" : source,
+      },
+    ],
+  };
+}
+
+function idsInOrder(list: readonly unknown[]): boolean {
+  if (list.length < 2 || list.length > 4) return false;
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list[index];
+    if (!isRecord(item) || item.id !== CHOICE_IDS[index]) return false;
+  }
+  return true;
+}
+
+function groundList(list: readonly unknown[], facts: Facts, language: string): SuggestOption[] {
+  const kept: SuggestOption[] = [];
+  const ctx = { language, facts };
+  for (const item of list) {
+    const option = asOption(item);
+    if (option === null) continue;
+    if (!sourceExists(option.source, facts)) continue;
+    if (guideTextIssues(option.label, ctx).length > 0) continue;
+    if (guideTextIssues(option.why, ctx).length > 0) continue;
+    kept.push(option);
+  }
+  return kept;
+}
+
+function assignIds(options: readonly SuggestOption[]): SuggestChoice[] {
+  const choices: SuggestChoice[] = [];
+  for (let index = 0; index < options.length && index < CHOICE_IDS.length; index += 1) {
+    const option = options[index];
+    const id = CHOICE_IDS[index];
+    if (option === undefined || id === undefined) continue;
+    choices.push({ id, label: option.label, why: option.why, source: option.source });
+  }
+  return choices;
 }
 
 function sourceExists(source: string, facts: Facts): boolean {

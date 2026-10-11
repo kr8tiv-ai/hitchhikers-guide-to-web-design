@@ -148,7 +148,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
     }
   }
   const saveForm = `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit">Save</button></form>`;
-  const bar = `<div class="hh-save-line">${line}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
+  const bar = `<div class="hh-save-line" role="region" aria-label="Project save">${line}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
   if (!firstScreen) return bar;
   const items = rows
     .map((row) => {
@@ -187,7 +187,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
 export function applyProjectChrome(html: string, chrome: string): string {
   let next = html;
   const marker = '<div class="hh-columns">';
-  const sectionEnd = chrome.indexOf('<div class="hh-save-line">');
+  const sectionEnd = chrome.indexOf('<div class="hh-save-line"');
   const section = sectionEnd >= 0 ? chrome.slice(0, sectionEnd) : "";
   const bar = sectionEnd >= 0 ? chrome.slice(sectionEnd) : chrome;
   if (section.length > 0 && next.includes(marker)) {

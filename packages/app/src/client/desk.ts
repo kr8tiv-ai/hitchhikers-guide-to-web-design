@@ -1,6 +1,6 @@
 import type { Question } from "@hitchhiker/engine";
-import type { CardAssumption, CardCounts, CardState } from "../card.ts";
-import { escapeHtml, renderCard, VOICE_SERVICE_NOTE } from "../card.ts";
+import type { CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
+import { escapeHtml, renderCard, renderChoiceGroup, VOICE_SERVICE_NOTE } from "../card.ts";
 import {
   engineForDesk,
   voiceChromeFor,
@@ -278,6 +278,8 @@ export interface SessionView {
   required: boolean;
   mastCompact: boolean;
   mastLine: string;
+  /** Null when this session has no picks. forId is the question they belong to. */
+  choices: CardChoiceSet | null;
 }
 
 interface DeskElement {
@@ -346,6 +348,7 @@ export interface DeskEnv {
 interface TurnInput {
   questionId: string;
   text?: string;
+  assumed?: boolean;
 }
 
 export function parseSession(value: unknown): SessionView | null {
@@ -372,6 +375,7 @@ export function parseSession(value: unknown): SessionView | null {
     required: value.required === true,
     mastCompact: value.mastCompact === true,
     mastLine: typeof value.mastLine === "string" ? value.mastLine : "",
+    choices: parseChoices(value.choices),
   };
 }
 
@@ -381,8 +385,9 @@ export async function postTurn(
   input: TurnInput,
   fetcher: typeof fetch = fetch,
 ): Promise<{ ok: true; session: SessionView } | { ok: false; error: string }> {
-  const body: { questionId: string; text?: string } = { questionId: input.questionId };
+  const body: { questionId: string; text?: string; assumed?: true } = { questionId: input.questionId };
   if (input.text !== undefined) body.text = input.text;
+  if (input.assumed === true) body.assumed = true;
   let response: Response;
   try {
     response = await fetcher(`/api/${action}`, {
@@ -441,6 +446,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let cardHold = false;
   /** The suggestion on screen, plus the next session waiting for Answer. */
   let suggestHold: { questionId: string; suggestion: string; session: SessionView } | null = null;
+  /** Other was picked. The next submit is the user's own words, even if the text matches. */
+  let ownWords = false;
   const editing = new Set<string>();
   let logoSaved: { id: string; text: string } | null = null;
 
@@ -457,6 +464,18 @@ export function mountDesk(env: DeskEnv): () => void {
     if (editId !== null) {
       event.preventDefault();
       toggleEdit(editId);
+      return;
+    }
+    const choiceId = readMarked(event.target, "data-choice-id");
+    if (choiceId !== null) {
+      event.preventDefault();
+      void pickChoice(choiceId);
+      return;
+    }
+    if (readMarked(event.target, "data-retry") === "suggest") {
+      event.preventDefault();
+      const id = suggestHold?.questionId ?? view?.question?.id ?? null;
+      if (id !== null) void requestSuggestion(id);
       return;
     }
     const action = readAction(event.target);
@@ -501,12 +520,46 @@ export function mountDesk(env: DeskEnv): () => void {
     stopVoice();
   };
   const onKeyDown = (event: DeskEvent): void => {
-    if (isDraftTarget(event.target) && event.key === "Enter") {
-      // Shift+Enter is a newline. An open IME composition is not a submit.
-      if (event.shiftKey === true || event.isComposing === true) return;
-      event.preventDefault();
-      void submit("answer");
+    if (isTypingTarget(event.target)) {
+      if (isDraftTarget(event.target) && event.key === "Enter") {
+        // Shift+Enter is a newline. An open IME composition is not a submit.
+        if (event.shiftKey === true || event.isComposing === true) return;
+        event.preventDefault();
+        void submit("answer");
+      }
       return;
+    }
+    if (choicesOpen()) {
+      const key = event.key ?? "";
+      if (key === "Escape") {
+        event.preventDefault();
+        focusField();
+        return;
+      }
+      const letter = letterChoice(key);
+      if (letter !== null && choiceNode(letter) !== null) {
+        event.preventDefault();
+        void pickChoice(letter);
+        return;
+      }
+      if (insideChoices(event.target)) {
+        if (key === "ArrowDown" || key === "ArrowRight") {
+          event.preventDefault();
+          moveChoice(1);
+          return;
+        }
+        if (key === "ArrowUp" || key === "ArrowLeft") {
+          event.preventDefault();
+          moveChoice(-1);
+          return;
+        }
+        if (key === "Enter" || key === " ") {
+          event.preventDefault();
+          const current = currentChoiceId();
+          if (current !== null) void pickChoice(current);
+          return;
+        }
+      }
     }
     if (event.key !== " " && event.key !== "Enter") return;
     if (!isVoiceTarget(event.target)) return;
@@ -953,6 +1006,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (action === "skip" && suggestHold !== null) {
       suggestHold = null;
       cardHold = false;
+      ownWords = false;
     }
     if (action === "answer" && draft.trim() === "") {
       error = EMPTY_ANSWER;
@@ -970,6 +1024,7 @@ export function mountDesk(env: DeskEnv): () => void {
     error = null;
     notice = null;
     let advance = false;
+    let focusChoices = false;
     try {
       paint();
       const result = await postTurn(
@@ -985,13 +1040,21 @@ export function mountDesk(env: DeskEnv): () => void {
       view = result.session;
       draft = "";
       error = null;
+      ownWords = false;
       advance = true;
+      focusChoices =
+        result.session.question?.id === questionId &&
+        result.session.pushback !== null &&
+        result.session.choices?.forId === questionId;
     } catch {
       error = DRAFT_KEPT;
     } finally {
       pending = false;
       paint();
-      if (advance) focusNewQuestion();
+      if (advance) {
+        if (focusChoices) focusChoiceGroup();
+        else focusNewQuestion();
+      }
     }
   }
 
@@ -1001,6 +1064,7 @@ export function mountDesk(env: DeskEnv): () => void {
     error = null;
     notice = null;
     cardHold = true;
+    clearSuggestNotice();
     setBusy(true);
     let result: { ok: true; session: SessionView } | { ok: false; error: string };
     try {
@@ -1016,7 +1080,7 @@ export function mountDesk(env: DeskEnv): () => void {
         return;
       }
       cardHold = false;
-      showFieldError(result.error);
+      showSuggestFailure(result.error);
       setBusy(false);
       return;
     }
@@ -1031,9 +1095,10 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     const held = suggestHold;
-    if (draft.trim() === held.suggestion.trim()) {
+    if (!ownWords && draft.trim() === held.suggestion.trim()) {
       suggestHold = null;
       cardHold = false;
+      ownWords = false;
       view = held.session;
       draft = "";
       error = null;
@@ -1056,6 +1121,7 @@ export function mountDesk(env: DeskEnv): () => void {
       }
       suggestHold = null;
       cardHold = false;
+      ownWords = false;
       view = result.session;
       draft = "";
       error = null;
@@ -1105,7 +1171,200 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null) transcript.innerHTML = session.transcriptHtml;
+    if (mountChoices(session, questionId)) focusChoiceGroup();
+    clearSuggestNotice();
     if (!pending) setBusy(false);
+  }
+
+  function mountChoices(session: SessionView, questionId: string): boolean {
+    const set = session.choices;
+    if (set === null || set.forId !== questionId || set.items.length < 1) return false;
+    const article = region()?.querySelector(`[data-question-id="${questionId}"]`);
+    if (article === null || article === undefined) return false;
+    if (article.querySelector("[data-choices]") !== null) return false;
+    const html = renderChoiceGroup(set);
+    if (html === "") return false;
+    const composer = article.querySelector(".hh-qcard__composer");
+    if (composer !== null && typeof composer.insertAdjacentHTML === "function") {
+      composer.insertAdjacentHTML("afterbegin", html);
+    } else {
+      const ask = article.querySelector("#hh-card-ask");
+      if (ask === null || typeof ask.insertAdjacentHTML !== "function") return false;
+      ask.insertAdjacentHTML("afterend", html);
+    }
+    return article.querySelector("[data-choices]") !== null;
+  }
+
+  function focusChoiceGroup(): void {
+    const first = choiceNodeByTab() ?? region()?.querySelector("[data-choice-id]");
+    if (first !== null && first !== undefined && typeof first.focus === "function") first.focus();
+  }
+
+  function focusField(): void {
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined && typeof field.focus === "function") field.focus();
+  }
+
+  function announceChoices(text: string): void {
+    const node = region()?.querySelector("[data-choices-live]");
+    if (node !== null && node !== undefined && "textContent" in node) node.textContent = text;
+  }
+
+  function showSuggestFailure(message: string): void {
+    error = null;
+    notice = message;
+    clearFieldError();
+    const question = region();
+    if (question === null) return;
+    patchNotice(question, message);
+    let retry = question.querySelector('[data-retry="suggest"]');
+    if (retry === null) {
+      const html = `<p class="hh-qcard__retry"><button type="button" class="hh-btn hh-btn--secondary" data-retry="suggest">Retry</button></p>`;
+      const noticeNode = question.querySelector("[data-card-notice]");
+      if (noticeNode !== null && typeof noticeNode.insertAdjacentHTML === "function") {
+        noticeNode.insertAdjacentHTML("afterend", html);
+      } else {
+        question.querySelector(".hh-qcard__actions")?.insertAdjacentHTML?.("beforebegin", html);
+      }
+      retry = question.querySelector('[data-retry="suggest"]');
+    }
+    retry?.removeAttribute("hidden");
+  }
+
+  function clearSuggestNotice(): void {
+    notice = null;
+    const question = region();
+    if (question === null) return;
+    const node = question.querySelector("[data-card-notice]");
+    if (node !== null && "textContent" in node) node.textContent = "";
+    const retry = question.querySelector('[data-retry="suggest"]');
+    if (retry !== null) {
+      retry.setAttribute("hidden", "");
+      const wrap = retry.parentElement;
+      if (wrap !== null && wrap.getAttribute("class") === "hh-qcard__retry") wrap.setAttribute("hidden", "");
+    }
+  }
+
+  async function pickChoice(id: string): Promise<void> {
+    if (pending || token === null) return;
+    if (id === "other") {
+      ownWords = true;
+      draft = "";
+      const field = region()?.querySelector("#hh-card-draft");
+      if (field !== null && field !== undefined) field.value = "";
+      hideAssumed();
+      const button = region()?.querySelector('[data-action="answer"]');
+      if (button !== null && button !== undefined) {
+        button.disabled = true;
+        button.setAttribute("disabled", "");
+      }
+      announceChoices("Write your own answer.");
+      focusField();
+      return;
+    }
+    const node = choiceNode(id);
+    if (node === null) return;
+    const label = node.getAttribute("data-choice-label") ?? "";
+    if (label.trim() === "") return;
+    ownWords = false;
+    draft = label;
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined) field.value = label;
+    showAssumed(label);
+    announceChoices(`Assumed: ${label}`);
+    if (suggestHold !== null) {
+      if (label.trim() === suggestHold.suggestion.trim()) {
+        const held = suggestHold;
+        suggestHold = null;
+        cardHold = false;
+        view = held.session;
+        draft = "";
+        error = null;
+        notice = null;
+        pending = false;
+        paint();
+        focusNewQuestion();
+        return;
+      }
+      await postAssumed(suggestHold.questionId, label);
+      return;
+    }
+    const questionId = view?.question?.id ?? null;
+    if (questionId === null) return;
+    await postAssumed(questionId, label);
+  }
+
+  async function postAssumed(questionId: string, text: string): Promise<void> {
+    if (token === null) return;
+    pending = true;
+    error = null;
+    notice = null;
+    setBusy(true);
+    let advance = false;
+    try {
+      const result = await postTurn("answer", token, { questionId, text, assumed: true }, env.fetch);
+      if (!result.ok) {
+        showFieldError(result.error);
+        return;
+      }
+      suggestHold = null;
+      cardHold = false;
+      ownWords = false;
+      view = result.session;
+      draft = "";
+      error = null;
+      advance = true;
+    } catch {
+      showFieldError(DRAFT_KEPT);
+    } finally {
+      pending = false;
+      if (advance) {
+        paint();
+        focusNewQuestion();
+      } else {
+        setBusy(false);
+      }
+    }
+  }
+
+  function choiceNode(id: string): DeskElement | null {
+    return region()?.querySelector(`[data-choice-id="${id}"]`) ?? null;
+  }
+
+  function choiceNodeByTab(): DeskElement | null {
+    return region()?.querySelector('[data-choice-id][tabindex="0"]') ?? null;
+  }
+
+  function choicesOpen(): boolean {
+    return region()?.querySelector("[data-choices]") !== null;
+  }
+
+  function currentChoiceId(): string | null {
+    return choiceNodeByTab()?.getAttribute("data-choice-id") ?? null;
+  }
+
+  function moveChoice(delta: number): void {
+    const ids = ["A", "B", "C", "D", "other"];
+    const nodes: DeskElement[] = [];
+    for (const id of ids) {
+      const node = choiceNode(id);
+      if (node !== null) nodes.push(node);
+    }
+    if (nodes.length === 0) return;
+    let index = 0;
+    for (let cursor = 0; cursor < nodes.length; cursor += 1) {
+      if (nodes[cursor]?.getAttribute("tabindex") === "0") index = cursor;
+    }
+    const next = (index + delta + nodes.length) % nodes.length;
+    for (let cursor = 0; cursor < nodes.length; cursor += 1) {
+      const node = nodes[cursor];
+      if (node === undefined) continue;
+      const on = cursor === next;
+      node.setAttribute("tabindex", on ? "0" : "-1");
+      node.setAttribute("aria-checked", on ? "true" : "false");
+    }
+    const target = nodes[next];
+    if (target !== undefined && typeof target.focus === "function") target.focus();
   }
 
   function showAssumed(text: string): void {
@@ -1310,6 +1569,10 @@ export function mountDesk(env: DeskEnv): () => void {
         required: view.required,
         skipConfirm: skipConfirm && view.required,
         enterHint: true,
+        choices:
+          view.choices !== null && view.question !== null && view.choices.forId === view.question.id
+            ? view.choices
+            : null,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
       };
       const engine = activeEngine();
@@ -1320,10 +1583,11 @@ export function mountDesk(env: DeskEnv): () => void {
       );
       const saved =
         logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : undefined;
-      question.innerHTML =
+      const html =
         saved === undefined
           ? withInterviewExtras(card, view.question)
           : withInterviewExtras(card, view.question, saved);
+      if (!refillSameCard(question, html)) question.innerHTML = html;
     } else if (question !== null && error !== null) {
       question.innerHTML = `<p class="hh-error" role="alert">${escapeHtml(error)}</p>`;
     }
@@ -1458,6 +1722,64 @@ function applyMast(document: DeskDocument, compact: boolean, line: string): void
 
 function isDraftTarget(start: DeskElement | null): boolean {
   return start !== null && start.getAttribute("id") === "hh-card-draft";
+}
+
+function isTypingTarget(start: DeskElement | null): boolean {
+  if (start === null) return false;
+  if (start.getAttribute("id") === "hh-card-draft") return true;
+  if (start.getAttribute("data-edit-field") !== null) return true;
+  if (start.getAttribute("data-logo-file") !== null) return true;
+  return false;
+}
+
+function letterChoice(key: string): "A" | "B" | "C" | "D" | null {
+  if (key === "a" || key === "A") return "A";
+  if (key === "b" || key === "B") return "B";
+  if (key === "c" || key === "C") return "C";
+  if (key === "d" || key === "D") return "D";
+  return null;
+}
+
+function insideChoices(start: DeskElement | null): boolean {
+  let node = start;
+  const seen = new Set<DeskElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    if (typeof node.getAttribute !== "function") return false;
+    if (node.getAttribute("data-choices") !== null) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
+/** Keep the article node when the question id did not change. */
+function refillSameCard(region: DeskElement, html: string): boolean {
+  const existing = region.querySelector("[data-question-id]");
+  if (existing === null) return false;
+  const openAt = html.indexOf("<article");
+  if (openAt < 0) return false;
+  const openEnd = html.indexOf(">", openAt);
+  const closeAt = html.lastIndexOf("</article>");
+  if (openEnd < 0 || closeAt < openEnd) return false;
+  const open = html.slice(openAt, openEnd);
+  const idMatch = /data-question-id="([^"]*)"/.exec(open);
+  if (idMatch === null || decodeAttr(idMatch[1] ?? "") !== existing.getAttribute("data-question-id")) return false;
+  existing.innerHTML = html.slice(openEnd + 1, closeAt);
+  const push = /data-pushback="([^"]*)"/.exec(open);
+  if (push !== null) existing.setAttribute("data-pushback", decodeAttr(push[1] ?? ""));
+  else existing.removeAttribute("data-pushback");
+  if (/aria-busy="true"/.test(open)) existing.setAttribute("aria-busy", "true");
+  else existing.removeAttribute("aria-busy");
+  return true;
+}
+
+function decodeAttr(value: string): string {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
 }
 
 function ensureMotion(document: DeskDocument, questionId: string | undefined): void {
@@ -1652,6 +1974,24 @@ function isLevel(value: unknown): value is LevelName {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseChoices(value: unknown): CardChoiceSet | null {
+  if (!isRecord(value)) return null;
+  if (value.origin !== "model" && value.origin !== "fallback") return null;
+  if (typeof value.forId !== "string" || value.forId.trim() === "") return null;
+  if (!Array.isArray(value.items) || value.items.length < 1 || value.items.length > 4) return null;
+  const ids = ["A", "B", "C", "D"] as const;
+  const items: CardChoiceSet["items"] = [];
+  for (let index = 0; index < value.items.length; index += 1) {
+    const item = value.items[index];
+    const id = ids[index];
+    if (!isRecord(item) || id === undefined || item.id !== id) return null;
+    if (typeof item.label !== "string" || item.label.trim() === "") return null;
+    if (typeof item.why !== "string" || typeof item.source !== "string") return null;
+    items.push({ id, label: item.label, why: item.why, source: item.source });
+  }
+  return { forId: value.forId, origin: value.origin, items };
 }
 
 function parseCounts(value: unknown): CardCounts | null {
