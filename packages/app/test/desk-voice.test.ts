@@ -18,6 +18,7 @@ import {
   type SpeechRecognitionLike,
   type SpeechResultEventLike,
 } from "../src/client/desk.ts";
+import { DRAFT_DEBOUNCE_MS, draftStorageKey, type DraftStorage } from "../src/client/draft-store.ts";
 
 /**
  * Click to talk on the desk. These tests drive the document listeners with a
@@ -160,10 +161,38 @@ function renderedDraft(html: string): string {
   return match?.[1] === undefined ? "" : decodeEntities(match[1]);
 }
 
-function harness(Recognition: DeskEnv["SpeechRecognition"]) {
+function memoryStorage(): DraftStorage {
+  const keys: string[] = [];
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return keys.length;
+    },
+    key(index) {
+      return keys[index] ?? null;
+    },
+    getItem(key) {
+      return values.get(key) ?? null;
+    },
+    setItem(key, value) {
+      if (!values.has(key)) keys.push(key);
+      values.set(key, value);
+    },
+    removeItem(key) {
+      if (!values.has(key)) return;
+      values.delete(key);
+      const at = keys.indexOf(key);
+      if (at >= 0) keys.splice(at, 1);
+    },
+  };
+}
+
+function harness(Recognition: DeskEnv["SpeechRecognition"], options?: { storage?: DraftStorage; projectKey?: string }) {
   const meta = element({ content: "csrf-token" });
   const field = element({ id: "hh-card-draft" });
   field.value = "";
+  let inputBinds = 0;
+  const windowListeners = new Map<string, Set<() => void>>();
   const region = element({ "data-region": "question" });
   // Paint replaces the article. The live textarea value has to follow that HTML,
   // or the next readDraft() still sees the empty field from before the paint.
@@ -191,12 +220,28 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
       return null;
     },
     addEventListener(type: string, listener: Listener) {
+      if (type === "input") inputBinds += 1;
       listeners.set(type, listener);
     },
     removeEventListener(type: string) {
       listeners.delete(type);
     },
   };
+  if (options?.storage !== undefined) {
+    Object.assign(doc, {
+      defaultView: {
+        localStorage: options.storage,
+        addEventListener(type: string, listener: () => void) {
+          const set = windowListeners.get(type) ?? new Set<() => void>();
+          set.add(listener);
+          windowListeners.set(type, set);
+        },
+        removeEventListener(type: string, listener: () => void) {
+          windowListeners.get(type)?.delete(listener);
+        },
+      },
+    });
+  }
   const env: DeskEnv = {
     document: doc,
     EventSource: class {
@@ -221,7 +266,24 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
           },
         });
       }
-      return Response.json({
+      const session: {
+        question: {
+          id: string;
+          module: string;
+          depth: string[];
+          ask: string;
+          why: string;
+          input: string[];
+          skipDefault: string;
+          writes: string[];
+        };
+        pushback: null;
+        done: false;
+        mapHtml: string;
+        transcriptHtml: string;
+        statusHtml: string;
+        projectKey?: string;
+      } = {
         question: {
           id: "DP-1.2",
           module: "towel-check",
@@ -237,7 +299,9 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
         mapHtml: "",
         transcriptHtml: "",
         statusHtml: "",
-      });
+      };
+      if (options?.projectKey !== undefined && options.projectKey !== "") session.projectKey = options.projectKey;
+      return Response.json(session);
     },
     SpeechRecognition: Recognition,
     lang: "en-CA",
@@ -251,7 +315,10 @@ function harness(Recognition: DeskEnv["SpeechRecognition"]) {
   const fireError = (): void => {
     errorListener?.();
   };
-  return { env, region, field, fire, listeners, emitSession, posts, fireError };
+  const firePageShow = (): void => {
+    for (const listener of windowListeners.get("pageshow") ?? []) listener();
+  };
+  return { env, region, field, fire, listeners, emitSession, posts, fireError, inputBinds: () => inputBinds, firePageShow };
 }
 
 const talk = (): FakeEl => element({ "data-voice": "hold" });
@@ -1535,6 +1602,148 @@ test("a restart replays old results once and stays at one live recognizer", asyn
     ], 0);
     assert.equal(renderedDraft(h.region.innerHTML), "alpha beta gamma");
     assert.equal(answerPosts(h).length, 0);
+  } finally {
+    stop();
+  }
+});
+
+/** The utterance from the Chrome screenshot, without the revised last word. */
+const UTTERANCE =
+  "this web page is for myself to operate I'm creating a page where people can buy";
+const DRAFT_PROJECT = "a".repeat(32);
+
+function occurrences(host: string, needle: string): number {
+  if (needle === "") return 0;
+  let count = 0;
+  let from = 0;
+  while (from < host.length) {
+    const at = host.indexOf(needle, from);
+    if (at < 0) return count;
+    count += 1;
+    from = at + needle.length;
+  }
+  return count;
+}
+
+function storedDraftText(storage: DraftStorage): string | null {
+  const raw = storage.getItem(draftStorageKey(DRAFT_PROJECT, "DP-1.2"));
+  if (raw === null) return null;
+  const parsed = JSON.parse(raw) as { text?: unknown };
+  return typeof parsed.text === "string" ? parsed.text : null;
+}
+
+test("a revised interim keeps the fixed base and never repeats the sentence", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.field.value = "Intro.";
+    h.fire("input", { target: h.field });
+    FakeRecognition.all = [];
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    const seen: string[] = [];
+    for (const word of ["fire", "Farm", "firewood"]) {
+      rec.hear([{ text: `${UTTERANCE} ${word}`, final: false }], 0);
+      seen.push(h.field.value ?? "");
+    }
+    rec.hear([{ text: `${UTTERANCE} firewood`, final: true }], 0);
+    seen.push(h.field.value ?? "");
+    assert.deepEqual(seen, [
+      `Intro. ${UTTERANCE} fire`,
+      `Intro. ${UTTERANCE} Farm`,
+      `Intro. ${UTTERANCE} firewood`,
+      `Intro. ${UTTERANCE} firewood`,
+    ]);
+    for (const value of seen) assert.equal(occurrences(value, UTTERANCE), 1);
+    assert.equal(liveCount(), 1);
+    assert.equal(FakeRecognition.all.filter((item) => item.onresult !== null).length, 1);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, `Intro. ${UTTERANCE} firewood`);
+  } finally {
+    stop();
+  }
+});
+
+test("repeated Chrome finals at resultIndex 0 leave the box unchanged", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.field.value = "Intro.";
+    h.fire("input", { target: h.field });
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    const list = [
+      { text: "one two", final: true },
+      { text: "three four", final: true },
+    ];
+    rec.hear(list, 0);
+    rec.hear(list, 0);
+    rec.hear(list, 0);
+    assertDraft(h, "Intro. one two three four");
+    assert.equal(occurrences(h.field.value ?? "", "one two three four"), 1);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, "Intro. one two three four");
+  } finally {
+    stop();
+  }
+});
+
+test("a mid-dictation restore, repaint, or programmatic write does not repeat the sentence", async () => {
+  FakeRecognition.all = [];
+  FakeRecognition.last = null;
+  FakeRecognition.stopOrder = "manual";
+  FakeRecognition.pendingFinal = "";
+  const storage = memoryStorage();
+  const h = harness(FakeRecognition, { storage, projectKey: DRAFT_PROJECT });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    assert.equal(h.inputBinds(), 1);
+    h.field.value = "Intro.";
+    h.fire("input", { target: h.field });
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.hear([{ text: `${UTTERANCE} fire`, final: false }], 0);
+    assert.equal(h.field.value, `Intro. ${UTTERANCE} fire`);
+    await delay(DRAFT_DEBOUNCE_MS + 50);
+    assert.equal(storedDraftText(storage), `Intro. ${UTTERANCE} fire`);
+    h.fireError();
+    h.fireError();
+    h.fireError();
+    h.firePageShow();
+    assert.equal(h.field.value, `Intro. ${UTTERANCE} fire`);
+    assert.equal(h.inputBinds(), 1);
+    assert.equal(FakeRecognition.all.filter((item) => item.onresult !== null).length, 1);
+    assert.equal(liveCount(), 1);
+    h.fire("input", { target: h.field });
+    h.field.value = "Intro. STALE COPY";
+    rec.hear([{ text: `${UTTERANCE} Farm`, final: false }], 0);
+    assert.equal(h.field.value, `Intro. ${UTTERANCE} Farm`);
+    assert.equal(occurrences(h.field.value ?? "", UTTERANCE), 1);
+    h.field.value = `${h.field.value ?? ""} please`;
+    h.fire("input", { target: h.field });
+    rec.hear([{ text: `${UTTERANCE} firewood`, final: false }], 0);
+    const heardOnce = `Intro. please ${UTTERANCE} firewood`;
+    assert.equal(h.field.value, heardOnce);
+    assert.equal(occurrences(h.field.value ?? "", "please"), 1);
+    assert.equal(occurrences(h.field.value ?? "", UTTERANCE), 1);
+    await delay(DRAFT_DEBOUNCE_MS + 50);
+    assert.equal(storedDraftText(storage), heardOnce);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, heardOnce);
+    assert.equal(h.inputBinds(), 1);
   } finally {
     stop();
   }

@@ -200,3 +200,67 @@ test("a typed-over box keeps the edit when the same transcript is resent", () =>
   assert.equal(again.draft, "Hello friend tea");
   assert.equal(again.draft.split("tea").length - 1, 1);
 });
+
+/** The utterance from the Chrome screenshot, without the revised last word. */
+const UTTERANCE =
+  "this web page is for myself to operate I'm creating a page where people can buy";
+
+function countOf(host: string, needle: string): number {
+  if (needle === "") return 0;
+  let count = 0;
+  let from = 0;
+  while (from < host.length) {
+    const at = host.indexOf(needle, from);
+    if (at < 0) return count;
+    count += 1;
+    from = at + needle.length;
+  }
+  return count;
+}
+
+/**
+ * Each call's `typed` is the previous call's draft, which is how the desk
+ * used to pass the live textarea back in.
+ */
+function chainRevised(base: string, steps: { final: string; interim: string }[]): string[] {
+  let typed = base;
+  const drafts: string[] = [];
+  for (const step of steps) {
+    const settled = settleVoice({ base, typed, final: step.final, interim: step.interim });
+    assert.equal(settled.heard, true);
+    typed = settled.draft;
+    drafts.push(settled.draft);
+  }
+  return drafts;
+}
+
+test("a revised interim replaces its last word instead of repeating the sentence", () => {
+  const words = ["fire", "Farm", "firewood"];
+  const steps = words.map((word) => ({ final: "", interim: `${UTTERANCE} ${word}` }));
+  steps.push({ final: `${UTTERANCE} firewood`, interim: "" });
+  const expected = [
+    `${UTTERANCE} fire`,
+    `${UTTERANCE} Farm`,
+    `${UTTERANCE} firewood`,
+    `${UTTERANCE} firewood`,
+  ];
+  assert.deepEqual(chainRevised("", steps), expected);
+  assert.deepEqual(
+    chainRevised("Intro.", steps),
+    expected.map((line) => `Intro. ${line}`),
+  );
+
+  const withFinals = chainRevised("Intro.", [
+    { final: "one two", interim: "three fire" },
+    { final: "one two", interim: "three Farm" },
+    { final: "one two three firewood", interim: "" },
+  ]);
+  assert.deepEqual(withFinals, [
+    "Intro. one two three fire",
+    "Intro. one two three Farm",
+    "Intro. one two three firewood",
+  ]);
+  for (const line of withFinals) {
+    assert.equal(countOf(line, "one two three"), 1);
+  }
+});

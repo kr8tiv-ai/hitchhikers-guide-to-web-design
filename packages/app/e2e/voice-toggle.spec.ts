@@ -1061,6 +1061,122 @@ test("a restart replays old results once and keeps one live recognizer", async (
   await expect(draft).toHaveValue("alpha beta gamma");
 });
 
+/** The utterance from the Chrome screenshot, without the revised last word. */
+const UTTERANCE =
+  "this web page is for myself to operate I'm creating a page where people can buy";
+
+test("a revised interim keeps a fixed base and never repeats the sentence", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await installInputCounter(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await replaceDraft(draft, "Intro.");
+  const bindsAtStart = await inputBinds(page);
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  const seen: string[] = [];
+  for (const word of ["fire", "Farm", "firewood"]) {
+    await emitList(page, -1, [{ text: `${UTTERANCE} ${word}`, final: false }], 0);
+    seen.push(await draft.inputValue());
+  }
+  await emitList(page, -1, [{ text: `${UTTERANCE} firewood`, final: true }], 0);
+  seen.push(await draft.inputValue());
+  expect(seen).toEqual([
+    `Intro. ${UTTERANCE} fire`,
+    `Intro. ${UTTERANCE} Farm`,
+    `Intro. ${UTTERANCE} firewood`,
+    `Intro. ${UTTERANCE} firewood`,
+  ]);
+  for (const value of seen) expect(value.split(UTTERANCE).length - 1).toBe(1);
+  const sameFinal = [
+    { text: "one two", final: true },
+    { text: "three four", final: true },
+  ];
+  await emitList(page, -1, sameFinal, 0);
+  await emitList(page, -1, sameFinal, 0);
+  await emitList(page, -1, sameFinal, 0);
+  await expect(draft).toHaveValue("Intro. one two three four");
+  expect((await draft.inputValue()).split("one two three four").length - 1).toBe(1);
+
+  await emitList(page, -1, [{ text: `${UTTERANCE} fire`, final: false }], 0);
+  await expect(draft).toHaveValue(`Intro. ${UTTERANCE} fire`);
+  await expect.poll(async () => storedDraftText(page), { timeout: 2_000 }).toBe(`Intro. ${UTTERANCE} fire`);
+  await paintFromStream(page);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("pageshow"));
+  });
+  await expect(draft).toHaveValue(`Intro. ${UTTERANCE} fire`);
+  await page.evaluate(() => {
+    const field = document.querySelector("#hh-card-draft");
+    if (field instanceof HTMLTextAreaElement) field.value = "Intro. STALE COPY";
+  });
+  await emitList(page, -1, [{ text: `${UTTERANCE} Farm`, final: false }], 0);
+  await expect(draft).toHaveValue(`Intro. ${UTTERANCE} Farm`);
+  expect((await draft.inputValue()).split(UTTERANCE).length - 1).toBe(1);
+  await draft.evaluate((el) => {
+    const field = el as HTMLTextAreaElement;
+    field.value = `${field.value} please`;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await emitList(page, -1, [{ text: `${UTTERANCE} firewood`, final: false }], 0);
+  const heardOnce = `Intro. please ${UTTERANCE} firewood`;
+  await expect(draft).toHaveValue(heardOnce);
+  expect((await draft.inputValue()).split("please").length - 1).toBe(1);
+  expect((await draft.inputValue()).split(UTTERANCE).length - 1).toBe(1);
+  await expect.poll(async () => storedDraftText(page), { timeout: 2_000 }).toBe(heardOnce);
+  const bindsAfter = await inputBinds(page);
+  expect(bindsAfter).toEqual(bindsAtStart);
+  expect(bindsAfter.document).toBe(1);
+  expect(bindsAfter.textarea).toBe(0);
+  const stats = await voiceStats(page);
+  expect(stats.live).toBe(1);
+  expect(stats.onresult).toBe(1);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue(heardOnce);
+  expect(answers).toEqual([]);
+});
+
+async function installInputCounter(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const host = window as Window & { __hhInputAdds?: { document: number; textarea: number } };
+    host.__hhInputAdds = { document: 0, textarea: 0 };
+    const docAdd = Document.prototype.addEventListener;
+    Document.prototype.addEventListener = function (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+      if (type === "input") host.__hhInputAdds!.document += 1;
+      docAdd.call(this, type, listener, options);
+    };
+    const areaAdd = HTMLTextAreaElement.prototype.addEventListener;
+    HTMLTextAreaElement.prototype.addEventListener = function (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+      if (type === "input") host.__hhInputAdds!.textarea += 1;
+      areaAdd.call(this, type, listener, options);
+    };
+  });
+}
+
+async function inputBinds(page: Page): Promise<{ document: number; textarea: number }> {
+  return page.evaluate(() => {
+    const host = window as Window & { __hhInputAdds?: { document: number; textarea: number } };
+    return host.__hhInputAdds ?? { document: 0, textarea: 0 };
+  });
+}
+
+async function storedDraftText(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key === null || !key.startsWith("hh.draft.v1:")) continue;
+      const raw = localStorage.getItem(key);
+      if (raw === null) return null;
+      const parsed = JSON.parse(raw) as { text?: unknown };
+      return typeof parsed.text === "string" ? parsed.text : null;
+    }
+    return null;
+  });
+}
+
 async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<void> {
   await page.addInitScript(installVoice, mode);
   if (clock) await page.clock.install();

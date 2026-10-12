@@ -4,7 +4,7 @@ Click to talk and the interview use a speech engine. The default spends nothing.
 
 One click starts listening. A second click stops. Stopping keeps every word in the draft. The desk waits for the final result, or for the recognizer to end, before it finishes that stop. Nothing is submitted until you press Answer.
 
-Click to talk keeps one recognizer at a time. The draft is rebuilt from the whole result list, so a repeated or growing list does not print a word twice. One late result can still arrive after you stop, until that short wait ends.
+Click to talk keeps one recognizer at a time. The draft is rebuilt from the whole result list, so a repeated or growing list does not print a word twice. The base is a snapshot of the box when dictation starts and stays fixed, so a revised interim replaces its last word instead of repeating the sentence. One late result can still arrive after you stop, until that short wait ends.
 
 Two browser tabs each have their own box. Chrome lets only one tab hold the microphone, so a second tab can stop the first.
 

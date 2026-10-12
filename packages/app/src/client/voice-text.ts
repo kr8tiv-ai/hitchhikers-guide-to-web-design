@@ -19,9 +19,12 @@ export interface MergedTranscript {
 }
 
 export interface SettleVoiceInput {
-  /** Text captured when listening started. */
+  /** Text captured when listening started. It stays fixed while results arrive. */
   base: string;
-  /** Live textarea, including anything typed while listening. */
+  /**
+   * Base plus words the person typed. Not the previous voice result.
+   * A previous result is still tolerated: a revised last word replaces it.
+   */
   typed: string;
   /** Final transcripts joined so far. */
   final: string;
@@ -71,9 +74,10 @@ function combineHeard(finalText: string, interimText: string): string {
 }
 
 /**
- * Commit a voice session.
- * Nothing heard returns the live textarea unchanged.
- * Heard words are joined once and the result is never shorter than that textarea.
+ * Join heard words onto the fixed base.
+ * Nothing heard returns `typed` unchanged.
+ * A previous copy of this utterance whose last word changed is replaced.
+ * Other typed words are joined once.
  */
 export function settleVoice(input: SettleVoiceInput): SettleVoiceResult {
   const heardText = combineHeard(input.final, input.interim);
@@ -82,7 +86,38 @@ export function settleVoice(input: SettleVoiceInput): SettleVoiceResult {
   if (covers(input.typed, composed)) return { draft: input.typed, heard: true };
   if (covers(composed, input.typed)) return { draft: composed, heard: true };
   if (input.typed.includes(heardText)) return { draft: input.typed, heard: true };
+  const revised = replaceRevisedTail(input.base, input.typed, heardText);
+  if (revised !== null) return { draft: revised, heard: true };
   return { draft: joinWords(input.typed, heardText), heard: true };
+}
+
+/**
+ * `typed` is base plus an older hypothesis of `heard`, and only the last word differs.
+ * That is a revision, so the hypothesis is replaced. A shorter or unrelated edit returns null
+ * and the caller keeps the typed words.
+ */
+function replaceRevisedTail(base: string, typed: string, heard: string): string | null {
+  const root = base.trim();
+  const host = typed.trim();
+  const speech = heard.trim();
+  if (host === "" || speech === "") return null;
+  let tail = host;
+  if (root !== "") {
+    const spaced = `${root} `;
+    if (!host.startsWith(spaced)) return null;
+    tail = host.slice(root.length).trim();
+  }
+  if (tail === "" || tail === speech) return null;
+  const tailWords = tail.split(/\s+/);
+  const speechWords = speech.split(/\s+/);
+  if (tailWords.length < 2 || tailWords.length !== speechWords.length) return null;
+  for (let index = 0; index < tailWords.length - 1; index += 1) {
+    const left = tailWords[index];
+    const right = speechWords[index];
+    if (left === undefined || right === undefined || left !== right) return null;
+  }
+  if (tailWords[tailWords.length - 1] === speechWords[speechWords.length - 1]) return null;
+  return joinWords(root, speech);
 }
 
 /** A longer final of the same utterance replaces the previous one. "no" + "no" does not. */

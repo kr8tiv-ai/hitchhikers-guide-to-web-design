@@ -637,11 +637,14 @@ export function mountDesk(env: DeskEnv): () => void {
   let committed = false;
   let heardStart = false;
   let voiceBase = "";
+  /** Words the person typed during this dictation. Voice output is not included. */
+  let voiceTyped = "";
+  /** Last value this dictation wrote, or the base at start. Echoes of it are not typing. */
+  let lastWritten = "";
   let voiceFinal = "";
   let voiceInterim = "";
   let voiceError: string | null = null;
   let userTouched = false;
-  let lastHeard = "";
   let promotedUtterance = "";
   let emptyRestarts = 0;
   let restartDelay = VOICE_RESTART_BASE_MS;
@@ -773,7 +776,10 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
-    draft = target.value ?? "";
+    const next = target.value ?? "";
+    // patchDraft, repaint, and restore write lastWritten. That echo is not typing.
+    if (voiceSession && next === lastWritten) return;
+    draft = next;
     pageTyped = true;
     offerOnFocus = null;
     rememberDraft(false);
@@ -877,6 +883,10 @@ export function mountDesk(env: DeskEnv): () => void {
   const onPageHide = (): void => {
     stopImmediately();
     flushLeaving();
+  };
+  const onPageShow = (): void => {
+    // Draft restore stays on the initial load. A pageshow must not move the voice base.
+    if (voiceActive()) return;
   };
   const onVisibility = (): void => {
     if (env.document.visibilityState === "hidden") {
@@ -984,6 +994,7 @@ export function mountDesk(env: DeskEnv): () => void {
   const deskWindow = env.document.defaultView ?? null;
   if (deskWindow !== null) {
     deskWindow.addEventListener("pagehide", onPageHide);
+    deskWindow.addEventListener("pageshow", onPageShow);
     deskWindow.addEventListener("beforeunload", onPageHide);
     deskWindow.addEventListener("dragover", onWindowDrag);
     deskWindow.addEventListener("drop", onWindowDrag);
@@ -1011,6 +1022,7 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("focusin", onFocusIn);
     if (deskWindow !== null) {
       deskWindow.removeEventListener("pagehide", onPageHide);
+      deskWindow.removeEventListener("pageshow", onPageShow);
       deskWindow.removeEventListener("beforeunload", onPageHide);
       deskWindow.removeEventListener("dragover", onWindowDrag);
       deskWindow.removeEventListener("drop", onWindowDrag);
@@ -1437,13 +1449,14 @@ export function mountDesk(env: DeskEnv): () => void {
     if (lateRec !== null && !endedRecs.has(lateRec)) retireRecognizer(lateRec);
     if (restartRec !== null) retireRecognizer(restartRec);
     voiceBase = draft;
+    voiceTyped = "";
+    lastWritten = draft;
     voiceFinal = "";
     voiceInterim = "";
     recognizerBase = "";
     voiceError = null;
     heardStart = false;
     userTouched = false;
-    lastHeard = "";
     promotedUtterance = "";
     emptyRestarts = 0;
     restartDelay = VOICE_RESTART_BASE_MS;
@@ -1672,26 +1685,68 @@ export function mountDesk(env: DeskEnv): () => void {
   function applyHeardToDraft(): void {
     const heard = joinWords(voiceFinal, voiceInterim);
     if (heard === "" && !userTouched) return;
-    readDraft();
-    const typed = draft;
-    if (!userTouched) {
-      draft = settleVoice({ base: voiceBase, typed, final: voiceFinal, interim: voiceInterim }).draft;
-    } else {
-      draft = mergeTyped(typed, heard);
-    }
-    lastHeard = heard;
+    const settled = settleCurrent();
+    draft = settled.draft;
+    lastWritten = draft;
     if (!patchDraft()) paint();
+    rememberDraft(false);
   }
 
-  function mergeTyped(typed: string, heard: string): string {
-    if (heard === "") return typed;
-    const trimmed = typed.trimEnd();
-    if (lastHeard !== "" && (trimmed === lastHeard || trimmed.endsWith(` ${lastHeard}`))) {
-      const head = trimmed === lastHeard ? "" : trimmed.slice(0, trimmed.length - lastHeard.length).trimEnd();
-      return joinWords(head, heard);
+  /**
+   * draft = base + words typed during dictation + heard, each once.
+   * The textarea already holds the previous composition, so it is not the base.
+   * A programmatic write leaves userTouched false and is ignored.
+   */
+  function settleCurrent(): { draft: string; heard: boolean } {
+    readDraft();
+    if (userTouched && draft !== lastWritten) absorbLiveEdit(draft);
+    const typed = voiceTyped === "" ? voiceBase : joinWords(voiceBase, voiceTyped);
+    return settleVoice({
+      base: voiceBase,
+      typed,
+      final: voiceFinal,
+      interim: voiceInterim,
+    });
+  }
+
+  /**
+   * A late final rewrote the box while this session is still listening.
+   * Peel the current heard, then the typed delta, so the next settle
+   * reproduces `next` from the fixed base instead of the pre-edit snapshot.
+   */
+  function adoptLateBase(next: string): void {
+    const heardNow = joinWords(voiceFinal, voiceInterim).trim();
+    const typed = voiceTyped.trim();
+    let rest = next.trim();
+    if (heardNow !== "" && (rest === heardNow || rest.endsWith(` ${heardNow}`))) {
+      rest = rest === heardNow ? "" : rest.slice(0, rest.length - heardNow.length).trimEnd();
     }
-    if (typed.includes(heard)) return typed;
-    return joinWords(typed, heard);
+    if (typed !== "" && (rest === typed || rest.endsWith(` ${typed}`))) {
+      voiceBase = rest === typed ? "" : rest.slice(0, rest.length - typed.length).trimEnd();
+    } else if (typed !== "") {
+      voiceBase = rest;
+      voiceTyped = "";
+    } else {
+      voiceBase = rest;
+    }
+    lastWritten = next;
+  }
+
+  function absorbLiveEdit(live: string): void {
+    if (live === lastWritten) return;
+    if (lastWritten !== "" && startsWithBoundary(live, lastWritten)) {
+      voiceTyped = joinWords(voiceTyped, live.slice(lastWritten.length));
+      lastWritten = live;
+      return;
+    }
+    const heard = joinWords(voiceFinal, voiceInterim).trim();
+    const base = voiceBase.trim();
+    let rest = live.trim();
+    if (base !== "" && (rest === base || startsWithBoundary(rest, base))) {
+      rest = rest === base ? "" : rest.slice(base.length).trim();
+    }
+    voiceTyped = removePhraseOnce(rest, heard);
+    lastWritten = live;
   }
 
   function clearStopTimer(): void {
@@ -1734,6 +1789,9 @@ export function mountDesk(env: DeskEnv): () => void {
       draft = next;
       heard = incoming.trim();
       anchor = "";
+      // The newer session still recomposes from its snapshot. Fold this edit
+      // into that snapshot or the next result puts the old base back.
+      if (voiceSession) adoptLateBase(next);
       // A new session owns the notice. This result only edits its own utterance.
       // Heard you is only for a box that still has words.
       if (changed && !voiceSession && !capped && !failed) {
@@ -1789,7 +1847,8 @@ export function mountDesk(env: DeskEnv): () => void {
     clearStopTimer();
     clearRestartTimer();
     userTouched = false;
-    lastHeard = "";
+    voiceTyped = "";
+    lastWritten = "";
     promotedUtterance = "";
     heardStart = false;
     emptyRestarts = 0;
@@ -1810,14 +1869,9 @@ export function mountDesk(env: DeskEnv): () => void {
   function commitVoice(owner: SpeechRecognitionLike | null): void {
     if (committed || !voiceSession) return;
     committed = true;
-    readDraft();
-    const settled = settleVoice({
-      base: voiceBase,
-      typed: draft,
-      final: voiceFinal,
-      interim: voiceInterim,
-    });
+    const settled = settleCurrent();
     draft = settled.draft;
+    lastWritten = draft;
     const failure = voiceError;
     const capped = capHit;
     const heard = settled.heard;
@@ -2019,7 +2073,7 @@ export function mountDesk(env: DeskEnv): () => void {
     view = session;
     if (keepField) {
       draft = typedValue;
-    } else if ((typed?.value ?? "").trim() === "") {
+    } else if (!voiceSession && (typed?.value ?? "").trim() === "") {
       const local =
         storage !== null && projectKey !== "" && questionId !== null
           ? loadDraft(storage, projectKey, questionId, Date.now())
@@ -3690,6 +3744,29 @@ function finalsFrom(event: SpeechResultEventLike): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function startsWithBoundary(host: string, prefix: string): boolean {
+  if (prefix === "") return false;
+  if (!host.startsWith(prefix)) return false;
+  if (host.length === prefix.length) return true;
+  const next = host.charAt(prefix.length);
+  return next === " " || next === "\n" || next === "\t";
+}
+
+/** Drop one whole-phrase copy of `phrase`. Other words stay. */
+function removePhraseOnce(host: string, phrase: string): string {
+  const text = host.trim();
+  const needle = phrase.trim();
+  if (needle === "" || text === "") return text;
+  if (text === needle) return "";
+  const spaced = ` ${needle}`;
+  if (text.endsWith(spaced)) return text.slice(0, text.length - spaced.length).trim();
+  if (text.startsWith(`${needle} `)) return text.slice(needle.length).trim();
+  const mid = ` ${needle} `;
+  const at = text.indexOf(mid);
+  if (at < 0) return text;
+  return `${text.slice(0, at)} ${text.slice(at + mid.length)}`.replace(/\s+/g, " ").trim();
 }
 
 /** Replace one whole-phrase occurrence. Null when the phrase is not in the draft. */
