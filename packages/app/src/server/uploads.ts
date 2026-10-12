@@ -263,6 +263,27 @@ interface ManifestRow {
 const PLATE_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "svg", "pdf"]);
 
 /**
+ * One writer per question folder.
+ * Two saves that read the manifest together would each write their own row and drop the other.
+ */
+const folderSaves = new Map<string, Promise<void>>();
+let manifestTmp = 0;
+
+function enqueueFolderSave<T>(folder: string, task: () => Promise<T>): Promise<T> {
+  const previous = folderSaves.get(folder) ?? Promise.resolve();
+  const run = previous.then(task, task);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  folderSaves.set(folder, settled);
+  void settled.then(() => {
+    if (folderSaves.get(folder) === settled) folderSaves.delete(folder);
+  });
+  return run;
+}
+
+/**
  * Saves one batch under `.hitchhiker/uploads/<questionId>/`.
  * A bad part is an error row. It does not erase the parts that saved.
  * The returned path uses forward slashes and never an absolute path.
@@ -276,6 +297,15 @@ export async function saveAttachParts(
   if (kinds === null) return { ok: false, error: "That question does not take files." };
   const folder = await prepareQuestionDir(projectDir, questionId);
   if (folder === null) return { ok: false, error: "That upload folder is not available." };
+  return enqueueFolderSave(folder, () => writeAttachParts(folder, questionId, parts, kinds));
+}
+
+async function writeAttachParts(
+  folder: string,
+  questionId: string,
+  parts: readonly { filename: string; mime: string; data: Buffer }[],
+  kinds: NonNullable<ReturnType<typeof kindsFor>>,
+): Promise<{ ok: true; files: AttachFileResult[] }> {
   const allowed = extensionsFor(kinds).filter((ext) => ext !== "url" && ext !== "webloc");
   const files: AttachFileResult[] = [];
   let kept = await manifestCount(folder);
@@ -423,7 +453,8 @@ async function appendManifest(folder: string, row: ManifestRow): Promise<void> {
   const file = path.join(folder, "manifest.json");
   const rows = await readManifest(file);
   rows.push(row);
-  const tmp = path.join(folder, `.manifest-${process.pid}-${Date.now()}.tmp`);
+  manifestTmp += 1;
+  const tmp = path.join(folder, `.manifest-${process.pid}-${Date.now()}-${manifestTmp}.tmp`);
   try {
     await writeFile(tmp, `${JSON.stringify(rows)}\n`, { flag: "wx" });
     await rename(tmp, file);

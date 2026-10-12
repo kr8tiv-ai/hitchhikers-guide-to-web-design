@@ -456,26 +456,33 @@ function renderAttach(questionId: string, view: AttachView | undefined): string 
 `;
 }
 
+/** Chip rows only. A live list can replace its contents without rebuilding the card. */
+export function renderChipItems(chips: readonly AttachChipView[]): string {
+  return chips.map((chip) => chipItem(chip)).join("\n");
+}
+
 function renderChips(chips: AttachChipView[]): string {
-  if (chips.length === 0) return "";
-  const items = chips.map((chip) => {
-    const src = previewSrc(chip.previewUrl);
-    const thumb = src === null ? "" : `<img class="hh-attach__thumb" alt="" src="${escapeHtml(src)}" />`;
-    const problem =
-      chip.error === undefined
-        ? ""
-        : `<p class="hh-error hh-attach__error" id="hh-attach-err-${escapeHtml(chip.id)}">${escapeHtml(chip.error)}</p>`;
-    const described = chip.error === undefined ? "" : ` aria-describedby="hh-attach-err-${escapeHtml(chip.id)}"`;
-    const retry =
-      chip.retry === true
-        ? `<button class="hh-btn hh-btn--ghost" type="button" data-attach-retry="${escapeHtml(chip.id)}" aria-label="${escapeHtml(`Retry ${chip.label}`)}">Retry</button>`
-        : "";
-    return `    <li class="hh-attach__chip" data-attach-chip="${escapeHtml(chip.id)}">${thumb}<span class="hh-attach__name">${escapeHtml(chip.label)}</span><span class="hh-attach__meta">${escapeHtml(chip.detail)}</span><button class="hh-btn hh-btn--ghost" type="button" data-attach-remove="${escapeHtml(chip.id)}" aria-label="${escapeHtml(chip.removeName)}"${described}>Remove</button>${retry}${problem}</li>`;
-  });
+  const items = renderChipItems(chips);
+  if (items === "") return "";
   return `<ul class="hh-attach__chips" data-attach-chips>
-${items.join("\n")}
+${items}
   </ul>
   `;
+}
+
+function chipItem(chip: AttachChipView): string {
+  const src = previewSrc(chip.previewUrl);
+  const thumb = src === null ? "" : `<img class="hh-attach__thumb" alt="" src="${escapeHtml(src)}" />`;
+  const problem =
+    chip.error === undefined
+      ? ""
+      : `<p class="hh-error hh-attach__error" id="hh-attach-err-${escapeHtml(chip.id)}">${escapeHtml(chip.error)}</p>`;
+  const described = chip.error === undefined ? "" : ` aria-describedby="hh-attach-err-${escapeHtml(chip.id)}"`;
+  const retry =
+    chip.retry === true
+      ? `<button class="hh-btn hh-btn--ghost" type="button" data-attach-retry="${escapeHtml(chip.id)}" aria-label="${escapeHtml(`Retry ${chip.label}`)}">Retry</button>`
+      : "";
+  return `    <li class="hh-attach__chip" data-attach-chip="${escapeHtml(chip.id)}">${thumb}<span class="hh-attach__name">${escapeHtml(chip.label)}</span><span class="hh-attach__meta">${escapeHtml(chip.detail)}</span><button class="hh-btn hh-btn--ghost" type="button" data-attach-remove="${escapeHtml(chip.id)}" aria-label="${escapeHtml(chip.removeName)}"${described}>Remove</button>${retry}${problem}</li>`;
 }
 
 function previewSrc(url: string | undefined): string | null {

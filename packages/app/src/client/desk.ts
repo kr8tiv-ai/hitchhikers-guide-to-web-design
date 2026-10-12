@@ -1,6 +1,6 @@
 import type { Question } from "@hitchhiker/engine";
 import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
-import { escapeHtml, renderCard, renderChoiceGroup, VOICE_SERVICE_NOTE } from "../card.ts";
+import { escapeHtml, renderCard, renderChipItems, renderChoiceGroup, VOICE_SERVICE_NOTE } from "../card.ts";
 import {
   MAX_ATTACH_FILES,
   type AnswerAttachment,
@@ -667,7 +667,10 @@ export function mountDesk(env: DeskEnv): () => void {
   let chipQuestionId: string | null = null;
   let dragDepth = 0;
   const filesById = new Map<string, File>();
-  let uploadQueue: Promise<void> = Promise.resolve();
+  /** In-flight saves for the current question. Answer stays locked while this is above zero. */
+  let uploadsInFlight = 0;
+  /** Bumped when the question changes so a late save cannot paint the next card. */
+  let uploadEpoch = 0;
   let projectKey = "";
   let pageTyped = false;
   let offerOnFocus: string | null = null;
@@ -2782,6 +2785,8 @@ export function mountDesk(env: DeskEnv): () => void {
   function syncAttachQuestion(): void {
     const id = view?.question?.id ?? null;
     if (id === chipQuestionId) return;
+    uploadEpoch += 1;
+    uploadsInFlight = 0;
     releaseChips();
     chipQuestionId = id;
     filesSeededFor = null;
@@ -2830,6 +2835,54 @@ export function mountDesk(env: DeskEnv): () => void {
     readLinkField();
   }
 
+  /**
+   * Chip list and the attach status line only.
+   * Replacing the card would drop the typed draft and detach the drop zone.
+   */
+  function patchAttach(): boolean {
+    const question = region();
+    if (question === null) return false;
+    const zone = question.querySelector("[data-attach-zone]");
+    if (zone === null) return false;
+    const snap = attachSnapshot();
+    if (snap === undefined) return false;
+    const items = renderChipItems(snap.chips);
+    const list = zone.querySelector("[data-attach-chips]");
+    if (list !== null) {
+      list.innerHTML = items;
+    } else if (items !== "") {
+      const anchor = zone.querySelector("[data-attach-live]");
+      if (anchor === null || typeof anchor.insertAdjacentHTML !== "function") return false;
+      anchor.insertAdjacentHTML(
+        "beforebegin",
+        `<ul class="hh-attach__chips" data-attach-chips>\n${items}\n  </ul>\n  `,
+      );
+    }
+    const live = zone.querySelector("[data-attach-live]");
+    if (live === null || !("textContent" in live)) return false;
+    live.textContent = snap.live;
+    const errorIds = snap.chips
+      .filter((chip) => chip.error !== undefined)
+      .map((chip) => `hh-attach-err-${chip.id}`);
+    zone.setAttribute("aria-describedby", ["hh-attach-live", ...errorIds].join(" "));
+    const link = zone.querySelector("[data-attach-url]");
+    if (link !== null && typeof link.value === "string" && link.value !== snap.linkDraft) {
+      link.value = snap.linkDraft;
+      link.setAttribute("value", snap.linkDraft);
+    }
+    const fileInput = zone.querySelector("[data-attach-file]");
+    if (fileInput !== null && typeof fileInput.value === "string" && fileInput.value !== "") {
+      fileInput.value = "";
+    }
+    syncAnswerLock();
+    return true;
+  }
+
+  function showAttach(): void {
+    rememberBeforePaint();
+    if (!patchAttach()) paint();
+  }
+
   function addLinkFromField(): void {
     rememberBeforePaint();
     const id = view?.question?.id;
@@ -2843,8 +2896,15 @@ export function mountDesk(env: DeskEnv): () => void {
     if (result.added.length > 0) messages.push(addedLinksMessage(result.added.map((url) => linkLabel(url))));
     if (result.errors.length > 0 && result.errors[0] !== undefined) messages.push(result.errors[0]);
     if (messages.length > 0) attachLive = messages.join(" ");
-    if (result.errors.length === 0 && result.added.length > 0) linkDraft = "";
-    paint();
+    if (result.errors.length === 0 && result.added.length > 0) {
+      linkDraft = "";
+      const field = region()?.querySelector("[data-attach-url]");
+      if (field !== null && field !== undefined && typeof field.value === "string") {
+        field.value = "";
+        field.setAttribute("value", "");
+      }
+    }
+    showAttach();
   }
 
   function addLinkParts(parts: readonly string[]): void {
@@ -2855,7 +2915,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (result.added.length > 0) messages.push(addedLinksMessage(result.added.map((url) => linkLabel(url))));
     if (result.errors.length > 0 && result.errors[0] !== undefined) messages.push(result.errors[0]);
     if (messages.length > 0) attachLive = messages.join(" ");
-    paint();
+    showAttach();
   }
 
   function linkUrls(): string[] {
@@ -2890,7 +2950,7 @@ export function mountDesk(env: DeskEnv): () => void {
     filesById.delete(id);
     chips.splice(index, 1);
     attachLive = removedMessage(chip.label);
-    paint();
+    showAttach();
     const next = chips[index] ?? chips[chips.length - 1];
     const focus =
       next === undefined
@@ -2960,10 +3020,13 @@ export function mountDesk(env: DeskEnv): () => void {
       toUpload.push(chip.id);
       added += 1;
     }
+    if (toUpload.length > 0) {
+      scheduleUploads(toUpload);
+      return;
+    }
     if (added > 0) messages.unshift(addedFilesMessage(added));
     if (messages.length > 0) attachLive = messages.join(" ");
-    paint();
-    if (toUpload.length > 0) scheduleUploads(toUpload);
+    showAttach();
   }
 
   function readyFileCount(): number {
@@ -3006,32 +3069,44 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function scheduleUploads(ids: readonly string[]): void {
     const questionId = view?.question?.id ?? "";
-    const total = ids.length;
-    uploadQueue = uploadQueue
-      .then(async () => {
-        for (let index = 0; index < ids.length; index += 1) {
-          const id = ids[index];
-          if (id === undefined || view?.question?.id !== questionId) return;
-          uploadingLabel = uploadingMessage(index + 1, total);
-          attachLive = uploadingLabel;
-          rememberBeforePaint();
-          paint();
-          await uploadChip(id, questionId);
-        }
-        if (view?.question?.id !== questionId) return;
-        uploadingLabel = null;
-        const problems = chips.flatMap((chip) => (chip.error === undefined ? [] : [chip.error]));
-        if (problems.length > 0) attachLive = problems.join(" ");
-        else {
-          const readyFiles = chips.filter((chip) => chip.kind === "file" && chip.ready).length;
-          if (readyFiles > 0) attachLive = addedFilesMessage(readyFiles);
-        }
-        rememberBeforePaint();
-        paint();
-      })
-      .catch(() => {
-        uploadingLabel = null;
-      });
+    const pending: string[] = [];
+    for (const id of ids) {
+      if (id !== undefined) pending.push(id);
+    }
+    if (pending.length === 0 || questionId === "") return;
+    // Send every file now. A queue would leave the next request unsent until
+    // earlier saves return, so a later failure could name the wrong file.
+    const epoch = uploadEpoch;
+    uploadsInFlight += pending.length;
+    uploadingLabel = uploadingMessage(1, pending.length);
+    attachLive = uploadingLabel;
+    showAttach();
+    for (const id of pending) void finishUpload(id, questionId, epoch);
+  }
+
+  async function finishUpload(id: string, questionId: string, epoch: number): Promise<void> {
+    let started = false;
+    try {
+      if (epoch !== uploadEpoch || view?.question?.id !== questionId) return;
+      started = true;
+      await uploadChip(id, questionId);
+    } finally {
+      if (!started || epoch !== uploadEpoch) return;
+      uploadsInFlight = Math.max(0, uploadsInFlight - 1);
+      if (view?.question?.id !== questionId) return;
+      if (uploadsInFlight > 0) {
+        showAttach();
+        return;
+      }
+      uploadingLabel = null;
+      const problems = chips.flatMap((chip) => (chip.error === undefined ? [] : [chip.error]));
+      if (problems.length > 0) attachLive = problems.join(" ");
+      else {
+        const readyFiles = chips.filter((chip) => chip.kind === "file" && chip.ready).length;
+        if (readyFiles > 0) attachLive = addedFilesMessage(readyFiles);
+      }
+      showAttach();
+    }
   }
 
   async function uploadChip(id: string, questionId: string): Promise<void> {
@@ -3073,7 +3148,6 @@ export function mountDesk(env: DeskEnv): () => void {
       chip.error = error;
       chip.ready = false;
       chip.retry = row !== null && row.ok === false ? false : true;
-      attachLive = error;
       return;
     }
     if (!row.path.startsWith(`.hitchhiker/uploads/${questionId}/`) || row.path.includes("..")) {
@@ -3095,7 +3169,6 @@ export function mountDesk(env: DeskEnv): () => void {
     chip.error = error;
     chip.ready = false;
     chip.retry = true;
-    attachLive = error;
   }
 
   async function receiveDrop(event: DeskEvent): Promise<void> {
