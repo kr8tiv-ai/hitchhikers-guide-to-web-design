@@ -199,5 +199,8 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 193 | So Long and Thanks for All the Fish | Forty-Two | Audit and fix every tool and model install | Heart of Gold | xhigh |
 | 194 | So Long and Thanks for All the Fish | Forty-Two | Second dictation keeps the text and appends to it | Heart of Gold | xhigh |
 | 195 | So Long and Thanks for All the Fish | Forty-Two | Fix the red engine unit test for Windows batch shims on Linux and macOS CI | Heart of Gold | xhigh |
+| 196 | So Long and Thanks for All the Fish | Forty-Two | Drag and drop and an Attach button on every website and file question | Heart of Gold | xhigh |
+| 197 | So Long and Thanks for All the Fish | Forty-Two | Click to talk keeps the box text and keeps Answer enabled after a stop | Heart of Gold | xhigh |
+| 198 | So Long and Thanks for All the Fish | Forty-Two | Make the starter fixture clear the 90 phone performance floor reliably on macOS CI | Heart of Gold | xhigh |
 
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
