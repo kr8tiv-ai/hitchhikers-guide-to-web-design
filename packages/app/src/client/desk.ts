@@ -32,6 +32,22 @@ import {
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
 import { handleTourKey, mountTour } from "./tour.ts";
 import { joinWords, mergeTranscript, settleVoice, type TranscriptPiece } from "./voice-text.ts";
+import {
+  clearDraft,
+  createDraftWriter,
+  dropOtherQuestions,
+  forgetProjectDraftsBefore,
+  loadDraft,
+  type DraftRecord,
+  type DraftStorage,
+  type DraftWriter,
+} from "./draft-store.ts";
+
+const DRAFT_SAVED = "Draft saved";
+const DRAFT_RESTORED = "Draft restored";
+const DRAFT_BLOCKED =
+  "This browser would not save the draft. Your words are still here, and stay until you press Answer.";
+const DRAFT_POST_GAP_MS = 2_000;
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -378,6 +394,21 @@ export interface SessionView {
   mastLine: string;
   /** Null when this session has no picks. forId is the question they belong to. */
   choices: CardChoiceSet | null;
+  /** Stable id for this project. Never a path. Empty when the session omitted it. */
+  projectKey: string;
+  /** Unsent text for the current question, from the project folder. */
+  storedDraft: { text: string; savedAt: string; step: number } | null;
+  /** Files already stored for the current question. Paths stay relative. */
+  savedFiles: SavedFileView[];
+  /** Set when a restart cleared drafts. Local rows older than this are dropped. */
+  draftsClearedAt: string | null;
+}
+
+interface SavedFileView {
+  path: string;
+  originalName: string;
+  size: number;
+  type: string;
 }
 
 interface DeskElement {
@@ -518,6 +549,12 @@ export function parseSession(value: unknown): SessionView | null {
     mastCompact: value.mastCompact === true,
     mastLine: typeof value.mastLine === "string" ? value.mastLine : "",
     choices: parseChoices(value.choices),
+    projectKey: parseProjectKey(value.projectKey),
+    storedDraft: parseStoredDraft(value.draft),
+    savedFiles: parseSavedFiles(value.savedFiles),
+    draftsClearedAt: typeof value.draftsClearedAt === "string" && value.draftsClearedAt.trim() !== ""
+      ? value.draftsClearedAt
+      : null,
   };
 }
 
@@ -631,8 +668,22 @@ export function mountDesk(env: DeskEnv): () => void {
   let dragDepth = 0;
   const filesById = new Map<string, File>();
   let uploadQueue: Promise<void> = Promise.resolve();
+  let projectKey = "";
+  let pageTyped = false;
+  let offerOnFocus: string | null = null;
+  let draftNote: string | null = null;
+  let draftFade = false;
+  let noteTimer: ReturnType<typeof setTimeout> | null = null;
+  let writer: DraftWriter | null = null;
+  let writerQuestionId: string | null = null;
+  let lastDraftPost = 0;
+  let draftPostTimer: ReturnType<typeof setTimeout> | null = null;
+  let draftPostBody: string | null = null;
+  const postedQuestions = new Set<string>();
+  let filesSeededFor: string | null = null;
 
   const onClick = (event: DeskEvent): void => {
+    if (isDeskLink(event.target)) flushLeaving();
     if (readMarked(event.target, "data-restart-open") !== null) {
       event.preventDefault();
       env.document.querySelector("[data-restart-dialog]")?.showModal?.();
@@ -720,6 +771,9 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     draft = target.value ?? "";
+    pageTyped = true;
+    offerOnFocus = null;
+    rememberDraft(false);
     if (voiceSession) userTouched = true;
     if (suggestHold !== null) {
       if (draft.trim() === suggestHold.suggestion.trim()) showAssumed(suggestHold.suggestion);
@@ -819,9 +873,25 @@ export function mountDesk(env: DeskEnv): () => void {
   };
   const onPageHide = (): void => {
     stopImmediately();
+    flushLeaving();
   };
   const onVisibility = (): void => {
-    if (env.document.visibilityState === "hidden") stopImmediately();
+    if (env.document.visibilityState === "hidden") {
+      stopImmediately();
+      flushLeaving();
+    }
+  };
+  const onFocusIn = (event: DeskEvent): void => {
+    if (!isDraftTarget(event.target) || offerOnFocus === null) return;
+    const field = event.target;
+    if (field === null) return;
+    const value = typeof field.value === "string" ? field.value : draft;
+    if (value.trim() !== "") return;
+    draft = offerOnFocus;
+    offerOnFocus = null;
+    field.value = draft;
+    syncAnswerLock();
+    showDraftNote(DRAFT_RESTORED, false);
   };
 
   const onChange = (event: DeskEvent): void => {
@@ -907,9 +977,11 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("keydown", onKeyDown);
   env.document.addEventListener("contextmenu", onContextMenu);
   env.document.addEventListener("visibilitychange", onVisibility);
+  env.document.addEventListener("focusin", onFocusIn);
   const deskWindow = env.document.defaultView ?? null;
   if (deskWindow !== null) {
     deskWindow.addEventListener("pagehide", onPageHide);
+    deskWindow.addEventListener("beforeunload", onPageHide);
     deskWindow.addEventListener("dragover", onWindowDrag);
     deskWindow.addEventListener("drop", onWindowDrag);
   }
@@ -933,11 +1005,16 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("keydown", onKeyDown);
     env.document.removeEventListener("contextmenu", onContextMenu);
     env.document.removeEventListener("visibilitychange", onVisibility);
+    env.document.removeEventListener("focusin", onFocusIn);
     if (deskWindow !== null) {
       deskWindow.removeEventListener("pagehide", onPageHide);
+      deskWindow.removeEventListener("beforeunload", onPageHide);
       deskWindow.removeEventListener("dragover", onWindowDrag);
       deskWindow.removeEventListener("drop", onWindowDrag);
     }
+    if (noteTimer !== null) clearTimeout(noteTimer);
+    if (draftPostTimer !== null) clearTimeout(draftPostTimer);
+    writer?.stop();
     releaseChips();
     cancelVoice();
     source?.close();
@@ -946,6 +1023,354 @@ export function mountDesk(env: DeskEnv): () => void {
   function readDraft(): void {
     const field = region()?.querySelector("#hh-card-draft");
     if (field !== null && field !== undefined && typeof field.value === "string") draft = field.value;
+  }
+
+  function browserStorage(): DraftStorage | null {
+    const host = env.document.defaultView as { localStorage?: DraftStorage } | null | undefined;
+    if (host == null) return null;
+    try {
+      const storage = host.localStorage;
+      if (storage == null) return null;
+      void storage.length;
+      return storage;
+    } catch {
+      return null;
+    }
+  }
+
+  function browserLifecycle(): {
+    addEventListener(type: string, listener: () => void): void;
+    removeEventListener(type: string, listener: () => void): void;
+    hidden(): boolean;
+  } {
+    const doc = env.document;
+    const win = env.document.defaultView ?? null;
+    return {
+      addEventListener(type: string, listener: () => void): void {
+        if (type === "visibilitychange") {
+          doc.addEventListener(type, listener);
+          return;
+        }
+        win?.addEventListener(type, listener);
+      },
+      removeEventListener(type: string, listener: () => void): void {
+        if (type === "visibilitychange") {
+          doc.removeEventListener(type, listener);
+          return;
+        }
+        win?.removeEventListener(type, listener);
+      },
+      hidden(): boolean {
+        return doc.visibilityState === "hidden";
+      },
+    };
+  }
+
+  function ensureWriter(): void {
+    const id = view?.question?.id ?? null;
+    const storage = browserStorage();
+    if (id === null || storage === null || !/^[a-f0-9]{32}$/.test(projectKey)) return;
+    if (writer !== null && writerQuestionId === id) return;
+    if (writer !== null) {
+      writer.stop();
+      writer = null;
+    }
+    writerQuestionId = id;
+    const step = view?.counts?.index ?? 0;
+    writer = createDraftWriter({
+      storage,
+      projectKey,
+      questionId: id,
+      step,
+      now: () => Date.now(),
+      schedule(fn, ms) {
+        const handle = setTimeout(fn, ms);
+        return { cancel: () => clearTimeout(handle) };
+      },
+      lifecycle: browserLifecycle(),
+      onResult(result) {
+        if (result.text.trim() === "") {
+          if (postedQuestions.has(result.questionId)) {
+            queueDraftPost(
+              {
+                questionId: result.questionId,
+                text: "",
+                step: result.step,
+                savedAt: new Date(result.savedAt).toISOString(),
+                pushback: null,
+                choices: null,
+              },
+              false,
+            );
+          }
+          return;
+        }
+        postedQuestions.add(result.questionId);
+        if (!result.ok) showDraftNote(DRAFT_BLOCKED, false);
+        else showDraftNote(DRAFT_SAVED, true);
+        queueDraftPost(draftBody(result.questionId, result.text, result.step, result.savedAt), false);
+      },
+    });
+  }
+
+  function draftBody(questionId: string, text: string, step: number, savedAt: number): {
+    questionId: string;
+    text: string;
+    step: number;
+    savedAt: string;
+    pushback?: string | null;
+    choices?: CardChoiceSet | null;
+  } {
+    const body: {
+      questionId: string;
+      text: string;
+      step: number;
+      savedAt: string;
+      pushback?: string | null;
+      choices?: CardChoiceSet | null;
+    } = { questionId, text, step, savedAt: new Date(savedAt).toISOString() };
+    if (view?.question?.id === questionId) {
+      body.pushback = view.pushback;
+      body.choices = choicesForPost();
+    }
+    return body;
+  }
+
+  function choicesForPost(): CardChoiceSet | null {
+    const set = view?.choices ?? null;
+    const id = view?.question?.id;
+    if (set === null || id === undefined || set.forId !== id) return null;
+    return set;
+  }
+
+  function rememberDraft(immediate: boolean): void {
+    try {
+      ensureWriter();
+      if (writer === null) return;
+      writer.push(draft);
+      if (immediate) writer.flush();
+    } catch {
+      // A blocked store must not stop typing.
+    }
+  }
+
+  function flushLeaving(): void {
+    try {
+      readDraft();
+      if (draft.trim() === "" && offerOnFocus !== null && offerOnFocus.trim() !== "") {
+        const offered = offerOnFocus;
+        draft = offered;
+        rememberDraft(true);
+        draft = "";
+      } else {
+        rememberDraft(true);
+      }
+      sendDraftNow();
+    } catch {
+      // Navigation still proceeds. The words stay in the box until then.
+    }
+  }
+
+  function releaseDraft(questionId: string): void {
+    if (draftPostTimer !== null) {
+      clearTimeout(draftPostTimer);
+      draftPostTimer = null;
+    }
+    draftPostBody = null;
+    offerOnFocus = null;
+    const savedHere = postedQuestions.has(questionId) || (writer !== null && writerQuestionId === questionId);
+    if (writer !== null && writerQuestionId === questionId) {
+      writer.clear();
+      writer.stop();
+      writer = null;
+      writerQuestionId = null;
+    } else {
+      const storage = browserStorage();
+      if (storage !== null && projectKey !== "") clearDraft(storage, projectKey, questionId);
+    }
+    postedQuestions.add(questionId);
+    if (savedHere) {
+      queueDraftPost(
+        {
+          questionId,
+          text: "",
+          step: 0,
+          savedAt: new Date().toISOString(),
+          pushback: null,
+          choices: null,
+        },
+        true,
+      );
+    }
+  }
+
+  function finishTurn(questionId: string, session: SessionView, keptText: string): void {
+    const moved = session.done || session.question?.id !== questionId;
+    if (moved) {
+      releaseDraft(questionId);
+      view = session;
+    } else if ((session.pushback ?? "") !== "") {
+      holdDraftForPushback(session, keptText);
+    } else {
+      view = session;
+    }
+    draft = "";
+    draftNote = null;
+    draftFade = false;
+  }
+
+  function holdDraftForPushback(session: SessionView, keptText: string): void {
+    view = session;
+    if (keptText.trim() !== "") {
+      offerOnFocus = keptText;
+      publishShown(keptText);
+    } else {
+      offerOnFocus = null;
+      publishShown(null);
+    }
+  }
+
+  function publishShown(text: string | null): void {
+    const id = view?.question?.id;
+    if (id === undefined || token === null) return;
+    const body: {
+      questionId: string;
+      text?: string;
+      step: number;
+      savedAt: string;
+      pushback: string | null;
+      choices: CardChoiceSet | null;
+    } = {
+      questionId: id,
+      step: view?.counts?.index ?? 0,
+      savedAt: new Date().toISOString(),
+      pushback: view?.pushback ?? null,
+      choices: choicesForPost(),
+    };
+    if (text !== null && text.trim() !== "") body.text = text;
+    queueDraftPost(body, true);
+  }
+
+  function queueDraftPost(body: {
+    questionId: string;
+    text?: string;
+    step: number;
+    savedAt?: string;
+    pushback?: string | null;
+    choices?: CardChoiceSet | null;
+  }, immediate: boolean): void {
+    draftPostBody = JSON.stringify(body);
+    if (immediate) {
+      sendDraftNow();
+      return;
+    }
+    if (draftPostTimer !== null) return;
+    const elapsed = Date.now() - lastDraftPost;
+    const wait = lastDraftPost === 0 ? 0 : Math.max(0, DRAFT_POST_GAP_MS - elapsed);
+    draftPostTimer = setTimeout(() => {
+      draftPostTimer = null;
+      sendDraftNow();
+    }, wait);
+  }
+
+  function sendDraftNow(): void {
+    if (draftPostTimer !== null) {
+      clearTimeout(draftPostTimer);
+      draftPostTimer = null;
+    }
+    const body = draftPostBody;
+    if (body === null || token === null) return;
+    draftPostBody = null;
+    lastDraftPost = Date.now();
+    void env.fetch("/api/draft", {
+      method: "POST",
+      cache: "no-store",
+      keepalive: true,
+      headers: {
+        "content-type": "application/json",
+        "x-hh-csrf": token,
+      },
+      body,
+    }).catch(() => {
+      // The browser copy is the primary. A missed post retries on the next change.
+    });
+  }
+
+  function showDraftNote(text: string, fade: boolean): void {
+    draftNote = text;
+    draftFade = false;
+    if (noteTimer !== null) {
+      clearTimeout(noteTimer);
+      noteTimer = null;
+    }
+    const node = region()?.querySelector("#hh-draft-status");
+    if (node !== null && node !== undefined) {
+      node.removeAttribute("data-draft-fade");
+      if ("textContent" in node) node.textContent = "";
+    }
+    announceDraftNote(text);
+    if (!fade || text === "") return;
+    noteTimer = setTimeout(() => {
+      noteTimer = null;
+      if (draftNote !== text) return;
+      draftFade = true;
+      const live = region()?.querySelector("#hh-draft-status");
+      if (live !== null && live !== undefined) live.setAttribute("data-draft-fade", "true");
+    }, 2_000);
+  }
+
+  function announceDraftNote(text: string): void {
+    const expected = text;
+    queueMicrotask(() => {
+      if (draftNote !== expected) return;
+      const live = region()?.querySelector("#hh-draft-status");
+      if (live !== null && live !== undefined && "textContent" in live) live.textContent = expected;
+    });
+  }
+
+  function adoptSavedFiles(): void {
+    const id = view?.question?.id;
+    if (id === undefined) return;
+    if (filesSeededFor === id) return;
+    if (chips.length > 0) {
+      filesSeededFor = id;
+      return;
+    }
+    const files = view?.savedFiles ?? [];
+    for (const file of files) {
+      const prefix = `.hitchhiker/uploads/${id}/`;
+      if (!file.path.startsWith(prefix) || file.path.includes("..")) continue;
+      chipSeq += 1;
+      chips.push({
+        id: `s${chipSeq}`,
+        kind: "file",
+        label: file.originalName,
+        detail: formatBytes(file.size),
+        removeName: `Remove ${file.originalName}`,
+        ready: true,
+        retry: false,
+        path: file.path,
+        originalName: file.originalName,
+        size: file.size,
+        type: file.type,
+      });
+    }
+    filesSeededFor = id;
+  }
+
+  function isDeskLink(start: DeskElement | null): boolean {
+    let node = start;
+    const seen = new Set<DeskElement>();
+    while (node !== null && !seen.has(node)) {
+      seen.add(node);
+      if (typeof node.getAttribute !== "function") return false;
+      if (node.tagName?.toLowerCase() === "a") {
+        const href = node.getAttribute("href") ?? "";
+        return href.startsWith("/") && !href.startsWith("//");
+      }
+      node = node.parentElement;
+    }
+    return false;
   }
 
   function voiceActive(): boolean {
@@ -1319,6 +1744,7 @@ export function mountDesk(env: DeskEnv): () => void {
       }
       if (!patchDraft()) paint();
       else syncAnswerLock();
+      if (changed) rememberDraft(true);
       close();
     };
     const close = (): void => {
@@ -1409,6 +1835,7 @@ export function mountDesk(env: DeskEnv): () => void {
     const extra = notice ?? error ?? "";
     announceVoice(extra === "" ? VOICE_LIVE_STOPPED : `${VOICE_LIVE_STOPPED}. ${extra}`);
     paint();
+    rememberDraft(true);
   }
 
   /** Page hide and unmount. Keeps heard words and does not abort when any were heard. */
@@ -1576,12 +2003,35 @@ export function mountDesk(env: DeskEnv): () => void {
     const typed = question.querySelector("#hh-card-draft");
     const existingId = question.querySelector("[data-question-id]")?.getAttribute("data-question-id") ?? null;
     const typedValue = typed?.value ?? "";
+    projectKey = session.projectKey;
+    const questionId = session.question?.id ?? null;
+    const storage = browserStorage();
+    if (storage !== null && projectKey !== "" && questionId !== null) {
+      const clearedAt = session.draftsClearedAt === null ? Number.NaN : Date.parse(session.draftsClearedAt);
+      if (!Number.isNaN(clearedAt)) forgetProjectDraftsBefore(storage, projectKey, clearedAt);
+      dropOtherQuestions(storage, projectKey, questionId);
+    }
+    const sameCard = session.question !== null && session.question.id === existingId;
+    const keepField = pageTyped || (typedValue.trim() !== "" && sameCard);
     view = session;
-    if (typedValue.trim() !== "" && session.question !== null && session.question.id === existingId) {
+    if (keepField) {
       draft = typedValue;
+    } else if ((typed?.value ?? "").trim() === "") {
+      const local =
+        storage !== null && projectKey !== "" && questionId !== null
+          ? loadDraft(storage, projectKey, questionId, Date.now())
+          : null;
+      const chosen = newerDraft(local, session.storedDraft);
+      if (chosen !== null && chosen.trim() !== "") {
+        draft = chosen;
+        draftNote = DRAFT_RESTORED;
+        draftFade = false;
+      }
     }
     error = null;
     paint();
+    if (draftNote === DRAFT_RESTORED) announceDraftNote(DRAFT_RESTORED);
+    if (keepField && draft.trim() !== "") rememberDraft(false);
     question.setAttribute("data-live", "true");
     ready = true;
     source = new env.EventSource("/api/events");
@@ -1634,13 +2084,47 @@ export function mountDesk(env: DeskEnv): () => void {
         await stopVoice();
         if (view === null || signature(next) === signature(view)) return;
         const kept = draft;
+        const same = view.question !== null && next.question?.id === view.question.id;
         view = next;
         draft = kept.trim() === "" ? "" : kept;
         error = null;
         pending = false;
         skipConfirm = false;
+        if (!same) {
+          draftNote = null;
+          draftFade = false;
+        }
         paint();
+        if (same && draft.trim() !== "") rememberDraft(true);
       })();
+      return;
+    }
+    const sameQuestion = view.question !== null && session.question?.id === view.question.id;
+    const pushbackArrived =
+      ready &&
+      sameQuestion &&
+      (session.pushback ?? "") !== "" &&
+      session.pushback !== view.pushback;
+    if (pushbackArrived) {
+      readDraft();
+      const kept = draft.trim() !== "" ? draft : (offerOnFocus ?? "");
+      if (kept.trim() !== "") {
+        offerOnFocus = kept;
+        draft = kept;
+        rememberDraft(true);
+      } else {
+        offerOnFocus = null;
+      }
+      view = session;
+      draft = "";
+      error = null;
+      notice = null;
+      pending = false;
+      skipConfirm = false;
+      draftNote = null;
+      draftFade = false;
+      paint();
+      publishShown(kept.trim() === "" ? null : kept);
       return;
     }
     view = session;
@@ -1649,6 +2133,10 @@ export function mountDesk(env: DeskEnv): () => void {
     notice = null;
     pending = false;
     skipConfirm = false;
+    if (!sameQuestion) {
+      draftNote = null;
+      draftFade = false;
+    }
     paint();
   }
 
@@ -1707,8 +2195,7 @@ export function mountDesk(env: DeskEnv): () => void {
         error = result.error;
         return;
       }
-      view = result.session;
-      draft = "";
+      finishTurn(questionId, result.session, draft);
       error = null;
       ownWords = false;
       advance = true;
@@ -1770,11 +2257,14 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const held = suggestHold;
     if (!ownWords && draft.trim() === held.suggestion.trim()) {
+      releaseDraft(held.questionId);
       suggestHold = null;
       cardHold = false;
       ownWords = false;
       view = held.session;
       draft = "";
+      draftNote = null;
+      draftFade = false;
       error = null;
       notice = null;
       pending = false;
@@ -1793,11 +2283,10 @@ export function mountDesk(env: DeskEnv): () => void {
         showFieldError(result.error);
         return;
       }
+      finishTurn(held.questionId, result.session, draft);
       suggestHold = null;
       cardHold = false;
       ownWords = false;
-      view = result.session;
-      draft = "";
       error = null;
       advance = true;
     } catch {
@@ -1842,6 +2331,7 @@ export function mountDesk(env: DeskEnv): () => void {
       if (suggestion !== "") showAssumed(suggestion);
       else hideAssumed();
       clearFieldError();
+      if (suggestion.trim() !== "") rememberDraft(true);
     }
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null) transcript.innerHTML = session.transcriptHtml;
@@ -1937,9 +2427,12 @@ export function mountDesk(env: DeskEnv): () => void {
     if (voiceActive()) await stopVoice();
     if (id === "other") {
       ownWords = true;
+      // Other asks for a blank box. Do not offer the pushback draft back on focus.
+      offerOnFocus = null;
       draft = "";
       const field = region()?.querySelector("#hh-card-draft");
       if (field !== null && field !== undefined) field.value = "";
+      rememberDraft(true);
       hideAssumed();
       const button = region()?.querySelector('[data-action="answer"]');
       if (button !== null && button !== undefined) {
@@ -1960,13 +2453,17 @@ export function mountDesk(env: DeskEnv): () => void {
     if (field !== null && field !== undefined) field.value = label;
     showAssumed(label);
     announceChoices(`Assumed: ${label}`);
+    rememberDraft(true);
     if (suggestHold !== null) {
       if (label.trim() === suggestHold.suggestion.trim()) {
         const held = suggestHold;
+        releaseDraft(held.questionId);
         suggestHold = null;
         cardHold = false;
         view = held.session;
         draft = "";
+        draftNote = null;
+        draftFade = false;
         error = null;
         notice = null;
         pending = false;
@@ -1995,11 +2492,10 @@ export function mountDesk(env: DeskEnv): () => void {
         showFieldError(result.error);
         return;
       }
+      finishTurn(questionId, result.session, text);
       suggestHold = null;
       cardHold = false;
       ownWords = false;
-      view = result.session;
-      draft = "";
       error = null;
       advance = true;
     } catch {
@@ -2245,6 +2741,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
     logoSaved = { id: question.id, text: `Saved as ${safeName}.` };
     paint();
+    rememberDraft(true);
   }
 
   function answerLocked(busy: boolean): boolean {
@@ -2287,6 +2784,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (id === chipQuestionId) return;
     releaseChips();
     chipQuestionId = id;
+    filesSeededFor = null;
     linkDraft = "";
     attachLive = "";
     uploadingLabel = null;
@@ -2626,6 +3124,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function paint(): void {
     syncAttachQuestion();
+    adoptSavedFiles();
     const question = region();
     if (question !== null && view !== null) {
       const state: CardState = {
@@ -2649,6 +3148,7 @@ export function mountDesk(env: DeskEnv): () => void {
         ...(voiceDisclosed ? { voiceNote: true } : {}),
         ...attachSpread(),
         keepDraft: true,
+        ...(draftNote !== null && draftNote !== "" ? { draftNote, draftFade } : {}),
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(
@@ -2687,6 +3187,7 @@ export function mountDesk(env: DeskEnv): () => void {
     ensureMotion(env.document, view?.question?.id);
     syncGuideLive();
     alignDraftField();
+    ensureWriter();
   }
 
   function speechReady(): boolean {
@@ -3313,6 +3814,51 @@ function isLevel(value: unknown): value is LevelName {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseProjectKey(value: unknown): string {
+  return typeof value === "string" && /^[a-f0-9]{32}$/.test(value) ? value : "";
+}
+
+function parseStoredDraft(value: unknown): { text: string; savedAt: string; step: number } | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.text !== "string" || value.text.trim() === "") return null;
+  if (typeof value.savedAt !== "string" || Number.isNaN(Date.parse(value.savedAt))) return null;
+  if (typeof value.step !== "number" || !Number.isFinite(value.step)) return null;
+  return { text: value.text, savedAt: value.savedAt, step: value.step };
+}
+
+function parseSavedFiles(value: unknown): SavedFileView[] {
+  if (!Array.isArray(value)) return [];
+  const files: SavedFileView[] = [];
+  for (const item of value) {
+    if (files.length >= 8 || !isRecord(item)) continue;
+    if (typeof item.path !== "string" || typeof item.originalName !== "string") continue;
+    if (typeof item.size !== "number" || !Number.isFinite(item.size) || item.size < 0) continue;
+    if (typeof item.type !== "string") continue;
+    const rel = item.path.replaceAll("\\", "/");
+    if (!rel.startsWith(".hitchhiker/uploads/") || rel.includes("..")) continue;
+    files.push({
+      path: rel,
+      originalName: item.originalName.slice(0, 120),
+      size: item.size,
+      type: item.type.slice(0, 120),
+    });
+  }
+  return files;
+}
+
+/** The newer copy wins. A blank side is ignored. */
+function newerDraft(
+  local: DraftRecord | null,
+  remote: { text: string; savedAt: string; step: number } | null,
+): string | null {
+  const localText = local !== null && local.text.trim() !== "" ? local : null;
+  const remoteAt = remote === null ? Number.NaN : Date.parse(remote.savedAt);
+  const remoteText = remote !== null && remote.text.trim() !== "" && !Number.isNaN(remoteAt) ? remote : null;
+  if (localText === null) return remoteText === null ? null : remoteText.text;
+  if (remoteText === null) return localText.text;
+  return remoteAt > localText.savedAt ? remoteText.text : localText.text;
 }
 
 function parseChoices(value: unknown): CardChoiceSet | null {

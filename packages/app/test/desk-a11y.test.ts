@@ -91,7 +91,12 @@ test("the desk page announces the question and keeps the mic off the action row"
     assert.equal(page.status, 200);
     const ask = "Is this site for you, or for a client?";
     const question = region(page.body, "question");
-    assert.equal(question.includes('aria-live="polite"'), false);
+    const polite = question.match(/aria-live="polite"/g) ?? [];
+    assert.equal(polite.length, 1);
+    assert.match(
+      question,
+      /data-testid="draft-saved"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,
+    );
     assert.equal(occurrences(question, ask), 1);
     assert.match(question, /id="hh-card-ask" tabindex="-1"/);
     assert.match(entryBlock(question), /data-voice="hold"/);
@@ -158,7 +163,11 @@ test("submit focuses the new question heading and updates the same live region",
     assert.match(h.region.innerHTML, /tabindex="-1"/);
     assert.match(h.region.innerHTML, /data-question-id="DP-0\.2"/);
     const polite = h.region.innerHTML.match(/aria-live="polite"/g) ?? [];
-    assert.equal(polite.length, 1);
+    assert.equal(polite.length, 2);
+    assert.match(
+      h.region.innerHTML,
+      /data-testid="draft-saved"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,
+    );
     assert.match(
       h.region.innerHTML,
       /id="hh-attach-live"[^>]*data-attach-live[^>]*aria-live="polite"/,

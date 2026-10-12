@@ -94,6 +94,10 @@ export interface CardState {
    * A newly shown pushback leaves this off, so the field starts empty.
    */
   keepDraft?: boolean;
+  /** Quiet line under the box: saved, restored, or the browser refused storage. */
+  draftNote?: string | null;
+  /** True after the saved line has faded. Reduced motion keeps the words visible. */
+  draftFade?: boolean;
 }
 
 /**
@@ -405,7 +409,7 @@ ${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
-  </label>
+${draftStatus(state.draftNote, state.draftFade)}  </label>
 ${attachHtml}${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
 ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
     ${talkButton(state.pending, state.listening === true)}
@@ -415,6 +419,13 @@ ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard_
   </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
 </article>`;
+}
+
+function draftStatus(note: string | null | undefined, fade: boolean | undefined): string {
+  const text = note ?? "";
+  const fading = fade === true && text !== "";
+  const flag = fading ? ' data-draft-fade="true"' : "";
+  return `    <span class="hh-qcard__draft-status" id="hh-draft-status" data-testid="draft-saved" role="status" aria-live="polite" aria-atomic="true"${flag}>${escapeHtml(text)}</span>\n`;
 }
 
 function renderAttach(questionId: string, view: AttachView | undefined): string {

@@ -57,7 +57,7 @@ import {
   type CardCounts,
   type CardState,
 } from "../card.ts";
-import { attachQuestionId } from "../client/attach.ts";
+import { attachQuestionId, formatBytes } from "../client/attach.ts";
 import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
@@ -98,6 +98,17 @@ import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } f
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
 import { restartInterview } from "./restart.ts";
+import {
+  clearAllDrafts,
+  clearQuestionDraft,
+  currentDraft,
+  parseDraftPost,
+  projectKeyFor,
+  readDraftFileSync,
+  readSavedFiles,
+  writeDraftPost,
+  type SavedFile,
+} from "./draft-file.ts";
 import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
@@ -173,6 +184,14 @@ export interface DeskSession {
   cardHtml: string;
   /** Picks for choices.forId. The card renders them only when that id is current. */
   choices: CardChoiceSet | null;
+  /** Hash of the project directory. The raw path never leaves the server. */
+  projectKey: string;
+  /** Unsent text for the question on screen, or null when nothing is stored. */
+  draft: { text: string; savedAt: string; step: number } | null;
+  /** Files already in this question's upload folder. Paths stay relative. */
+  savedFiles: SavedFile[];
+  /** Set when the interview restarts, so an older browser copy is dropped. */
+  draftsClearedAt: string | null;
 }
 
 export interface DeskApp {
@@ -188,6 +207,7 @@ const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const DRAFT_STORE_SOURCE = path.resolve(SRC_ROOT, "client", "draft-store.ts");
 const ATTACH_SOURCE = path.resolve(SRC_ROOT, "client", "attach.ts");
 const TOOL_SOURCE = path.resolve(SRC_ROOT, "client", "tool-install.ts");
 const SAVE_SOURCE = path.resolve(SRC_ROOT, "client", "save-status.ts");
@@ -676,6 +696,10 @@ async function handlePost(
     await handleTurn(req, res, pathname, turn, view, hub, enqueue, projectDir);
     return;
   }
+  if (pathname === "/api/draft") {
+    await handleDraftPost(req, res, projectDir, enqueue);
+    return;
+  }
   if (pathname.startsWith("/api/attach/")) {
     const questionId = pathname.slice("/api/attach/".length);
     if (!attachQuestionId(questionId)) {
@@ -785,7 +809,10 @@ async function handleRestart(
     return;
   }
   try {
-    await enqueue(() => restartInterview(projectDir));
+    await enqueue(async () => {
+      await restartInterview(projectDir);
+      await clearAllDrafts(projectDir, new Date().toISOString());
+    });
   } catch (error: unknown) {
     logDeskError(error);
     sendHtml(req, res, 500, restartErrorPage("The project could not be saved, so the interview was not restarted."));
@@ -891,6 +918,15 @@ async function handleTurn(
           ...(parsed.assumed === true ? { assumed: true } : {}),
         }),
       );
+      const after = view().question;
+      const moved = after === null || after.id !== parsed.questionId;
+      if ((kind === "answer" || kind === "skip") && moved) {
+        try {
+          await clearQuestionDraft(projectDir, parsed.questionId);
+        } catch (error: unknown) {
+          logDeskError(error);
+        }
+      }
       const session = view();
       hub.publish("session", session);
       for (const event of output.events) hub.publish("update", event);
@@ -1233,6 +1269,11 @@ async function handleGet(
     sendJson(req, res, 200, view());
     return;
   }
+  if (pathname === "/api/draft") {
+    const questionId = queryValue(rawUrl, "questionId");
+    sendJson(req, res, 200, currentDraft(projectDir, questionId) ?? { text: "" });
+    return;
+  }
   if (pathname === "/api/events") {
     streamEvents(req, res, view, hub);
     return;
@@ -1249,6 +1290,10 @@ async function handleGet(
   }
   if (pathname === "/client/desk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DESK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/draft-store.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRAFT_STORE_SOURCE)));
     return;
   }
   if (pathname === "/client/tour.js") {
@@ -1455,10 +1500,22 @@ function buildSession(
         };
   const assumption = previousAssumption(questions, answers, question?.id ?? null);
   const required = questionNeedsConfirm(question, requiredList);
-  const choices =
+  let choices =
     question !== null && overlay.choices !== null && overlay.choices.forId === question.id
       ? overlay.choices
       : null;
+  const drafts = readDraftFileSync(projectDir);
+  const fileShown =
+    drafts.shown !== null && question !== null && drafts.shown.forId === question.id ? drafts.shown : null;
+  if (question !== null && fileShown !== null && !overlay.calm) {
+    const memoryPush = overlay.forId === question.id && overlay.status === "pushed" && overlay.quote !== null;
+    if (!memoryPush && (pushback === null || pushback === "") && fileShown.pushback !== null) {
+      pushback = fileShown.pushback;
+    }
+    if (choices === null && fileShown.choices !== null) choices = fileShown.choices;
+  }
+  const savedFiles = readSavedFiles(projectDir, question?.id ?? null);
+  const stored = question === null ? null : (drafts.entries[question.id] ?? null);
   const card: CardState = {
     question,
     draft: "",
@@ -1471,6 +1528,7 @@ function buildSession(
     required,
     enterHint: true,
     choices,
+    ...(savedFiles.length > 0 ? { attach: chipsFromSaved(savedFiles) } : {}),
   };
   const compact = depthTouched(questions, answers);
   const stepTotal = questions.length;
@@ -1530,8 +1588,63 @@ function buildSession(
     transcriptHtml: transcript,
     statusHtml: statusSpans(footerText, notice, overlay.calm),
     cardHtml,
-    choices: overlay.choices,
+    // The held card can still be the question that was just suggested, after the
+    // cursor has moved. Send that choice set. The rendered card only shows a set
+    // whose forId is the question on screen.
+    choices: overlay.choices ?? choices,
+    projectKey: projectKeyFor(projectDir),
+    draft: stored,
+    savedFiles,
+    draftsClearedAt: drafts.clearedAt,
   };
+}
+
+function chipsFromSaved(files: readonly SavedFile[]): NonNullable<CardState["attach"]> {
+  return {
+    linkDraft: "",
+    uploading: null,
+    live: "",
+    chips: files.map((file, index) => ({
+      id: `s${index + 1}`,
+      kind: "file" as const,
+      label: file.originalName,
+      detail: formatBytes(file.size),
+      removeName: `Remove ${file.originalName}`,
+      ready: true,
+    })),
+  };
+}
+
+async function handleDraftPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That draft is too long." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That draft is too long." });
+    dropRequest(req);
+    return;
+  }
+  const parsed = parseDraftPost(capped.body.toString("utf8"));
+  if ("error" in parsed) {
+    sendJson(req, res, 400, { error: parsed.error });
+    return;
+  }
+  try {
+    await enqueue(() => writeDraftPost(projectDir, parsed));
+  } catch (error: unknown) {
+    logDeskError(error);
+    sendJson(req, res, 500, { error: "The draft could not be saved." });
+    return;
+  }
+  sendJson(req, res, 200, { ok: true });
 }
 
 function statusSpans(text: string, notice: string | null | undefined, calm = false): string {
@@ -2241,6 +2354,7 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
     .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
     .replace(/from\s+["']\.\/voice-text\.ts["']/g, 'from "/client/voice-text.js"')
+    .replace(/from\s+["']\.\/draft-store\.ts["']/g, 'from "/client/draft-store.js"')
     .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"')
     .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"')
     .replace(/from\s+["']\.\/tile\.ts["']/g, 'from "/client/tile.js"');
@@ -2959,6 +3073,16 @@ function referenceError(error: unknown): { status: number; message: string } {
     }
   }
   return { status: 500, message: "The shortlist did not save." };
+}
+
+function queryValue(rawUrl: string, name: string): string | null {
+  const query = rawUrl.split("?")[1] ?? "";
+  if (query === "") return null;
+  try {
+    return new URLSearchParams(query).get(name);
+  } catch {
+    return null;
+  }
 }
 
 function normalizePath(url: string): string | null {

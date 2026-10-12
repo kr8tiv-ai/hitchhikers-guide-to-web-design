@@ -47,6 +47,11 @@ test.afterAll(async () => {
   if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
 });
 
+// These tests share one project and each opens a new page. The desk restores a saved draft.
+test.beforeEach(async () => {
+  if (projectDir !== "") await rm(path.join(projectDir, ".hitchhiker", "drafts.json"), { force: true });
+});
+
 test("mouse and keyboard toggles fill the draft and do not submit", async ({ page }) => {
   const errors = trackErrors(page);
   const answers: string[] = [];
@@ -199,6 +204,12 @@ async function openDesk(page: Page, mode: VoiceMode): Promise<void> {
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto(deskUrl);
   await page.locator('[data-region="question"][data-live="true"]').waitFor();
+  await page.evaluate(() => {
+    const field = document.querySelector("#hh-card-draft");
+    if (field === null || !("value" in field) || field.value === "") return;
+    field.value = "";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await expect(page.locator('script[src="/client/desk.js"]')).toHaveCount(1);
   const boot = await page.evaluate(() => {
     const host = window as Window & {

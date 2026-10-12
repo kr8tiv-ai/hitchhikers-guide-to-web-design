@@ -50,6 +50,11 @@ test.afterAll(async () => {
   if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
 });
 
+// These tests share one project and each opens a new page. The desk restores a saved draft.
+test.beforeEach(async () => {
+  if (projectDir !== "") await rm(path.join(projectDir, ".hitchhiker", "drafts.json"), { force: true });
+});
+
 const HEARD = "Heard you. Check the words, then press Answer.";
 const PUSH_LINE = "Name one concrete detail.";
 const KEPT_SENTENCE = "Yourself, or one named client.";
@@ -1062,6 +1067,12 @@ async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<voi
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto(deskUrl);
   await page.locator('[data-region="question"][data-live="true"]').waitFor();
+  await page.evaluate(() => {
+    const field = document.querySelector("#hh-card-draft");
+    if (field === null || !("value" in field) || field.value === "") return;
+    field.value = "";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   // Pause after load so fastForward is the only thing that moves time.
   if (clock) {
     const pageNow = await page.evaluate(() => Date.now());
@@ -1241,6 +1252,15 @@ async function expectIdle(page: Page, value: string): Promise<void> {
   await expect(page.locator("[data-card-notice]")).toHaveText(/Heard you\. Check the words, then press Answer\./);
 }
 
+/** Sets the box without a focus that would offer a saved draft back. */
+async function replaceDraft(draft: ReturnType<Page["locator"]>, value: string): Promise<void> {
+  await draft.evaluate((el, next) => {
+    const field = el as HTMLTextAreaElement;
+    field.value = next;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
+}
+
 async function showPushback(page: Page, line = PUSH_LINE): Promise<void> {
   await page.evaluate(async (text) => {
     const response = await fetch("/api/session", { cache: "no-store" });
@@ -1291,7 +1311,7 @@ async function dictateOnto(page: Page, prior: string, interim: string, final: st
 async function runLate(page: Page, waitMs: number): Promise<void> {
   const draft = page.locator("#hh-card-draft");
   const button = page.locator('[data-voice="hold"]');
-  await draft.fill("Hello");
+  await replaceDraft(draft, "Hello");
   await button.click();
   await expect(button).toHaveText("Stop listening");
   expect(await draft.inputValue()).toBe("Hello");
@@ -1306,7 +1326,7 @@ async function runLate(page: Page, waitMs: number): Promise<void> {
 async function runLateSurvives(page: Page): Promise<void> {
   const draft = page.locator("#hh-card-draft");
   const button = page.locator('[data-voice="hold"]');
-  await draft.fill("Hello");
+  await replaceDraft(draft, "Hello");
   await button.click();
   await expect(button).toHaveText("Stop listening");
   expect(await draft.inputValue()).toBe("Hello");

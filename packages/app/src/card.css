@@ -8,6 +8,7 @@
 .hh-qcard__field {
   display: block;
   min-width: 0;
+  position: relative;
 }
 
 .hh-qcard__label {
@@ -229,6 +230,36 @@
   overflow-wrap: break-word;
 }
 
+.hh-qcard__draft-status {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  display: block;
+  margin: 0;
+  min-height: 1.25em;
+  color: var(--color-muted);
+  font-size: var(--type-micro);
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+
+.hh-qcard__draft-status:not(:empty) {
+  background: var(--color-plate);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hh-qcard__draft-status {
+    transition: opacity 400ms ease;
+  }
+}
+
+.hh-qcard__draft-status[data-draft-fade="true"] {
+  opacity: 0;
+}
+
 .hh-qcard__assumed {
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -329,9 +360,14 @@
 @media (prefers-reduced-motion: reduce) {
   .hh-qcard__input,
   .hh-qcard .hh-btn,
-  .hh-attach.is-drag {
+  .hh-attach.is-drag,
+  .hh-qcard__draft-status {
     transition: none;
     animation: none;
+  }
+
+  .hh-qcard__draft-status[data-draft-fade="true"] {
+    opacity: 1;
   }
 }
 
