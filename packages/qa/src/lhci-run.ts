@@ -5,8 +5,11 @@
  * Autorun uses the copy the CLI depends on. The phone floor stays 90.
  *
  * Three mobile runs, simulated throttling, minScore 0.9 on performance,
- * accessibility, best-practices, and seo. A crash, a missing report, or a
- * score under the floor is BLOCKER. Nothing here lowers a floor.
+ * accessibility, best-practices, and seo. The route score is the median of
+ * those runs, which is what Lighthouse recommends and what the phone-gate
+ * comment already names. A crash, a missing report, fewer than three runs,
+ * or a median under the floor is BLOCKER. One noisy sample does not fail
+ * the route. Nothing here lowers a floor.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -56,6 +59,7 @@ interface CollectConfig {
       };
     };
     assert: {
+      aggregationMethod: "median";
       assertions: Record<string, ["error", { minScore: number }]>;
     };
     upload: {
@@ -90,6 +94,7 @@ export function lhciCollectConfig(urls: string[], chromePath: string, outputDir:
         },
       },
       assert: {
+        aggregationMethod: "median",
         assertions: {
           "categories:performance": ["error", { minScore: 0.9 }],
           "categories:accessibility": ["error", { minScore: 0.9 }],
@@ -266,16 +271,36 @@ function median(values: number[]): number {
   return lower === undefined ? center : (lower + center) / 2;
 }
 
-function judgeRoute(
+function representativeRun<T extends { scores: LhScores }>(runs: readonly T[], medianPerformance: number): T {
+  let best = runs[0];
+  if (best === undefined) throw new Error("Lighthouse returned no scores.");
+  let distance = Math.abs(best.scores.performance - medianPerformance);
+  for (const run of runs) {
+    const next = Math.abs(run.scores.performance - medianPerformance);
+    if (next < distance) {
+      best = run;
+      distance = next;
+    }
+  }
+  return best;
+}
+
+/**
+ * Judge one route from its mobile runs. Category scores are the median.
+ * LHCI assert uses the same aggregation. A single run under the floor does
+ * not fail the route when the median clears it.
+ */
+export function judgeLhRuns(
   route: string,
-  runs: Array<{ json: unknown; scores: LhScores }>,
+  runs: ReadonlyArray<{ json?: unknown; scores: LhScores }>,
   assertOk: boolean,
   assertDetail: string,
 ): LhResult {
   if (runs.length === 0) return blocker(route, "Lighthouse wrote no report. The gate fails closed.");
+  const performance = median(runs.map((run) => run.scores.performance));
   const scores = fromLhci({
     categories: {
-      performance: { score: median(runs.map((run) => run.scores.performance)) },
+      performance: { score: performance },
       accessibility: { score: median(runs.map((run) => run.scores.accessibility)) },
       "best-practices": { score: median(runs.map((run) => run.scores.bestPractices)) },
       seo: { score: median(runs.map((run) => run.scores.seo)) },
@@ -284,13 +309,9 @@ function judgeRoute(
   const judged = evaluateLh({ phone: scores, heavy: false, floors: floors() });
   const reasons = [...judged.reasons];
   let status = judged.status;
-  for (const run of runs) {
-    const one = evaluateLh({ phone: run.scores, heavy: false, floors: floors() });
-    if (one.status === "BLOCKER") {
-      status = "BLOCKER";
-      reasons.push(...one.reasons);
-      reasons.push(...weakAudits(run.json));
-    }
+  if (status === "BLOCKER") {
+    const sample = representativeRun(runs, performance);
+    if (sample.json !== undefined) reasons.push(...weakAudits(sample.json));
   }
   if (!assertOk) {
     status = "BLOCKER";
@@ -341,7 +362,7 @@ export async function runLhci(url: string, routes: string[]): Promise<LhResult[]
       }
       const judged = live.map((target) => {
         const route = routePath(target);
-        return judgeRoute(route, grouped.get(route) ?? [], asserted.code === 0, assertDetail);
+        return judgeLhRuns(route, grouped.get(route) ?? [], asserted.code === 0, assertDetail);
       });
       return [...dead, ...judged];
     } finally {

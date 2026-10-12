@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import https from "node:https";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
@@ -16,7 +17,8 @@ import {
 } from "@hitchhiker/engine";
 import { contrastRatio } from "../src/axe-run.ts";
 import { applyFixLoop } from "../src/fix-prompts.ts";
-import { lhciCollectConfig } from "../src/lhci-run.ts";
+import { judgeLhRuns, lhciCollectConfig } from "../src/lhci-run.ts";
+import type { LhScores } from "../src/lighthouse-gate.ts";
 import { checkLinks } from "../src/link-check.ts";
 import { captureReviewShots, startFixtureSite } from "../src/playwright-opener.ts";
 import { ONCE_OVER_ID, insertOnceOver, runGates, writeOnceOver, type QueueEntry } from "../src/site-once-over.ts";
@@ -86,6 +88,25 @@ function cassette(value: unknown, seen: ThinkRequest<unknown>[]): typeof import(
 
 function points(score: number): number {
   return score <= 1 ? score * 100 : score;
+}
+
+function readHttps(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+      });
+      res.on("end", () => {
+        if ((res.statusCode ?? 500) >= 400) {
+          reject(new Error(`GET ${url} returned ${res.statusCode ?? 0}`));
+          return;
+        }
+        resolve(Buffer.concat(chunks).toString("utf8"));
+      });
+    });
+    req.on("error", reject);
+  });
 }
 
 const ADAPTER_FLAGS = new Set([
@@ -358,12 +379,58 @@ describe("live gates", { concurrency: false }, () => {
     assert.match(source, /minScore:\s*0\.9/);
     assert.match(source, /numberOfRuns:\s*3/);
     assert.match(source, /formFactor:\s*"mobile"/);
+    assert.match(source, /throttlingMethod:\s*"simulate"/);
     assert.equal(source.includes("0.8"), false);
     const config = lhciCollectConfig(["https://127.0.0.1/"], "chrome", "lhci-upload");
     assert.equal(config.ci.collect.numberOfRuns, 3);
     assert.equal(config.ci.collect.settings.formFactor, "mobile");
+    assert.equal(config.ci.collect.settings.throttlingMethod, "simulate");
+    assert.equal(config.ci.assert.aggregationMethod, "median");
     for (const key of ["performance", "accessibility", "best-practices", "seo"]) {
       assert.equal(config.ci.assert.assertions[`categories:${key}`]?.[1].minScore, 0.9);
+    }
+  });
+
+  test("the phone gate scores the median of three runs", () => {
+    const sample = (performance: number): { scores: LhScores } => ({
+      scores: { performance, accessibility: 1, bestPractices: 1, seo: 1 },
+    });
+    const noisy = judgeLhRuns("/", [sample(0.8), sample(0.96), sample(0.97)], true, "");
+    assert.equal(noisy.status, "PASS");
+    assert.equal(noisy.runs, 3);
+    assert.equal(noisy.scores?.performance, 0.96);
+    assert.equal(noisy.reasons.length, 0);
+
+    const low = judgeLhRuns("/", [sample(0.8), sample(0.8), sample(0.97)], true, "");
+    assert.equal(low.status, "BLOCKER");
+    assert.equal(low.scores?.performance, 0.8);
+    assert.match(low.reasons.join("\n"), /Phone performance is 80, below the floor of 90/);
+
+    const short = judgeLhRuns("/", [sample(1), sample(1)], true, "");
+    assert.equal(short.status, "BLOCKER");
+    assert.match(short.reasons.join("\n"), /Expected 3 mobile runs and found 2/);
+
+    const asserted = judgeLhRuns("/", [sample(1), sample(1), sample(1)], false, "LHCI assert failed.");
+    assert.equal(asserted.status, "BLOCKER");
+    assert.match(asserted.reasons.join("\n"), /LHCI assert failed/);
+  });
+
+  test("the starter page inlines critical CSS and has no render-blocking head resource", async () => {
+    const site = await startFixtureSite();
+    try {
+      for (const route of ["/", "/credits"]) {
+        const html = await readHttps(`${site.url}${route}`);
+        assert.equal(/<link\b[^>]*stylesheet/i.test(html), false, route);
+        assert.equal(/<script\b[^>]*\bsrc\s*=/i.test(html), false, route);
+        const scripts = html.match(/<script\b[^>]*>/gi) ?? [];
+        assert.ok(scripts.length > 0, route);
+        for (const tag of scripts) assert.match(tag, /type="application\/ld\+json"/);
+        assert.match(html, /<style>[\s\S]*--paper:\s*#f3ecdf/);
+        assert.match(html, /a:focus-visible/);
+        assert.equal(html.includes("/blank.css"), false, route);
+      }
+    } finally {
+      await site.close();
     }
   });
 
@@ -438,11 +505,10 @@ describe("live gates", { concurrency: false }, () => {
     const shotsDir = await mkdtemp(path.join(os.tmpdir(), "hh-shots-"));
     try {
       assert.match(site.url, /^https:\/\/127\.0\.0\.1:\d+$/);
+      const gates = await runGates(`${site.url}/`, ["/", "/credits"]);
       const shots = await captureReviewShots(`${site.url}/`, ["main"], shotsDir);
       assert.equal(shots.length, 16);
       for (const file of shots) assert.ok(statSync(file).size > 0);
-
-      const gates = await runGates(`${site.url}/`, ["/", "/credits"]);
       const detail = JSON.stringify(
         {
           lighthouse: gates.lighthouse,

@@ -6,9 +6,12 @@
  * eight-frame scroll strip.
  *
  * The fixture is the astro-default starter (prompt 106), served as static
- * HTML over TLS. Lighthouse scores is-on-https at 0 for an http URL, which
- * pulls best-practices under 90. The certificate is generated in process
- * for 127.0.0.1. Chrome is told to ignore it. The floor stays 90.
+ * HTML over TLS. Astro is configured with inlineStylesheets "always", so
+ * the critical CSS is in the document head and the page does not request a
+ * render-blocking stylesheet. Lighthouse scores is-on-https at 0 for an
+ * http URL, which pulls best-practices under 90. The certificate is
+ * generated in process for 127.0.0.1. Chrome is told to ignore it. The
+ * floor stays 90.
  */
 
 import { spawn } from "node:child_process";
@@ -136,7 +139,11 @@ function canonicalOf(source: string, fallback: string): string {
   return match?.[1] ?? fallback;
 }
 
-function shell(title: string, description: string, canonical: string, body: string): string {
+function pageCss(root: string): string {
+  return readFileSync(path.join(root, "src", "styles", "blank.css"), "utf8").trim();
+}
+
+function shell(title: string, description: string, canonical: string, body: string, css: string): string {
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -153,7 +160,9 @@ function shell(title: string, description: string, canonical: string, body: stri
 <meta name="description" content="${escapeHtml(description)}">
 <link rel="canonical" href="${escapeHtml(canonical)}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/blank.css">
+<style>
+${css}
+</style>
 <meta name="theme-color" content="#f3ecdf">
 <script type="application/ld+json">${jsonLd}</script>
 </head>
@@ -194,7 +203,7 @@ function homeDocument(root: string): string {
 <footer>
 <p>${escapeHtml(footer)}</p>
 </footer>`;
-  return shell(title, description, canonicalOf(source, "https://example.com/"), body);
+  return shell(title, description, canonicalOf(source, "https://example.com/"), body, pageCss(root));
 }
 
 function creditsDocument(root: string): string {
@@ -223,7 +232,7 @@ function creditsDocument(root: string): string {
 <h1>${escapeHtml(h1)}</h1>
 <p class="dek">${escapeHtml(dek)}</p>
 </main>`;
-  return shell(title, description, canonicalOf(source, "https://example.com/credits"), body);
+  return shell(title, description, canonicalOf(source, "https://example.com/credits"), body, pageCss(root));
 }
 
 function tinyIcon(): Buffer {
