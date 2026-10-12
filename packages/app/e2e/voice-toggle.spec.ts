@@ -7,6 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   TALK_NEEDS_CHROMIUM,
   VOICE_CAP_NOTICE,
+  VOICE_NO_TRANSCRIPT,
   VOICE_RESTART_BASE_MS,
   VOICE_RESTART_CAP,
   VOICE_STOP_WAIT_MS,
@@ -917,6 +918,7 @@ test("ten cycles keep one live recognizer and one late result handler", async ({
   expect(done.onerror).toBe(0);
   expect(done.onend).toBe(0);
   expect(done.onstart).toBe(0);
+  expect(done.onspeechstart).toBe(0);
   expect(done.constructed).toBe(10);
 });
 
@@ -937,7 +939,7 @@ test("a stop without onend retires the first recognizer before the next start", 
   expect(stats.live).toBe(1);
   const first = stats.recognizers[0];
   expect(first).toBeDefined();
-  const cleared = first !== undefined && !first.onstart && !first.onresult && !first.onerror && !first.onend;
+  const cleared = first !== undefined && !first.onstart && !first.onspeechstart && !first.onresult && !first.onerror && !first.onend;
   expect(first?.aborted === true || cleared).toBe(true);
   await emitList(page, 0, [{ text: "should not land", final: true }], 0);
   await expect(draft).toHaveValue("alpha beta gamma");
@@ -1139,6 +1141,165 @@ test("a revised interim keeps a fixed base and never repeats the sentence", asyn
   expect(answers).toEqual([]);
 });
 
+test("Chrome cumulative results from an empty box land once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await expect(draft).toHaveValue("");
+  await emitList(page, -1, [{ text: "for my", final: false }], 0);
+  await expectOnce(draft, "for my", ["for my"]);
+  await emitList(page, -1, [{ text: "for my own", final: true }], 0);
+  await expectOnce(draft, "for my own", ["for my own"]);
+  await emitList(page, -1, [
+    { text: "for my own", final: true },
+    { text: "bakery", final: false },
+  ], 1);
+  await expectOnce(draft, "for my own bakery", ["for my own bakery", "bakery"]);
+  await emitList(page, -1, [
+    { text: "for my own", final: true },
+    { text: "bakery", final: true },
+  ], 1);
+  await expectOnce(draft, "for my own bakery", ["for my own bakery", "for my own", "bakery"]);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expectOnce(draft, "for my own bakery", ["for my own bakery"]);
+  expect(answers).toEqual([]);
+});
+
+test("Chrome cumulative results keep a fixed Intro base once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await replaceDraft(draft, "Intro.");
+  await expect(draft).toHaveValue("Intro.");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await expect(draft).toHaveValue("Intro.");
+  await emitList(page, -1, [{ text: "hello fire", final: false }], 0);
+  await expectOnce(draft, "Intro. hello fire", ["hello fire", "Intro."]);
+  await emitList(page, -1, [{ text: "hello firewood", final: false }], 0);
+  await expectOnce(draft, "Intro. hello firewood", ["hello firewood", "Intro."]);
+  await emitList(page, -1, [{ text: "hello firewood bakery", final: true }], 0);
+  await expectOnce(draft, "Intro. hello firewood bakery", ["hello firewood bakery", "Intro."]);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expectOnce(draft, "Intro. hello firewood bakery", ["hello firewood bakery"]);
+  expect(answers).toEqual([]);
+});
+
+test("a restart joins the next recognizer's final once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await expect(draft).toHaveValue("");
+  await emitList(page, -1, [{ text: "we bake bread", final: true }], 0);
+  await expectOnce(draft, "we bake bread", ["we bake bread"]);
+  const before = await counts(page);
+  await end(page);
+  await expectOnce(draft, "we bake bread", ["we bake bread"]);
+  await page.waitForTimeout(VOICE_RESTART_BASE_MS + 80);
+  await expect.poll(() => counts(page).then((item) => item.starts)).toBe(before.starts + 1);
+  await expect(button).toHaveText("Stop listening");
+  await expectOnce(draft, "we bake bread", ["we bake bread"]);
+  await emitList(page, -1, [{ text: "every morning", final: true }], 0);
+  await expectOnce(draft, "we bake bread every morning", ["we bake bread", "every morning"]);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expectOnce(draft, "we bake bread every morning", ["we bake bread every morning"]);
+  expect(answers).toEqual([]);
+});
+
+test("a late final inside the stop window replaces the interim once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [{ text: "for my", final: false }], 0);
+  await expectOnce(draft, "for my", ["for my"]);
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expectOnce(draft, "for my", ["for my"]);
+  await emitList(page, 0, [{ text: "for my own site", final: true }], 0);
+  await expectOnce(draft, "for my own site", ["for my own site"]);
+  expect(answers).toEqual([]);
+});
+
+test("speechstart with no result names the silent speech service", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await replaceDraft(draft, "Notes.");
+  await expect(draft).toHaveValue("Notes.");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await expect(draft).toHaveValue("Notes.");
+  await speechStart(page);
+  await expect(draft).toHaveValue("Notes.");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("Notes.");
+  await expect(page.locator("#hh-card-error")).toHaveText(VOICE_NO_TRANSCRIPT);
+  await expect(page.getByText(NOTHING)).toHaveCount(0);
+  expect(answers).toEqual([]);
+});
+
+test("speechstart and empty restarts name the service instead of the cap", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual", true);
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await replaceDraft(draft, "Notes.");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await speechStart(page);
+  await expect(draft).toHaveValue("Notes.");
+  for (let empty = 0; empty < VOICE_RESTART_CAP - 1; empty += 1) {
+    await end(page);
+    await page.clock.fastForward(2_000);
+    await expect.poll(() => counts(page).then((item) => item.starts)).toBe(empty + 2);
+    await expect(button).toHaveText("Stop listening");
+    await expect(draft).toHaveValue("Notes.");
+  }
+  await end(page);
+  await expect(button).toHaveText("Click to talk");
+  await expect(draft).toHaveValue("Notes.");
+  await expect(page.locator("#hh-card-error")).toHaveText(VOICE_NO_TRANSCRIPT);
+  await expect(page.getByText(VOICE_CAP_NOTICE)).toHaveCount(0);
+  expect(answers).toEqual([]);
+});
+
+async function expectOnce(
+  draft: ReturnType<Page["locator"]>,
+  value: string,
+  phrases: string[],
+): Promise<void> {
+  await expect(draft).toHaveValue(value);
+  const text = await draft.inputValue();
+  for (const phrase of phrases) expect(text.split(phrase).length - 1).toBe(1);
+}
+
+async function speechStart(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const host = window as Window & { __hhSpeech?: () => void };
+    host.__hhSpeech?.();
+  });
+}
+
 async function installInputCounter(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const host = window as Window & { __hhInputAdds?: { document: number; textarea: number } };
@@ -1270,6 +1431,7 @@ interface VoiceRecognizerStat {
   onerror: boolean;
   onend: boolean;
   onstart: boolean;
+  onspeechstart: boolean;
 }
 
 interface VoiceStats {
@@ -1280,6 +1442,7 @@ interface VoiceStats {
   onerror: number;
   onend: number;
   onstart: number;
+  onspeechstart: number;
   recognizers: VoiceRecognizerStat[];
 }
 
@@ -1310,6 +1473,7 @@ async function voiceStats(page: Page): Promise<VoiceStats> {
       onerror: 0,
       onend: 0,
       onstart: 0,
+      onspeechstart: 0,
       recognizers: [],
     };
   });
@@ -1500,6 +1664,7 @@ function installVoice(mode: VoiceMode): void {
       onresult: ((event: unknown) => void) | null;
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
+      onspeechstart: (() => void) | null;
       live: boolean;
     };
     __hhEmit?: (text: string, isFinal: boolean) => void;
@@ -1516,6 +1681,7 @@ function installVoice(mode: VoiceMode): void {
       onresult: ((event: unknown) => void) | null;
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
+      onspeechstart: (() => void) | null;
       started: boolean;
       stopped: boolean;
       aborted: boolean;
@@ -1539,6 +1705,7 @@ function installVoice(mode: VoiceMode): void {
       onerror: number;
       onend: number;
       onstart: number;
+      onspeechstart: number;
       recognizers: {
         live: boolean;
         aborted: boolean;
@@ -1546,8 +1713,10 @@ function installVoice(mode: VoiceMode): void {
         onerror: boolean;
         onend: boolean;
         onstart: boolean;
+        onspeechstart: boolean;
       }[];
     };
+    __hhSpeech?: () => void;
     SpeechRecognition?: unknown;
     webkitSpeechRecognition?: unknown;
   };
@@ -1599,6 +1768,7 @@ function installVoice(mode: VoiceMode): void {
     continuous = false;
     interimResults = false;
     onstart: (() => void) | null = null;
+    onspeechstart: (() => void) | null = null;
     onresult: ((event: unknown) => void) | null = null;
     onerror: ((event: { error: string }) => void) | null = null;
     onend: (() => void) | null = null;
@@ -1688,6 +1858,9 @@ function installVoice(mode: VoiceMode): void {
     }
   }
 
+  host.__hhSpeech = (): void => {
+    host.__hhCurrent?.onspeechstart?.();
+  };
   host.__hhEmit = (text: string, isFinal: boolean): void => {
     host.__hhCurrent?.onresult?.({
       resultIndex: 0,
@@ -1719,6 +1892,7 @@ function installVoice(mode: VoiceMode): void {
       onerror: list.filter((item) => item.onerror !== null).length,
       onend: list.filter((item) => item.onend !== null).length,
       onstart: list.filter((item) => item.onstart !== null).length,
+      onspeechstart: list.filter((item) => item.onspeechstart !== null).length,
       recognizers: list.map((item) => ({
         live: item.live === true,
         aborted: item.aborted === true,
@@ -1726,6 +1900,7 @@ function installVoice(mode: VoiceMode): void {
         onerror: item.onerror !== null,
         onend: item.onend !== null,
         onstart: item.onstart !== null,
+        onspeechstart: item.onspeechstart !== null,
       })),
     };
   };

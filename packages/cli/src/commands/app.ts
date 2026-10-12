@@ -5,6 +5,7 @@ import { cassetteNotice, cassetteRefusal } from "../cassette-guard.ts";
 import { deskPreflight, spawnCommand, type CommandRunner } from "../doctor.ts";
 
 const USAGE = "Usage: hh app [--project <dir>] [--port <n>] [--no-open] [--cassette]";
+const VOICE_LAUNCH = "Voice input needs Chrome or Edge. Open this address there to talk.";
 const HELP = `${USAGE}
 --cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.
 `;
@@ -167,7 +168,7 @@ export async function runApp(
       return { exitCode: 1, stdout: "The companion app did not load.\n", stderr: "" };
     }
     active = handle;
-    let stdout = `${handle.url}\n`;
+    let stdout = `${handle.url}\n${VOICE_LAUNCH}\n`;
     if (parsed.open && !handle.opened) {
       stdout += "The browser did not open. Use the URL above.\n";
     }

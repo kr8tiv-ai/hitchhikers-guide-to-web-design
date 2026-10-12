@@ -69,8 +69,11 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
     });
     assert.equal(flagged.exitCode, 0, flagged.stderr);
     assert.equal(opened, 1);
-    assert.match(flagged.stdout, /^http:\/\/127\.0\.0\.1:\d+\/\n$/);
-    const flaggedPage = await fetch(flagged.stdout.trim());
+    assert.match(
+      flagged.stdout,
+      /^http:\/\/127\.0\.0\.1:\d+\/\nVoice input needs Chrome or Edge\. Open this address there to talk\.\n$/,
+    );
+    const flaggedPage = await fetch(firstUrl(flagged.stdout));
     assert.equal(flaggedPage.status, 200);
     assert.match(await flaggedPage.text(), /Replay mode: answers come from recorded cassettes\./);
     await closeActiveApp();
@@ -82,6 +85,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
     });
     assert.equal(allowed.exitCode, 0, allowed.stderr);
     assert.equal(opened, 0);
+    assert.match(allowed.stdout, /Voice input needs Chrome or Edge\. Open this address there to talk\./);
     const allowedHtml = await (await fetch(firstUrl(allowed.stdout))).text();
     assert.match(allowedHtml, /Replay mode: answers come from recorded cassettes\./);
     await closeActiveApp();
@@ -92,6 +96,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
       { env: { HH_CASSETTE: "record" }, open },
     );
     assert.equal(recorded.exitCode, 0, recorded.stderr);
+    assert.match(recorded.stdout, /Voice input needs Chrome or Edge\. Open this address there to talk\./);
     const recordedHtml = await (await fetch(firstUrl(recorded.stdout))).text();
     assert.match(recordedHtml, /Record mode: answers are written to cassettes\./);
     await closeActiveApp();
@@ -101,6 +106,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
       open,
     });
     assert.equal(quiet.exitCode, 0, quiet.stderr);
+    assert.match(quiet.stdout, /Voice input needs Chrome or Edge\. Open this address there to talk\./);
     const quietHtml = await (await fetch(firstUrl(quiet.stdout))).text();
     assert.equal(quietHtml.includes("Replay mode:"), false);
     await closeActiveApp();

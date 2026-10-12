@@ -6,6 +6,7 @@ import {
   VOICE_FIRST_ALLOW,
   VOICE_HEARD,
   VOICE_LISTENING,
+  VOICE_NO_TRANSCRIPT,
   VOICE_RELEASE_EMPTY,
   VOICE_RESTART_BASE_MS,
   VOICE_SILENT,
@@ -84,6 +85,7 @@ class FakeRecognition implements SpeechRecognitionLike {
   continuous = false;
   interimResults = false;
   onstart: (() => void) | null = null;
+  onspeechstart: (() => void) | null = null;
   onresult: ((event: SpeechResultEventLike) => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
   onend: (() => void) | null = null;
@@ -450,6 +452,52 @@ test("a stop with nothing heard asks for another click, not for the microphone",
     assert.equal(h.region.innerHTML.includes(VOICE_FIRST_ALLOW), false);
     assert.equal(h.region.innerHTML.includes("allow the microphone"), false);
     assert.equal(rec.aborted, false);
+  } finally {
+    stop();
+  }
+});
+
+test("speechstart with no result names the speech service and keeps the draft", async () => {
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    typeDraft(h, "Notes.");
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.onspeechstart?.();
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assert.ok(h.region.innerHTML.includes(VOICE_NO_TRANSCRIPT));
+    assert.equal(h.region.innerHTML.includes(VOICE_RELEASE_EMPTY), false);
+    assert.equal(renderedDraft(h.region.innerHTML), "Notes.");
+    assert.equal(h.field.value, "Notes.");
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    stop();
+  }
+});
+
+test("a stop with no speechstart still says nothing was heard", async () => {
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    typeDraft(h, "Notes.");
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assert.ok(h.region.innerHTML.includes(VOICE_RELEASE_EMPTY));
+    assert.equal(h.region.innerHTML.includes(VOICE_NO_TRANSCRIPT), false);
+    assert.equal(renderedDraft(h.region.innerHTML), "Notes.");
+    assert.equal(answerPosts(h).length, 0);
   } finally {
     stop();
   }
@@ -1381,7 +1429,13 @@ function resultHandlers(): number {
 }
 
 function handlersCleared(rec: FakeRecognition): boolean {
-  return rec.onstart === null && rec.onresult === null && rec.onerror === null && rec.onend === null;
+  return (
+    rec.onstart === null &&
+    rec.onspeechstart === null &&
+    rec.onresult === null &&
+    rec.onerror === null &&
+    rec.onend === null
+  );
 }
 
 test("ten cycles keep one live recognizer and at most one late result handler", async () => {
@@ -1411,7 +1465,10 @@ test("ten cycles keep one live recognizer and at most one late result handler", 
     }
     await delay(VOICE_STOP_WAIT_MS + 50);
     assert.equal(resultHandlers(), 0);
-    assert.equal(FakeRecognition.all.filter((item) => item.onstart !== null || item.onerror !== null || item.onend !== null).length, 0);
+    assert.equal(
+      FakeRecognition.all.filter((item) => item.onstart !== null || item.onspeechstart !== null || item.onerror !== null || item.onend !== null).length,
+      0,
+    );
     assert.equal(liveCount(), 0);
     assert.equal(readVoiceInvariant().live, 0);
     assert.equal(readVoiceInvariant().handlers, 0);

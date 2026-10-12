@@ -18,6 +18,8 @@ When the browser exposes `SpeechRecognition` or `webkitSpeechRecognition`, the d
 
 Browser speech recognition is free to you, and the browser vendor processes it. For example, Google does this in Chrome and Microsoft does this in Edge, so audio may leave this device.
 
+When Chrome hears speech and its speech service sends no words, the desk says: Chrome heard you, but its speech service sent no words back. Check the internet connection, then try again, or type your answer.
+
 The same sentence is in the voice help under the voice button, and on Settings.
 
 ## Local whisper
@@ -39,6 +41,8 @@ Other known speech hosts are treated as paid too, including OpenAI, Groq, Deepgr
 ## No speech in this browser
 
 The label reads `Voice: unavailable`. The page says: Voice input needs Chrome or Edge on this computer. Type your answer instead. The draft still accepts typing.
+
+`hh app` prints this line with the desk address: Voice input needs Chrome or Edge. Open this address there to talk.
 
 ## Older notes
 

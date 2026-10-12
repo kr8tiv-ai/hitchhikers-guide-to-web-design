@@ -294,6 +294,9 @@ export const VOICE_FIRST_ALLOW =
   "If Chrome asks to use the microphone, press Allow. Then click the voice button and speak.";
 /** A stop with no words. Not the microphone permission sentence. */
 export const VOICE_RELEASE_EMPTY = "Nothing was heard. Click the voice button and try again.";
+/** Speech started, then the service returned no words and no error. */
+export const VOICE_NO_TRANSCRIPT =
+  "Chrome heard you, but its speech service sent no words back. Check the internet connection, then try again, or type your answer.";
 export const VOICE_SILENT = "Nothing was heard. Click the voice button and try again.";
 export const VOICE_NO_MIC = "No microphone was found. Plug one in, or type your answer.";
 export const VOICE_NETWORK =
@@ -320,6 +323,7 @@ export interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
   onstart: (() => void) | null;
+  onspeechstart: (() => void) | null;
   onresult: ((event: SpeechResultEventLike) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
@@ -352,6 +356,7 @@ export function readVoiceInvariant(): VoiceInvariant {
   if (voiceDebug) {
     for (const rec of trackedRecs) {
       if (rec.onstart !== null) handlers += 1;
+      if (rec.onspeechstart !== null) handlers += 1;
       if (rec.onresult !== null) handlers += 1;
       if (rec.onerror !== null) handlers += 1;
       if (rec.onend !== null) handlers += 1;
@@ -649,6 +654,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let emptyRestarts = 0;
   let restartDelay = VOICE_RESTART_BASE_MS;
   let cycleHeard = false;
+  /** This click heard speechstart. A restart keeps it. The next click clears it. */
+  let speechHeard = false;
   let capHit = false;
   /** Bumped on each click-to-talk. Handlers from an older id ignore the new session. */
   let voiceEpoch = 0;
@@ -884,10 +891,6 @@ export function mountDesk(env: DeskEnv): () => void {
     stopImmediately();
     flushLeaving();
   };
-  const onPageShow = (): void => {
-    // Draft restore stays on the initial load. A pageshow must not move the voice base.
-    if (voiceActive()) return;
-  };
   const onVisibility = (): void => {
     if (env.document.visibilityState === "hidden") {
       stopImmediately();
@@ -994,7 +997,6 @@ export function mountDesk(env: DeskEnv): () => void {
   const deskWindow = env.document.defaultView ?? null;
   if (deskWindow !== null) {
     deskWindow.addEventListener("pagehide", onPageHide);
-    deskWindow.addEventListener("pageshow", onPageShow);
     deskWindow.addEventListener("beforeunload", onPageHide);
     deskWindow.addEventListener("dragover", onWindowDrag);
     deskWindow.addEventListener("drop", onWindowDrag);
@@ -1022,7 +1024,6 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("focusin", onFocusIn);
     if (deskWindow !== null) {
       deskWindow.removeEventListener("pagehide", onPageHide);
-      deskWindow.removeEventListener("pageshow", onPageShow);
       deskWindow.removeEventListener("beforeunload", onPageHide);
       deskWindow.removeEventListener("dragover", onWindowDrag);
       deskWindow.removeEventListener("drop", onWindowDrag);
@@ -1408,6 +1409,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (rec === null) return;
     const ended = endedRecs.has(rec);
     rec.onstart = null;
+    rec.onspeechstart = null;
     rec.onresult = null;
     rec.onerror = null;
     rec.onend = null;
@@ -1461,6 +1463,7 @@ export function mountDesk(env: DeskEnv): () => void {
     emptyRestarts = 0;
     restartDelay = VOICE_RESTART_BASE_MS;
     cycleHeard = false;
+    speechHeard = false;
     capHit = false;
     committed = false;
     voiceSession = true;
@@ -1507,6 +1510,11 @@ export function mountDesk(env: DeskEnv): () => void {
     rec.onstart = () => {
       if (epoch !== voiceEpoch || recognition !== rec) return;
       heardStart = true;
+    };
+    rec.onspeechstart = () => {
+      if (epoch !== voiceEpoch) return;
+      if (recognition !== rec && lateRec !== rec) return;
+      speechHeard = true;
     };
     rec.onresult = (event) => {
       if (epoch !== voiceEpoch) return;
@@ -1763,6 +1771,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function unhook(rec: SpeechRecognitionLike): void {
     rec.onstart = null;
+    rec.onspeechstart = null;
     rec.onresult = null;
     rec.onerror = null;
     rec.onend = null;
@@ -1813,6 +1822,7 @@ export function mountDesk(env: DeskEnv): () => void {
       alive = false;
       if (rec.onresult === handler) {
         rec.onstart = null;
+        rec.onspeechstart = null;
         rec.onresult = null;
         rec.onerror = null;
         rec.onend = null;
@@ -1822,6 +1832,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (lateRec !== null && lateRec !== rec) retireRecognizer(lateRec);
     lateRec = rec;
     rec.onstart = null;
+    rec.onspeechstart = null;
     rec.onerror = null;
     rec.onend = null;
     rec.onresult = handler;
@@ -1854,6 +1865,7 @@ export function mountDesk(env: DeskEnv): () => void {
     emptyRestarts = 0;
     restartDelay = VOICE_RESTART_BASE_MS;
     cycleHeard = false;
+    speechHeard = false;
     capHit = false;
     voiceError = null;
     voiceFinal = "";
@@ -1875,10 +1887,14 @@ export function mountDesk(env: DeskEnv): () => void {
     const failure = voiceError;
     const capped = capHit;
     const heard = settled.heard;
+    const silentService = speechHeard && !heard;
     resetVoiceSession(owner);
     if (failure !== null) {
       notice = null;
       error = failure;
+    } else if (silentService) {
+      notice = null;
+      error = VOICE_NO_TRANSCRIPT;
     } else if (capped) {
       error = null;
       notice = VOICE_CAP_NOTICE;

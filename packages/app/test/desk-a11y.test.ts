@@ -307,6 +307,7 @@ class QuietRecognition implements SpeechRecognitionLike {
   continuous = false;
   interimResults = false;
   onstart: (() => void) | null = null;
+  onspeechstart: (() => void) | null = null;
   onresult: ((event: never) => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
   onend: (() => void) | null = null;
