@@ -1,0 +1,4260 @@
+{
+ "generated": "2026-10-11",
+ "policy": "Seed only. Every row here was fetched by the research box on 2026-10-11 (http field). verification.status unverified means the box got 403, no response or a bot gate: the site exists as far as known but was not read. No row carries copied copy, screenshots, or score text. The build agent writes the original text fields (title, why, palette notes, typography notes, borrow) after opening each site.",
+ "sources": [
+  {
+   "id": "awwwards",
+   "name": "Awwwards",
+   "url": "https://www.awwwards.com/",
+   "best_for": "Peer-scored winners: Site of the Day, Month, Year, Developer Award, Honorable Mention. Tag pages (GSAP, three.js, WebGL, minimal, e-commerce, real estate, portfolio) are the best discovery path. Site pages list colour palettes and an own-words description.",
+   "useful_urls": [
+    "https://www.awwwards.com/websites/gsap/",
+    "https://www.awwwards.com/websites/sites_of_the_day/",
+    "https://www.awwwards.com/websites/sites_of_the_year/",
+    "https://www.awwwards.com/websites/three-js/",
+    "https://www.awwwards.com/websites/webgl/",
+    "https://www.awwwards.com/websites/real-estate/",
+    "https://www.awwwards.com/websites/e-commerce/",
+    "https://www.awwwards.com/websites/minimal/",
+    "https://www.awwwards.com/websites/portfolio/",
+    "https://www.awwwards.com/annual-awards/"
+   ],
+   "terms_url": "https://www.awwwards.com/terms/",
+   "reuse": "Awwwards content (screenshots, scores, texts, jury copy) is theirs, reproduction is prohibited and commercial use needs written consent. Featured sites stay the IP of their creators. Link and describe in our own words only.",
+   "verified": "2026-10-11",
+   "notes": "The <title> of a site page says SOTD even when the site later won Site of the Year (Lando Norris). The creator profile page shows SOTY 2025."
+  },
+  {
+   "id": "recent",
+   "name": "Recent (formerly Godly)",
+   "url": "https://recent.design/",
+   "best_for": "Daily hand-picked feed of sites, interfaces, branding, motion. It took Godly's place.",
+   "terms_url": null,
+   "reuse": "No terms page found (recent.design/terms is 404). Treat as all rights reserved: link and describe only.",
+   "verified": "2026-10-11",
+   "notes": "godly.website answers 301 to http://recent.design/?ref=godly. recent.design/info says 'Recent also takes the place of Godly'. Our pack's 'godly' source value is legacy. Godly has no public API and no per-site pages we can cite, so the seed has no source=godly rows."
+  },
+  {
+   "id": "gsap-showcase",
+   "name": "GSAP Showcase",
+   "url": "https://gsap.com/showcase/",
+   "best_for": "Sites the GSAP team itself picked. Short list, high craft, scroll and timeline work.",
+   "terms_url": "https://gsap.com/standard-license/",
+   "reuse": "Showcase thumbnails and videos belong to their makers. Link only.",
+   "verified": "2026-10-11",
+   "notes": "Seven outbound sites verified from the page markup: guillaumecolombel.fr, huyml.co, a24.raviklaassens.com, raviklaassens.com, illoca.unseen.co, jesperlandberg.com, davidlubofsky.com."
+  },
+  {
+   "id": "aura",
+   "name": "aura.build",
+   "url": "https://www.aura.build/",
+   "best_for": "AI landing page builder with a template and prompt library. Useful as a source of layout patterns and prompts, not as a winners list.",
+   "terms_url": null,
+   "reuse": "Generated and template output has its own licence per template. Link only unless a template page says otherwise.",
+   "verified": "2026-10-11",
+   "notes": "Homepage fetched (200, 'Create Beautiful Landing Pages with AI'). Template listing URLs were not verified. Existing walk code auto-adds up to 2 aura.build rows per round when the pack lists them."
+  },
+  {
+   "id": "siteinspire",
+   "name": "Siteinspire",
+   "url": "https://www.siteinspire.com/",
+   "best_for": "Long-running curated web design gallery filtered by style and type: minimal, editorial, portfolio, agency.",
+   "terms_url": null,
+   "reuse": "Unverified. The research box got HTTP 429 and a Vercel security checkpoint, so terms could not be read. Link only.",
+   "verified": "unverified (bot checkpoint)"
+  },
+  {
+   "id": "minimal-gallery",
+   "name": "Minimal Gallery",
+   "url": "https://minimal.gallery/",
+   "best_for": "Restraint: minimal sites, e-commerce, portfolio, agency, one-page, templates, tools. Running since 2013, acquired 2026.",
+   "terms_url": "https://minimal.gallery/legal/",
+   "reuse": "Screenshots, thumbnails, curated descriptions and metadata are owned by the gallery. No reproduction, display, scraping or bulk image download without written permission. Personal viewing and bookmarking allowed.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "land-book",
+   "name": "Land-book",
+   "url": "https://land-book.com/",
+   "best_for": "Landing pages searchable by style, colour, industry and section type (hero, pricing, about).",
+   "terms_url": "https://land-book.com/terms-of-service",
+   "reuse": "Submitted work stays with creators. Landbook content and data may not be used for ML training or commercial reuse without consent. Bots, crawlers and scrapers are prohibited.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "lapa-ninja",
+   "name": "Lapa Ninja",
+   "url": "https://www.lapa.ninja/",
+   "best_for": "Large landing page collection (about 7,300) and font, template and resource lists. Useful for SaaS and product pages.",
+   "terms_url": "https://www.lapa.ninja/privacy/",
+   "reuse": "No terms page found (/terms/ is 404). Link only.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "httpster",
+   "name": "Httpster",
+   "url": "https://httpster.net/",
+   "best_for": "Hand-picked, personality-heavy sites: agencies, portfolios, indie shops.",
+   "terms_url": "https://httpster.net/privacy-policy/",
+   "reuse": "No reuse terms read. Link only.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "css-design-awards",
+   "name": "CSS Design Awards",
+   "url": "https://www.cssdesignawards.com/",
+   "best_for": "Daily awards with UI, UX and innovation scores. Good second opinion to Awwwards.",
+   "terms_url": "https://www.cssdesignawards.com/terms",
+   "reuse": "Creator keeps copyright. Site content not submitted by users may not be reproduced without authority. Link and describe only.",
+   "verified": "2026-10-11",
+   "notes": "Homepage returned HTTP 202 to curl (bot gate). Terms page fetched."
+  },
+  {
+   "id": "fwa",
+   "name": "The FWA",
+   "url": "https://thefwa.com/",
+   "best_for": "Long-running interactive and campaign awards (FOTD, FOTM, FOTY). Strong for WebGL and experiential work.",
+   "terms_url": null,
+   "reuse": "No terms page found at /terms. Link only.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "mobbin",
+   "name": "Mobbin",
+   "url": "https://mobbin.com/",
+   "best_for": "Real app UI and flow screenshots for web and mobile product patterns.",
+   "terms_url": "https://mobbin.com/terms",
+   "reuse": "Paid platform. Terms forbid scraping, mirroring, caching or re-hosting materials, and say screenshots belong to their IP holders. Never copy or cache. Link and describe only.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "refero",
+   "name": "Refero",
+   "url": "https://refero.design/",
+   "best_for": "Searchable real UI screens and flows from live products, plus style references. Also exposed through the Refero MCP in this workspace.",
+   "terms_url": null,
+   "reuse": "Terms URL not found (/terms returned 200 but is the app shell). Treat screenshots as third-party. Link and describe only.",
+   "verified": "2026-10-11"
+  },
+  {
+   "id": "dribbble-behance",
+   "name": "Dribbble and Behance",
+   "url": "https://dribbble.com/",
+   "best_for": "Concept shots and case studies. Not used for the walk: shots are mockups, not live sites, and each shot is the designer's copyright.",
+   "terms_url": null,
+   "reuse": "Not researched. Out of scope on purpose.",
+   "verified": "not fetched"
+  },
+  {
+   "id": "codrops",
+   "name": "Codrops",
+   "url": "https://tympanus.net/codrops/",
+   "best_for": "Tutorials and demos for GSAP, three.js, shaders. Source of how an effect is built.",
+   "terms_url": null,
+   "reuse": "Demos ship under a stated licence per article. Link only here.",
+   "verified": "2026-10-11"
+  }
+ ],
+ "entries": [
+  {
+   "name": "11 mois sans toi(t)",
+   "url": "https://11moissanstoit.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/11-mois-sans-toi-t",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#FEE422",
+    "#151723"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-001",
+   "family_status": "proposed"
+  },
+  {
+   "name": "21 Oaks",
+   "url": "https://21oaks.org/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/21-oaks",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#E8CEFF",
+    "#292929"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-002",
+   "family_status": "proposed"
+  },
+  {
+   "name": "360 Lexington Ave",
+   "url": "https://360lexingtonave.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/360-lexington-ave",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-003",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Active Theory v4",
+   "url": "https://activetheory.net/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/active-theory-v4",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Jan 29, 2018)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#49C5B6",
+    "#FF9398"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-004",
+   "family_status": "proposed"
+  },
+  {
+   "name": "AN OCEAN of IDEAS (AOI)",
+   "url": "https://aoiofficial.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/an-ocean-of-ideas-aoi",
+   "listed_in": [
+    "awwwards:e-commerce",
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [
+    "#FFFFFF",
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-005",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Aralesk — Collages & Motion",
+   "url": "https://www.aralesk.es/en/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/aralesk-collages-motion",
+   "listed_in": [
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#221B16",
+    "#F1E8DC"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-006",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Aspen Search",
+   "url": "https://www.aspensearch.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/aspen-search",
+   "listed_in": [
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 15, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FFFFFF",
+    "#232323"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-007",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Base31",
+   "url": "https://www.base31.ca/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/base31",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-008",
+   "family_status": "proposed"
+  },
+  {
+   "name": "bleibtgleich'26",
+   "url": "https://bleibtgleich.dev/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/bleibtgleich26",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 22, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FFFFFF",
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-009",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Boc.Studio",
+   "url": "https://boc.studio/work",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/boc-studio",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 19, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FF4421",
+    "#0D0E0E"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-010",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Bruno Simon Portfolio",
+   "url": "https://bruno-simon.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/bruno-simon-portfolio",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Nov 11, 2019)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#DF6C4F",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-011",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Brutalism",
+   "url": "https://storyofbrutalism.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/brutalism",
+   "listed_in": [
+    "awwwards:brutalism"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "brutalist",
+   "industry": "other",
+   "palette_hex": [
+    "#000000",
+    "#EB504E"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-012",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Butter",
+   "url": "https://www.butter.video/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/butter",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 28, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#1E1E1E",
+    "#F7F7F7"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-013",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Catalyze AI - SaaS website",
+   "url": "https://catalyzeai.webflow.io/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/catalyze-ai-saas-website",
+   "listed_in": [
+    "awwwards:saas"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [
+    "#07133B",
+    "#1AD079"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-014",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Chungi Folio",
+   "url": "https://www.chungiyoo.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/chungi-folio",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#FF9398",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-015",
+   "family_status": "proposed"
+  },
+  {
+   "name": "COCOON",
+   "url": "https://www.cocoonblanket.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/cocoon-2",
+   "listed_in": [
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#141414",
+    "#F0F0F0"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-016",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Colonia Zacamil",
+   "url": "https://coloniazacamil.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/colonia-zacamil",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd",
+    "awwwards:three-js"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [
+    "#CDC3B7",
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-017",
+   "family_status": "proposed"
+  },
+  {
+   "name": "CoMinVi",
+   "url": "https://www.cominvi.com.mx/about-us",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/cominvi",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 30, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#151515",
+    "#FF7511"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-018",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Coutumes",
+   "url": "https://coutumes.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/coutumes",
+   "listed_in": [
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#F9AF26",
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-019",
+   "family_status": "proposed"
+  },
+  {
+   "name": "CRISP Barbershop",
+   "url": "https://www.crispmtl.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/crisp-barbershop",
+   "listed_in": [
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#000000",
+    "#F3EFED"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-020",
+   "family_status": "proposed"
+  },
+  {
+   "name": "EDOLUS",
+   "url": "https://edolus.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/edolus",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd",
+    "awwwards:webgl"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-021",
+   "family_status": "proposed"
+  },
+  {
+   "name": "ERA Residence",
+   "url": "https://www.era-residence.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/era-residence",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "SOTD (Aug 31, 2026)",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#B5CEDB",
+    "#F8BBCB"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-022",
+   "family_status": "proposed"
+  },
+  {
+   "name": "ESR Bespoke",
+   "url": "https://www.esrbespoke.au/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/esr-bespoke",
+   "listed_in": [
+    "awwwards:interactive"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-023",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Ethan W Photography",
+   "url": "https://ethanwong.photography/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/ethan-w-photography",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#0F0E0C",
+    "#EFEDE7"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-024",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Frans Hals Museum",
+   "url": "https://franshalsmuseum.nl/en",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/franshals-museum",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Apr 17, 2018)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#49C5B6",
+    "#FF9398",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-025",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Gil Huybrecht",
+   "url": "https://gilhuybrecht.com/gallery/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/gil-huybrecht",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 21, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#0D0D0F",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-026",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Huy Phan Vol.2",
+   "url": "https://huyml.co/about",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/huy-phan-vol-2",
+   "listed_in": [
+    "awwwards:illustration",
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "playful",
+   "industry": "other",
+   "palette_hex": [
+    "#FF4949",
+    "#181818"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-027",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Igloo Inc",
+   "url": "https://www.igloo.inc/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/igloo-inc",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Jul 23, 2024)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#B6BAC5",
+    "#383E4E"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-028",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Juan Mora Romero",
+   "url": "https://www.juanmoraromero.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/juan-mora-romero",
+   "listed_in": [
+    "awwwards:interactive"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#343131",
+    "#F9FAFB"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-029",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kavieng Creative",
+   "url": "https://kaviengcreative.com/#project/poppu",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/kavieng-creative",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#050505",
+    "#F0EFE9"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-030",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kavimada",
+   "url": "https://adammount.org/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/kavimada",
+   "listed_in": [
+    "awwwards:illustration"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "playful",
+   "industry": "other",
+   "palette_hex": [
+    "#1A1A1A",
+    "#F5F8E2"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-031",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kode Sports Club",
+   "url": "https://www.kodeclubs.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/kode",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Nov 26, 2020)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#49C5B6",
+    "#FF9398"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-032",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kononenko Architectural Bureau",
+   "url": "https://kononenkogroup.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/kononenko-architectural-bureau",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "SOTD (Aug 23, 2026)",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#FFFFFF",
+    "#000000"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-033",
+   "family_status": "proposed"
+  },
+  {
+   "name": "koox",
+   "url": "https://koox.co.uk/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/koox",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Jul 11, 2018)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#49C5B6",
+    "#9C9C9C",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-034",
+   "family_status": "proposed"
+  },
+  {
+   "name": "KPR",
+   "url": "https://kprverse.com/about",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/kpr",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Dec 26, 2022)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#6D64A3"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-035",
+   "family_status": "proposed"
+  },
+  {
+   "name": "L.I.S.A.",
+   "url": "https://lisa.locomotive.ca/en",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/l-i-s-a",
+   "listed_in": [
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 16, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-036",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lidar Drone Scanning",
+   "url": "https://drone.riotters.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/lidar-drone-scanning",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd",
+    "awwwards:three-js",
+    "awwwards:webgl"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [
+    "#DFE5E8",
+    "#28363E"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-037",
+   "family_status": "proposed"
+  },
+  {
+   "name": "LPAS",
+   "url": "https://lpas.com/processes/site-feasibility/?ids=1333%2C1334%2C1335%2C1336%2C1337",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/lpas",
+   "listed_in": [
+    "awwwards:architecture",
+    "awwwards:art-and-design",
+    "awwwards:gsap",
+    "awwwards:interactive",
+    "awwwards:portfolio",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Oct 10, 2026)",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#E3C1AA",
+    "#262626"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-038",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lusion v3",
+   "url": "https://lusion.co/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/lusion-v3",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#1A2FFB",
+    "#F0F1FA"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-039",
+   "family_status": "proposed"
+  },
+  {
+   "name": "LxL Creative",
+   "url": "https://www.lxlcreative.co.uk/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/lxl-creative",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 17, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FF5121",
+    "#27201D"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-040",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Mana Yerba Mate",
+   "url": "https://en.manayerbamate.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/mana-yerba-mate",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Mar 13, 2023)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FFD372",
+    "#F15B40"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-041",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Maria Vasilyeva Portfolio",
+   "url": "https://www.mariavasilyeva.com/about",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/maria-vasilyeva-portfolio",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:portfolio",
+    "awwwards:sotd",
+    "awwwards:typography",
+    "awwwards:webgl"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [
+    "#131313",
+    "#F9F9F9"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-042",
+   "family_status": "proposed"
+  },
+  {
+   "name": "MA",
+   "url": "https://ch.maswitzerland.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/ma",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Aug 19, 2019)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#D14836",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-043",
+   "family_status": "proposed"
+  },
+  {
+   "name": "MEER MOHSIN",
+   "url": "https://www.meermohsin.me/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/meer-mohsin",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 26, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#990000",
+    "#090909"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-044",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Nick Ho",
+   "url": "https://nickho-motorsports.nl/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/nick-ho",
+   "listed_in": [
+    "awwwards:art-and-design",
+    "awwwards:gsap",
+    "awwwards:interactive",
+    "awwwards:sotd",
+    "awwwards:three-js"
+   ],
+   "award_on_awwwards": "SOTD (Oct 11, 2026)",
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [
+    "#FED60A"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-045",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Noho",
+   "url": "https://noho.ink/#blog-section",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/noho",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 18, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#F1EEE9",
+    "#E7E2DA"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-046",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Nomadic Tribe",
+   "url": "https://2019.makemepulse.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/nomadic-tribe",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Feb 19, 2019)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#987654",
+    "#49C5B6",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-047",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Noomo Agency",
+   "url": "https://noomoagency.com/our-story",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/noomo-agency",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Sep 21, 2023)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#DEE7F1"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-048",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Numa",
+   "url": "https://numa.uprock.pro/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/numa",
+   "listed_in": [
+    "awwwards:interactive"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2B5CFF",
+    "#FFFEFC"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-049",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Olha Uzhykova Personal Website",
+   "url": "https://olhauzhykova.com/itg.html",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/olha-uzhykova-personal-website-1",
+   "listed_in": [
+    "awwwards:editorial"
+   ],
+   "award_on_awwwards": "SOTD (Dec 17, 2022)",
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [
+    "#51733F",
+    "#F5F5EB"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-050",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Onda Studio",
+   "url": "https://www.ondastudio.co/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/onda-studio",
+   "listed_in": [
+    "awwwards:interactive"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#BEFDA7",
+    "#1A1918"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-051",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Opal Tadpole",
+   "url": "https://op.al/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/opal-tadpole",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Jan 11, 2024)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FFDB01",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-052",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Orano",
+   "url": "https://www.orano.group/experience/innovation/en",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/orano",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Nov 26, 2018)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FFFFFF",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-053",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Pangram Pangram Foundry",
+   "url": "https://pangrampangram.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/pangram-pangram-foundry",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Nov 11, 2021)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#9C9C9C",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-054",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Paradigm Festival",
+   "url": "https://www.adfarm.nl/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/paradigm-festival",
+   "listed_in": [
+    "awwwards:illustration"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "playful",
+   "industry": "other",
+   "palette_hex": [
+    "#1A1F0A",
+    "#F54109"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-055",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Pensatori Irrazionali",
+   "url": "https://pensatori-irrazionali.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/pensatori-irrazionali",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 20, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#4C4C4C",
+    "#F5F5F5"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-056",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Persepolis Reimagined",
+   "url": "https://persepolis.getty.edu/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/persepolis-reimagined",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#987654",
+    "#D14836",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-057",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Pinnacl",
+   "url": "https://pinnacl.co/experience",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/pinnacl",
+   "listed_in": [
+    "awwwards:architecture"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#000000",
+    "#7C1DCC"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-058",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Playful Creative Collective",
+   "url": "https://helloplayful.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/playful-creative-collective",
+   "listed_in": [
+    "awwwards:playful"
+   ],
+   "award_on_awwwards": "SOTD (Mar 26, 2020)",
+   "family": "playful",
+   "industry": "other",
+   "palette_hex": [
+    "#FFFFFF",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-059",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Prometheus Fuels",
+   "url": "https://prometheusfuels.ai/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/prometheus-fuels",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#D14836",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-060",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Quinta D. Amália",
+   "url": "https://www.quintadamalia.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/quinta-d-amalia",
+   "listed_in": [
+    "awwwards:architecture",
+    "awwwards:interactive",
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#262626",
+    "#F4F4F4"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-061",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Realevate",
+   "url": "https://realevate.agency/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/realevate",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:real-estate",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 27, 2026)",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#1F2B5E",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-062",
+   "family_status": "proposed"
+  },
+  {
+   "name": "RemyShoots",
+   "url": "https://www.remyshoots.co.za/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/remyshoots",
+   "listed_in": [
+    "awwwards:fashion",
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#111111",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-063",
+   "family_status": "proposed"
+  },
+  {
+   "name": "SavoirFaire©",
+   "url": "https://www.savoirfaire.nyc/about",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/savoirfaire-c",
+   "listed_in": [
+    "awwwards:editorial"
+   ],
+   "award_on_awwwards": "SOTD (Mar 19, 2024)",
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [
+    "#000000",
+    "#CDFD50"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-064",
+   "family_status": "proposed"
+  },
+  {
+   "name": "SENAWA",
+   "url": "https://senawastudio.com/elements",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/senawa",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#F6F2EB",
+    "#302620"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-065",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Simply Chocolate",
+   "url": "https://www.simplychocolate.dk/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/simply-chocolate",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#49C5B6",
+    "#FF9398",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-066",
+   "family_status": "proposed"
+  },
+  {
+   "name": "STANZZA design",
+   "url": "https://stanzza.design/awards",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/stanzza-design",
+   "listed_in": [
+    "awwwards:architecture",
+    "awwwards:illustration"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#525C2F",
+    "#7A8452"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-067",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Star Atlas",
+   "url": "https://staratlas.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/star-atlas",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#987654",
+    "#D14836",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-068",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Storey Architecture",
+   "url": "https://www.storeyarchitecture.co.uk/studio",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/storey-architecture",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-069",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Studio Foundry",
+   "url": "https://studio-foundry.sujen.co/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/studio-foundry",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#F3F0EC",
+    "#1A1A1A"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-070",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Synchronized studio",
+   "url": "https://synchronized.studio/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/synchronized-studio",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD (Jul 29, 2020)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#9C9C9C",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-071",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Tengile Malamala Collection",
+   "url": "https://tengilemalamala.com/gallery",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/tengile-malamala-collection",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#FBF8F6",
+    "#5C6E21"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-072",
+   "family_status": "proposed"
+  },
+  {
+   "name": "The Cool Club x FWA",
+   "url": "https://fwa.thecoolclub.co/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/the-cool-club-x-fwa",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#FF9398",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-073",
+   "family_status": "proposed"
+  },
+  {
+   "name": "The Other Side of Truth",
+   "url": "https://theothersideoftruth.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/the-other-side-of-truth",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-074",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Tilly Sveaas",
+   "url": "https://tillysveaas.co.uk/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/tilly-sveaas",
+   "listed_in": [
+    "awwwards:fashion"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [
+    "#FFFFFF",
+    "#080808"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-075",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Tour Kyrgyzstan",
+   "url": "https://tour-kyrgyzstan.com/#faq",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/tour-kyrgyzstan",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-076",
+   "family_status": "proposed"
+  },
+  {
+   "name": "twks",
+   "url": "https://twks.ch/projets/geneve-tourisme",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/twks-1",
+   "listed_in": [
+    "awwwards:interactive",
+    "awwwards:portfolio",
+    "awwwards:sotd",
+    "awwwards:typography"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-077",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Umami Land",
+   "url": "https://www.google.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/umami-land",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTD",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#2779A7",
+    "#49C5B6",
+    "#ECD06F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-078",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Vakantiehuis Coquelicots",
+   "url": "https://coquelicots.nl/contact/#book",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/vakantiehuis-coquelicots",
+   "listed_in": [
+    "awwwards:real-estate"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [
+    "#121D5E",
+    "#B4CDF0"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-079",
+   "family_status": "proposed"
+  },
+  {
+   "name": "ViV",
+   "url": "https://vivmgmt.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/viv",
+   "listed_in": [
+    "awwwards:photography"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "photography",
+   "industry": "portfolio",
+   "palette_hex": [
+    "#000000",
+    "#FFFFFF"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-080",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Warm & Fuzzy",
+   "url": "https://www.warmnfuzzy.tv/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/warm-fuzzy",
+   "listed_in": [
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 12, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#190BB6",
+    "#E5CF4F"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-081",
+   "family_status": "proposed"
+  },
+  {
+   "name": "White Desert",
+   "url": "https://white-desert.com/itineraries",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/white-desert",
+   "listed_in": [
+    "awwwards:sotd"
+   ],
+   "award_on_awwwards": "SOTD (Sep 11, 2026)",
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [
+    "#1F2A44",
+    "#E9E7E1"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-082",
+   "family_status": "proposed"
+  },
+  {
+   "name": "WHP Creative",
+   "url": "https://www.whpcreative.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/whp-creative",
+   "listed_in": [
+    "awwwards:illustration"
+   ],
+   "award_on_awwwards": "Honorable Mention",
+   "family": "playful",
+   "industry": "other",
+   "palette_hex": [
+    "#0A0A0A",
+    "#EDEDED"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-083",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lando Norris",
+   "url": "https://landonorris.com/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/lando-norris",
+   "listed_in": [
+    "awwwards:sites_of_the_year"
+   ],
+   "award_on_awwwards": "SOTY 2025 (also SOTD; confirmed on awwwards.com/offbrand and the studio case study)",
+   "family": "3d-webgl",
+   "industry": "personal",
+   "palette_hex": [
+    "#D2FF00",
+    "#111112"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-084",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Odyssée",
+   "url": "https://www.odysseeclinic.com.au/",
+   "source": "awwwards",
+   "source_page": "https://www.awwwards.com/sites/odyssee",
+   "listed_in": [
+    "awwwards:gsap"
+   ],
+   "award_on_awwwards": "SOTD (Oct 08, 2026; Developer Award)",
+   "family": "minimal",
+   "industry": "health",
+   "palette_hex": [
+    "#1E305E",
+    "#F6F4F2"
+   ],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11"
+   },
+   "id": "seed-085",
+   "family_status": "proposed"
+  },
+  {
+   "name": "The Cut",
+   "url": "https://www.thecut.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-086",
+   "family_status": "proposed"
+  },
+  {
+   "name": "The Pudding",
+   "url": "https://pudding.cool/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-087",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Aeon",
+   "url": "https://aeon.co/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-088",
+   "family_status": "proposed"
+  },
+  {
+   "name": "The New Yorker",
+   "url": "https://www.newyorker.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-089",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kinfolk",
+   "url": "https://www.kinfolk.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-090",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Balenciaga",
+   "url": "https://www.balenciaga.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-091",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Hoverstat.es",
+   "url": "https://www.hoverstat.es/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-092",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Poolsuite",
+   "url": "https://poolsuite.net/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-093",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Are.na",
+   "url": "https://www.are.na/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-094",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Gumroad",
+   "url": "https://gumroad.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-095",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Stripe Press",
+   "url": "https://press.stripe.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-096",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Monocle",
+   "url": "https://monocle.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "editorial",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-097",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Messenger by Abeto",
+   "url": "https://messenger.abeto.co/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-098",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Yeezy Supply",
+   "url": "https://www.yeezysupply.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 0,
+    "checked": "2026-10-11",
+    "reason": "no response from the research box"
+   },
+   "id": "seed-099",
+   "family_status": "proposed"
+  },
+  {
+   "name": "14islands",
+   "url": "https://www.14islands.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-100",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Locomotive",
+   "url": "https://locomotive.ca/en",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-101",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Resn",
+   "url": "https://resn.co.nz/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-102",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Opal Tadpole",
+   "url": "https://op.al/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-103",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Makemepulse",
+   "url": "https://www.makemepulse.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-104",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Cuberto",
+   "url": "https://cuberto.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-105",
+   "family_status": "proposed"
+  },
+  {
+   "name": "basement.studio",
+   "url": "https://basement.studio/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-106",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Studio Freight",
+   "url": "https://studiofreight.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-107",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Unseen Studio",
+   "url": "https://unseen.co/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-108",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Darkroom Engineering",
+   "url": "https://darkroom.engineering/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-109",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Guillaume Colombel",
+   "url": "https://guillaumecolombel.fr/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-110",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Immersive Garden",
+   "url": "https://immersive-g.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-111",
+   "family_status": "proposed"
+  },
+  {
+   "name": "A24 by Ravi Klaassens",
+   "url": "https://a24.raviklaassens.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-112",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Zajno",
+   "url": "https://zajno.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-113",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Ravi Klaassens",
+   "url": "https://www.raviklaassens.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-114",
+   "family_status": "proposed"
+  },
+  {
+   "name": "three.js examples",
+   "url": "https://threejs.org/examples/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "3d-webgl",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-115",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Illoca",
+   "url": "https://illoca.unseen.co/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-116",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Hublot",
+   "url": "https://www.hublot.com/en-us",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-117",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Obys",
+   "url": "https://obys.agency/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-118",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Brutalist Websites",
+   "url": "https://brutalistwebsites.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "brutalist",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-119",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Jesper Landberg",
+   "url": "https://jesperlandberg.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-120",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Aman",
+   "url": "https://www.aman.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "restaurant-hotel",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-121",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Porsche",
+   "url": "https://www.porsche.com/usa/?cs_redirect=1",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-122",
+   "family_status": "proposed"
+  },
+  {
+   "name": "McLaren",
+   "url": "https://www.mclaren.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-123",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Rolls-Royce Motor Cars",
+   "url": "https://www.rolls-roycemotorcars.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 0,
+    "checked": "2026-10-11",
+    "reason": "no response from the research box"
+   },
+   "id": "seed-124",
+   "family_status": "proposed"
+  },
+  {
+   "name": "David Lubofsky",
+   "url": "https://www.davidlubofsky.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [
+    "gsap.com/showcase"
+   ],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-125",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Bang and Olufsen",
+   "url": "https://www.bang-olufsen.com/en/us",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-126",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Mailchimp",
+   "url": "https://mailchimp.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-127",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Duolingo",
+   "url": "https://www.duolingo.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-128",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Aesop",
+   "url": "https://www.aesop.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-129",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Dogstudio",
+   "url": "https://dogstudio.co/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "scroll-gsap",
+   "industry": "agency",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-130",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Headspace",
+   "url": "https://www.headspace.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "health",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-131",
+   "family_status": "proposed"
+  },
+  {
+   "name": "COS",
+   "url": "https://www.cos.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-132",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lamborghini",
+   "url": "https://www.lamborghini.com/en-en",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dark-luxury",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-133",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Muji",
+   "url": "https://www.muji.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 0,
+    "checked": "2026-10-11",
+    "reason": "no response from the research box"
+   },
+   "id": "seed-134",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Oatly",
+   "url": "https://www.oatly.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "food-drink",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-135",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Teenage Engineering",
+   "url": "https://teenage.engineering/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-136",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Stripe",
+   "url": "https://stripe.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-137",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Linear",
+   "url": "https://linear.app/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-138",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Tonies",
+   "url": "https://us.tonies.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-139",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Vercel",
+   "url": "https://vercel.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-140",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Liquid Death",
+   "url": "https://liquid-death.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "playful",
+   "industry": "food-drink",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-141",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Resend",
+   "url": "https://resend.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-142",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Allbirds",
+   "url": "https://www.allbirds.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-143",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Nothing",
+   "url": "https://nothing.tech/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-144",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Arc",
+   "url": "https://arc.net/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-145",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Framer",
+   "url": "https://www.framer.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-146",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Cursor",
+   "url": "https://cursor.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-147",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Superhuman",
+   "url": "https://superhuman.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-148",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Supabase",
+   "url": "https://supabase.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-149",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Notion",
+   "url": "https://www.notion.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-150",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Raycast",
+   "url": "https://www.raycast.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-151",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Clerk",
+   "url": "https://clerk.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "saas",
+   "industry": "saas",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-152",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Zaha Hadid Architects",
+   "url": "https://www.zha.com/?disclaimer=true",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-153",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Olson Kundig",
+   "url": "https://olsonkundig.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-154",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Sothebys Realty",
+   "url": "https://www.sothebysrealty.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 202,
+    "checked": "2026-10-11",
+    "reason": "HTTP 202"
+   },
+   "id": "seed-155",
+   "family_status": "proposed"
+  },
+  {
+   "name": "BIG",
+   "url": "https://big.dk/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-156",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Dezeen",
+   "url": "https://www.dezeen.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-157",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Compass",
+   "url": "https://www.compass.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "real-estate",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-158",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Josh Comeau",
+   "url": "https://www.joshwcomeau.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-159",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Emil Kowalski",
+   "url": "https://emilkowalski.ski/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 0,
+    "checked": "2026-10-11",
+    "reason": "no response from the research box"
+   },
+   "id": "seed-160",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Paco Coursey",
+   "url": "https://paco.me/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-161",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lynn and Tonic",
+   "url": "https://lynnandtonic.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-162",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Rauno Freiberg",
+   "url": "https://rauno.me/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-163",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Robin Noguier",
+   "url": "https://www.robinnoguier.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "portfolio",
+   "industry": "portfolio",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 0,
+    "checked": "2026-10-11",
+    "reason": "no response from the research box"
+   },
+   "id": "seed-164",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Foster + Partners",
+   "url": "https://www.fosterandpartners.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-165",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Blue Bottle Coffee",
+   "url": "https://bluebottlecoffee.com/us/eng",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-166",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Stussy",
+   "url": "https://www.stussy.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-167",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Glossier",
+   "url": "https://www.glossier.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-168",
+   "family_status": "proposed"
+  },
+  {
+   "name": "MoMA",
+   "url": "https://www.moma.org/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "culture-art",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-169",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Ridge",
+   "url": "https://ridge.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-170",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Snohetta",
+   "url": "https://www.snohetta.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-171",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Tate",
+   "url": "https://www.tate.org.uk/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "culture-art",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-172",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Kith",
+   "url": "https://kith.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-173",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Rhode",
+   "url": "https://www.rhodeskin.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "ecommerce",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-174",
+   "family_status": "proposed"
+  },
+  {
+   "name": "SSENSE",
+   "url": "https://www.ssense.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-175",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Jacquemus",
+   "url": "https://www.jacquemus.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-176",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Serpentine",
+   "url": "https://www.serpentinegalleries.org/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "culture-art",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-177",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Noma",
+   "url": "https://noma.dk/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "hospitality-food",
+   "industry": "restaurant-hotel",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-178",
+   "family_status": "proposed"
+  },
+  {
+   "name": "V&A",
+   "url": "https://www.vam.ac.uk/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "culture-art",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-179",
+   "family_status": "proposed"
+  },
+  {
+   "name": "charity: water",
+   "url": "https://www.charitywater.org/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "nonprofit-events",
+   "industry": "nonprofit",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-180",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Ace Hotel",
+   "url": "https://acehotel.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "hospitality-food",
+   "industry": "restaurant-hotel",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-181",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Acne Studios",
+   "url": "https://www.acnestudios.com/us/en/home",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-182",
+   "family_status": "proposed"
+  },
+  {
+   "name": "WWF",
+   "url": "https://www.worldwildlife.org/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "nonprofit-events",
+   "industry": "nonprofit",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 403,
+    "checked": "2026-10-11",
+    "reason": "bot-blocked (403)"
+   },
+   "id": "seed-183",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Loewe",
+   "url": "https://www.loewe.com/usa/en/home",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "fashion-beauty",
+   "industry": "fashion",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-184",
+   "family_status": "proposed"
+  },
+  {
+   "name": "SXSW",
+   "url": "https://sxsw.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "nonprofit-events",
+   "industry": "events",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-185",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Centre Pompidou",
+   "url": "https://www.centrepompidou.fr/en/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "culture-art",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-186",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Codrops",
+   "url": "https://tympanus.net/codrops/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dev-tools-craft",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-187",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Sweetgreen",
+   "url": "https://www.sweetgreen.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "hospitality-food",
+   "industry": "restaurant-hotel",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-188",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Motion",
+   "url": "https://motion.dev/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dev-tools-craft",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-189",
+   "family_status": "proposed"
+  },
+  {
+   "name": "GSAP",
+   "url": "https://gsap.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dev-tools-craft",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-190",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Lenis",
+   "url": "https://lenis.dev/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dev-tools-craft",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-191",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Primavera Sound",
+   "url": "https://www.primaverasound.com/en",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "nonprofit-events",
+   "industry": "events",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-192",
+   "family_status": "proposed"
+  },
+  {
+   "name": "anime.js",
+   "url": "https://animejs.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "dev-tools-craft",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-193",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Leica",
+   "url": "https://leica-camera.com/en-US",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "minimal",
+   "industry": "e-commerce",
+   "palette_hex": [],
+   "verification": {
+    "status": "verified",
+    "http": 200,
+    "checked": "2026-10-11",
+    "reason": null
+   },
+   "id": "seed-194",
+   "family_status": "proposed"
+  },
+  {
+   "name": "Herzog de Meuron",
+   "url": "https://www.herzogdemeuron.com/",
+   "source": "other",
+   "source_page": null,
+   "listed_in": [],
+   "award_on_awwwards": null,
+   "family": "architecture-real-estate",
+   "industry": "other",
+   "palette_hex": [],
+   "verification": {
+    "status": "unverified",
+    "http": 302,
+    "checked": "2026-10-11",
+    "reason": "HTTP 302"
+   },
+   "id": "seed-195",
+   "family_status": "proposed"
+  }
+ ]
+}

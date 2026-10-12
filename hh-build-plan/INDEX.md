@@ -202,5 +202,10 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 | 196 | So Long and Thanks for All the Fish | Forty-Two | Drag and drop and an Attach button on every website and file question | Heart of Gold | xhigh |
 | 197 | So Long and Thanks for All the Fish | Forty-Two | Click to talk keeps the box text and keeps Answer enabled after a stop | Heart of Gold | xhigh |
 | 198 | So Long and Thanks for All the Fish | Forty-Two | Make the starter fixture clear the 90 phone performance floor reliably on macOS CI | Heart of Gold | xhigh |
+| 199 | So Long and Thanks for All the Fish | Forty-Two | Desk install dialog: winget route is not a dead button | Heart of Gold | xhigh |
+| 200 | So Long and Thanks for All the Fish | Forty-Two | Click to talk: one recognizer, no tripled or garbled words | Heart of Gold | xhigh |
+| 201 | So Long and Thanks for All the Fish | Forty-Two | Desk identity: logo mark, icons, social card, installable manifest | Heart of Gold | xhigh |
+| 202 | So Long and Thanks for All the Fish | Forty-Two | Gallery walk with 120+ original, attributed options across 12+ style families | Heart of Gold | xhigh |
+| 203 | So Long and Thanks for All the Fish | Forty-Two | Keep the typed answer draft across pages, refresh, and restart | Heart of Gold | xhigh |
 
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
