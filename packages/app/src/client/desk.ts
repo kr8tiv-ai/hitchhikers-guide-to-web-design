@@ -31,7 +31,7 @@ import {
 } from "./voice-engine.ts";
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
 import { handleTourKey, mountTour } from "./tour.ts";
-import { joinWords, settleVoice } from "./voice-text.ts";
+import { joinWords, mergeTranscript, settleVoice, type TranscriptPiece } from "./voice-text.ts";
 
 const START_INTERVIEW_LABEL = "Start the interview";
 const EMPTY_CARD_TITLE = "No question yet.";
@@ -312,6 +312,58 @@ export interface SpeechRecognitionLike {
   abort(): void;
 }
 
+export interface VoiceInvariant {
+  constructed: number;
+  live: number;
+  handlers: number;
+}
+
+/** Development counter only. The desk never branches on it, and the page does not show it. */
+function voiceDebugEnabled(): boolean {
+  try {
+    return typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+  } catch {
+    return false;
+  }
+}
+
+const voiceDebug = voiceDebugEnabled();
+const trackedRecs: SpeechRecognitionLike[] = [];
+const liveRecs = new Set<SpeechRecognitionLike>();
+
+export function readVoiceInvariant(): VoiceInvariant {
+  let handlers = 0;
+  if (voiceDebug) {
+    for (const rec of trackedRecs) {
+      if (rec.onstart !== null) handlers += 1;
+      if (rec.onresult !== null) handlers += 1;
+      if (rec.onerror !== null) handlers += 1;
+      if (rec.onend !== null) handlers += 1;
+    }
+  }
+  return { constructed: trackedRecs.length, live: liveRecs.size, handlers };
+}
+
+export function resetVoiceInvariant(): void {
+  trackedRecs.length = 0;
+  liveRecs.clear();
+}
+
+function trackConstructed(rec: SpeechRecognitionLike): void {
+  if (!voiceDebug) return;
+  trackedRecs.push(rec);
+}
+
+function markLive(rec: SpeechRecognitionLike): void {
+  if (!voiceDebug) return;
+  liveRecs.add(rec);
+}
+
+function markDead(rec: SpeechRecognitionLike): void {
+  if (!voiceDebug) return;
+  liveRecs.delete(rec);
+}
+
 export interface SessionView {
   question: Question | null;
   pushback: string | null;
@@ -535,6 +587,12 @@ export function mountDesk(env: DeskEnv): () => void {
   let recognition: SpeechRecognitionLike | null = null;
   /** Recognizer that may still deliver a final after stop, until the late window closes. */
   let lateRec: SpeechRecognitionLike | null = null;
+  /** Recognizer Chrome ended. The next beginRecognition retires it without a second abort. */
+  let restartRec: SpeechRecognitionLike | null = null;
+  /** Heard text from recognizers that already ended during this dictation. */
+  let recognizerBase = "";
+  /** onend ran. A recognizer that never ended is an orphan and is retired on the next start. */
+  const endedRecs = new WeakSet<SpeechRecognitionLike>();
   let stopTimer: ReturnType<typeof setTimeout> | null = null;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
   let stopWait: { rec: SpeechRecognitionLike; resolve: () => void } | null = null;
@@ -902,6 +960,30 @@ export function mountDesk(env: DeskEnv): () => void {
     startVoice();
   }
 
+  /**
+   * One recognizer. Clear its four handlers, abort it if it never ended, and drop it.
+   * A recognizer that already fired onend is not aborted again: the restart cap stays at zero aborts.
+   */
+  function retireRecognizer(rec: SpeechRecognitionLike | null): void {
+    if (rec === null) return;
+    const ended = endedRecs.has(rec);
+    rec.onstart = null;
+    rec.onresult = null;
+    rec.onerror = null;
+    rec.onend = null;
+    if (!ended) {
+      try {
+        rec.abort();
+      } catch {
+        // Already ended or aborted.
+      }
+    }
+    if (recognition === rec) recognition = null;
+    if (lateRec === rec) lateRec = null;
+    if (restartRec === rec) restartRec = null;
+    markDead(rec);
+  }
+
   function startVoice(): void {
     if (voiceSession || stopping !== null || toggled) return;
     if (pending || view === null || view.question === null) return;
@@ -922,11 +1004,14 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     voiceEpoch += 1;
     const epoch = voiceEpoch;
-    // A stop that ended on a final result used to leave the old recognizer here.
-    if (recognition !== null) recognition = null;
+    retireRecognizer(recognition);
+    // A stop that never fired onend is still holding the microphone.
+    if (lateRec !== null && !endedRecs.has(lateRec)) retireRecognizer(lateRec);
+    if (restartRec !== null) retireRecognizer(restartRec);
     voiceBase = draft;
     voiceFinal = "";
     voiceInterim = "";
+    recognizerBase = "";
     voiceError = null;
     heardStart = false;
     userTouched = false;
@@ -950,7 +1035,9 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function beginRecognition(epoch: number = voiceEpoch): "started" | "idle" {
-    if (recognition !== null || !toggled || !voiceSession || committed) return "idle";
+    if (!toggled || !voiceSession || committed) return "idle";
+    retireRecognizer(recognition);
+    if (restartRec !== null) retireRecognizer(restartRec);
     const Recognition = env.SpeechRecognition ?? null;
     if (Recognition === null) {
       voiceError = VOICE_UNSUPPORTED;
@@ -961,12 +1048,14 @@ export function mountDesk(env: DeskEnv): () => void {
       voiceInterim = "";
       applyHeardToDraft();
     }
-    // A restart keeps earlier words. The next final is a new utterance, so it appends.
+    // A restart keeps earlier words. The next recognizer starts a new segment list.
+    recognizerBase = voiceFinal.trim();
     promotedUtterance = "";
     cycleHeard = false;
     let rec: SpeechRecognitionLike;
     try {
       rec = new Recognition();
+      trackConstructed(rec);
       rec.lang = env.lang ?? "en-US";
       rec.continuous = true;
       rec.interimResults = true;
@@ -1002,38 +1091,29 @@ export function mountDesk(env: DeskEnv): () => void {
       voiceError = VOICE_FAILED;
       recognition = null;
       unhook(rec);
+      markDead(rec);
       return "idle";
     }
+    if (recognition === rec) markLive(rec);
     return recognition === rec ? "started" : "idle";
   }
 
   function applyResult(event: SpeechResultEventLike): void {
-    let interim = "";
-    let finals = "";
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      const result = event.results[index];
-      if (result === undefined || result.length === 0) continue;
-      const text = result[0]?.transcript ?? "";
-      if (result.isFinal) finals = joinWords(finals, text);
-      else interim = joinWords(interim, text);
-    }
-    if (finals !== "") {
-      voiceFinal = replacePromoted(voiceFinal, promotedUtterance, finals);
-      voiceInterim = "";
-      promotedUtterance = "";
+    const pieces = piecesFrom(event);
+    if (pieces.length === 0) return;
+    const eventOnly = mergeTranscript(pieces);
+    if (eventOnly.heard === "") return;
+    const folded = mergeTranscript(pieces, recognizerBase);
+    voiceFinal = folded.finals;
+    voiceInterim = folded.interim;
+    if (eventOnly.finals !== "" || eventOnly.interim !== "") {
+      if (eventOnly.finals !== "") promotedUtterance = "";
       cycleHeard = true;
       emptyRestarts = 0;
       restartDelay = VOICE_RESTART_BASE_MS;
-    } else {
-      voiceInterim = interim;
-      if (interim !== "") {
-        cycleHeard = true;
-        emptyRestarts = 0;
-        restartDelay = VOICE_RESTART_BASE_MS;
-      }
     }
     applyHeardToDraft();
-    if (finals !== "" && stopWait !== null) stopWait.resolve();
+    if (eventOnly.finals !== "" && stopWait !== null) stopWait.resolve();
   }
 
   function stopVoice(): Promise<void> {
@@ -1056,6 +1136,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     promoteInterim();
+    if (lateRec !== null && lateRec !== rec) retireRecognizer(lateRec);
     lateRec = rec;
     const ended = waitForStop(rec);
     try {
@@ -1095,6 +1176,7 @@ export function mountDesk(env: DeskEnv): () => void {
               // abort throws once the recognizer has already ended.
             }
           }
+          markDead(rec);
           recognition = null;
         }
         finish();
@@ -1105,7 +1187,9 @@ export function mountDesk(env: DeskEnv): () => void {
   function endRecognition(rec: SpeechRecognitionLike): void {
     if (recognition !== rec) return;
     const heardCycle = cycleHeard;
+    endedRecs.add(rec);
     recognition = null;
+    markDead(rec);
     if (stopWait !== null && stopWait.rec === rec) {
       const wake = stopWait.resolve;
       stopWait = null;
@@ -1116,6 +1200,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (lateRec === rec) lateRec = null;
     if (!voiceSession || committed) return;
     if (toggled && voiceError === null) {
+      restartRec = rec;
       queueRestart(heardCycle);
       return;
     }
@@ -1247,6 +1332,7 @@ export function mountDesk(env: DeskEnv): () => void {
       }
       if (lateRec === rec) lateRec = null;
     };
+    if (lateRec !== null && lateRec !== rec) retireRecognizer(lateRec);
     lateRec = rec;
     rec.onstart = null;
     rec.onerror = null;
@@ -1263,7 +1349,12 @@ export function mountDesk(env: DeskEnv): () => void {
    * so a newer recognizer is not dropped.
    */
   function resetVoiceSession(owner: SpeechRecognitionLike | null): void {
-    if (recognition !== null && (owner === null || recognition === owner)) recognition = null;
+    if (recognition !== null && (owner === null || recognition === owner)) {
+      markDead(recognition);
+      recognition = null;
+    }
+    if (owner !== null) markDead(owner);
+    recognizerBase = "";
     const waiter = stopWait;
     stopWait = null;
     clearStopTimer();
@@ -3009,14 +3100,18 @@ function isVoiceTarget(start: DeskElement | null): boolean {
   return button.getAttribute("disabled") === null;
 }
 
-function finalsFrom(event: SpeechResultEventLike): string {
-  let finals = "";
-  for (let index = event.resultIndex; index < event.results.length; index += 1) {
+function piecesFrom(event: SpeechResultEventLike): TranscriptPiece[] {
+  const pieces: TranscriptPiece[] = [];
+  for (let index = 0; index < event.results.length; index += 1) {
     const result = event.results[index];
-    if (result === undefined || result.length === 0 || !result.isFinal) continue;
-    finals = joinWords(finals, result[0]?.transcript ?? "");
+    if (result === undefined || result.length === 0) continue;
+    pieces.push({ transcript: result[0]?.transcript ?? "", isFinal: result.isFinal });
   }
-  return finals;
+  return pieces;
+}
+
+function finalsFrom(event: SpeechResultEventLike): string {
+  return mergeTranscript(piecesFrom(event)).finals;
 }
 
 function escapeRegExp(value: string): string {
@@ -3060,27 +3155,6 @@ function sameUtterance(pending: string, incoming: string): boolean {
   const right = incoming.trim();
   if (left === "" || right === "") return false;
   return left === right || right.startsWith(left) || left.startsWith(right);
-}
-
-function utteranceTail(existing: string, phrase: string): boolean {
-  const host = existing.trimEnd();
-  const tail = phrase.trim();
-  if (tail === "") return false;
-  return host === tail || host.endsWith(` ${tail}`);
-}
-
-/** A late final replaces the promoted interim for the same utterance. */
-function replacePromoted(existing: string, promoted: string, incoming: string): string {
-  const pending = promoted.trim();
-  const next = incoming.trim();
-  if (next === "") return existing;
-  if (pending !== "" && utteranceTail(existing, pending) && sameUtterance(pending, next)) {
-    const trimmed = existing.trimEnd();
-    const head = trimmed === pending ? "" : trimmed.slice(0, trimmed.length - pending.length).trimEnd();
-    return joinWords(head, next);
-  }
-  if (utteranceTail(existing, next)) return existing;
-  return joinWords(existing, next);
 }
 
 /** Chrome's SpeechRecognition error codes, in words a person can act on. */

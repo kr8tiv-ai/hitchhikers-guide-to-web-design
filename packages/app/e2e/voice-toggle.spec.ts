@@ -880,6 +880,182 @@ test("197 answer: a stop does not submit, and Answer sends the box once", async 
   expect(bodies).toHaveLength(1);
 });
 
+test("ten cycles keep one live recognizer and one late result handler", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  let expected = "";
+  for (let cycle = 0; cycle < 10; cycle += 1) {
+    const word = `w${cycle}`;
+    await button.click();
+    await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+    const started = await voiceStats(page);
+    expect(started.live).toBe(1);
+    expect(started.maxLive).toBe(1);
+    const withResult = started.recognizers.filter((item) => item.onresult);
+    expect(withResult.filter((item) => item.live)).toHaveLength(1);
+    expect(withResult.filter((item) => !item.live).length).toBeLessThanOrEqual(1);
+    await emit(page, word, false);
+    await emit(page, word, true);
+    await setStopOrder(page, "final-then-end", word);
+    await button.click();
+    expected = expected === "" ? word : `${expected} ${word}`;
+    await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+    await expect(draft).toHaveValue(expected);
+    expect((await voiceStats(page)).live).toBe(0);
+  }
+  await page.waitForTimeout(VOICE_STOP_WAIT_MS + 100);
+  const done = await voiceStats(page);
+  expect(done.live).toBe(0);
+  expect(done.maxLive).toBe(1);
+  expect(done.onresult).toBe(0);
+  expect(done.onerror).toBe(0);
+  expect(done.onend).toBe(0);
+  expect(done.onstart).toBe(0);
+  expect(done.constructed).toBe(10);
+});
+
+test("a stop without onend retires the first recognizer before the next start", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emit(page, "alpha beta gamma", true);
+  await setStopOrder(page, "final-only", "alpha beta gamma");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("alpha beta gamma");
+  await button.click();
+  await expect(button).toHaveText("Stop listening", { timeout: 1_000 });
+  const stats = await voiceStats(page);
+  expect(stats.live).toBe(1);
+  const first = stats.recognizers[0];
+  expect(first).toBeDefined();
+  const cleared = first !== undefined && !first.onstart && !first.onresult && !first.onerror && !first.onend;
+  expect(first?.aborted === true || cleared).toBe(true);
+  await emitList(page, 0, [{ text: "should not land", final: true }], 0);
+  await expect(draft).toHaveValue("alpha beta gamma");
+});
+
+test("a cumulative resend with resultIndex 0 is the sentence once", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [{ text: "one two", final: true }], 0);
+  await expect(draft).toHaveValue("one two");
+  await emitList(page, -1, [
+    { text: "one two", final: true },
+    { text: "three four", final: true },
+  ], 1);
+  await expect(draft).toHaveValue("one two three four");
+  await emitList(page, -1, [
+    { text: "one two", final: true },
+    { text: "three four", final: true },
+    { text: "five six", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("one two three four five six");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("one two three four five six");
+});
+
+test("a growing sentence at resultIndex 0 appears once", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [{ text: "turn on", final: false }], 0);
+  await expect(draft).toHaveValue("turn on");
+  await emitList(page, -1, [
+    { text: "turn on", final: false },
+    { text: "turn on the", final: false },
+  ], 0);
+  await expect(draft).toHaveValue("turn on the");
+  await emitList(page, -1, [
+    { text: "turn on", final: false },
+    { text: "turn on the", final: false },
+    { text: "turn on the light", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("turn on the light");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("turn on the light");
+});
+
+test("one event with a final and an interim shows both once", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [
+    { text: "one two", final: true },
+    { text: "three", final: false },
+  ], 0);
+  await expect(draft).toHaveValue("one two three");
+  await emitList(page, -1, [
+    { text: "one two", final: true },
+    { text: "three", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("one two three");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(draft).toHaveValue("one two three");
+});
+
+test("a late cumulative resend does not append a repeat", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [{ text: "turn on the", final: false }], 0);
+  await expect(draft).toHaveValue("turn on the");
+  await setStopOrder(page, "end-only", "");
+  await button.click();
+  await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
+  await expect(draft).toHaveValue("turn on the");
+  await emitList(page, 0, [
+    { text: "turn on", final: true },
+    { text: "turn on the", final: true },
+    { text: "turn on the light", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("turn on the light");
+});
+
+test("a restart replays old results once and keeps one live recognizer", async ({ page }) => {
+  await openDesk(page, "manual");
+  const button = page.locator('[data-voice="hold"]');
+  const draft = page.locator("#hh-card-draft");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  await emitList(page, -1, [
+    { text: "alpha", final: true },
+    { text: "beta", final: true },
+    { text: "gamma", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("alpha beta gamma");
+  const before = await counts(page);
+  await end(page);
+  await page.waitForTimeout(VOICE_RESTART_BASE_MS + 80);
+  await expect.poll(() => counts(page).then((item) => item.starts)).toBe(before.starts + 1);
+  const started = await voiceStats(page);
+  expect(started.live).toBe(1);
+  expect(started.maxLive).toBe(1);
+  await emitList(page, -1, [
+    { text: "alpha", final: true },
+    { text: "beta", final: true },
+    { text: "gamma", final: true },
+  ], 0);
+  await expect(draft).toHaveValue("alpha beta gamma");
+});
+
 async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<void> {
   await page.addInitScript(installVoice, mode);
   if (clock) await page.clock.install();
@@ -953,6 +1129,63 @@ async function dictateCycles(page: Page, order: string, words: string[], prefix 
     await expect(button).toHaveText("Click to talk", { timeout: 1_000 });
     await expect(draft).toHaveValue(expected);
   }
+}
+
+interface HeardPiece {
+  text: string;
+  final: boolean;
+}
+
+interface VoiceRecognizerStat {
+  live: boolean;
+  aborted: boolean;
+  onresult: boolean;
+  onerror: boolean;
+  onend: boolean;
+  onstart: boolean;
+}
+
+interface VoiceStats {
+  constructed: number;
+  live: number;
+  maxLive: number;
+  onresult: number;
+  onerror: number;
+  onend: number;
+  onstart: number;
+  recognizers: VoiceRecognizerStat[];
+}
+
+async function emitList(page: Page, index: number, entries: HeardPiece[], resultIndex: number): Promise<void> {
+  await page.evaluate(
+    ({ index: at, entries: pieces, resultIndex: from }) => {
+      const host = window as Window & {
+        __hhEmitList?: (
+          index: number,
+          entries: { text: string; final: boolean }[],
+          resultIndex: number,
+        ) => void;
+      };
+      host.__hhEmitList?.(at, pieces, from);
+    },
+    { index, entries, resultIndex },
+  );
+}
+
+async function voiceStats(page: Page): Promise<VoiceStats> {
+  return page.evaluate(() => {
+    const host = window as Window & { __hhVoiceStats?: () => VoiceStats };
+    return host.__hhVoiceStats?.() ?? {
+      constructed: 0,
+      live: 0,
+      maxLive: 0,
+      onresult: 0,
+      onerror: 0,
+      onend: 0,
+      onstart: 0,
+      recognizers: [],
+    };
+  });
 }
 
 async function emit(page: Page, text: string, isFinal: boolean): Promise<void> {
@@ -1131,6 +1364,7 @@ function installVoice(mode: VoiceMode): void {
       onresult: ((event: unknown) => void) | null;
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
+      live: boolean;
     };
     __hhEmit?: (text: string, isFinal: boolean) => void;
     __hhEnd?: () => void;
@@ -1142,17 +1376,42 @@ function installVoice(mode: VoiceMode): void {
     __hhOrder?: string;
     __hhPending?: string;
     __hhList?: {
+      onstart: (() => void) | null;
       onresult: ((event: unknown) => void) | null;
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
       started: boolean;
       stopped: boolean;
+      aborted: boolean;
+      live: boolean;
     }[];
     __hhHandlers?: {
       onend: (() => void) | null;
       onerror: ((event: { error: string }) => void) | null;
     }[];
     __hhMaxLive?: number;
+    __hhEmitList?: (
+      index: number,
+      entries: { text: string; final: boolean }[],
+      resultIndex: number,
+    ) => void;
+    __hhVoiceStats?: () => {
+      constructed: number;
+      live: number;
+      maxLive: number;
+      onresult: number;
+      onerror: number;
+      onend: number;
+      onstart: number;
+      recognizers: {
+        live: boolean;
+        aborted: boolean;
+        onresult: boolean;
+        onerror: boolean;
+        onend: boolean;
+        onstart: boolean;
+      }[];
+    };
     SpeechRecognition?: unknown;
     webkitSpeechRecognition?: unknown;
   };
@@ -1190,7 +1449,14 @@ function installVoice(mode: VoiceMode): void {
 
   host.__hhList = [];
   host.__hhHandlers = [];
-  let live = 0;
+
+  const recount = (): void => {
+    let now = 0;
+    for (const item of host.__hhList ?? []) {
+      if (item.live) now += 1;
+    }
+    host.__hhMaxLive = Math.max(host.__hhMaxLive ?? 0, now);
+  };
 
   class FakeSpeech {
     lang = "";
@@ -1202,6 +1468,8 @@ function installVoice(mode: VoiceMode): void {
     onend: (() => void) | null = null;
     started = false;
     stopped = false;
+    aborted = false;
+    live = false;
 
     constructor() {
       host.__hhList?.push(this);
@@ -1209,8 +1477,8 @@ function installVoice(mode: VoiceMode): void {
 
     start(): void {
       this.started = true;
-      live += 1;
-      host.__hhMaxLive = Math.max(host.__hhMaxLive ?? 0, live);
+      this.live = true;
+      recount();
       host.__hhStarts = (host.__hhStarts ?? 0) + 1;
       host.__hhCurrent = this;
       host.__hhContinuous = this.continuous;
@@ -1232,7 +1500,8 @@ function installVoice(mode: VoiceMode): void {
 
     stop(): void {
       this.stopped = true;
-      live = Math.max(0, live - 1);
+      this.live = false;
+      recount();
       host.__hhStops = (host.__hhStops ?? 0) + 1;
       if (mode === "auto" || mode === "denied") {
         this.onend?.();
@@ -1275,7 +1544,9 @@ function installVoice(mode: VoiceMode): void {
 
     abort(): void {
       this.stopped = true;
-      live = Math.max(0, live - 1);
+      this.aborted = true;
+      this.live = false;
+      recount();
       host.__hhAborts = (host.__hhAborts ?? 0) + 1;
       if (mode === "auto" || mode === "denied") this.onend?.();
     }
@@ -1288,7 +1559,39 @@ function installVoice(mode: VoiceMode): void {
     });
   };
   host.__hhEnd = (): void => {
-    host.__hhCurrent?.onend?.();
+    const current = host.__hhCurrent;
+    if (current !== undefined) current.live = false;
+    recount();
+    current?.onend?.();
+  };
+  host.__hhEmitList = (index, entries, resultIndex): void => {
+    const rec = index < 0 ? host.__hhCurrent : host.__hhList?.[index];
+    const results = entries.map((entry) => ({
+      isFinal: entry.final,
+      length: 1,
+      0: { transcript: entry.text },
+    }));
+    rec?.onresult?.({ resultIndex, results });
+  };
+  host.__hhVoiceStats = () => {
+    const list = host.__hhList ?? [];
+    return {
+      constructed: list.length,
+      live: list.filter((item) => item.live).length,
+      maxLive: host.__hhMaxLive ?? 0,
+      onresult: list.filter((item) => item.onresult !== null).length,
+      onerror: list.filter((item) => item.onerror !== null).length,
+      onend: list.filter((item) => item.onend !== null).length,
+      onstart: list.filter((item) => item.onstart !== null).length,
+      recognizers: list.map((item) => ({
+        live: item.live === true,
+        aborted: item.aborted === true,
+        onresult: item.onresult !== null,
+        onerror: item.onerror !== null,
+        onend: item.onend !== null,
+        onstart: item.onstart !== null,
+      })),
+    };
   };
   const emitOn = (index: number, text: string, isFinal: boolean): void => {
     host.__hhList?.[index]?.onresult?.({

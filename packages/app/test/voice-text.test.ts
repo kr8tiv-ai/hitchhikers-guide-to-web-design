@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { joinWords, settleVoice } from "../src/client/voice-text.ts";
+import { joinWords, mergeTranscript, settleVoice } from "../src/client/voice-text.ts";
 
 test("joinWords trims the ends, keeps internal spaces, and joins a newline as a space", () => {
   assert.equal(joinWords("", ""), "");
@@ -81,4 +81,122 @@ test("typed text and heard words stay together, and the draft never shrinks", ()
   });
   assert.equal(exact.draft, "Hello  ");
   assert.equal(exact.heard, false);
+});
+
+test("an identical results list produces the same transcript", () => {
+  const list = [
+    { transcript: "one two", isFinal: true },
+    { transcript: "three four", isFinal: true },
+  ];
+  assert.deepEqual(mergeTranscript(list), mergeTranscript(list));
+  assert.equal(mergeTranscript(list).heard, "one two three four");
+  const sealed = mergeTranscript(list, "one two three four");
+  assert.equal(sealed.heard, "one two three four");
+  assert.equal(sealed.interim, "");
+});
+
+test("a growing resend collapses to the sentence once", () => {
+  const once = mergeTranscript([{ transcript: "turn on", isFinal: false }]);
+  assert.equal(once.heard, "turn on");
+  const longer = mergeTranscript([
+    { transcript: "turn on", isFinal: false },
+    { transcript: "turn on the", isFinal: false },
+  ]);
+  assert.equal(longer.heard, "turn on the");
+  const done = mergeTranscript([
+    { transcript: "turn on", isFinal: true },
+    { transcript: "turn on the", isFinal: true },
+    { transcript: "turn on the light", isFinal: true },
+  ]);
+  assert.equal(done.heard, "turn on the light");
+  assert.equal(done.interim, "");
+  assert.equal(mergeTranscript([
+    { transcript: "turn on", isFinal: true },
+    { transcript: "turn on the", isFinal: true },
+    { transcript: "turn on the light", isFinal: true },
+  ], "turn on the light").heard, "turn on the light");
+});
+
+test("a resend with a new tail keeps the earlier words once", () => {
+  const first = mergeTranscript([{ transcript: "one two", isFinal: true }]);
+  assert.equal(first.heard, "one two");
+  const second = mergeTranscript([
+    { transcript: "one two", isFinal: true },
+    { transcript: "three four", isFinal: true },
+  ]);
+  assert.equal(second.heard, "one two three four");
+  const third = mergeTranscript([
+    { transcript: "one two", isFinal: true },
+    { transcript: "three four", isFinal: true },
+    { transcript: "five six", isFinal: true },
+  ], "one two three four");
+  assert.equal(third.heard, "one two three four five six");
+  assert.equal(third.heard.split("one two").length - 1, 1);
+});
+
+test("a resend with only an interim tail shows the final and the tail once", () => {
+  const mixed = mergeTranscript([
+    { transcript: "one two", isFinal: true },
+    { transcript: "three", isFinal: false },
+  ]);
+  assert.equal(mixed.finals, "one two");
+  assert.equal(mixed.interim, "three");
+  assert.equal(mixed.heard, "one two three");
+  const again = mergeTranscript([
+    { transcript: "one two", isFinal: true },
+    { transcript: "three", isFinal: false },
+  ], "one two");
+  assert.equal(again.heard, "one two three");
+  const finalized = mergeTranscript([
+    { transcript: "one two", isFinal: true },
+    { transcript: "three", isFinal: true },
+  ], "one two");
+  assert.equal(finalized.heard, "one two three");
+  assert.equal(finalized.interim, "");
+});
+
+test("empty and whitespace results add nothing", () => {
+  assert.deepEqual(mergeTranscript([]), { finals: "", interim: "", heard: "" });
+  assert.deepEqual(mergeTranscript([
+    { transcript: "   ", isFinal: true },
+    { transcript: "\n", isFinal: false },
+  ]), { finals: "", interim: "", heard: "" });
+  const kept = mergeTranscript([
+    { transcript: "  ", isFinal: true },
+    { transcript: "\t", isFinal: false },
+  ], "already heard");
+  assert.equal(kept.heard, "already heard");
+  assert.equal(kept.interim, "");
+});
+
+test("the same word said twice on purpose stays twice", () => {
+  const twice = mergeTranscript([
+    { transcript: "no", isFinal: true },
+    { transcript: "no", isFinal: true },
+  ]);
+  assert.equal(twice.heard, "no no");
+  assert.equal(twice.finals, "no no");
+  assert.equal(twice.interim, "");
+});
+
+test("a typed-over box keeps the edit when the same transcript is resent", () => {
+  const heard = mergeTranscript([{ transcript: "tea", isFinal: true }]);
+  const typed = settleVoice({
+    base: "Hello",
+    typed: "Hello friend",
+    final: heard.finals,
+    interim: heard.interim,
+  });
+  assert.equal(typed.heard, true);
+  assert.equal(typed.draft, "Hello friend tea");
+  const resent = mergeTranscript([{ transcript: "tea", isFinal: true }]);
+  assert.deepEqual(resent, heard);
+  const again = settleVoice({
+    base: "Hello",
+    typed: typed.draft,
+    final: resent.finals,
+    interim: resent.interim,
+  });
+  assert.equal(again.draft, "Hello friend tea");
+  assert.equal(again.draft.split("tea").length - 1, 1);
 });

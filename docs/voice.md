@@ -4,6 +4,10 @@ Click to talk and the interview use a speech engine. The default spends nothing.
 
 One click starts listening. A second click stops. Stopping keeps every word in the draft. The desk waits for the final result, or for the recognizer to end, before it finishes that stop. Nothing is submitted until you press Answer.
 
+Click to talk keeps one recognizer at a time. The draft is rebuilt from the whole result list, so a repeated or growing list does not print a word twice. One late result can still arrive after you stop, until that short wait ends.
+
+Two browser tabs each have their own box. Chrome lets only one tab hold the microphone, so a second tab can stop the first.
+
 Each later dictation in the same question appends to the text already in the box. Words you typed or edited between dictations, or during one, stay in place. A stop ends that dictation only. It does not clear the box, and it does not submit.
 
 Starting and stopping dictation keeps the text already in the box, and spoken words are added after it. Answer follows the box: it stays on when the box has words, including after a stop, a late result, and a repaint, and it stays off when the box is blank or a request is in flight. Heard you shows only when the box has those words. A new pushback still opens with an empty box. The grey hint in an empty box is not text.

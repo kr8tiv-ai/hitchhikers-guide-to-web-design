@@ -11,6 +11,8 @@ import {
   VOICE_SILENT,
   VOICE_STOP_WAIT_MS,
   VOICE_UNSUPPORTED,
+  readVoiceInvariant,
+  resetVoiceInvariant,
   voiceMessage,
   type DeskEnv,
   type SpeechRecognitionLike,
@@ -135,8 +137,12 @@ class FakeRecognition implements SpeechRecognitionLike {
     this.onend?.();
   }
   say(text: string, isFinal: boolean): void {
-    const result = Object.assign([{ transcript: text }], { isFinal });
-    this.onresult?.({ resultIndex: 0, results: [result] });
+    this.hear([{ text, final: isFinal }]);
+  }
+  /** Whole results list, including a Chrome resend that sets resultIndex back to 0. */
+  hear(pieces: { text: string; final: boolean }[], resultIndex = 0): void {
+    const results = pieces.map((piece) => Object.assign([{ transcript: piece.text }], { isFinal: piece.final }));
+    this.onresult?.({ resultIndex, results });
   }
 }
 
@@ -1302,3 +1308,234 @@ async function lateSurvives(h: VoiceHarness, pushed: boolean): Promise<void> {
   assert.equal(renderedDraft(h.region.innerHTML).includes("too late"), false);
   if (pushed) assert.match(h.region.innerHTML, /data-pushback=/);
 }
+
+function resultHandlers(): number {
+  return FakeRecognition.all.filter((item) => item.onresult !== null).length;
+}
+
+function handlersCleared(rec: FakeRecognition): boolean {
+  return rec.onstart === null && rec.onresult === null && rec.onerror === null && rec.onend === null;
+}
+
+test("ten cycles keep one live recognizer and at most one late result handler", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    resetVoiceInvariant();
+    FakeRecognition.all = [];
+    for (let cycle = 0; cycle < 10; cycle += 1) {
+      const word = `w${cycle}`;
+      h.fire("click", { target: talk(), button: 0 });
+      const rec = FakeRecognition.last;
+      assert.ok(rec);
+      assert.equal(liveCount(), 1);
+      assert.equal(readVoiceInvariant().live, 1);
+      assert.ok(readVoiceInvariant().handlers <= 5);
+      assert.ok(resultHandlers() <= 2, `cycle ${cycle} started with ${resultHandlers()} result handlers`);
+      rec.onstart?.();
+      rec.hear([{ text: word, final: false }]);
+      rec.hear([{ text: word, final: true }]);
+      FakeRecognition.stopOrder = "final-then-end";
+      FakeRecognition.pendingFinal = word;
+      h.fire("click", { target: talk() });
+      await settle();
+      assert.equal(liveCount(), 0);
+      assertDraft(h, Array.from({ length: cycle + 1 }, (_, index) => `w${index}`).join(" "));
+    }
+    await delay(VOICE_STOP_WAIT_MS + 50);
+    assert.equal(resultHandlers(), 0);
+    assert.equal(FakeRecognition.all.filter((item) => item.onstart !== null || item.onerror !== null || item.onend !== null).length, 0);
+    assert.equal(liveCount(), 0);
+    assert.equal(readVoiceInvariant().live, 0);
+    assert.equal(readVoiceInvariant().handlers, 0);
+    assert.equal(readVoiceInvariant().constructed, 10);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("a stop without onend retires that recognizer before the next start", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const first = FakeRecognition.last;
+    assert.ok(first);
+    first.onstart?.();
+    first.say("alpha beta gamma", true);
+    FakeRecognition.stopOrder = "final-only";
+    FakeRecognition.pendingFinal = "alpha beta gamma";
+    h.fire("click", { target: talk() });
+    await settle();
+    assertDraft(h, "alpha beta gamma");
+    assert.equal(first.aborted, false);
+    h.fire("click", { target: talk(), button: 0 });
+    const second = FakeRecognition.last;
+    assert.ok(second);
+    assert.notEqual(second, first);
+    assert.equal(second.started, true);
+    assert.equal(liveCount(), 1);
+    assert.equal(first.aborted || handlersCleared(first), true);
+    first.hear([{ text: "should not land", final: true }]);
+    assert.equal(renderedDraft(h.region.innerHTML), "alpha beta gamma");
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("a cumulative resend with resultIndex 0 does not repeat the words", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.hear([{ text: "one two", final: true }], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "one two");
+    rec.hear([
+      { text: "one two", final: true },
+      { text: "three four", final: true },
+    ], 1);
+    assert.equal(renderedDraft(h.region.innerHTML), "one two three four");
+    rec.hear([
+      { text: "one two", final: true },
+      { text: "three four", final: true },
+      { text: "five six", final: true },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "one two three four five six");
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, "one two three four five six");
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    stop();
+  }
+});
+
+test("a growing sentence delivered at resultIndex 0 appears once", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.hear([{ text: "turn on", final: false }], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "turn on");
+    rec.hear([
+      { text: "turn on", final: false },
+      { text: "turn on the", final: false },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "turn on the");
+    rec.hear([
+      { text: "turn on", final: false },
+      { text: "turn on the", final: false },
+      { text: "turn on the light", final: true },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "turn on the light");
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, "turn on the light");
+  } finally {
+    stop();
+  }
+});
+
+test("one event with a final and an interim shows both", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.hear([
+      { text: "one two", final: true },
+      { text: "three", final: false },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "one two three");
+    rec.hear([
+      { text: "one two", final: true },
+      { text: "three", final: true },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "one two three");
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertDraft(h, "one two three");
+  } finally {
+    stop();
+  }
+});
+
+test("a late cumulative resend does not append a repeat", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.hear([{ text: "turn on the", final: false }], 0);
+    FakeRecognition.stopOrder = "end-only";
+    FakeRecognition.pendingFinal = "";
+    h.fire("click", { target: talk() });
+    await settle();
+    assertDraft(h, "turn on the");
+    rec.hear([
+      { text: "turn on", final: true },
+      { text: "turn on the", final: true },
+      { text: "turn on the light", final: true },
+    ], 0);
+    await settle();
+    assertDraft(h, "turn on the light");
+    assert.equal(renderedDraft(h.region.innerHTML).split("turn on").length - 1, 1);
+  } finally {
+    FakeRecognition.stopOrder = "manual";
+    stop();
+  }
+});
+
+test("a restart replays old results once and stays at one live recognizer", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    FakeRecognition.all = [];
+    h.fire("click", { target: talk(), button: 0 });
+    const first = FakeRecognition.last;
+    assert.ok(first);
+    first.onstart?.();
+    first.hear([
+      { text: "alpha", final: true },
+      { text: "beta", final: true },
+      { text: "gamma", final: true },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "alpha beta gamma");
+    first.onend?.();
+    // Chrome has ended this recognizer. stop() was not the path that did it.
+    first.stopped = true;
+    await delay(VOICE_RESTART_BASE_MS + 40);
+    const second = FakeRecognition.last;
+    assert.ok(second);
+    assert.notEqual(second, first);
+    assert.equal(second.started, true);
+    assert.equal(FakeRecognition.all.length, 2);
+    assert.equal(liveCount(), 1);
+    second.onstart?.();
+    second.hear([
+      { text: "alpha", final: true },
+      { text: "beta", final: true },
+      { text: "gamma", final: true },
+    ], 0);
+    assert.equal(renderedDraft(h.region.innerHTML), "alpha beta gamma");
+    assert.equal(answerPosts(h).length, 0);
+  } finally {
+    stop();
+  }
+});
