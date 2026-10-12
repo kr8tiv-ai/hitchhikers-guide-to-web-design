@@ -62,6 +62,14 @@ interface ModelView {
   bytes: number;
 }
 
+interface BlockView {
+  code: "installed" | "needs-admin" | "no-manager" | "unsupported-platform" | "winget-missing";
+  title: string;
+  detail: string;
+  actionLabel: string | null;
+  actionUrl: string | null;
+}
+
 interface PlanView {
   recipeId: string;
   tool: string;
@@ -76,6 +84,7 @@ interface PlanView {
   docsUrl: string | null;
   signIn: string | null;
   canRun: boolean;
+  blocked: BlockView | null;
   models: ModelView[];
   selectedModel: string | null;
   note: string;
@@ -178,23 +187,26 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
         const selected = model.id === plan.selectedModel ? " selected" : "";
         return `<option value="${escapeHtml(model.id)}"${selected}>${escapeHtml(model.label)}</option>`;
       }).join("")}</select></label>`;
+  const blocked = shownBlock(plan);
   const docs = plan.docsUrl === null
     ? ""
     : `<a class="hh-btn hh-btn--secondary" href="${escapeHtml(plan.docsUrl)}" data-install-docs>Open docs</a>`;
   const signIn = plan.signIn === null ? "" : `<p data-install-signin>${escapeHtml(plan.signIn)}</p>`;
   const workspace = plan.workspace === null ? "" : `<p>Runs in ${escapeHtml(plan.workspace)}</p>`;
-  const runAttrs = plan.canRun ? "" : ` disabled aria-disabled="true" aria-describedby="hh-install-run-reason"`;
   const reasonHidden = plan.canRun ? " hidden" : "";
   const againHidden = plan.canRun ? " hidden" : "";
   const verified = plan.verificationNote.length === 0
     ? ""
     : `<p data-install-verified>${escapeHtml(plan.verificationNote)}</p>`;
+  const intro = blocked === null ? `<p>These steps run on this machine after you confirm.</p>` : "";
   dialog.setAttribute("data-tool", plan.tool);
   dialog.setAttribute("data-token", token);
   dialog.setAttribute("data-can-run", plan.canRun ? "true" : "false");
+  if (blocked === null) dialog.removeAttribute("data-blocked");
+  else dialog.setAttribute("data-blocked", blocked.code);
   dialog.removeAttribute("data-running");
   dialog.innerHTML = `<h2 id="hh-install-title">${escapeHtml(plan.title)}</h2>
-    <p>These steps run on this machine after you confirm.</p>
+    ${intro}
     <ol class="hh-install__cmds" data-install-commands>${commands}</ol>
     <p data-install-size>Size: ${escapeHtml(plan.sizeLabel)}</p>
     <p data-install-location>Location: ${escapeHtml(plan.location)}</p>
@@ -221,8 +233,10 @@ function renderDialog(env: InstallEnv, plan: PlanView, token: string): void {
     </details>
     <p id="hh-install-run-reason" data-install-run-reason${reasonHidden}>${escapeHtml(plan.note)}</p>
     <textarea class="hh-install__manual" readonly data-install-manual>${escapeHtml(plan.manualCommand)}</textarea>
+    ${blockedStatus(blocked)}
     <div class="hh-install__actions">
-      <button class="hh-btn hh-btn--primary" type="button" data-install-run${runAttrs}>Run these steps</button>
+      ${runButton(blocked)}
+      ${actionControl(blocked, plan.manualCommand)}
       <button class="hh-btn hh-btn--secondary" type="button" data-install-copy>Copy</button>
       ${docs}
       <button class="hh-btn hh-btn--secondary" type="button" data-install-retry hidden>Retry</button>
@@ -270,6 +284,11 @@ function wireDialog(env: InstallEnv, dialog: InstallNode): void {
     if (host.getAttribute("data-install-again") !== null) {
       event.preventDefault();
       void postRecheck(env);
+      return;
+    }
+    if (host.getAttribute("data-install-action") !== null && host.getAttribute("href") === null) {
+      event.preventDefault();
+      markCopied(host);
       return;
     }
     if (host.getAttribute("data-install-copy") !== null) {
@@ -695,11 +714,25 @@ function selectedModel(dialog: InstallNode): string | null {
   return select.value;
 }
 
+const copyTimers = new WeakMap<InstallNode, ReturnType<typeof setTimeout>>();
+
 function markCopied(button: InstallNode): void {
   const text = button.getAttribute("data-copy") ?? "";
   const done = (): void => {
+    const prior = copyTimers.get(button);
+    if (prior !== undefined) clearTimeout(prior);
+    if (button.getAttribute("data-copied") !== "true") {
+      button.setAttribute("data-label", button.textContent ?? "");
+    }
     button.setAttribute("data-copied", "true");
     button.textContent = "Copied";
+    const timer = setTimeout(() => {
+      copyTimers.delete(button);
+      const label = button.getAttribute("data-label");
+      if (label !== null) button.textContent = label;
+      button.removeAttribute("data-copied");
+    }, 2000);
+    copyTimers.set(button, timer);
   };
   const clip = typeof navigator === "undefined" ? undefined : navigator.clipboard;
   if (clip === undefined) {
@@ -707,6 +740,54 @@ function markCopied(button: InstallNode): void {
     return;
   }
   void clip.writeText(text).then(done, done);
+}
+
+function shownBlock(plan: PlanView): BlockView | null {
+  if (plan.canRun) return null;
+  if (plan.blocked !== null) return plan.blocked;
+  const detail = plan.note.length > 0 ? plan.note : "Nothing runs from the desk.";
+  return {
+    code: "unsupported-platform",
+    title: "The desk will not run this",
+    detail,
+    actionLabel: plan.manualCommand.length > 0 ? "Copy command" : null,
+    actionUrl: null,
+  };
+}
+
+function blockedStatus(blocked: BlockView | null): string {
+  if (blocked === null) return "";
+  return `<p class="hh-install__blocked" data-install-blocked role="status">${escapeHtml(blocked.title)}. ${escapeHtml(blocked.detail)}</p>`;
+}
+
+function runButton(blocked: BlockView | null): string {
+  if (blocked?.code === "installed") return "";
+  if (blocked === null) {
+    return `<button class="hh-btn hh-btn--primary" type="button" data-install-run>Run these steps</button>`;
+  }
+  const tip = `${blocked.title}: ${blocked.detail}`;
+  return `<button class="hh-btn hh-btn--primary" type="button" data-install-run data-blocked="true" disabled aria-disabled="true" aria-describedby="hh-install-run-reason" title="${escapeHtml(tip)}">Run these steps</button>`;
+}
+
+function actionControl(blocked: BlockView | null, manualCommand: string): string {
+  if (blocked === null || blocked.actionLabel === null) return "";
+  const label = escapeHtml(blocked.actionLabel);
+  const href = httpsLink(blocked.actionUrl);
+  if (href !== null) {
+    return `<a class="hh-btn hh-btn--secondary" href="${escapeHtml(href)}" target="_blank" rel="noopener" data-install-action>${label}</a>`;
+  }
+  return `<button class="hh-btn hh-btn--secondary" type="button" data-install-action data-copy="${escapeHtml(manualCommand)}">${label}</button>`;
+}
+
+function httpsLink(url: string | null): string | null {
+  if (url === null || url.length === 0) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return null;
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 function commandText(step: PlanStepView): string {
@@ -780,6 +861,7 @@ function readPlan(value: unknown): PlanView | null {
     docsUrl: typeof value.docsUrl === "string" ? value.docsUrl : null,
     signIn: typeof value.signIn === "string" ? value.signIn : null,
     canRun: value.canRun === true,
+    blocked: readBlocked(value.blocked),
     models,
     selectedModel: typeof value.selectedModel === "string" ? value.selectedModel : null,
     note: typeof value.note === "string" ? value.note : "",
@@ -788,6 +870,28 @@ function readPlan(value: unknown): PlanView | null {
     verificationState: typeof value.verificationState === "string" ? value.verificationState : "",
     verificationNote: typeof value.verificationNote === "string" ? value.verificationNote : "",
   };
+}
+
+function readBlocked(value: unknown): BlockView | null {
+  if (!isRecord(value)) return null;
+  const code = value.code;
+  if (
+    code !== "installed" &&
+    code !== "needs-admin" &&
+    code !== "no-manager" &&
+    code !== "unsupported-platform" &&
+    code !== "winget-missing"
+  ) {
+    return null;
+  }
+  if (typeof value.title !== "string" || typeof value.detail !== "string") return null;
+  const actionLabel = typeof value.actionLabel === "string" && value.actionLabel.length > 0
+    ? value.actionLabel
+    : null;
+  const actionUrl = typeof value.actionUrl === "string" && value.actionUrl.length > 0
+    ? value.actionUrl
+    : null;
+  return { code, title: value.title, detail: value.detail, actionLabel, actionUrl };
 }
 
 function readStrings(value: unknown): string[] {

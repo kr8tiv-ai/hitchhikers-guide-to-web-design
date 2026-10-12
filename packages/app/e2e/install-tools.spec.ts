@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -109,6 +109,127 @@ test("install confirms, streams, cancels, retries, and refreshes the desk", asyn
     await expect(page.locator("[data-probe='grok']")).toHaveAttribute("data-probe-state", "ok");
     await expect(page.locator("[data-probe='whisper']")).toHaveAttribute("data-probe-state", "missing");
     expect(await page.evaluate(() => (globalThis as { hhMark?: number }).hhMark)).toBe(1);
+    expect(errors).toEqual([]);
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+const BLOCKED = [
+  { code: "installed", button: "Install pdftotext", title: "pdftotext is already installed", action: "check" },
+  { code: "needs-admin", button: "Install pdftotext", title: "Needs an admin terminal", action: "copy" },
+  { code: "no-manager", button: "Install pdftotext", title: "No package manager found", action: "store" },
+  { code: "winget-missing", button: "Install pdftotext", title: "winget is missing", action: "store" },
+  { code: "unsupported-platform", button: "Install whisper", title: "This system is not supported", action: "copy" },
+] as const;
+
+test("blocked install states explain themselves and keep a working path", async ({ page }) => {
+  test.setTimeout(180_000);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-install-block-"));
+  const blockFile = path.join(projectDir, "block.txt");
+  await writeFile(blockFile, "installed\n");
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  const stubFile = path.resolve(here, "install-stub.ts");
+  const shotDir = path.resolve(here, "../../../docs/assets/ui-after");
+  const child = spawn(
+    process.execPath,
+    ["--experimental-strip-types", "--input-type=module", "-e", childSource()],
+    {
+      env: {
+        ...process.env,
+        HH_E2E_PROJECT: projectDir,
+        HH_E2E_SERVER: pathToFileURL(serverFile).href,
+        HH_E2E_STUB: pathToFileURL(stubFile).href,
+        HH_E2E_BLOCK_FILE: blockFile,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    },
+  );
+  const errors: string[] = [];
+  page.on("pageerror", (error) => {
+    errors.push(error.message);
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+
+  try {
+    const url = await readUrl(child);
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(url).origin });
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(url);
+    const dialog = page.getByRole("dialog");
+
+    for (const state of BLOCKED) {
+      await writeFile(blockFile, `${state.code}\n`);
+      await page.getByRole("button", { name: state.button }).click();
+      await expect(dialog).toBeVisible();
+      const status = dialog.locator("[data-install-blocked]");
+      await expect(status).toBeVisible();
+      await expect(status).toContainText(state.title);
+      const hidden = await status.evaluate((el) => el.hasAttribute("hidden") || getComputedStyle(el).display === "none");
+      expect(hidden).toBe(false);
+
+      if (state.code === "installed") {
+        await expect(dialog.locator("[data-install-run]")).toHaveCount(0);
+        const again = dialog.getByRole("button", { name: "Check again" });
+        await expect(again).toBeVisible();
+        await again.click();
+        await expect(dialog).toBeVisible();
+        await expect(status).toContainText(state.title);
+      } else {
+        const run = dialog.locator("[data-install-run]");
+        await expect(run).toBeVisible();
+        await expect(run).toBeDisabled();
+        await expect(status).toBeVisible();
+        await run.hover();
+        const cursor = await run.evaluate((el) => getComputedStyle(el).cursor);
+        expect(cursor).not.toBe("not-allowed");
+        expect(cursor).toBe("default");
+        const title = await run.getAttribute("title");
+        expect(title ?? "").toContain(state.title);
+      }
+
+      if (state.action === "copy") {
+        const manual = await dialog.locator("[data-install-manual]").inputValue();
+        const copy = dialog.locator("[data-install-action]");
+        await expect(copy).toHaveText("Copy command");
+        await copy.click();
+        await expect(copy).toHaveText("Copied");
+        const clip = await page.evaluate(() => navigator.clipboard.readText());
+        expect(clip).toBe(manual);
+        expect(manual.length).toBeGreaterThan(0);
+        await expect(copy).toHaveText("Copy command", { timeout: 4_000 });
+      }
+
+      if (state.action === "store") {
+        const link = dialog.getByRole("link", { name: "Open Microsoft Store page" });
+        await expect(link).toHaveAttribute("href", "https://apps.microsoft.com/detail/9nblggh4nns1");
+        await expect(link).toHaveAttribute("rel", "noopener");
+        await expect(link).toHaveAttribute("target", "_blank");
+      }
+
+      for (const width of [375, 768, 1440]) {
+        await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+        for (const scheme of ["light", "dark"] as const) {
+          await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+          expect(await overflows(page)).toBe(false);
+          await expect(status).toBeVisible();
+          await dialog.screenshot({
+            path: path.join(shotDir, `install-blocked-${state.code}-${width}-${scheme}.png`),
+          });
+        }
+      }
+
+      await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await dialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(dialog).toBeHidden();
+    }
+
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);

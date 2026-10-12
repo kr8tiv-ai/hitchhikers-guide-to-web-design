@@ -32,6 +32,25 @@ export interface InstallModel {
   bytes: number;
 }
 
+export const INSTALL_BLOCK_CODES = [
+  "installed",
+  "needs-admin",
+  "no-manager",
+  "unsupported-platform",
+  "winget-missing",
+] as const;
+
+export type InstallBlockCode = (typeof INSTALL_BLOCK_CODES)[number];
+
+/** Why the desk will not run a plan. Null when `canRun` is true. */
+export interface InstallBlock {
+  code: InstallBlockCode;
+  title: string;
+  detail: string;
+  actionLabel: string | null;
+  actionUrl: string | null;
+}
+
 export interface InstallPlan {
   recipeId: string;
   tool: InstallTool;
@@ -50,6 +69,7 @@ export interface InstallPlan {
   docsUrl: string | null;
   signIn: string | null;
   canRun: boolean;
+  blocked: InstallBlock | null;
   models: readonly InstallModel[];
   selectedModel: string | null;
   note: string;
@@ -66,6 +86,13 @@ export interface PlanContext {
   dataDir: string;
   browsersDir: string;
   workspaceDir: string;
+  /** Tools the probe already finds. Those plans do not run. */
+  present?: readonly string[];
+  /**
+   * Per-recipe override for `needsElevation`.
+   * A missing key uses the recipe flag.
+   */
+  elevationOverrides?: Readonly<Record<string, boolean>>;
 }
 
 export interface InstallEvent {

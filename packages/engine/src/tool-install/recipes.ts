@@ -4,7 +4,17 @@
  * That release points at nightly tag b5454, which has the official binaries.
  * SHA-256 values are the GitHub release asset digest field, retrieved 2026-10-10.
  * Model SHA-256 values are the Hugging Face lfs.oid for ggerganov/whisper.cpp, retrieved 2026-10-10.
- * winget id oschwartz10612.Poppler is the community Poppler package. Assumed, not re-queried.
+ * winget id oschwartz10612.Poppler is the community Poppler package.
+ * needsElevation for pdftotext-winget was checked against the winget-pkgs
+ * installer manifest oschwartz10612.Poppler 25.07.0-0 on 2026-10-12, not by
+ * running winget. InstallerType is zip, NestedInstallerType is portable
+ * (pdftotext.exe is under poppler-25.07.0/Library/bin), there is no Scope
+ * and no ElevationRequirement, InstallModes are interactive, silent, and
+ * silentWithProgress, and ArchiveBinariesDependOnPath is true. The package
+ * depends on Microsoft.VCRedist.2015+.x64 (x86 on x86). A portable zip
+ * installs per user, so needsElevation is false. That dependency can still
+ * show one Windows admin prompt when the runtime is missing. The manifest
+ * declares no scope, so the argv does not pass --scope user.
  */
 
 export interface WhisperArchive {
@@ -130,7 +140,7 @@ export const POPPLER_RECIPES: readonly ManagerRecipe[] = [
     platform: "win32",
     argv: ["winget", "install", "--disable-interactivity", "--exact", "--id", "oschwartz10612.Poppler"],
     manual: "winget install --disable-interactivity --exact --id oschwartz10612.Poppler",
-    needsElevation: true,
+    needsElevation: false,
   },
   {
     id: "pdftotext-choco",

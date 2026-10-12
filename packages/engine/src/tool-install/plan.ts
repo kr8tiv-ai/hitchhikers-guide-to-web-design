@@ -26,6 +26,7 @@ import {
 import {
   PlanError,
   isInstallTool,
+  type InstallBlock,
   type InstallModel,
   type InstallPlan,
   type InstallTool,
@@ -56,6 +57,15 @@ const PLAYWRIGHT_SIZE =
   "Shown by the Playwright CLI during the download. The browsers cache holds Chromium.";
 
 const URL_IN_TEXT = /https:\/\/[^\s"'<>]+/g;
+
+/**
+ * Dialog link only. App Installer in the Microsoft Store.
+ * The desk never fetches this host, and it is not a recipe URL.
+ */
+const APP_INSTALLER_STORE = "https://apps.microsoft.com/detail/9nblggh4nns1";
+
+const WINGET_NOTE =
+  "pdftotext comes from poppler. Windows may show one admin prompt if the Visual C++ libraries are not already installed. Poppler itself installs for the current user.";
 
 export function commandOnPath(
   name: string,
@@ -134,8 +144,9 @@ export function buildInstallPlan(
         : tool === "whisper"
           ? whisperPlan(modelId, ctx)
           : popplerPlan(ctx);
-  assertPlanUrls(plan);
-  return plan;
+  const ready = applyPresent(plan, ctx);
+  assertPlanUrls(ready);
+  return ready;
 }
 
 export function assertPlanUrls(plan: InstallPlan): void {
@@ -186,8 +197,13 @@ function finish(input: {
   note: string;
   workspace: string | null;
   auditIds: readonly string[];
+  blocked: InstallBlock | null;
 }): InstallPlan {
-  const canRun = input.runSteps.length > 0 && !input.needsAdmin;
+  const canRun = input.runSteps.length > 0 && !input.needsAdmin && input.blocked === null;
+  const blocked = canRun ? null : input.blocked;
+  if (!canRun && blocked === null) {
+    throw new PlanError("A plan that cannot run needs a blocked reason.");
+  }
   const urls = [input.sourceUrl, ...input.runSteps.map((step) => step.url ?? "")];
   const verification = describeVerification(input.auditIds);
   return {
@@ -208,6 +224,7 @@ function finish(input: {
     docsUrl: input.docsUrl,
     signIn: input.signIn,
     canRun,
+    blocked,
     models: input.models,
     selectedModel: input.selectedModel,
     note: input.note,
@@ -258,6 +275,9 @@ function grokPlan(ctx: PlanContext): InstallPlan {
       : NOTHING_RUNS,
     workspace: null,
     auditIds: auditIdsFor("grok", ctx.platform, ctx.arch, null),
+    blocked: npm
+      ? null
+      : noManagerBlock("npm is not on this machine, so the desk will not run the install.", manual),
   });
 }
 
@@ -296,6 +316,9 @@ function playwrightPlan(ctx: PlanContext): InstallPlan {
     note: pnpm ? "Runs in the Guide workspace." : NOTHING_RUNS,
     workspace: pnpm ? ctx.workspaceDir : null,
     auditIds: auditIdsFor("playwright", ctx.platform, ctx.arch, null),
+    blocked: pnpm
+      ? null
+      : noManagerBlock("pnpm is not on this machine, so the desk will not run the install.", "pnpm exec playwright install chromium"),
   });
 }
 
@@ -306,7 +329,7 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
   const recipes = platform === null ? [] : POPPLER_RECIPES.filter((recipe) => recipe.platform === platform);
   const chosen = recipes.find((recipe) => hasManager(ctx, recipe.manager)) ?? null;
   const fallback = recipes[0] ?? null;
-  if (chosen !== null && !chosen.needsElevation) {
+  if (chosen !== null && !recipeElevated(chosen, ctx)) {
     const step = managerStep(chosen);
     return finish({
       recipeId: chosen.id,
@@ -325,13 +348,15 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
       signIn: null,
       models: [],
       selectedModel: null,
-      note: "pdftotext comes from poppler.",
+      note: chosen.id === "pdftotext-winget" ? WINGET_NOTE : "pdftotext comes from poppler.",
       workspace: null,
       auditIds: auditIdsFor("pdftotext", ctx.platform, ctx.arch, null),
+      blocked: null,
     });
   }
   const manual = chosen?.manual ?? fallback?.manual ?? "Install poppler from the official source.";
   const recipeId = chosen?.id ?? (platform === null ? "pdftotext-manual" : `pdftotext-manual-${platform}`);
+  const elevated = chosen !== null && recipeElevated(chosen, ctx);
   return finish({
     recipeId,
     tool: "pdftotext",
@@ -341,7 +366,7 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
     sizeExact: false,
     sizeLabel: "The package manager reports the download as it runs.",
     location: "The package manager puts poppler on PATH.",
-    needsAdmin: chosen?.needsElevation === true,
+    needsAdmin: elevated,
     sourceHost: "poppler.freedesktop.org",
     sourceUrl: POPPLER_HOME,
     manualCommand: manual,
@@ -349,10 +374,118 @@ function popplerPlan(ctx: PlanContext): InstallPlan {
     signIn: null,
     models: [],
     selectedModel: null,
-    note: chosen === null ? NOTHING_RUNS : ADMIN_LABEL,
+    note: elevated ? ADMIN_LABEL : NOTHING_RUNS,
     workspace: null,
     auditIds: auditIdsFor("pdftotext", ctx.platform, ctx.arch, null),
+    blocked: popplerBlocked(ctx, platform, elevated, manual),
   });
+}
+
+function recipeElevated(recipe: ManagerRecipe, ctx: PlanContext): boolean {
+  const override = ctx.elevationOverrides?.[recipe.id];
+  if (override !== undefined) return override;
+  return recipe.needsElevation;
+}
+
+function applyPresent(plan: InstallPlan, ctx: PlanContext): InstallPlan {
+  if (ctx.present?.includes(plan.tool) !== true) return plan;
+  const blocked = installedBlock(plan.tool);
+  return {
+    ...plan,
+    steps: [],
+    runSteps: [],
+    needsAdmin: false,
+    adminLabel: NO_ADMIN_LABEL,
+    canRun: false,
+    blocked,
+    note: blocked.detail,
+  };
+}
+
+function installedBlock(tool: string): InstallBlock {
+  return {
+    code: "installed",
+    title: `${tool} is already installed`,
+    detail: "The check already finds it on this machine. Use Check again if that changed.",
+    actionLabel: null,
+    actionUrl: null,
+  };
+}
+
+function needsAdminBlock(manualCommand: string): InstallBlock {
+  return {
+    code: "needs-admin",
+    title: "Needs an admin terminal",
+    detail: `The desk will not run this. Run this command in an admin terminal: ${manualCommand}`,
+    actionLabel: "Copy command",
+    actionUrl: null,
+  };
+}
+
+function noManagerWinBlock(): InstallBlock {
+  return {
+    code: "no-manager",
+    title: "No package manager found",
+    detail: "Install App Installer from the Microsoft Store to get winget, then reopen this dialog",
+    actionLabel: "Open Microsoft Store page",
+    actionUrl: APP_INSTALLER_STORE,
+  };
+}
+
+function wingetMissingBlock(): InstallBlock {
+  return {
+    code: "winget-missing",
+    title: "winget is missing",
+    detail: "App Installer is not on this machine, so winget is missing. Install App Installer from the Microsoft Store, then reopen this dialog.",
+    actionLabel: "Open Microsoft Store page",
+    actionUrl: APP_INSTALLER_STORE,
+  };
+}
+
+function noManagerBlock(detail: string, manualCommand: string, title = "No package manager found"): InstallBlock {
+  return {
+    code: "no-manager",
+    title,
+    detail,
+    actionLabel: manualCommand.length > 0 ? "Copy command" : null,
+    actionUrl: null,
+  };
+}
+
+function unsupportedBlock(detail: string, manualCommand: string): InstallBlock {
+  return {
+    code: "unsupported-platform",
+    title: "This system is not supported",
+    detail,
+    actionLabel: manualCommand.length > 0 ? "Copy command" : null,
+    actionUrl: null,
+  };
+}
+
+function popplerBlocked(
+  ctx: PlanContext,
+  platform: "win32" | "darwin" | "linux" | null,
+  elevated: boolean,
+  manual: string,
+): InstallBlock {
+  if (elevated) return needsAdminBlock(manual);
+  if (platform === null) {
+    return unsupportedBlock("The desk has no install steps for this system.", manual);
+  }
+  if (platform === "win32") {
+    if (ctx.managers.length > 0) return wingetMissingBlock();
+    return noManagerWinBlock();
+  }
+  if (platform === "darwin") {
+    return noManagerBlock(
+      "Homebrew is not on this machine. Install it, then reopen this dialog, or run the command below.",
+      manual,
+    );
+  }
+  return noManagerBlock(
+    "No package manager from the desk list is on this machine. The command below is the usual install.",
+    manual,
+  );
 }
 
 function managerStep(recipe: ManagerRecipe): PlanStep {
@@ -409,6 +542,16 @@ function whisperPlan(modelId: string | null, ctx: PlanContext): InstallPlan {
         : "tar is not on PATH, so the archive cannot be extracted. Nothing runs from the desk.",
       workspace: null,
       auditIds: auditIdsFor("whisper", ctx.platform, ctx.arch, model.label),
+      blocked: archive === null
+        ? unsupportedBlock(
+            "This OS has no prebuilt whisper.cpp binary in the pinned release. Nothing runs from the desk.",
+            manual,
+          )
+        : noManagerBlock(
+            "tar is not on PATH, so the archive cannot be extracted. Nothing runs from the desk.",
+            manual,
+            "tar is not on PATH",
+          ),
     });
   }
   const archiveUrl = whisperAssetUrl(archive.file);
@@ -473,5 +616,6 @@ function whisperPlan(modelId: string | null, ctx: PlanContext): InstallPlan {
     note: `The binary is copied to ${binaryName} in the install folder so the check can see it.`,
     workspace: null,
     auditIds: auditIdsFor("whisper", ctx.platform, ctx.arch, model.label),
+    blocked: null,
   });
 }

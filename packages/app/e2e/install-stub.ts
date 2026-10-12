@@ -3,10 +3,12 @@
  * Plans are the real recipes so the dialog shows the real commands.
  */
 
+import { readFileSync } from "node:fs";
 import {
   buildInstallPlan,
   type InstallEvent,
   type InstallPlan,
+  type PlanContext,
   type RunResult,
 } from "@hitchhiker/engine";
 import type { DeskPreflight, PreflightName } from "../src/server/card.ts";
@@ -30,14 +32,14 @@ export function missingPreflight(): DeskPreflight {
 export function tools(): ToolRuntime {
   return {
     plan(input) {
-      return buildInstallPlan(input.tool, input.modelId, {
-        platform: "win32",
-        arch: "x64",
-        managers: ["npm", "pnpm", "scoop", "tar"],
-        dataDir: "C:\\Hitchhiker\\tools",
-        browsersDir: "C:\\Cache\\ms-playwright",
-        workspaceDir: "C:\\guide",
-      });
+      const code = blockCode();
+      if (code === "unsupported-platform" && input.tool === "whisper") {
+        return buildInstallPlan("whisper", null, deskCtx({ arch: "s390x", managers: ["tar"] }));
+      }
+      if (code.length > 0 && input.tool === "pdftotext" && code !== "unsupported-platform") {
+        return blockedPoppler(code);
+      }
+      return buildInstallPlan(input.tool, input.modelId, deskCtx());
     },
     async run(plan, ctx) {
       if (plan.tool === "whisper") return cancelWhisper(plan, ctx);
@@ -67,6 +69,50 @@ export function tools(): ToolRuntime {
       return report();
     },
   };
+}
+
+function blockCode(): string {
+  const file = process.env.HH_E2E_BLOCK_FILE;
+  if (file === undefined || file.length === 0) return "";
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function deskCtx(extra: {
+  arch?: string;
+  managers?: readonly string[];
+  present?: readonly string[];
+  elevationOverrides?: Readonly<Record<string, boolean>>;
+} = {}): PlanContext {
+  const ctx: PlanContext = {
+    platform: "win32",
+    arch: extra.arch ?? "x64",
+    managers: extra.managers ?? ["npm", "pnpm", "scoop", "tar"],
+    dataDir: "C:\\Hitchhiker\\tools",
+    browsersDir: "C:\\Cache\\ms-playwright",
+    workspaceDir: "C:\\guide",
+  };
+  if (extra.present !== undefined) ctx.present = extra.present;
+  if (extra.elevationOverrides !== undefined) ctx.elevationOverrides = extra.elevationOverrides;
+  return ctx;
+}
+
+function blockedPoppler(code: string): InstallPlan {
+  if (code === "installed") {
+    return buildInstallPlan("pdftotext", null, deskCtx({ managers: ["winget"], present: ["pdftotext"] }));
+  }
+  if (code === "needs-admin") {
+    return buildInstallPlan("pdftotext", null, deskCtx({
+      managers: ["winget"],
+      elevationOverrides: { "pdftotext-winget": true },
+    }));
+  }
+  if (code === "no-manager") return buildInstallPlan("pdftotext", null, deskCtx({ managers: [] }));
+  if (code === "winget-missing") return buildInstallPlan("pdftotext", null, deskCtx({ managers: ["npm"] }));
+  return buildInstallPlan("pdftotext", null, deskCtx());
 }
 
 function report(): DeskPreflight {

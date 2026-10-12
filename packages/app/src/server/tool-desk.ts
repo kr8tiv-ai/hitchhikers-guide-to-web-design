@@ -57,7 +57,10 @@ export interface ToolDeskOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export function productionRuntime(env: NodeJS.ProcessEnv = process.env): ToolRuntime {
+export function productionRuntime(
+  env: NodeJS.ProcessEnv = process.env,
+  presentTools?: () => readonly string[],
+): ToolRuntime {
   const platform = process.platform;
   const workspaceDir = path.resolve(import.meta.dirname, "..", "..", "..", "..");
   return {
@@ -69,6 +72,7 @@ export function productionRuntime(env: NodeJS.ProcessEnv = process.env): ToolRun
         dataDir: toolDataDir(platform, env),
         browsersDir: playwrightBrowsersCache(platform, env),
         workspaceDir,
+        present: presentTools?.() ?? [],
       });
     },
     run(plan, ctx) {
@@ -94,7 +98,11 @@ export function productionRuntime(env: NodeJS.ProcessEnv = process.env): ToolRun
 }
 
 export function createToolHandler(options: ToolDeskOptions): (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void> {
-  const runtime = options.runtime ?? productionRuntime(options.env ?? process.env);
+  const runtime = options.runtime ?? productionRuntime(options.env ?? process.env, () => {
+    const report = options.getPreflight();
+    if (report === null) return [];
+    return report.probes.filter((probe) => probe.ok).map((probe) => probe.name);
+  });
   const confirms = createConfirmStore();
   const active = new Map<string, AbortController>();
   const now = (): number => options.now?.() ?? Date.now();

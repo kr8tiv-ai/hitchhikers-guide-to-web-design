@@ -2,6 +2,8 @@
 
 The desk can install grok, playwright (Chromium), whisper.cpp, and pdftotext. Whisper models on the desk are tiny, tiny.en, base, and base.en. A small model is not offered. Node and pnpm are prerequisites. The desk does not download them.
 
+The desk is not an installable app.
+
 An install stays **unverified** until `scripts/verify-installs.ts` has downloaded it on a machine and this table records that run. A unit test with a mock is not a pass. Unverified rows stay unverified until a later run replaces them.
 
 The harness downloads into a directory under `os.tmpdir()` and deletes it. It does not change the user or machine install. Set `HH_SKIP_INSTALL_VERIFY=1` to print `skipped` and exit 0. That flag is for CI. A local audit runs without it.
@@ -26,7 +28,7 @@ The table below is the 2026-10-11 run on win32-x64, Node v24.13.1. Redirect host
 | whisper-model-base.en | whisper | base.en | ggml-base.en.bin | 147964211 | sha256 | us.aws.cdn.hf.co | pass | 2026-10-11 | SHA-256 matched. A one-second silent wav loaded. Desk check saw whisper. |
 | grok | grok |  | @xai-official/grok |  | npm registry | registry.npmjs.org | pass | 2026-10-11 | Installed with npm --prefix in scratch. Desk check saw grok. |
 | playwright | playwright | chromium | playwright install chromium |  | playwright CLI | cdn.playwright.dev | pass | 2026-10-11 | Chromium installed under PLAYWRIGHT_BROWSERS_PATH in scratch. Desk check saw playwright. |
-| pdftotext-win32 | pdftotext |  | oschwartz10612.Poppler |  | package-manager | poppler.freedesktop.org | unverified | 2026-10-11 | winget, choco, and scoop install onto the user or machine. No scratch prefix, so the installer was not run. |
+| pdftotext-win32 | pdftotext |  | oschwartz10612.Poppler |  | package-manager | poppler.freedesktop.org | unverified | 2026-10-11 | Verified from the winget-pkgs installer manifest oschwartz10612.Poppler 25.07.0-0 on 2026-10-12: InstallerType zip, NestedInstallerType portable, no Scope, no ElevationRequirement. The package installs per user. Microsoft.VCRedist.2015+ can show one Windows admin prompt when it is missing. The installer was not run, so this row stays unverified. |
 | pdftotext-darwin | pdftotext |  | brew install poppler |  | package-manager | poppler.freedesktop.org | unverified | 2026-10-11 | macOS command is covered by unit tests. It was not executed on Windows. |
 | pdftotext-linux | pdftotext |  | poppler-utils |  | package-manager | poppler.freedesktop.org | unverified | 2026-10-11 | Linux commands are covered by unit tests. They were not executed on Windows. |
 
@@ -47,3 +49,5 @@ Recipe URLs are pinned in `packages/engine/src/tool-install/recipes.ts`. Redirec
 ## Not installed by the desk
 
 Node and pnpm have to be on PATH before the desk can install grok or playwright. This audit used Node v24.13.1. The desk does not download Node from nodejs.org and does not download pnpm.
+
+On Windows, when no package manager is on PATH, the install dialog links to the Microsoft Store page for App Installer. The desk does not fetch that page.

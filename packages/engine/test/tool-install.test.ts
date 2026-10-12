@@ -50,10 +50,21 @@ test("win32 recipes name the expected argv, size, location, and manual command",
   assert.equal(poppler.sizeExact, false);
 
   const winget = buildInstallPlan("pdftotext", null, ctx("win32", ["winget", "scoop"]));
-  assert.deepEqual(argvOf(winget), []);
-  assert.equal(winget.canRun, false);
-  assert.equal(winget.needsAdmin, true);
+  assert.deepEqual(argvOf(winget), [[
+    "winget",
+    "install",
+    "--disable-interactivity",
+    "--exact",
+    "--id",
+    "oschwartz10612.Poppler",
+  ]]);
+  assert.equal(winget.runSteps[0]?.kind, "spawn");
+  assert.equal(winget.runSteps[0]?.needsElevation, false);
+  assert.equal(winget.canRun, true);
+  assert.equal(winget.blocked, null);
+  assert.equal(winget.needsAdmin, false);
   assert.match(winget.manualCommand, /^winget install /);
+  assert.equal(winget.manualCommand.includes("--scope"), false);
   assert.equal(winget.manualCommand.includes("scoop"), false);
 
   const grok = buildInstallPlan("grok", null, ctx("win32", ["npm"]));
@@ -92,6 +103,69 @@ test("win32 recipes name the expected argv, size, location, and manual command",
   assert.equal(whisper.runSteps[1]?.argv[0], "tar");
 });
 
+test("a blocked install names the machine state and a winget plan can run", () => {
+  const only = buildInstallPlan("pdftotext", null, ctx("win32", ["winget"]));
+  assert.equal(only.canRun, true);
+  assert.equal(only.blocked, null);
+  assert.equal(only.needsAdmin, false);
+  assert.equal(only.runSteps[0]?.kind, "spawn");
+  assert.deepEqual(only.runSteps[0]?.argv, [
+    "winget",
+    "install",
+    "--disable-interactivity",
+    "--exact",
+    "--id",
+    "oschwartz10612.Poppler",
+  ]);
+  assert.match(only.note, /Visual C\+\+/);
+  assert.match(only.note, /admin prompt/);
+  assert.equal(/elevation/i.test(only.note), false);
+  assert.equal(only.manualCommand.includes("--scope"), false);
+
+  const forced = buildInstallPlan("pdftotext", null, {
+    ...ctx("win32", ["winget"]),
+    elevationOverrides: { "pdftotext-winget": true },
+  });
+  assert.equal(forced.canRun, false);
+  assert.equal(forced.needsAdmin, true);
+  assert.deepEqual(argvOf(forced), []);
+  assert.equal(forced.blocked?.code, "needs-admin");
+  assert.equal(forced.blocked?.title, "Needs an admin terminal");
+  assert.equal(forced.blocked?.actionLabel, "Copy command");
+  assert.equal((forced.blocked?.detail ?? "").includes(forced.manualCommand), true);
+  assert.equal(/elevation/i.test(forced.blocked?.detail ?? ""), false);
+
+  const none = buildInstallPlan("pdftotext", null, ctx("win32", []));
+  assert.equal(none.canRun, false);
+  assert.equal(none.blocked?.code, "no-manager");
+  assert.equal(none.blocked?.title, "No package manager found");
+  assert.equal(
+    none.blocked?.detail,
+    "Install App Installer from the Microsoft Store to get winget, then reopen this dialog",
+  );
+  assert.equal(none.blocked?.actionLabel, "Open Microsoft Store page");
+  assert.equal(none.blocked?.actionUrl, "https://apps.microsoft.com/detail/9nblggh4nns1");
+  assert.throws(() => assertRecipeUrl(none.blocked?.actionUrl ?? ""), /do not recognize/);
+
+  const installed = buildInstallPlan("pdftotext", null, {
+    ...ctx("win32", ["winget"]),
+    present: ["pdftotext"],
+  });
+  assert.equal(installed.canRun, false);
+  assert.equal(installed.blocked?.code, "installed");
+  assert.equal(installed.blocked?.title, "pdftotext is already installed");
+  assert.deepEqual(installed.runSteps, []);
+
+  const wingetMissing = buildInstallPlan("pdftotext", null, ctx("win32", ["npm"]));
+  assert.equal(wingetMissing.canRun, false);
+  assert.equal(wingetMissing.blocked?.code, "winget-missing");
+  assert.equal(wingetMissing.blocked?.actionUrl, "https://apps.microsoft.com/detail/9nblggh4nns1");
+
+  const odd = buildInstallPlan("pdftotext", null, ctx("freebsd", []));
+  assert.equal(odd.canRun, false);
+  assert.equal(odd.blocked?.code, "unsupported-platform");
+});
+
 test("darwin and linux recipes follow the manager that is present", () => {
   const brew = buildInstallPlan("pdftotext", null, ctx("darwin", ["brew"]));
   assert.deepEqual(argvOf(brew), [["brew", "install", "poppler"]]);
@@ -101,6 +175,8 @@ test("darwin and linux recipes follow the manager that is present", () => {
   const noBrew = buildInstallPlan("pdftotext", null, ctx("darwin", []));
   assert.deepEqual(argvOf(noBrew), []);
   assert.equal(noBrew.canRun, false);
+  assert.equal(noBrew.blocked?.code, "no-manager");
+  assert.equal(noBrew.blocked?.actionUrl, null);
   assert.equal(noBrew.manualCommand, "brew install poppler");
   assert.equal(noBrew.sourceUrl, "https://poppler.freedesktop.org/");
 
@@ -108,6 +184,8 @@ test("darwin and linux recipes follow the manager that is present", () => {
   assert.deepEqual(argvOf(apt), []);
   assert.equal(apt.canRun, false);
   assert.equal(apt.needsAdmin, true);
+  assert.equal(apt.blocked?.code, "needs-admin");
+  assert.match(apt.blocked?.detail ?? "", /sudo apt-get install -y poppler-utils/);
   assert.equal(apt.manualCommand, "sudo apt-get install -y poppler-utils");
   assert.equal(apt.manualCommand.includes("dnf"), false);
 
@@ -125,6 +203,7 @@ test("darwin and linux recipes follow the manager that is present", () => {
 
   const macWhisper = buildInstallPlan("whisper", null, ctx("darwin", ["brew", "tar"]));
   assert.equal(macWhisper.canRun, false);
+  assert.equal(macWhisper.blocked?.code, "unsupported-platform");
   assert.equal(macWhisper.manualCommand, "brew install whisper-cpp");
   assert.deepEqual(argvOf(macWhisper), []);
 
@@ -161,7 +240,15 @@ test("every recipe URL is on an allow-listed host and another host fails", () =>
     }
   }
   assert.ok(urls.length > 8);
-  for (const url of urls) assert.doesNotThrow(() => assertRecipeUrl(url), url);
+  const dialogOnly = "https://apps.microsoft.com/detail/9nblggh4nns1";
+  assert.equal(urls.includes(dialogOnly), true);
+  for (const url of urls) {
+    if (url === dialogOnly) {
+      assert.throws(() => assertRecipeUrl(url), /do not recognize/);
+      continue;
+    }
+    assert.doesNotThrow(() => assertRecipeUrl(url), url);
+  }
   assert.throws(() => assertRecipeUrl("https://evil.example/tool"), /evil\.example/);
   assert.throws(() => assertRecipeUrl("http://github.com/ggml-org/whisper.cpp"), /https/);
   const github = "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip";

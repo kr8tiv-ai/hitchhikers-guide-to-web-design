@@ -3,7 +3,9 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } 
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { buildInstallPlan, loadConfig, type InstallPlan, type RunResult } from "@hitchhiker/engine";
+import { fileURLToPath } from "node:url";
+import { buildInstallPlan, loadConfig, type InstallPlan, type PlanContext, type RunResult } from "@hitchhiker/engine";
+import { handleInstallClick } from "../src/client/tool-install.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import type { DeskPreflight, PreflightName } from "../src/server/card.ts";
 import type { ToolRuntime } from "../src/server/tool-desk.ts";
@@ -288,4 +290,153 @@ test("success records a scrubbed install and returns the new probe", async () =>
     else process.env.Path = previousWin;
     await session.close();
   }
+});
+
+const BLOCK_CODES = ["installed", "needs-admin", "no-manager", "unsupported-platform", "winget-missing"] as const;
+
+function blockPlan(code: (typeof BLOCK_CODES)[number]): InstallPlan {
+  const base: PlanContext = {
+    platform: "win32",
+    arch: "x64",
+    managers: ["winget"],
+    dataDir: "C:\\Hitchhiker\\tools",
+    browsersDir: "C:\\Cache\\ms-playwright",
+    workspaceDir: "C:\\guide",
+  };
+  if (code === "installed") {
+    return buildInstallPlan("pdftotext", null, { ...base, present: ["pdftotext"] });
+  }
+  if (code === "needs-admin") {
+    return buildInstallPlan("pdftotext", null, {
+      ...base,
+      elevationOverrides: { "pdftotext-winget": true },
+    });
+  }
+  if (code === "no-manager") return buildInstallPlan("pdftotext", null, { ...base, managers: [] });
+  if (code === "winget-missing") return buildInstallPlan("pdftotext", null, { ...base, managers: ["npm"] });
+  return buildInstallPlan("pdftotext", null, { ...base, platform: "freebsd", managers: [] });
+}
+
+async function renderDialogHtml(plan: InstallPlan): Promise<string> {
+  let html = "";
+  const attrs = new Map<string, string>();
+  const dialog = {
+    open: false,
+    get innerHTML() {
+      return html;
+    },
+    set innerHTML(value: string) {
+      html = value;
+    },
+    getAttribute(name: string): string | null {
+      return attrs.get(name) ?? null;
+    },
+    setAttribute(name: string, value: string) {
+      attrs.set(name, value);
+    },
+    removeAttribute(name: string) {
+      attrs.delete(name);
+    },
+    querySelector() {
+      return null;
+    },
+    showModal() {
+      this.open = true;
+    },
+  };
+  const button = {
+    getAttribute(name: string): string | null {
+      return name === "data-install" ? plan.tool : null;
+    },
+    closest() {
+      return button;
+    },
+  };
+  handleInstallClick(
+    {
+      document: {
+        querySelector(selector: string) {
+          if (selector === "[data-install-dialog]") return dialog;
+          return null;
+        },
+        createElement() {
+          return dialog;
+        },
+        body: {
+          appendChild() {
+            return undefined;
+          },
+        },
+        addEventListener() {
+          return undefined;
+        },
+        removeEventListener() {
+          return undefined;
+        },
+      },
+      fetch: (async () => ({
+        ok: true,
+        json: async () => ({ token: "confirm-token", plan }),
+      })) as typeof fetch,
+    },
+    {
+      target: button,
+      preventDefault() {
+        return undefined;
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return html;
+}
+
+test("the install dialog explains each blocked state and keeps a runnable plan enabled", async () => {
+  const cardCss = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/card.css"),
+    "utf8",
+  );
+  assert.match(
+    cardCss,
+    /\.hh-install \[data-install-run\]\[data-blocked="true"\]:disabled:hover[\s\S]*?\{[^}]*cursor:\s*default/,
+  );
+  for (const code of BLOCK_CODES) {
+    const plan = blockPlan(code);
+    assert.equal(plan.blocked?.code, code);
+    const blocked = plan.blocked;
+    assert.ok(blocked !== null);
+    const html = await renderDialogHtml(plan);
+    assert.match(html, new RegExp(blocked.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(html, /data-install-blocked/);
+    assert.equal(/data-install-blocked[^>]*hidden/.test(html), false);
+    assert.equal(html.includes("cursor: not-allowed"), false);
+    if (code === "installed") {
+      assert.equal(/<button[^>]*data-install-run[\s>]/.test(html), false);
+      assert.match(html, /data-install-again>Check again<\/button>/);
+      continue;
+    }
+    assert.match(html, /data-install-run[^>]*data-blocked="true"/);
+    assert.match(html, /data-install-run[^>]*title="/);
+    assert.equal(/data-install-run[^>]*style=/.test(html), false);
+    assert.match(html, new RegExp(`title="${blocked.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:`));
+    assert.ok(blocked.actionLabel !== null);
+    assert.match(html, new RegExp(`data-install-action[^>]*>${blocked.actionLabel}<`));
+    assert.equal(/data-install-action[^>]*disabled/.test(html), false);
+  }
+
+  const open = buildInstallPlan("pdftotext", null, {
+    platform: "win32",
+    arch: "x64",
+    managers: ["winget"],
+    dataDir: "C:\\Hitchhiker\\tools",
+    browsersDir: "C:\\Cache\\ms-playwright",
+    workspaceDir: "C:\\guide",
+  });
+  assert.equal(open.canRun, true);
+  assert.equal(open.blocked, null);
+  const enabled = await renderDialogHtml(open);
+  assert.match(enabled, /data-install-run>Run these steps<\/button>/);
+  assert.equal(enabled.includes("disabled"), false);
+  assert.equal(enabled.includes("aria-disabled"), false);
+  assert.equal(enabled.includes("cursor: not-allowed"), false);
+  assert.match(enabled, /Visual C\+\+/);
 });

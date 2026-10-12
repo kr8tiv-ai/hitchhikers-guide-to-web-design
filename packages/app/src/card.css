@@ -535,11 +535,30 @@
   resize: none;
 }
 
+.hh-install__blocked {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-plate);
+  color: var(--color-ink);
+}
+
 .hh-install__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
+}
+
+.hh-install [data-install-run][data-blocked="true"],
+.hh-install [data-install-run][data-blocked="true"]:hover,
+.hh-install [data-install-run][data-blocked="true"]:disabled,
+.hh-install [data-install-run][data-blocked="true"]:disabled:hover,
+.hh-install [data-install-run][data-blocked="true"][aria-disabled="true"],
+.hh-install [data-install-run][data-blocked="true"][aria-disabled="true"]:hover {
+  cursor: default;
 }
 
 .hh-install .hh-btn {
