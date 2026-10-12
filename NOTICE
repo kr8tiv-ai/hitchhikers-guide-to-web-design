@@ -164,7 +164,8 @@ opentype.js 2.0.0
   Repository: https://github.com/opentypejs/opentype.js
   License: MIT
   Dev dependency of @hitchhiker/app. Used to outline the display face
-  into wordmark.svg. Not imported by the app at runtime.
+  into wordmark.svg, and by scripts/build-brand-assets.ts to outline
+  Literata on the social card. Not imported by the app at runtime.
   @hitchhiker/assets depends on the same pin at runtime for logo wordmarks.
   Version 2.0.0 loadSync only prints a deprecation line. The wordmark
   reads the font bytes and calls parse.

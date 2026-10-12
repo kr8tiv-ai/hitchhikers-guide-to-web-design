@@ -38,6 +38,7 @@ const FILES = [
   "docs/assets/social-card.png",
   "docs/assets/logo-lockup.png",
   "docs/brand.md",
+  "packages/app/scripts/stable-raster.ts",
 ] as const;
 
 const PNG_SIZES: Readonly<Record<string, { width: number; height: number }>> = {
@@ -214,6 +215,16 @@ function decodePng(buf: Buffer): Rgba {
 function pixelAt(image: Rgba, x: number, y: number): string {
   const index = (y * image.width + x) * 4;
   return `${image.pixels[index]},${image.pixels[index + 1]},${image.pixels[index + 2]},${image.pixels[index + 3]}`;
+}
+
+function countRgb(image: Rgba, x0: number, y0: number, x1: number, y1: number, rgb: string): number {
+  let count = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      if (pixelAt(image, x, y) === rgb) count += 1;
+    }
+  }
+  return count;
 }
 
 function icoSizes(buf: Buffer): number[] {
@@ -419,6 +430,27 @@ describe("desk identity", { concurrency: false }, () => {
       const size = pngSize(readFileSync(repoFile(rel)));
       assert.deepEqual(size, expected, rel);
     }
+    const cream = "243,235,221,255";
+    const ink = "28,22,18,255";
+    const rust = "142,47,26,255";
+    assert.equal(
+      sha256(path.join(publicDir, "social-card.png")),
+      sha256(path.join(docsAssets, "social-card.png")),
+      "public and docs social cards",
+    );
+    const socialCard = decodePng(readFileSync(path.join(publicDir, "social-card.png")));
+    assert.equal(pixelAt(socialCard, 0, 0), cream, "social card corner");
+    assert.equal(pixelAt(socialCard, 1199, 629), cream, "social card far corner");
+    assert.equal(countRgb(socialCard, 500, 360, 628, 368, rust), 128 * 8, "social card rust bar");
+    assert.equal(countRgb(socialCard, 490, 395, 1180, 445, ink), 4892, "social card Literata line");
+    assert.equal(countRgb(socialCard, 500, 180, 1100, 340, ink), 19267, "social card wordmark");
+    assert.equal(countRgb(socialCard, 88, 135, 450, 500, ink), 29338, "social card book ink");
+    assert.equal(countRgb(socialCard, 88, 135, 450, 500, rust), 7606, "social card book rust");
+    const lockupPng = decodePng(readFileSync(path.join(docsAssets, "logo-lockup.png")));
+    assert.equal(pixelAt(lockupPng, 0, 0), cream, "lockup corner");
+    assert.equal(countRgb(lockupPng, 24, 24, 152, 152, ink), 3840, "lockup mark ink");
+    assert.equal(countRgb(lockupPng, 24, 24, 152, 152, rust), 1024, "lockup mark rust");
+    assert.equal(countRgb(lockupPng, 180, 40, 860, 140, ink), 31261, "lockup wordmark");
     const lockupSvg = readFileSync(path.join(publicDir, "brand", "logo-lockup.svg"), "utf8");
     const lockupWidth = Number(/width="(\d+)"/.exec(lockupSvg)?.[1]);
     const lockupHeight = Number(/height="(\d+)"/.exec(lockupSvg)?.[1]);

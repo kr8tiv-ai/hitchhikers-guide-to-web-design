@@ -18,4 +18,4 @@ Contrast, computed the WCAG way:
 
 Clear space is one quarter of the mark: 16 units on the 64 grid, when the mark sits on another field. On an icon tile the paper is the field. Maskable icons keep that tile inside the central 80 percent, on a full-bleed rust ground.
 
-Regenerate the PNG files, the ICO, the lockup, and the social card with `pnpm --filter @hitchhiker/app run brand-assets`. The script reads the SVG mark and the outlined wordmark, then screenshots them in the repo's Chromium. It does not call an external service.
+Regenerate the PNG files, the ICO, the lockup, and the social card with `pnpm --filter @hitchhiker/app run brand-assets`. The script reads the SVG mark and the outlined wordmark. Icon tiles are screenshots in the repo's Chromium. The lockup and the social card are drawn from those outlines, including Literata's glyph outlines, so a second run keeps the same PNG bytes on Windows, macOS, and Linux. It does not call an external service.
