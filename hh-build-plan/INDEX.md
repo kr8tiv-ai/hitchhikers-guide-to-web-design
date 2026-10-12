@@ -211,3 +211,4 @@ Plan v3 (2026-10-06): steward review applied, 22 new prompts merged in, re-index
 Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh. Single-file or docs-only prompts use medium or high.
 | 204 | So Long and Thanks for All the Fish | Forty-Two | Fix brand-assets rewrite so social-card.png stays byte-stable on Linux and macOS CI | Heart of Gold | xhigh |
 | 205 | So Long and Thanks for All the Fish | Forty-Two | Fix attach and draft-persist so a failed upload or page change keeps the typed draft | Heart of Gold | xhigh |
+| 206 | So Long and Thanks for All the Fish | Forty-Two | Fix dictation so a revised interim never re-appends the whole sentence (fixed voice base) | Heart of Gold | xhigh |
