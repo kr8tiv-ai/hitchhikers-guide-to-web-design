@@ -201,14 +201,22 @@ test("taste cards are two Godly and two Awwwards, and a shown url is excluded", 
     limit: 4,
     exclude: first.map((card) => card.url),
   });
-  assert.equal(second.length, 0);
+  assert.equal(second.length, 1);
+  assert.equal(second[0]?.source, "other");
+  assert.equal(second.some((card) => first.some((item) => item.url === card.url)), false);
 });
 
-test("the curated pack does not backfill source other when Godly rows are absent", () => {
-  const picked = referenceCards(loadGallery(defaultGalleryFile()), { limit: 4, exclude: [] });
-  assert.equal(picked.filter((card) => card.source === "godly").length, 0);
-  assert.ok(picked.length > 0 && picked.length <= 2);
-  assert.ok(picked.every((card) => card.source === "awwwards"));
+test("the curated pack deals four cards and caps the lead sources", () => {
+  const pack = loadGallery(defaultGalleryFile());
+  const picked = referenceCards(pack, { limit: 4, exclude: [] });
+  assert.equal(picked.length, 4);
+  assert.ok(picked.filter((card) => card.source === "godly" || card.source === "recent").length <= 2);
+  assert.ok(picked.filter((card) => card.source === "awwwards").length <= 2);
+  const lando = pack.find((card) => card.name === "Lando Norris");
+  assert.ok(lando);
+  const without = referenceCards(pack, { limit: 4, exclude: [lando.url] });
+  assert.equal(without.some((card) => card.url === lando.url), false);
+  assert.equal(without.length, 4);
 });
 
 test("express writes ASSUMED for ids the mode does not ask", async () => {

@@ -206,13 +206,33 @@ export interface Facts {
  * Gallery card shape used by Suggest.
  * The engine cannot import the crawler package, so this mirrors that entry.
  */
+export interface GalleryPalette {
+  note: string;
+  hex: string[];
+}
+
 export interface GalleryEntry {
   industry: string;
   styleWorld: string;
   motionLevel: number;
   name: string;
   url: string;
-  source: "awwwards" | "godly" | "other";
+  source: "awwwards" | "recent" | "godly" | "gsap-showcase" | "aura" | "other";
   award: string;
   noted: string;
+  /** Optional on load so older packs and fixture files still open. */
+  id?: string;
+  title?: string;
+  sourceName?: string;
+  sourcePage?: string | null;
+  family?: string;
+  styleTags?: string[];
+  why?: string;
+  palette?: GalleryPalette;
+  typography?: string;
+  borrow?: string;
+  attribution?: string;
+  verified?: boolean;
+  verificationNote?: string;
+  checked?: string;
 }

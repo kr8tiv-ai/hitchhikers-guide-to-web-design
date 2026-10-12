@@ -2,6 +2,16 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { USER_AGENT } from "./crawl.ts";
+import {
+  isGalleryFamily,
+  isGallerySource,
+  isGalleryStyleWorld,
+  selectReferenceCards,
+  styleWorldForFamily,
+  type GalleryFamily,
+  type GallerySource,
+  type GalleryStyleWorld,
+} from "./gallery-pick.ts";
 
 /**
  * Offline shortlist for Suggest. Resolved from this file so Windows, macOS,
@@ -25,21 +35,7 @@ export const GALLERY_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Allow-listed GETs abort at this limit. */
 export const GALLERY_FETCH_TIMEOUT_MS = 10_000;
 
-const PER_SOURCE_CAP = 2;
-
-const STYLE_WORLDS = [
-  "editorial",
-  "3d-world",
-  "scroll-film",
-  "brutalist",
-  "minimal-luxury",
-  "playful",
-] as const;
-
-const SOURCES = ["awwwards", "godly", "other"] as const;
-
-export type GalleryStyleWorld = (typeof STYLE_WORLDS)[number];
-export type GallerySource = (typeof SOURCES)[number];
+export type { GalleryStyleWorld, GallerySource };
 
 export interface GalleryEntry {
   industry: string;
@@ -50,6 +46,20 @@ export interface GalleryEntry {
   source: GallerySource;
   award: string;
   noted: string;
+  id?: string;
+  title?: string;
+  sourceName?: string;
+  sourcePage?: string | null;
+  family?: GalleryFamily;
+  styleTags?: string[];
+  why?: string;
+  palette?: { note: string; hex: string[] };
+  typography?: string;
+  borrow?: string;
+  attribution?: string;
+  verified?: boolean;
+  verificationNote?: string;
+  checked?: string;
 }
 
 export interface GalleryCache {
@@ -60,8 +70,12 @@ export interface GalleryCache {
 export interface SuggestQuery {
   industry?: string;
   styleWorld?: string;
+  family?: string;
   exclude?: readonly string[];
   limit: number;
+  seed?: string;
+  round?: number;
+  lovedUrls?: readonly string[];
 }
 
 export interface RefreshOptions {
@@ -74,17 +88,6 @@ export interface RefreshOptions {
 export interface RefreshResult {
   status: "skipped" | "ok";
   reason?: string;
-}
-
-const styleWorldSet: ReadonlySet<string> = new Set(STYLE_WORLDS);
-const sourceSet: ReadonlySet<string> = new Set(SOURCES);
-
-function isStyleWorld(value: string): value is GalleryStyleWorld {
-  return styleWorldSet.has(value);
-}
-
-function isSource(value: string): value is GallerySource {
-  return sourceSet.has(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,49 +131,62 @@ function parseEntry(value: unknown, index: number): GalleryEntry {
   if (!isRecord(value)) {
     throw new Error(`Gallery entry ${index} is not an object.`);
   }
+  const label = entryLabel(index, value);
   const name = readString(value, ["name"]);
   const url = readString(value, ["url"]);
   const source = readString(value, ["source"]);
   const industry = readString(value, ["industry"]);
-  const styleWorld = readString(value, ["styleWorld", "style_world"]);
+  const styleRaw = readString(value, ["styleWorld", "style_world"]);
   const award = readString(value, ["award"]);
   const noted = readString(value, ["noted"]);
   const motionRaw = value.motionLevel ?? value.motion_level;
+  const familyRaw = readString(value, ["family"]);
 
-  if (name === null || name.length === 0) throw new Error(`Gallery entry ${index} needs a name.`);
-  if (url === null || url.length === 0) throw new Error(`Gallery entry ${index} needs a url.`);
-  assertHttpUrl(url, `Gallery entry ${index} url`);
-  if (source === null || !isSource(source)) {
-    throw new Error(`Gallery entry ${index} has a source this pack does not use.`);
+  if (name === null || name.length === 0) throw new Error(`${label} needs a name.`);
+  if (url === null || url.length === 0) throw new Error(`${label} needs a url.`);
+  assertHttpUrl(url, `${label} url`);
+  if (source === null || !isGallerySource(source)) {
+    throw new Error(`${label} has a source this pack does not use.`);
   }
   if (industry === null || industry.length === 0) {
-    throw new Error(`Gallery entry ${index} needs an industry.`);
+    throw new Error(`${label} needs an industry.`);
   }
-  if (styleWorld === null || !isStyleWorld(styleWorld)) {
-    throw new Error(`Gallery entry ${index} has a style world this pack does not use.`);
+  if (familyRaw !== null && !isGalleryFamily(familyRaw)) {
+    throw new Error(`${label} has a family this pack does not use.`);
+  }
+  let styleWorld = styleRaw;
+  if (familyRaw !== null) {
+    const expected = styleWorldForFamily(familyRaw);
+    if (styleWorld === null) styleWorld = expected;
+    else if (styleWorld !== expected) {
+      throw new Error(`${label} style world does not match its family.`);
+    }
+  }
+  if (styleWorld === null || !isGalleryStyleWorld(styleWorld)) {
+    throw new Error(`${label} has a style world this pack does not use.`);
   }
   if (typeof motionRaw !== "number" || !Number.isInteger(motionRaw) || motionRaw < 1 || motionRaw > 10) {
-    throw new Error(`Gallery entry ${index} needs a motion level from 1 to 10.`);
+    throw new Error(`${label} needs a motion level from 1 to 10.`);
   }
-  if (award === null || award.length === 0) throw new Error(`Gallery entry ${index} needs an award.`);
+  if (award === null || award.length === 0) throw new Error(`${label} needs an award.`);
   assertAward(award);
   if (noted === null || !noted.startsWith("Look at")) {
-    throw new Error(`Gallery entry ${index} needs a one-line Look at note.`);
+    throw new Error(`${label} needs a one-line Look at note.`);
   }
   if (noted.includes("\n") || noted.includes("!")) {
-    throw new Error(`Gallery entry ${index} note must be one line, with no exclamation mark.`);
+    throw new Error(`${label} note must be one line, with no exclamation mark.`);
   }
 
   const year = value.year;
   if (year !== undefined && (typeof year !== "number" || !Number.isInteger(year))) {
-    throw new Error(`Gallery entry ${index} year must be an integer when present.`);
+    throw new Error(`${label} year must be an integer when present.`);
   }
   const date = value.date;
   if (date !== undefined && (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
-    throw new Error(`Gallery entry ${index} date must be YYYY-MM-DD when present.`);
+    throw new Error(`${label} date must be YYYY-MM-DD when present.`);
   }
 
-  return {
+  const entry: GalleryEntry = {
     name,
     url,
     source,
@@ -180,6 +196,20 @@ function parseEntry(value: unknown, index: number): GalleryEntry {
     award,
     noted,
   };
+  if (familyRaw !== null) entry.family = familyRaw;
+  if (Object.hasOwn(value, "verified")) {
+    if (typeof value.verified !== "boolean") throw new Error(`${label} verified must be a boolean.`);
+    entry.verified = value.verified;
+  }
+  const id = typeof value.id === "string" && value.id.trim() !== "" ? value.id.trim() : undefined;
+  if (id !== undefined) entry.id = id;
+  return entry;
+}
+
+function entryLabel(index: number, raw: Record<string, unknown>): string {
+  const id = raw.id;
+  if (typeof id === "string" && id.trim() !== "") return `Gallery entry ${index} (${id.trim()})`;
+  return `Gallery entry ${index}`;
 }
 
 function parseEntries(value: unknown): GalleryEntry[] {
@@ -207,42 +237,12 @@ export function loadCurated(file: string): GalleryEntry[] {
 }
 
 /**
- * Up to two Godly and two Awwwards rows for the query, and never more than
- * limit. A provided industry and a provided style world both have to match.
- * Source "other" stays in the pack for loadCurated and is not backfilled
- * into this round. The input array is not reordered or resized.
+ * Up to two Recent or legacy Godly rows and two Awwwards rows, then backfill
+ * until the round has four. The input array is not reordered or resized.
+ * This is the crawler copy of the engine picker.
  */
 export function suggestReferences(entries: readonly GalleryEntry[], q: SuggestQuery): GalleryEntry[] {
-  if (!Number.isFinite(q.limit) || q.limit <= 0) return [];
-  const excluded = new Set(q.exclude ?? []);
-  const godly: GalleryEntry[] = [];
-  const awwwards: GalleryEntry[] = [];
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    if (seen.has(entry.url) || excluded.has(entry.url)) continue;
-    if (q.industry !== undefined && entry.industry !== q.industry) continue;
-    if (q.styleWorld !== undefined && entry.styleWorld !== q.styleWorld) continue;
-    seen.add(entry.url);
-    if (entry.source === "godly") godly.push(entry);
-    else if (entry.source === "awwwards") awwwards.push(entry);
-  }
-
-  const picked: GalleryEntry[] = [];
-  let godlyIndex = 0;
-  let awwwardsIndex = 0;
-  for (let round = 0; round < PER_SOURCE_CAP; round += 1) {
-    const godlyEntry = godly[godlyIndex];
-    if (godlyEntry !== undefined && picked.length < q.limit) {
-      picked.push(godlyEntry);
-      godlyIndex += 1;
-    }
-    const awwwardsEntry = awwwards[awwwardsIndex];
-    if (awwwardsEntry !== undefined && picked.length < q.limit) {
-      picked.push(awwwardsEntry);
-      awwwardsIndex += 1;
-    }
-  }
-  return picked;
+  return selectReferenceCards(entries, q);
 }
 
 /**

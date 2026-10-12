@@ -113,7 +113,14 @@ importers:
 
   packages/grok-plugin: {}
 
-  packages/knowledge: {}
+  packages/knowledge:
+    dependencies:
+      '@hitchhiker/crawler':
+        specifier: workspace:*
+        version: link:../crawler
+      '@hitchhiker/engine':
+        specifier: workspace:*
+        version: link:../engine
 
   packages/orchestrator:
     dependencies:

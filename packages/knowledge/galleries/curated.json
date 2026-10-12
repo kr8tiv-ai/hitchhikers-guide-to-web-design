@@ -1,124 +1,4508 @@
 [
   {
+    "id": "lando-norris",
+    "title": "Depth instead of a second pitch",
     "name": "Lando Norris",
     "url": "https://landonorris.com/",
     "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/lando-norris",
     "industry": "personal",
-    "style_world": "3d-world",
-    "motion_level": 8,
-    "year": 2025,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark",
+      "gsap"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#101400",
+        "#D2FF00",
+        "#000000"
+      ]
+    },
+    "typography": "The page names Brier among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "SOTY 2025",
-    "noted": "Look at how OFF+BRAND lets one signature moment organize a personal site. Taken from the research record, not a live check."
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at how OFF+BRAND lets one signature moment organize a personal site. Taken from the research record, not a live check.",
+    "year": 2025
   },
   {
+    "id": "cominvi",
+    "title": "Type as the only picture",
     "name": "CoMinVi",
     "url": "https://www.cominvi.com.mx/",
     "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/cominvi",
     "industry": "other",
-    "style_world": "editorial",
-    "motion_level": 5,
-    "date": "2026-09-30",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "A narrow measure and a wide margin let the writing stay the main event on the page.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#151515",
+        "#EBF0ED"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
     "award": "SOTD",
-    "noted": "Look at a Site of the Day as one day's award, kept apart from Site of the Year. The record date is 2026-09-30, and this pack does not claim the page is unchanged."
+    "motionLevel": 5,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at a Site of the Day as one day's award, kept apart from the annual prize. The record date is 2026-09-30, and this pack does not claim the page is unchanged.",
+    "date": "2026-09-30"
   },
   {
+    "id": "igloo-inc",
+    "title": "A room you move through",
     "name": "Igloo Inc",
     "url": "https://www.igloo.inc/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/igloo-inc",
     "industry": "agency",
-    "style_world": "3d-world",
-    "motion_level": 9,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "The page treats the viewport as a room and lets one model hold the attention.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#B6BAC5",
+        "#383E4E"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 9,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a pinned scroll can carry one story without adding a second idea."
   },
   {
+    "id": "lusion",
+    "title": "One model holds the page",
     "name": "Lusion",
     "url": "https://lusion.co/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/lusion-v3",
     "industry": "agency",
-    "style_world": "3d-world",
-    "motion_level": 9,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#1A1411",
+        "#FFEDD7",
+        "#181818"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 9,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a studio can make the work itself the way you move through the site."
   },
   {
+    "id": "bruno-simon",
+    "title": "Depth instead of a second pitch",
     "name": "Bruno Simon",
     "url": "https://bruno-simon.com/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/bruno-simon-portfolio",
     "industry": "portfolio",
-    "style_world": "3d-world",
-    "motion_level": 9,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "The page treats the viewport as a room and lets one model hold the attention.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#FFCECA"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 9,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a portfolio can be a place the visitor moves through, with the person as the guide."
   },
   {
+    "id": "opal-tadpole",
+    "title": "Depth instead of a second pitch",
     "name": "Opal Tadpole",
     "url": "https://www.opalcamera.com/opal-tadpole",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/opal-tadpole",
     "industry": "e-commerce",
-    "style_world": "3d-world",
-    "motion_level": 8,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#FFDB01",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how one product gesture can explain the object, so the page does not need a second pitch."
   },
   {
+    "id": "pangram-pangram",
+    "title": "Type as the only picture",
     "name": "Pangram Pangram",
     "url": "https://pangrampangram.com/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/pangram-pangram-foundry",
     "industry": "other",
-    "style_world": "editorial",
-    "motion_level": 4,
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "Columns and a quiet rule do the hierarchy, so the page never needs a loud badge.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#959595",
+        "#A4A4A4",
+        "#FF0000"
+      ]
+    },
+    "typography": "The page names Neue Montreal among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how type can do the job of an image, and the rest of the page can stay quiet."
   },
   {
+    "id": "simply-chocolate",
+    "title": "Play that still shows the product",
     "name": "Simply Chocolate",
     "url": "https://simplychocolate.dk",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/simply-chocolate",
     "industry": "food-drink",
-    "style_world": "playful",
-    "motion_level": 6,
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "A bounce in the layout keeps the offer friendly while the product stays easy to find.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#1C1C1C",
+        "#2D8F4E",
+        "#FFFFFF",
+        "#1E1E1E",
+        "#000000"
+      ]
+    },
+    "typography": "The page names Simply Chocolate among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a food shop can play along the scroll and still keep the product as the point."
   },
   {
+    "id": "frans-hals-museum",
+    "title": "The work hosted like a room",
     "name": "Frans Hals Museum",
     "url": "https://www.franshalsmuseum.nl/en/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/franshals-museum",
     "industry": "other",
-    "style_world": "editorial",
-    "motion_level": 4,
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The collection leads and the type hosts the room, so the visit feels like a gallery not a brochure.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#7D8688",
+        "#FAFAFA",
+        "#B9C089",
+        "#001317",
+        "#2CFF70"
+      ]
+    },
+    "typography": "The page names Rubik among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a museum visit can lead with the collection, and let type host the room."
   },
   {
-    "name": "Messenger",
-    "url": "https://messenger.abeto.co",
-    "source": "other",
-    "industry": "other",
-    "style_world": "3d-world",
-    "motion_level": 9,
-    "award": "none",
-    "noted": "Look at how a small world can explain a service by letting someone move through it."
-  },
-  {
+    "id": "synchronized-studio",
+    "title": "Margins doing the hierarchy",
     "name": "Synchronized Studio",
     "url": "https://synchronized.studio/",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/synchronized-studio",
     "industry": "agency",
-    "style_world": "editorial",
-    "motion_level": 4,
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy",
+      "gsap"
+    ],
+    "why": "A narrow measure and a wide margin let the writing stay the main event on the page.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#CFCFCF",
+        "#84918D",
+        "#AA918A",
+        "#9393A0"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a studio can let letters carry the motion, and keep every other element spare."
   },
   {
+    "id": "active-theory",
+    "title": "Depth instead of a second pitch",
     "name": "Active Theory",
     "url": "https://activetheory.net",
     "source": "other",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/active-theory-v4",
     "industry": "agency",
-    "style_world": "3d-world",
-    "motion_level": 9,
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "The page treats the viewport as a room and lets one model hold the attention.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#333333",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "The page names nbarchitekt among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
     "award": "none",
+    "motionLevel": 9,
+    "verified": true,
+    "checked": "2026-10-12",
     "noted": "Look at how a body of work can still offer one path through it."
+  },
+  {
+    "id": "maria-vasilyeva-portfolio",
+    "title": "Margins doing the hierarchy",
+    "name": "Maria Vasilyeva Portfolio",
+    "url": "https://www.mariavasilyeva.com/about",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/maria-vasilyeva-portfolio",
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "Columns and a quiet rule do the hierarchy, so the page never needs a loud badge.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F9F9F9",
+        "#131313",
+        "#626262",
+        "#E9E9E9",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "The page names synt among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "olha-uzhykova-personal-website",
+    "title": "A column that holds the writing",
+    "name": "Olha Uzhykova Personal Website",
+    "url": "https://olhauzhykova.com/itg.html",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/olha-uzhykova-personal-website-1",
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#5BBAD5",
+        "#DA532C",
+        "#B2C797"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "savoirfaire",
+    "title": "Type as the only picture",
+    "name": "SavoirFaire©",
+    "url": "https://www.savoirfaire.nyc/about",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/savoirfaire-c",
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy",
+      "webgl"
+    ],
+    "why": "Columns and a quiet rule do the hierarchy, so the page never needs a loud badge.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#CDFD50",
+        "#116699",
+        "#000000",
+        "#899090",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "The page names haas-regular among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "twks",
+    "title": "A column that holds the writing",
+    "name": "twks",
+    "url": "https://twks.ch/projets/geneve-tourisme",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/twks-1",
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "Columns and a quiet rule do the hierarchy, so the page never needs a loud badge.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#101010",
+        "#003399",
+        "#0077FF",
+        "#F8F8F8"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "aeon",
+    "title": "A column that holds the writing",
+    "name": "Aeon",
+    "url": "https://aeon.co/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#9D120D",
+        "#9D1D20",
+        "#0C776D",
+        "#035A6D",
+        "#940B52"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "kinfolk",
+    "title": "Margins doing the hierarchy",
+    "name": "Kinfolk",
+    "url": "https://www.kinfolk.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#404040",
+        "#003388",
+        "#000000",
+        "#DBDED5"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "monocle",
+    "title": "A column that holds the writing",
+    "name": "Monocle",
+    "url": "https://monocle.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#003388",
+        "#FFFFFF",
+        "#999999",
+        "#000000",
+        "#CCCCCC"
+      ]
+    },
+    "typography": "The page names var(--ff-secondary) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "stripe-press",
+    "title": "Type as the only picture",
+    "name": "Stripe Press",
+    "url": "https://press.stripe.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#635BFF",
+        "#DBC895",
+        "#292432",
+        "#18185E"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "the-cut",
+    "title": "Type as the only picture",
+    "name": "The Cut",
+    "url": "https://www.thecut.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FF5656",
+        "#DB2800",
+        "#000000",
+        "#F7F7F7",
+        "#FFEEEA"
+      ]
+    },
+    "typography": "The page names LibreFranklin among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "the-new-yorker",
+    "title": "A column that holds the writing",
+    "name": "The New Yorker",
+    "url": "https://www.newyorker.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "Columns and a quiet rule do the hierarchy, so the page never needs a loud badge.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#0066CC",
+        "#E0C04E",
+        "#FFFFFF",
+        "#0066FF",
+        "#000000"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "the-pudding",
+    "title": "Margins doing the hierarchy",
+    "name": "The Pudding",
+    "url": "https://pudding.cool/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "editorial",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "A narrow measure and a wide margin let the writing stay the main event on the page.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#9A4CAD",
+        "#222255",
+        "#222244",
+        "#F693FF",
+        "#222233"
+      ]
+    },
+    "typography": "Quiet headlines sit over a readable body, with the column doing the scale.",
+    "borrow": "Borrow the idea of a narrow column and a margin that does the hierarchy.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "brutalism",
+    "title": "Slabs with the structure showing",
+    "name": "Brutalism",
+    "url": "https://storyofbrutalism.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/brutalism",
+    "industry": "other",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "Uneven slabs and a harsh crop keep the page feeling built, not decorated.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#FFFFFF",
+        "#D9D9D9",
+        "#EB504E",
+        "#999999"
+      ]
+    },
+    "typography": "The page names Inter-Kharkiv among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "are-na",
+    "title": "A grid that refuses polish",
+    "name": "Are.na",
+    "url": "https://www.are.na/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "The page uses blunt blocks and tight type so the grid itself is the argument.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#F7F7F7",
+        "#EDEDED",
+        "#DEDEDE",
+        "#999999"
+      ]
+    },
+    "typography": "The page names var(--fonts-sans) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "brutalist-websites",
+    "title": "A grid that refuses polish",
+    "name": "Brutalist Websites",
+    "url": "https://brutalistwebsites.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "Uneven slabs and a harsh crop keep the page feeling built, not decorated.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#EEEEEE"
+      ]
+    },
+    "typography": "Tight grotesk headlines sit in hard blocks with almost no secondary style.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "gumroad",
+    "title": "Hard blocks and raw type",
+    "name": "Gumroad",
+    "url": "https://gumroad.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "The page uses blunt blocks and tight type so the grid itself is the argument.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#242423",
+        "#FF90E8",
+        "#000000",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "Tight grotesk headlines sit in hard blocks with almost no secondary style.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "hoverstat-es",
+    "title": "A grid that refuses polish",
+    "name": "Hoverstat.es",
+    "url": "https://www.hoverstat.es/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "Hard slabs and raw type put the structure on the surface instead of hiding it in polish.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#711BFF",
+        "#F1F1F1",
+        "#000000",
+        "#D6D6D6",
+        "#333333"
+      ]
+    },
+    "typography": "The page names Fakt among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "poolsuite",
+    "title": "Slabs with the structure showing",
+    "name": "Poolsuite",
+    "url": "https://poolsuite.net/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "Hard slabs and raw type put the structure on the surface instead of hiding it in polish.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F9EFE4",
+        "#F6D5D5"
+      ]
+    },
+    "typography": "Tight grotesk headlines sit in hard blocks with almost no secondary style.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "balenciaga",
+    "title": "Slabs with the structure showing",
+    "name": "Balenciaga",
+    "url": "https://www.balenciaga.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "fashion",
+    "family": "brutalist",
+    "styleWorld": "brutalist",
+    "styleTags": [
+      "grotesk",
+      "dense",
+      "grid"
+    ],
+    "why": "The page uses blunt blocks and tight type so the grid itself is the argument.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "The page names BB-CondBold among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the grid as slabs instead of hiding it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "jarcos-work",
+    "title": "Depth instead of a second pitch",
+    "name": "jarcos.work",
+    "url": "https://jarcos.work/",
+    "source": "other",
+    "sourceName": "Minimal Gallery",
+    "sourcePage": "https://minimal.gallery/",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "A spatial scene carries the idea, so the visitor learns the work by moving through it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#0099FF",
+        "#111111",
+        "#808080"
+      ]
+    },
+    "typography": "The page names Inter Display among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Minimal Gallery.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the structure of the page, and leave its assets where they are."
+  },
+  {
+    "id": "redcollar-co",
+    "title": "A room you move through",
+    "name": "redcollar.co",
+    "url": "https://redcollar.co/",
+    "source": "other",
+    "sourceName": "CSS Design Awards",
+    "sourcePage": "https://www.cssdesignawards.com/",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "A spatial scene carries the idea, so the visitor learns the work by moving through it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#E3FDFD",
+        "#0D0C0C",
+        "#F51B1B",
+        "#FAFAFA",
+        "#666666"
+      ]
+    },
+    "typography": "The page names RedCollar among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on CSS Design Awards.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the structure of the page, and leave its assets where they are."
+  },
+  {
+    "id": "yeahright-co",
+    "title": "A room you move through",
+    "name": "yeahright.co",
+    "url": "https://yeahright.co/",
+    "source": "other",
+    "sourceName": "CSS Design Awards",
+    "sourcePage": "https://www.cssdesignawards.com/",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#071919",
+        "#1A120D",
+        "#FFBE7A",
+        "#C9F7B2",
+        "#1C0E0A"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on CSS Design Awards.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the structure of the page, and leave its assets where they are."
+  },
+  {
+    "id": "colonia-zacamil",
+    "title": "A room you move through",
+    "name": "Colonia Zacamil",
+    "url": "https://coloniazacamil.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/colonia-zacamil",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "A spatial scene carries the idea, so the visitor learns the work by moving through it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#EBE6E0",
+        "#FFFFFF",
+        "#888888",
+        "#F1F1F1",
+        "#AAAAAA"
+      ]
+    },
+    "typography": "The page names Roboto Mono among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "edolus",
+    "title": "One model holds the page",
+    "name": "EDOLUS",
+    "url": "https://edolus.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/edolus",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#000000"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "lidar-drone-scanning",
+    "title": "One model holds the page",
+    "name": "Lidar Drone Scanning",
+    "url": "https://drone.riotters.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/lidar-drone-scanning",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "Depth and a single object do the explaining, and the rest of the page stays out of the way.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FDFDFD",
+        "#ECEDEE",
+        "#24363F",
+        "#C7CCCB",
+        "#DDE5E9"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "nick-ho",
+    "title": "Depth instead of a second pitch",
+    "name": "Nick Ho",
+    "url": "https://nickho-motorsports.nl/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/nick-ho",
+    "industry": "other",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "The page treats the viewport as a room and lets one model hold the attention.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FED60A",
+        "#E5E5E5"
+      ]
+    },
+    "typography": "Short labels sit over the scene, and the type stays smaller than the model.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "immersive-garden",
+    "title": "A room you move through",
+    "name": "Immersive Garden",
+    "url": "https://immersive-g.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "agency",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "The page treats the viewport as a room and lets one model hold the attention.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#FFFF00",
+        "#000000",
+        "#030303",
+        "#E8E8E8"
+      ]
+    },
+    "typography": "The page names PSTimes among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "locomotive",
+    "title": "A room you move through",
+    "name": "Locomotive",
+    "url": "https://locomotive.ca/en",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "agency",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark"
+    ],
+    "why": "A spatial scene carries the idea, so the visitor learns the work by moving through it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#DA532C",
+        "#CCCCCC",
+        "#DA382E"
+      ]
+    },
+    "typography": "The page names ff(primary) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "makemepulse",
+    "title": "One model holds the page",
+    "name": "Makemepulse",
+    "url": "https://www.makemepulse.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "agency",
+    "family": "3d-webgl",
+    "styleWorld": "3d-world",
+    "styleTags": [
+      "webgl",
+      "product-3d",
+      "dark",
+      "gsap"
+    ],
+    "why": "A spatial scene carries the idea, so the visitor learns the work by moving through it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#C4C4C4",
+        "#A0AEC0",
+        "#0F0F0F",
+        "#F2F2F2"
+      ]
+    },
+    "typography": "The page names SFMono-Regular among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of one spatial object that explains the offer by being moved.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "guillaume-colombel",
+    "title": "Pinned moments along the page",
+    "name": "Guillaume Colombel",
+    "url": "https://guillaumecolombel.fr/",
+    "source": "gsap-showcase",
+    "sourceName": "GSAP Showcase",
+    "sourcePage": "https://gsap.com/showcase/",
+    "industry": "portfolio",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type",
+      "webgl"
+    ],
+    "why": "The page pins a moment and lets the scroll finish the sentence the headline started.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#050404",
+        "#F0EBE2",
+        "#FFFFFF",
+        "#FFE8CD",
+        "#FFF1E0"
+      ]
+    },
+    "typography": "The page names Neue Montreal among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on GSAP Showcase.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "ravi-klaassens",
+    "title": "Scroll that finishes the sentence",
+    "name": "Ravi Klaassens",
+    "url": "https://www.raviklaassens.com/",
+    "source": "gsap-showcase",
+    "sourceName": "GSAP Showcase",
+    "sourcePage": "https://gsap.com/showcase/",
+    "industry": "portfolio",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on GSAP Showcase.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "jesper-landberg",
+    "title": "One beat then the next",
+    "name": "Jesper Landberg",
+    "url": "https://jesperlandberg.com/",
+    "source": "gsap-showcase",
+    "sourceName": "GSAP Showcase",
+    "sourcePage": "https://gsap.com/showcase/",
+    "industry": "portfolio",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type",
+      "webgl"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#EEEEEE",
+        "#D9A441",
+        "#000000",
+        "#3B82F6"
+      ]
+    },
+    "typography": "The page names sans among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on GSAP Showcase.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "david-lubofsky",
+    "title": "One beat then the next",
+    "name": "David Lubofsky",
+    "url": "https://www.davidlubofsky.com/",
+    "source": "gsap-showcase",
+    "sourceName": "GSAP Showcase",
+    "sourcePage": "https://gsap.com/showcase/",
+    "industry": "portfolio",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#A1A1AA",
+        "#161617",
+        "#FFFFFF",
+        "#FFD600",
+        "#000000"
+      ]
+    },
+    "typography": "The page names pleasure among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on GSAP Showcase.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "aspen-search",
+    "title": "Pinned moments along the page",
+    "name": "Aspen Search",
+    "url": "https://www.aspensearch.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/aspen-search",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#004B87",
+        "#009AA6",
+        "#08225A"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "bleibtgleich-26",
+    "title": "Pinned moments along the page",
+    "name": "bleibtgleich'26",
+    "url": "https://bleibtgleich.dev/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/bleibtgleich26",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type",
+      "webgl"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "boc-studio",
+    "title": "Scroll that finishes the sentence",
+    "name": "Boc.Studio",
+    "url": "https://boc.studio/work",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/boc-studio",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#FF4421"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "butter",
+    "title": "Scroll that finishes the sentence",
+    "name": "Butter",
+    "url": "https://www.butter.video/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/butter",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#0F0F0F",
+        "#EBEBEB",
+        "#3C3C3C",
+        "#FAFAFA"
+      ]
+    },
+    "typography": "The page names DieGrotesk among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "chungi-folio",
+    "title": "One beat then the next",
+    "name": "Chungi Folio",
+    "url": "https://www.chungiyoo.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/chungi-folio",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000105",
+        "#000000",
+        "#D73234",
+        "#FFE699",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "gil-huybrecht",
+    "title": "Scroll that finishes the sentence",
+    "name": "Gil Huybrecht",
+    "url": "https://gilhuybrecht.com/gallery/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/gil-huybrecht",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#9CA3AF",
+        "#000000",
+        "#FFE81F",
+        "#BA996C"
+      ]
+    },
+    "typography": "The page names sans among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "juan-mora-romero",
+    "title": "Scroll that finishes the sentence",
+    "name": "Juan Mora Romero",
+    "url": "https://www.juanmoraromero.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/juan-mora-romero",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#C4452F",
+        "#2F7D4F",
+        "#C98A2B",
+        "#3A52A8",
+        "#1F8A93"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "kode-sports-club",
+    "title": "One beat then the next",
+    "name": "Kode Sports Club",
+    "url": "https://www.kodeclubs.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/kode",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type",
+      "webgl"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#333333",
+        "#F50359",
+        "#1C228C"
+      ]
+    },
+    "typography": "The page names Antique Olive among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "koox",
+    "title": "Pinned moments along the page",
+    "name": "koox",
+    "url": "https://koox.co.uk/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/koox",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#E95144",
+        "#6B1229",
+        "#000000",
+        "#787878",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "The page names Helvetica among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "l-i-s-a",
+    "title": "Pinned moments along the page",
+    "name": "L.I.S.A.",
+    "url": "https://lisa.locomotive.ca/en",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/l-i-s-a",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "The page pins a moment and lets the scroll finish the sentence the headline started.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#DA532C",
+        "#CCCCCC",
+        "#DA382E"
+      ]
+    },
+    "typography": "The page names ff(primary) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "lxl-creative",
+    "title": "One beat then the next",
+    "name": "LxL Creative",
+    "url": "https://www.lxlcreative.co.uk/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/lxl-creative",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "The page pins a moment and lets the scroll finish the sentence the headline started.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#FF5121",
+        "#27201D"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "ma",
+    "title": "Scroll that finishes the sentence",
+    "name": "MA",
+    "url": "https://ch.maswitzerland.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/ma",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "The page pins a moment and lets the scroll finish the sentence the headline started.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FCFCFC",
+        "#E4F6FF",
+        "#DBE9E0",
+        "#020912",
+        "#FFDFB8"
+      ]
+    },
+    "typography": "The page names Cabin among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "meer-mohsin",
+    "title": "One beat then the next",
+    "name": "MEER MOHSIN",
+    "url": "https://www.meermohsin.me/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/meer-mohsin",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type",
+      "webgl"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#0D0D0D",
+        "#E6E6E6",
+        "#990000",
+        "#E73C37",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "noho",
+    "title": "One beat then the next",
+    "name": "Noho",
+    "url": "https://noho.ink/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/noho",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#A0B2D2",
+        "#BA703E",
+        "#FF5A33",
+        "#54562A"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "nomadic-tribe",
+    "title": "Pinned moments along the page",
+    "name": "Nomadic Tribe",
+    "url": "https://2019.makemepulse.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/nomadic-tribe",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#987654",
+        "#49C5B6",
+        "#ECD06F"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "noomo-agency",
+    "title": "Pinned moments along the page",
+    "name": "Noomo Agency",
+    "url": "https://noomoagency.com/our-story",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/noomo-agency",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Staggered beats along the scroll keep one story moving without adding a second plot.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#C9D2E7",
+        "#FFFFFF",
+        "#181520",
+        "#6D6D76",
+        "#DAE2F2"
+      ]
+    },
+    "typography": "The page names NeueRoman among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "onda-studio",
+    "title": "Pinned moments along the page",
+    "name": "Onda Studio",
+    "url": "https://www.ondastudio.co/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/onda-studio",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "Scroll timing is the navigation, and each beat reveals one idea before the next arrives.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#4D65FF",
+        "#BEFDA7",
+        "#D9D9D9"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "orano",
+    "title": "Pinned moments along the page",
+    "name": "Orano",
+    "url": "https://www.orano.group/experience/innovation/en",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/orano",
+    "industry": "other",
+    "family": "scroll-gsap",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "gsap",
+      "scroll-driven",
+      "kinetic-type"
+    ],
+    "why": "The page pins a moment and lets the scroll finish the sentence the headline started.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#2E2E2E",
+        "#000000"
+      ]
+    },
+    "typography": "A strong headline changes with the scroll while the body stays still.",
+    "borrow": "Borrow the idea of scroll beats that reveal a single story in order.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "huy-phan-vol-2",
+    "title": "Play that still shows the product",
+    "name": "Huy Phan Vol.2",
+    "url": "https://huyml.co/about",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/huy-phan-vol-2",
+    "industry": "other",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#FFFFFF",
+        "#ECECEC",
+        "#EDEDED",
+        "#0099FF"
+      ]
+    },
+    "typography": "The page names BT Grotesk Medium among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "kavimada",
+    "title": "A page that wants a gesture",
+    "name": "Kavimada",
+    "url": "https://adammount.org/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/kavimada",
+    "industry": "other",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "A bounce in the layout keeps the offer friendly while the product stays easy to find.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#1A1A1A",
+        "#9BD4D7",
+        "#FFFFFF",
+        "#000000"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "paradigm-festival",
+    "title": "Friendly motion around the offer",
+    "name": "Paradigm Festival",
+    "url": "https://www.adfarm.nl/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/paradigm-festival",
+    "industry": "other",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#97D28B",
+        "#DEAC73",
+        "#E0CC7B",
+        "#4D65FF",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "playful-creative-collective",
+    "title": "Friendly motion around the offer",
+    "name": "Playful Creative Collective",
+    "url": "https://helloplayful.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/playful-creative-collective",
+    "industry": "other",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "A bounce in the layout keeps the offer friendly while the product stays easy to find.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "whp-creative",
+    "title": "Friendly motion around the offer",
+    "name": "WHP Creative",
+    "url": "https://www.whpcreative.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/whp-creative",
+    "industry": "other",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#0A0A0A",
+        "#FFFFFF",
+        "#4DA6FD",
+        "#FD7071",
+        "#2B213F"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "headspace",
+    "title": "A page that wants a gesture",
+    "name": "Headspace",
+    "url": "https://www.headspace.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "health",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#2D2C2B",
+        "#4B4C4D",
+        "#FFFFFF",
+        "#44423F",
+        "#F9F4F2"
+      ]
+    },
+    "typography": "The page names Headspace Apercu among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "liquid-death",
+    "title": "Friendly motion around the offer",
+    "name": "Liquid Death",
+    "url": "https://liquid-death.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "food-drink",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#0B0C10",
+        "#8B5CF6",
+        "#22D3EE",
+        "#22C55E",
+        "#F59E0B"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "oatly",
+    "title": "A page that wants a gesture",
+    "name": "Oatly",
+    "url": "https://www.oatly.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "food-drink",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "Circles, a loose path, and a light touch make the page feel played rather than presented.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#F40000",
+        "#98C5D2",
+        "#000000"
+      ]
+    },
+    "typography": "Rounded or loose headlines keep the tone light over a simple body.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "tonies",
+    "title": "Play that still shows the product",
+    "name": "Tonies",
+    "url": "https://us.tonies.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "e-commerce",
+    "family": "playful",
+    "styleWorld": "playful",
+    "styleTags": [
+      "cursor-play",
+      "kinetic-type",
+      "light"
+    ],
+    "why": "The page invites a small gesture and rewards it without turning the whole visit into a trick.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F4F1ED",
+        "#6BC5EF",
+        "#FFFFFF",
+        "#7ACAFF",
+        "#000000"
+      ]
+    },
+    "typography": "The page names Ella among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a small gesture that rewards attention without a trick.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "arc",
+    "title": "A short path to the tool",
+    "name": "Arc",
+    "url": "https://arc.net/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "The layout shows the product once, then gets out of the way of the next step.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#000354",
+        "#2404AA",
+        "#3139FB"
+      ]
+    },
+    "typography": "The page names var(--fonts-sans) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "clerk",
+    "title": "The product framed once",
+    "name": "Clerk",
+    "url": "https://clerk.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A clear product frame and a short path to the action keep the page in service of the tool.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#131316",
+        "#F7F7F8",
+        "#E0876A",
+        "#D97757",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "Plain grotesk headlines sit over a short product description.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "linear",
+    "title": "Software shown without a speech",
+    "name": "Linear",
+    "url": "https://linear.app/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A clear product frame and a short path to the action keep the page in service of the tool.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#08090A"
+      ]
+    },
+    "typography": "The page names var(--font-monospace) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "notion",
+    "title": "The product framed once",
+    "name": "Notion",
+    "url": "https://www.notion.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "The layout shows the product once, then gets out of the way of the next step.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#097FE8",
+        "#FFB110",
+        "#F64932",
+        "#1AAE39"
+      ]
+    },
+    "typography": "Plain grotesk headlines sit over a short product description.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "raycast",
+    "title": "The product framed once",
+    "name": "Raycast",
+    "url": "https://www.raycast.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A grid, a plain headline, and one action make the software understandable at a glance.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FF6363",
+        "#E6E6E6",
+        "#FFFFFF",
+        "#D8D8D8",
+        "#7B7B7B"
+      ]
+    },
+    "typography": "Plain grotesk headlines sit over a short product description.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "resend",
+    "title": "A short path to the tool",
+    "name": "Resend",
+    "url": "https://resend.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A grid, a plain headline, and one action make the software understandable at a glance.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#777777",
+        "#999999",
+        "#BBBBBB",
+        "#DDDDDD"
+      ]
+    },
+    "typography": "The page names Helvetica among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "stripe",
+    "title": "The product framed once",
+    "name": "Stripe",
+    "url": "https://stripe.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A grid, a plain headline, and one action make the software understandable at a glance.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#031323",
+        "#4285F4",
+        "#34A853",
+        "#FBBC04",
+        "#EA4335"
+      ]
+    },
+    "typography": "Plain grotesk headlines sit over a short product description.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "vercel",
+    "title": "The product framed once",
+    "name": "Vercel",
+    "url": "https://vercel.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "A grid, a plain headline, and one action make the software understandable at a glance.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FAFAFA",
+        "#000000"
+      ]
+    },
+    "typography": "The page names var(--font-mono) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of showing the product once and then pointing at the next step.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "catalyze-ai-saas-website",
+    "title": "Software shown without a speech",
+    "name": "Catalyze AI - SaaS website",
+    "url": "https://catalyzeai.webflow.io/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/catalyze-ai-saas-website",
+    "industry": "saas",
+    "family": "saas",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "grid",
+      "grotesk",
+      "light"
+    ],
+    "why": "This page did not open in this session, so the entry keeps listing facts instead of a fresh look.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#07133B",
+        "#1AD079"
+      ]
+    },
+    "typography": "The type role was not checked because the page did not open.",
+    "borrow": "Nothing visual is borrowed here because the page did not open in this session.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": false,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is.",
+    "verificationNote": "Left unverified because robots asked us not to fetch the page."
+  },
+  {
+    "id": "21-oaks",
+    "title": "Rooms shown as a sequence",
+    "name": "21 Oaks",
+    "url": "https://21oaks.org/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/21-oaks",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy",
+      "gsap"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#80A8BA",
+        "#F1F1F1",
+        "#292929",
+        "#FFFFFF",
+        "#FFF27D"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "360-lexington-ave",
+    "title": "Rooms shown as a sequence",
+    "name": "360 Lexington Ave",
+    "url": "https://360lexingtonave.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/360-lexington-ave",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#111213",
+        "#FFFFFF",
+        "#000000",
+        "#F5F5F5",
+        "#0099FF"
+      ]
+    },
+    "typography": "The page names Instrument Sans among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "era-residence",
+    "title": "The building given the width",
+    "name": "ERA Residence",
+    "url": "https://www.era-residence.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/era-residence",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#FF75C2",
+        "#000000"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "lpas",
+    "title": "Rooms shown as a sequence",
+    "name": "LPAS",
+    "url": "https://lpas.com/processes/site-feasibility/?ids=1333%2C1334%2C1335%2C1336%2C1337",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/lpas",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#32373C",
+        "#000000",
+        "#ABB8C3",
+        "#F78DA7"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "pinnacl",
+    "title": "A horizon and two uprights",
+    "name": "Pinnacl",
+    "url": "https://pinnacl.co/experience",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/pinnacl",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "The page gives the room or the facade the full width and lets type sit quietly beside it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "quinta-d-ama-lia",
+    "title": "Rooms shown as a sequence",
+    "name": "Quinta D. Amália",
+    "url": "https://www.quintadamalia.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/quinta-d-amalia",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#003399",
+        "#003388",
+        "#0D6EFD",
+        "#6610F2",
+        "#6F42C1"
+      ]
+    },
+    "typography": "The page names var(--bs-font-sans-serif) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "realevate",
+    "title": "Rooms shown as a sequence",
+    "name": "Realevate",
+    "url": "https://realevate.agency/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/realevate",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy",
+      "gsap"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#1F2B5E",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "stanzza-design",
+    "title": "A horizon and two uprights",
+    "name": "STANZZA design",
+    "url": "https://stanzza.design/awards",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/stanzza-design",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy",
+      "gsap"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#1E1E1E"
+      ]
+    },
+    "typography": "The page names var(--font-family--text) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "storey-architecture",
+    "title": "A horizon and two uprights",
+    "name": "Storey Architecture",
+    "url": "https://www.storeyarchitecture.co.uk/studio",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/storey-architecture",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#2B2B2B",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "studio-foundry",
+    "title": "A horizon and two uprights",
+    "name": "Studio Foundry",
+    "url": "https://studio-foundry.sujen.co/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/studio-foundry",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy",
+      "webgl"
+    ],
+    "why": "The page gives the room or the facade the full width and lets type sit quietly beside it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F3F0EC",
+        "#8D46E7",
+        "#FFFFFF",
+        "#000000"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "vakantiehuis-coquelicots",
+    "title": "Rooms shown as a sequence",
+    "name": "Vakantiehuis Coquelicots",
+    "url": "https://coquelicots.nl/contact/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/vakantiehuis-coquelicots",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "The page gives the room or the facade the full width and lets type sit quietly beside it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#374151",
+        "#F8F8F8",
+        "#222222",
+        "#FFFFFF",
+        "#575AD6"
+      ]
+    },
+    "typography": "The page names var(--f-toolbar-font among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "aman",
+    "title": "A horizon and two uprights",
+    "name": "Aman",
+    "url": "https://www.aman.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "restaurant-hotel",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F3EEE7",
+        "#003399",
+        "#000000",
+        "#FFFFFF",
+        "#313131"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "base31",
+    "title": "The building given the width",
+    "name": "Base31",
+    "url": "https://www.base31.ca/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/base31",
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "big",
+    "title": "Rooms shown as a sequence",
+    "name": "BIG",
+    "url": "https://big.dk/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "The page gives the room or the facade the full width and lets type sit quietly beside it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#6B6B6B",
+        "#797979"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "compass",
+    "title": "Rooms shown as a sequence",
+    "name": "Compass",
+    "url": "https://www.compass.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "real estate",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F3F3F3",
+        "#E6E6E6",
+        "#000000",
+        "#FFFFFF",
+        "#C9C9C9"
+      ]
+    },
+    "typography": "The page names var(--cx-font-familySans) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "dezeen",
+    "title": "A horizon and two uprights",
+    "name": "Dezeen",
+    "url": "https://www.dezeen.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A wide horizon and a few uprights let the building be the page instead of a caption under it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#556E9B",
+        "#003399",
+        "#FAA61A",
+        "#7A00DF",
+        "#DDDDDD"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "foster-partners",
+    "title": "Rooms shown as a sequence",
+    "name": "Foster + Partners",
+    "url": "https://www.fosterandpartners.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#0D6EFD",
+        "#6610F2",
+        "#6F42C1",
+        "#D63384",
+        "#DC3545"
+      ]
+    },
+    "typography": "The page names open sans among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "olson-kundig",
+    "title": "A horizon and two uprights",
+    "name": "Olson Kundig",
+    "url": "https://olsonkundig.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "architecture-real-estate",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "Space is shown as a sequence of openings, and the copy stays shorter than the view.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#686B5E",
+        "#958E87",
+        "#5C4A2E",
+        "#837663",
+        "#A19381"
+      ]
+    },
+    "typography": "A calm headline names the place and a smaller line gives the fact.",
+    "borrow": "Borrow the idea of giving the building the full width and keeping type beside it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "an-ocean-of-ideas-aoi",
+    "title": "One item and a short path",
+    "name": "AN OCEAN of IDEAS (AOI)",
+    "url": "https://aoiofficial.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/an-ocean-of-ideas-aoi",
+    "industry": "e-commerce",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light"
+    ],
+    "why": "One product, one price idea, and a quiet frame keep the shop from shouting over the thing.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#CCCCCC",
+        "#000000",
+        "#3B3A3E",
+        "#B9BC3F",
+        "#9A8775"
+      ]
+    },
+    "typography": "The page names Trio Grotesk among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "mana-yerba-mate",
+    "title": "The object in a clear frame",
+    "name": "Mana Yerba Mate",
+    "url": "https://en.manayerbamate.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/mana-yerba-mate",
+    "industry": "other",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light",
+      "webgl"
+    ],
+    "why": "The object sits in a clear frame and the path to it stays shorter than the pitch.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#2B3D73",
+        "#FFFFFF",
+        "#0E0E0E",
+        "#FEF7E6",
+        "#FF0000"
+      ]
+    },
+    "typography": "The page names Neue Montreal 2020 among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Listed on Awwwards.",
+    "award": "SOTD",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "glossier",
+    "title": "The object in a clear frame",
+    "name": "Glossier",
+    "url": "https://www.glossier.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "e-commerce",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light"
+    ],
+    "why": "The object sits in a clear frame and the path to it stays shorter than the pitch.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#FFFFFF",
+        "#A85566",
+        "#F1EFD8",
+        "#9D2235"
+      ]
+    },
+    "typography": "The product name is the headline and the supporting line stays short.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "kith",
+    "title": "The object in a clear frame",
+    "name": "Kith",
+    "url": "https://kith.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "e-commerce",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light",
+      "webgl"
+    ],
+    "why": "The page treats the item as the hero and lets the rest of the shop stay in the margin.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#141414",
+        "#FFFFFF",
+        "#333333",
+        "#F6F6F6",
+        "#545454"
+      ]
+    },
+    "typography": "The page names Inter among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "rhode",
+    "title": "A shop that lets the thing speak",
+    "name": "Rhode",
+    "url": "https://www.rhodeskin.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "e-commerce",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light"
+    ],
+    "why": "The page treats the item as the hero and lets the rest of the shop stay in the margin.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#333333",
+        "#777777",
+        "#191919",
+        "#DDDDDD"
+      ]
+    },
+    "typography": "The page names var(--oke-text-fontFamily) among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "stussy",
+    "title": "A shop that lets the thing speak",
+    "name": "Stussy",
+    "url": "https://www.stussy.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "e-commerce",
+    "family": "ecommerce",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "product-3d",
+      "grid",
+      "light"
+    ],
+    "why": "One product, one price idea, and a quiet frame keep the shop from shouting over the thing.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#8F8F8F"
+      ]
+    },
+    "typography": "The page names Arial among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a clear frame around one object and a short path to it.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "centre-pompidou",
+    "title": "A label beside the piece",
+    "name": "Centre Pompidou",
+    "url": "https://www.centrepompidou.fr/en/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The collection leads and the type hosts the room, so the visit feels like a gallery not a brochure.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#DC0036",
+        "#003399",
+        "#0078C2"
+      ]
+    },
+    "typography": "The page names UniversNextBold among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "moma",
+    "title": "A label beside the piece",
+    "name": "MoMA",
+    "url": "https://www.moma.org/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The collection leads and the type hosts the room, so the visit feels like a gallery not a brochure.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#8FC421",
+        "#00B7F2",
+        "#FF0300"
+      ]
+    },
+    "typography": "A gallery label scale: the title of the work, then a smaller credit.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "serpentine",
+    "title": "The work hosted like a room",
+    "name": "Serpentine",
+    "url": "https://www.serpentinegalleries.org/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "The collection leads and the type hosts the room, so the visit feels like a gallery not a brochure.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F2F2F2",
+        "#003399",
+        "#FFFFFF",
+        "#32373C",
+        "#000000"
+      ]
+    },
+    "typography": "A gallery label scale: the title of the work, then a smaller credit.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "tate",
+    "title": "One work at a time",
+    "name": "Tate",
+    "url": "https://www.tate.org.uk/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "A work on the page is given room, and the institution speaks in a smaller voice beside it.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F5F5F5",
+        "#85DEE7"
+      ]
+    },
+    "typography": "A gallery label scale: the title of the work, then a smaller credit.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "v-a",
+    "title": "A label beside the piece",
+    "name": "V&A",
+    "url": "https://www.vam.ac.uk/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "culture-art",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "editorial-layout",
+      "serif",
+      "airy"
+    ],
+    "why": "A work on the page is given room, and the institution speaks in a smaller voice beside it.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#1F1F21",
+        "#5BBAD5",
+        "#DA532C"
+      ]
+    },
+    "typography": "A gallery label scale: the title of the work, then a smaller credit.",
+    "borrow": "Borrow the idea of pacing a page like a room, one work then a label.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "aralesk-collages-motion",
+    "title": "Cloth given the full height",
+    "name": "Aralesk — Collages & Motion",
+    "url": "https://www.aralesk.es/en/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/aralesk-collages-motion",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark",
+      "gsap",
+      "webgl"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F1E8DC",
+        "#A7C1B4",
+        "#EAC2B2",
+        "#E0A585",
+        "#C57B5A"
+      ]
+    },
+    "typography": "The page names Montserrat among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "cocoon",
+    "title": "A lookbook crop on the page",
+    "name": "COCOON",
+    "url": "https://www.cocoonblanket.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/cocoon-2",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F0F0F0",
+        "#807055"
+      ]
+    },
+    "typography": "The page names Marcellus among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "coutumes",
+    "title": "Cloth given the full height",
+    "name": "Coutumes",
+    "url": "https://coutumes.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/coutumes",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "A tall crop and a thin rule let the garment or the campaign occupy the page like a lookbook.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#EDE9DF",
+        "#272D45",
+        "#FFFFFF",
+        "#676986",
+        "#F4F4F6"
+      ]
+    },
+    "typography": "The page names Exposure Regular among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "crisp-barbershop",
+    "title": "Cloth given the full height",
+    "name": "CRISP Barbershop",
+    "url": "https://www.crispmtl.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/crisp-barbershop",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark",
+      "gsap"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A thin headline sits beside or under the crop like a lookbook credit.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "remyshoots",
+    "title": "A lookbook crop on the page",
+    "name": "RemyShoots",
+    "url": "https://www.remyshoots.co.za/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/remyshoots",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "These swatches are published palette facts for this product, because the opened page did not print its own colours.",
+      "hex": [
+        "#111111",
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A thin headline sits beside or under the crop like a lookbook credit.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "tilly-sveaas",
+    "title": "Cloth given the full height",
+    "name": "Tilly Sveaas",
+    "url": "https://tillysveaas.co.uk/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/tilly-sveaas",
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "A tall crop and a thin rule let the garment or the campaign occupy the page like a lookbook.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#DEC292",
+        "#CECECE"
+      ]
+    },
+    "typography": "The page names Gaisyr Light among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "acne-studios",
+    "title": "A lookbook crop on the page",
+    "name": "Acne Studios",
+    "url": "https://www.acnestudios.com/us/en/home",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#0018A8"
+      ]
+    },
+    "typography": "The page names Helvetica Now Text among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "loewe",
+    "title": "The campaign edited hard",
+    "name": "Loewe",
+    "url": "https://www.loewe.com/usa/en/home",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "fashion",
+    "family": "fashion-beauty",
+    "styleWorld": "minimal-luxury",
+    "styleTags": [
+      "full-bleed",
+      "serif",
+      "dark"
+    ],
+    "why": "Fashion here is a sequence of crops, and the type never competes with the cloth.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#999999",
+        "#000000",
+        "#F8F8F8",
+        "#F2CA56"
+      ]
+    },
+    "typography": "The page names Avus among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of a tall crop with type kept to a caption.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "11-mois-sans-toi-t",
+    "title": "The picture as the argument",
+    "name": "11 mois sans toi(t)",
+    "url": "https://11moissanstoit.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/11-mois-sans-toi-t",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A plate and a short caption let the picture be the page and the words stay in service.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FEE422",
+        "#151723",
+        "#000000",
+        "#FFFFFF",
+        "#003399"
+      ]
+    },
+    "typography": "A small caption under the plate, with the picture larger than the type.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "ethan-w-photography",
+    "title": "The picture as the argument",
+    "name": "Ethan W Photography",
+    "url": "https://ethanwong.photography/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/ethan-w-photography",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "One image, a thin caption, and almost no chrome make the picture the only argument.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#EFEDE7",
+        "#8A8174",
+        "#1C1813",
+        "#A49C8E",
+        "#F4EFE4"
+      ]
+    },
+    "typography": "The page names Pinyon Script among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "kavieng-creative",
+    "title": "A plate and a short caption",
+    "name": "Kavieng Creative",
+    "url": "https://kaviengcreative.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/kavieng-creative",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A plate and a short caption let the picture be the page and the words stay in service.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#050505"
+      ]
+    },
+    "typography": "A small caption under the plate, with the picture larger than the type.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "senawa",
+    "title": "A plate and a short caption",
+    "name": "SENAWA",
+    "url": "https://senawastudio.com/elements",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/senawa",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "A plate and a short caption let the picture be the page and the words stay in service.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F6F2EB",
+        "#FFFFFF",
+        "#000000",
+        "#EDE6D8",
+        "#D4C9B4"
+      ]
+    },
+    "typography": "The page names Inter among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "tour-kyrgyzstan",
+    "title": "An inset frame for the photo",
+    "name": "Tour Kyrgyzstan",
+    "url": "https://tour-kyrgyzstan.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/tour-kyrgyzstan",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "One image, a thin caption, and almost no chrome make the picture the only argument.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#0D0D0D",
+        "#DC2F02",
+        "#B52501"
+      ]
+    },
+    "typography": "The page names Fragment Mono among its type, in the role of the main voice.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "viv",
+    "title": "An inset frame for the photo",
+    "name": "ViV",
+    "url": "https://vivmgmt.com/",
+    "source": "awwwards",
+    "sourceName": "Awwwards",
+    "sourcePage": "https://www.awwwards.com/sites/viv",
+    "industry": "portfolio",
+    "family": "photography",
+    "styleWorld": "editorial",
+    "styleTags": [
+      "full-bleed",
+      "light",
+      "airy"
+    ],
+    "why": "One image, a thin caption, and almost no chrome make the picture the only argument.",
+    "palette": {
+      "note": "A deep ground carries one brighter accent, and the rest of the field stays quiet.",
+      "hex": [
+        "#000000",
+        "#B67859",
+        "#BFBDC5",
+        "#A86E53",
+        "#664C26"
+      ]
+    },
+    "typography": "A small caption under the plate, with the picture larger than the type.",
+    "borrow": "Borrow the idea of an inset plate and a caption shorter than the picture.",
+    "attribution": "Listed on Awwwards.",
+    "award": "Honorable Mention",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "anime-js",
+    "title": "A tool you can inspect",
+    "name": "anime.js",
+    "url": "https://animejs.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense"
+    ],
+    "why": "A tight grid and a monospace accent make the craft of the tool visible in the layout itself.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF"
+      ]
+    },
+    "typography": "A grotesk headline with a monospace accent for the technical detail.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "cursor",
+    "title": "A grid for a technical product",
+    "name": "Cursor",
+    "url": "https://cursor.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense"
+    ],
+    "why": "The page shows the mechanism in small measured steps instead of a single glossy claim.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F7F7F4",
+        "#14120B",
+        "#26251E",
+        "#EDECEC",
+        "#D9D5CF"
+      ]
+    },
+    "typography": "The page names var(--font-serif) among its type, in the role of a technical accent.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "gsap",
+    "title": "A grid for a technical product",
+    "name": "GSAP",
+    "url": "https://gsap.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense",
+      "gsap"
+    ],
+    "why": "The page shows the mechanism in small measured steps instead of a single glossy claim.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#0AE448",
+        "#5BBAD5",
+        "#000000",
+        "#0E100F",
+        "#191919"
+      ]
+    },
+    "typography": "The page names Mori among its type, in the role of a technical accent.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 6,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "lenis",
+    "title": "A grid for a technical product",
+    "name": "Lenis",
+    "url": "https://lenis.dev/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense",
+      "webgl"
+    ],
+    "why": "A tight grid and a monospace accent make the craft of the tool visible in the layout itself.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#FFFFFF",
+        "#000000",
+        "#8C8C8C",
+        "#EFEFEF"
+      ]
+    },
+    "typography": "A grotesk headline with a monospace accent for the technical detail.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "motion",
+    "title": "A grid for a technical product",
+    "name": "Motion",
+    "url": "https://motion.dev/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "other",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense",
+      "gsap",
+      "webgl"
+    ],
+    "why": "The page shows the mechanism in small measured steps instead of a single glossy claim.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#F7DF1E",
+        "#61DAFB",
+        "#41B883",
+        "#34495E"
+      ]
+    },
+    "typography": "A grotesk headline with a monospace accent for the technical detail.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 8,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
+  },
+  {
+    "id": "supabase",
+    "title": "Craft shown in small steps",
+    "name": "Supabase",
+    "url": "https://supabase.com/",
+    "source": "other",
+    "sourceName": "Direct pick",
+    "sourcePage": null,
+    "industry": "saas",
+    "family": "dev-tools-craft",
+    "styleWorld": "scroll-film",
+    "styleTags": [
+      "mono",
+      "grid",
+      "dense"
+    ],
+    "why": "A tight grid and a monospace accent make the craft of the tool visible in the layout itself.",
+    "palette": {
+      "note": "A light ground carries a darker mark, and the accent stays in a small share of the page.",
+      "hex": [
+        "#3ECF8E",
+        "#249361",
+        "#FFFFFF",
+        "#BDA4FF",
+        "#FFCDA1"
+      ]
+    },
+    "typography": "A grotesk headline with a monospace accent for the technical detail.",
+    "borrow": "Borrow the idea of a measured grid that makes a tool feel inspectable.",
+    "attribution": "Direct pick, no gallery listing.",
+    "award": "none",
+    "motionLevel": 4,
+    "verified": true,
+    "checked": "2026-10-12",
+    "noted": "Look at the thinking in the structure, and keep the surface where it is."
   }
 ]

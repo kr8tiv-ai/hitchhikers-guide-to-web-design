@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -29,7 +28,6 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
   const cacheDir = await mkdtemp(path.join(tmpdir(), "hh-gallery-cache-"));
   const packFile = path.join(projectDir, "gallery.json");
   await writeFile(packFile, JSON.stringify(fixturePack()));
-  await seedRobotsPlaceholder(cacheDir, "https://example.com/godly/1");
 
   const serverFile = path.resolve(here, "../src/server/server.ts");
   const child = spawn(
@@ -67,9 +65,7 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
     await expect(page.locator(".hh-site__note")).toHaveCount(4);
     await expect(page.locator(".hh-vote")).toHaveCount(12);
     await expect(page.locator(".hh-site__title").first()).toHaveText("Godly 1");
-    await expect(page.locator(".hh-site").first().locator(".hh-shot-note")).toHaveText(
-      "This site asks crawlers to stay out, so the shot is a stand-in.",
-    );
+    await assertWalkingTiles(page);
     const opener = page.locator('a[href="https://example.com/godly/1"]');
     await expect(opener).toHaveAttribute("target", "_blank");
     await expect(opener).toHaveAttribute("rel", /noopener/);
@@ -98,6 +94,7 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
     }
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "narrowing");
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", "10");
+    await expect(page.locator("#hh-gallery img")).toHaveCount(0);
 
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await columnCount(page)).toBe(1);
@@ -116,6 +113,7 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
     expect(await fits(page)).toBe(true);
     await page.locator("[data-shortlist]").click();
     await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "done");
+    await expect(page.locator("#hh-gallery img")).toHaveCount(0);
     await expect(page.locator("#hh-gallery .hh-log li")).toHaveCount(5);
     expect(await fits(page)).toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -150,6 +148,135 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
   }
 });
 
+test("the shipped pack deals four cards across at least three families and walks to a shortlist", async ({ page }) => {
+  test.setTimeout(120_000);
+  const desk = await openDesk(page);
+  const errors = desk.errors;
+  try {
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${desk.url}gallery`);
+    await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "walking");
+    await expect(page.locator("#hh-gallery .hh-site")).toHaveCount(4);
+    const opening = await page.locator("#hh-gallery .hh-site").evaluateAll((cards) => {
+      return cards.map((card) => card.getAttribute("data-family") ?? "");
+    });
+    expect(new Set(opening.filter((family) => family !== "")).size).toBeGreaterThanOrEqual(3);
+    await assertWalkingTiles(page);
+    await expect(page.locator("#hh-gallery img")).toHaveCount(0);
+    expect(await fits(page)).toBe(true);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await columnCount(page)).toBe(1);
+    expect(await fits(page)).toBe(true);
+
+    const seen: string[] = [];
+    for (let index = 0; index < WHYS.length; index += 1) {
+      await keepLoveNoted(page, WHYS[index] ?? "", index + 1, seen);
+    }
+    expect(seen).toHaveLength(10);
+    expect(new Set(seen.filter((family) => family !== "")).size).toBeGreaterThanOrEqual(3);
+    await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "narrowing");
+    await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", "10");
+    await expect(page.locator("#hh-gallery img")).toHaveCount(0);
+
+    const picks = page.locator("[data-pick]");
+    await expect(picks).toHaveCount(10);
+    for (let index = 0; index < 4; index += 1) await picks.nth(index).check();
+    await page.locator("#hh-thread").fill(THREAD);
+    await page.locator("[data-shortlist]").click();
+    await expect(page.locator("#hh-gallery")).toHaveAttribute("data-phase", "done");
+    await expect(page.locator("#hh-gallery img")).toHaveCount(0);
+    expect(errors).toEqual([]);
+
+    const dir = path.join(desk.projectDir, ".hitchhiker", "references");
+    const names = (await readdir(dir)).filter((name) => name.endsWith(".md")).sort();
+    expect(names.filter((name) => name !== "INDEX.md")).toHaveLength(4);
+    expect(names).toContain("INDEX.md");
+    for (const name of names) {
+      const body = await readFile(path.join(dir, name), "utf8");
+      expect(body.includes("![")).toBe(false);
+      if (name !== "INDEX.md") {
+        expect(body).toContain("## Why");
+        expect(body).toContain("https://");
+        expect(body).toContain("Listed on:");
+        expect(body).toContain("Family:");
+        expect(body).toContain("Borrow:");
+      }
+    }
+  } finally {
+    await desk.stop();
+  }
+});
+
+test("two keeps in a row both count", async ({ page }) => {
+  test.setTimeout(120_000);
+  const desk = await openDesk(page, async (projectDir) => {
+    await writeFile(path.join(projectDir, "gallery.json"), JSON.stringify(fixturePack()));
+  });
+  try {
+    await page.goto(`${desk.url}gallery?industry=saas&styleWorld=editorial`);
+    await expect(page.locator("#hh-gallery .hh-site")).toHaveCount(4);
+    const first = page.locator("#hh-gallery .hh-site").nth(0);
+    const second = page.locator("#hh-gallery .hh-site").nth(1);
+    const firstUrl = await first.getAttribute("data-url");
+    const secondUrl = await second.getAttribute("data-url");
+    expect(firstUrl).toBeTruthy();
+    expect(secondUrl).toBeTruthy();
+    await first.locator('[data-vote="love"]').click();
+    await first.locator("textarea").fill(WHYS[0] ?? "");
+    await second.locator('[data-vote="love"]').click();
+    await second.locator("textarea").fill(WHYS[1] ?? "");
+    await first.locator("[data-keep]").click({ noWaitAfter: true });
+    await second.locator("[data-keep]").click({ noWaitAfter: true });
+    await expect(page.locator("#hh-gallery")).toHaveAttribute("data-loves", "2");
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator(`#hh-gallery .hh-site[data-url="${quoteAttr(firstUrl ?? "")}"]`)).toHaveCount(0);
+    await expect(page.locator(`#hh-gallery .hh-site[data-url="${quoteAttr(secondUrl ?? "")}"]`)).toHaveCount(0);
+    expect(desk.errors).toEqual([]);
+  } finally {
+    await desk.stop();
+  }
+});
+
+async function openDesk(
+  page: Page,
+  prepare?: (projectDir: string) => Promise<void>,
+): Promise<{ url: string; projectDir: string; errors: string[]; stop: () => Promise<void> }> {
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-gallery-walk-"));
+  const cacheDir = await mkdtemp(path.join(tmpdir(), "hh-gallery-cache-"));
+  if (prepare !== undefined) await prepare(projectDir);
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    HH_GALLERY_CACHE: cacheDir,
+    HH_E2E_PROJECT: projectDir,
+    HH_E2E_SERVER: pathToFileURL(serverFile).href,
+  };
+  const packFile = path.join(projectDir, "gallery.json");
+  if (prepare !== undefined) env.HH_GALLERY_FILE = packFile;
+  else delete env.HH_GALLERY_FILE;
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", childSource()], {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => {
+    errors.push(error.message);
+  });
+  const url = await readUrl(child);
+  return {
+    url,
+    projectDir,
+    errors,
+    stop: async () => {
+      await stopChild(child);
+      await rm(projectDir, { recursive: true, force: true });
+      await rm(cacheDir, { recursive: true, force: true });
+    },
+  };
+}
+
 function fixturePack(): unknown[] {
   const rows: unknown[] = [
     row("godly", "fashion", "playful", "Fashion Outlier", "https://example.com/godly/fashion"),
@@ -176,17 +303,27 @@ function row(source: string, industry: string, styleWorld: string, name: string,
   };
 }
 
-async function seedRobotsPlaceholder(cacheDir: string, url: string): Promise<void> {
-  const hash = createHash("sha1").update(url).digest("hex");
-  await mkdir(cacheDir, { recursive: true });
-  await writeFile(
-    path.join(cacheDir, `${hash}.json`),
-    JSON.stringify({
-      at: Date.now(),
-      placeholder: true,
-      note: "This site asks crawlers to stay out, so the shot is a stand-in.",
-    }),
-  );
+async function assertWalkingTiles(page: Page): Promise<void> {
+  const shots = page.locator("#hh-gallery .hh-site__shot");
+  const count = await shots.count();
+  expect(count).toBeGreaterThan(0);
+  for (let index = 0; index < count; index += 1) {
+    await expect(shots.nth(index).locator('svg[role="img"]')).toHaveCount(1);
+  }
+  const credits = page.locator("#hh-gallery .hh-site__credit");
+  await expect(credits).toHaveCount(count);
+  for (let index = 0; index < count; index += 1) {
+    await expect(credits.nth(index)).toContainText("Listed on");
+  }
+  await expect(page.locator("#hh-gallery img")).toHaveCount(0);
+}
+
+async function keepLoveNoted(page: Page, why: string, lovesAfter: number, seen: string[]): Promise<void> {
+  await page.waitForLoadState("domcontentloaded");
+  const open = page.locator("#hh-gallery .hh-site").first();
+  await open.waitFor();
+  seen.push((await open.getAttribute("data-family")) ?? "");
+  await keepLove(page, why, false, lovesAfter);
 }
 
 function quoteAttr(value: string): string {

@@ -21,6 +21,14 @@ export {
 export type { BrowserSession, CrawlDeps, CrawlResult, FakePage, Viewport } from "./crawl.ts";
 
 export {
+  FAMILIES as galleryFamilies,
+  FAMILY_STYLE as galleryFamilyStyle,
+  familyOf as galleryFamilyOf,
+  selectReferenceCards as gallerySelectReferenceCards,
+} from "./gallery-pick.ts";
+export type { GalleryPick as GalleryPickShape } from "./gallery-pick.ts";
+
+export {
   CURATED_PACK_FILE,
   DEFAULT_GALLERY_ALLOW,
   GALLERY_CACHE_MAX_AGE_MS,

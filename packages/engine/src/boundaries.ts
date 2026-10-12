@@ -50,7 +50,7 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   },
   { name: "@hitchhiker/qa", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },
-  { name: "@hitchhiker/knowledge", allowDeps: [] },
+  { name: "@hitchhiker/knowledge", allowDeps: ["@hitchhiker/crawler", "@hitchhiker/engine"] },
   { name: "@hitchhiker/templates", allowDeps: ["@hitchhiker/engine"] },
 ];
 

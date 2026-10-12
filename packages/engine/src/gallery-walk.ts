@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { GalleryEntry } from "./guide/schemas.ts";
+import { STYLE_WORLDS } from "./guide/gallery-model.ts";
 import { referenceCards } from "./guide/suggest.ts";
 
 /**
@@ -10,10 +11,9 @@ import { referenceCards } from "./guide/suggest.ts";
  *
  * Conflict, recorded on purpose: boundaries.ts forbids the engine from
  * depending on the crawler package, where 029 exports suggestReferences.
- * referenceCards in guide/suggest.ts is that picker, copied in prompt 035.
- * nextRound calls it under the name suggestReferences. Same rule: at most
- * two Godly and two Awwwards, no source "other" as backfill. aura.build
- * rows are added after that pick when the pack lists them.
+ * referenceCards in guide/suggest.ts is that picker. nextRound calls it
+ * under the name suggestReferences. Quota is two Recent or legacy Godly
+ * and two Awwwards, then backfill until the round has four.
  */
 
 export const LOVE_TARGET = 10;
@@ -26,17 +26,7 @@ export const WHY_NUDGE =
 export const MISSING_PROMPT =
   "None of these were a love. Say what was missing. That note is kept with the shortlist.";
 
-const STYLE_WORLDS = [
-  "editorial",
-  "3d-world",
-  "scroll-film",
-  "brutalist",
-  "minimal-luxury",
-  "playful",
-] as const;
-
 const WHY_LIMIT = 2_000;
-const AURA_CAP = 2;
 
 export interface Verdict {
   url: string;
@@ -47,6 +37,7 @@ export interface Verdict {
 export interface WalkQuery {
   industry?: string;
   styleWorld?: string;
+  family?: string;
 }
 
 export interface VerdictInput {
@@ -67,6 +58,8 @@ export interface WalkState {
   fillNote: string | null;
   missingPrompt: string | null;
   shortlistError: string | null;
+  /** Stable walk seed. Missing on older saves, which load as "hh". */
+  seed: string;
 }
 
 export interface Deal {
@@ -95,7 +88,7 @@ export function defaultGalleryCacheDir(): string {
   return path.join(os.homedir(), ".hitchhiker", "cache", "gallery");
 }
 
-export function emptyWalk(): WalkState {
+export function emptyWalk(seed = "hh"): WalkState {
   return {
     round: 0,
     seen: [],
@@ -106,6 +99,7 @@ export function emptyWalk(): WalkState {
     fillNote: null,
     missingPrompt: null,
     shortlistError: null,
+    seed: seed.length > 0 ? seed : "hh",
   };
 }
 
@@ -133,6 +127,11 @@ export function parseWalkState(value: unknown): WalkState | null {
   if (value.fillNote !== null && typeof value.fillNote !== "string") return null;
   if (value.missingPrompt !== null && typeof value.missingPrompt !== "string") return null;
   if (value.shortlistError !== null && typeof value.shortlistError !== "string") return null;
+  let seed = "hh";
+  if (Object.hasOwn(value, "seed") && value.seed !== undefined) {
+    if (typeof value.seed !== "string") return null;
+    if (value.seed.length > 0) seed = value.seed;
+  }
   return {
     round,
     seen,
@@ -143,6 +142,7 @@ export function parseWalkState(value: unknown): WalkState | null {
     fillNote: typeof value.fillNote === "string" ? value.fillNote : null,
     missingPrompt: typeof value.missingPrompt === "string" ? value.missingPrompt : null,
     shortlistError: typeof value.shortlistError === "string" ? value.shortlistError : null,
+    seed,
   };
 }
 
@@ -152,7 +152,16 @@ export function parseWalkState(value: unknown): WalkState | null {
  */
 function suggestReferences(
   entries: readonly GalleryEntry[],
-  q: { industry?: string; styleWorld?: string; exclude?: readonly string[]; limit: number },
+  q: {
+    industry?: string;
+    styleWorld?: string;
+    family?: string;
+    exclude?: readonly string[];
+    limit: number;
+    seed?: string;
+    round?: number;
+    lovedUrls?: readonly string[];
+  },
 ): GalleryEntry[] {
   return referenceCards(entries, q);
 }
@@ -164,7 +173,7 @@ export function nextRound(s: WalkState, pack: readonly GalleryEntry[], q: WalkQu
   const open = openEntries(s, pack);
   if (open.length > 0) return open;
   if (s.round >= ROUND_CAP) return [];
-  return planRound(pack, s.seen, q).cards;
+  return planRound(pack, s, q).cards;
 }
 
 /** Deal the open round, or the next one, and remember the urls. */
@@ -174,7 +183,7 @@ export function dealRound(s: WalkState, pack: readonly GalleryEntry[], q: WalkQu
   const open = openEntries(s, pack);
   if (open.length > 0) return { state: s, cards: open };
   if (s.round >= ROUND_CAP) return { state: toNarrowing(s), cards: [] };
-  const planned = planRound(pack, s.seen, q);
+  const planned = planRound(pack, s, q);
   if (planned.cards.length === 0) return { state: toNarrowing(s), cards: [] };
   const seen = s.seen.slice();
   for (const card of planned.cards) {
@@ -327,6 +336,11 @@ export async function writeReferences(
       "",
       `URL: ${url}`,
       `Source: ${entry?.source ?? "unknown"}`,
+      `Listed on: ${listedOn(entry)}`,
+      `Family: ${entry?.family ?? "unknown"}`,
+      `Borrow: ${entry?.borrow ?? "Borrow the idea, not an asset from the site."}`,
+      `Palette: ${paletteLine(entry)}`,
+      `Typography: ${entry?.typography ?? "Type role was not recorded."}`,
       `Industry: ${entry?.industry ?? "unknown"}`,
       `Style world: ${entry?.styleWorld ?? "unknown"}`,
       `Award: ${entry?.award ?? "none"}`,
@@ -367,33 +381,34 @@ export async function writeReferences(
   return written;
 }
 
-function planRound(pack: readonly GalleryEntry[], exclude: readonly string[], q: WalkQuery): Plan {
+function planRound(pack: readonly GalleryEntry[], state: WalkState, q: WalkQuery): Plan {
   const query = normalizeQuery(q);
-  let cards = suggestReferences(pack, { ...query, exclude, limit: ROUND_SIZE });
-  const used = new Set<string>([...exclude, ...cards.map((card) => card.url)]);
-  const aura = auraMatches(pack, used, query);
-  let auraAdded = 0;
-  for (const entry of aura) {
-    if (auraAdded >= AURA_CAP) break;
-    cards = [...cards, entry];
-    used.add(entry.url);
-    auraAdded += 1;
-  }
+  const loved = state.verdicts.filter((item) => item.verdict === "love").map((item) => item.url);
+  const cards = suggestReferences(pack, {
+    ...query,
+    exclude: state.seen,
+    limit: ROUND_SIZE,
+    seed: state.seed,
+    round: state.round + 1,
+    lovedUrls: loved,
+  });
+  const used = new Set<string>([...state.seen, ...cards.map((card) => card.url)]);
 
   let filledFrom: string | null = null;
   let widened = false;
-  if (cards.length < ROUND_SIZE && query.styleWorld !== undefined) {
-    filledFrom = fillFromWorlds(pack, cards, used, query, false);
+  if (cards.length < ROUND_SIZE && query.family === undefined && query.styleWorld !== undefined) {
+    filledFrom = fillFromWorlds(pack, cards, used, query, false, state.seed);
   }
-  if (cards.length < ROUND_SIZE && query.industry !== undefined) {
+  if (cards.length < ROUND_SIZE && query.family === undefined && query.industry !== undefined) {
     const before = cards.length;
-    const fromWider = fillFromWorlds(pack, cards, used, query, true);
+    const fromWider = fillFromWorlds(pack, cards, used, query, true, state.seed);
     if (cards.length > before) {
       widened = true;
       if (filledFrom === null) filledFrom = fromWider;
     }
   }
 
+  const auraAdded = cards.filter((card) => card.source === "aura" || isAura(card.url)).length;
   return { cards, fillNote: fillNote(query, cards.length, auraAdded, filledFrom, widened) };
 }
 
@@ -403,6 +418,7 @@ function fillFromWorlds(
   used: Set<string>,
   query: WalkQuery,
   dropIndustry: boolean,
+  seed: string,
 ): string | null {
   const origin = query.styleWorld;
   const worlds = origin === undefined ? [] : neighbours(origin);
@@ -417,6 +433,8 @@ function fillFromWorlds(
       ...nextQuery,
       exclude: [...used],
       limit: ROUND_SIZE - cards.length,
+      seed,
+      round: 1,
     });
     for (const entry of more) {
       if (cards.length >= ROUND_SIZE || used.has(entry.url)) continue;
@@ -452,17 +470,6 @@ function fillNote(
   return parts.join(" ");
 }
 
-function auraMatches(pack: readonly GalleryEntry[], used: Set<string>, query: WalkQuery): GalleryEntry[] {
-  const found: GalleryEntry[] = [];
-  for (const entry of pack) {
-    if (used.has(entry.url) || !isAura(entry.url)) continue;
-    if (query.industry !== undefined && entry.industry !== query.industry) continue;
-    if (query.styleWorld !== undefined && entry.styleWorld !== query.styleWorld) continue;
-    found.push(entry);
-  }
-  return found;
-}
-
 function neighbours(origin: string): string[] {
   const start = STYLE_WORLDS.indexOf(origin as (typeof STYLE_WORLDS)[number]);
   const worlds = STYLE_WORLDS.filter((world) => world !== origin);
@@ -478,7 +485,24 @@ function normalizeQuery(q: WalkQuery): WalkQuery {
   const next: WalkQuery = {};
   if (q.industry !== undefined && q.industry.trim() !== "") next.industry = q.industry.trim();
   if (q.styleWorld !== undefined && isStyle(q.styleWorld)) next.styleWorld = q.styleWorld;
+  if (q.family !== undefined && q.family.trim() !== "") next.family = q.family.trim();
   return next;
+}
+
+function listedOn(entry: GalleryEntry | undefined): string {
+  if (entry?.sourceName !== undefined && entry.sourceName.length > 0) return entry.sourceName;
+  if (entry?.source === "godly") return "Godly";
+  if (entry?.source === "awwwards") return "Awwwards";
+  if (entry?.source === "recent") return "Recent (formerly Godly)";
+  if (entry?.source === "gsap-showcase") return "GSAP Showcase";
+  if (entry?.source === "aura") return "aura.build";
+  return "Direct pick";
+}
+
+function paletteLine(entry: GalleryEntry | undefined): string {
+  if (entry?.palette === undefined) return "Palette was not recorded.";
+  const colors = entry.palette.hex.join(", ");
+  return colors.length > 0 ? `${entry.palette.note} ${colors}` : entry.palette.note;
 }
 
 function isStyle(value: string): boolean {

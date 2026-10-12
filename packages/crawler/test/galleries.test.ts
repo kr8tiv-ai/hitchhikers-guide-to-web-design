@@ -20,11 +20,9 @@ import {
 } from "../src/index.ts";
 
 /**
- * The curated pack is intentionally shorter than the 60 to 120 rows named
- * in the prompt context. Step 1 keeps the two verified awards and allows at
- * most ten more rows, and only when the URL is already in context/sources
- * or the addendum. Those extra rows use award "none" and source "other".
- * No SOTY 2026 winner is invented. Godly item URLs are not in the repo.
+ * The shipped pack holds at least 120 original rows. Lando Norris stays
+ * SOTY 2025. CoMinVi stays a Site of the Day dated 2026-09-30. No SOTY
+ * 2026 winner is invented. Legacy godly rows are not added.
  */
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
@@ -72,8 +70,7 @@ function writePack(dir: string, entries: unknown): string {
 test("the offline pack keeps Lando as SOTY 2025 and CoMinVi as SOTD", () => {
   const pack = loadCurated(CURATED_PACK_FILE);
   assert.equal(path.basename(CURATED_PACK_FILE), "curated.json");
-  assert.ok(pack.length >= 2);
-  assert.ok(pack.length <= 12);
+  assert.ok(pack.length >= 120);
 
   const lando = pack.find((entry) => entry.name === "Lando Norris");
   assert.ok(lando);
@@ -96,15 +93,17 @@ test("the offline pack keeps Lando as SOTY 2025 and CoMinVi as SOTD", () => {
   assert.ok(cominviRaw && typeof cominviRaw === "object" && "date" in cominviRaw);
   assert.equal(cominviRaw.date, "2026-09-30");
 
+  const sources = ["awwwards", "recent", "godly", "gsap-showcase", "aura", "other"];
+  const awards = ["none", "SOTD", "Honorable Mention", "Developer Award", "SOTY 2025"];
   for (const entry of pack) {
     assert.equal(/SOTY\s*2026/i.test(entry.award), false);
     assert.equal(entry.noted.startsWith("Look at"), true);
     assert.equal(entry.noted.includes("!"), false);
     assert.equal(entry.noted.includes("\n"), false);
-    if (entry.name !== "Lando Norris" && entry.name !== "CoMinVi") {
-      assert.equal(entry.award, "none");
-      assert.equal(entry.source, "other");
-    }
+    assert.equal(sources.includes(entry.source), true, entry.source);
+    assert.equal(awards.includes(entry.award), true, entry.award);
+    if (entry.award === "SOTY 2025") assert.equal(entry.name, "Lando Norris");
+    if (entry.award === "SOTD") assert.equal(entry.award.includes("Year"), false);
   }
   assert.equal(
     pack.some((entry) => entry.source === "godly"),
@@ -222,8 +221,9 @@ test("suggestReferences skips excluded urls and does not backfill from other", (
   assert.equal(picked.filter((entry) => entry.source === "other").length, 0);
 
   const awwwardsOnly = suggestReferences([...awwwards, ...other], { limit: 4 });
-  assert.equal(awwwardsOnly.length, 2);
-  assert.ok(awwwardsOnly.every((entry) => entry.source === "awwwards"));
+  assert.equal(awwwardsOnly.length, 4);
+  assert.equal(awwwardsOnly.filter((entry) => entry.source === "awwwards").length, 2);
+  assert.equal(awwwardsOnly.filter((entry) => entry.source === "other").length, 2);
 });
 
 test("suggestReferences filters industry and style world together", () => {
@@ -257,8 +257,9 @@ test("suggestReferences on the curated pack stays inside the limit", () => {
   const pack = loadCurated(CURATED_PACK_FILE);
   const before = structuredClone(pack);
   const suggested = suggestReferences(pack, { limit: 4 });
-  assert.ok(suggested.length <= 4);
-  assert.ok(suggested.every((entry) => entry.source === "awwwards" || entry.source === "godly"));
+  assert.equal(suggested.length, 4);
+  assert.ok(suggested.filter((entry) => entry.source === "awwwards").length <= 2);
+  assert.ok(suggested.filter((entry) => entry.source === "godly" || entry.source === "recent").length <= 2);
   assert.deepEqual(pack, before);
 
   const lando = pack.find((entry) => entry.name === "Lando Norris");

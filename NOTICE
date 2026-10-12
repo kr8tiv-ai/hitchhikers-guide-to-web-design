@@ -247,11 +247,34 @@ pdfjs-dist 5.4.530
 Gallery shortlist
 -----------------
 
-packages/knowledge/galleries/curated.json is an offline pack. Gallery names
-are facts about public awards, not a copy of gallery copy. The pack does
-not fetch Godly or Awwwards, and it does not assume a Godly API. Site of
-the Day is not labeled Site of the Year. A live refresh runs only when a
-caller passes a fetcher and a non-empty allow list.
+packages/knowledge/galleries/curated.json is an offline pack of names, URLs,
+and award facts. Every sentence in it is original. The desk does not copy
+a gallery description, score, jury text, screenshot, or thumbnail. Preview
+tiles are generated SVG. There is no hotlinked image. The pack does not
+assume a Godly API. Godly's old catalog now lives at Recent
+(https://recent.design/), so new lead rows use that name. Legacy source
+value godly still loads. Site of the Day is not labeled Site of the Year.
+The only Site of the Year stored here is Lando Norris, 2025
+(https://landonorris.com/). A live refresh runs only when a caller passes
+a fetcher and a non-empty allow list.
+
+Reuse, one line each, from the terms pages read for this pack. We link
+and describe. We do not reproduce their content.
+
+- Awwwards (https://www.awwwards.com/): site content is their property.
+- Recent (https://recent.design/): no terms page was found. All rights reserved.
+- GSAP Showcase (https://gsap.com/showcase/): thumbnails belong to the makers.
+- aura.build (https://www.aura.build/): template licences vary. Link only.
+- Siteinspire (https://www.siteinspire.com/): not read. A checkpoint blocked the terms page.
+- Minimal Gallery (https://minimal.gallery/): screenshots and descriptions are theirs.
+- Land-book (https://land-book.com/): no ML or commercial reuse, no scrapers.
+- Lapa Ninja (https://www.lapa.ninja/): no terms page found. Link only.
+- Httpster (https://httpster.net/): no reuse terms read. Link only.
+- CSS Design Awards (https://www.cssdesignawards.com/): creator keeps copyright.
+- The FWA (https://thefwa.com/): no terms page found. Link only.
+- Mobbin (https://mobbin.com/): no scraping or re-hosting. Never cache.
+- Refero (https://refero.design/): third-party screens. Link only.
+- Codrops (https://tympanus.net/codrops/): per article licence. Link only.
 
 Imagine price card (2026-09-29)
 -------------------------------

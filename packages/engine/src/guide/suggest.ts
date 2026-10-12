@@ -13,23 +13,20 @@ import {
   type SuggestChoice,
   type SuggestOption,
 } from "./schemas.ts";
+import {
+  isGalleryFamily,
+  isGallerySource,
+  isGalleryStyleWorld,
+  selectReferenceCards,
+  styleWorldForFamily,
+} from "./gallery-model.ts";
 import { guideTextIssues } from "./validators.ts";
 
 /**
  * Grounded Suggest. Options that cite material the project does not have are dropped.
- * Taste cards are a local copy of the 029 picker: two Godly, two Awwwards, no "other" backfill.
- * The engine cannot import the crawler package.
+ * Taste cards use the gallery picker: up to two Recent or legacy Godly, up to two
+ * Awwwards, then backfill until the round has four. The engine cannot import the crawler.
  */
-
-const PER_SOURCE_CAP = 2;
-const STYLE_WORLDS = [
-  "editorial",
-  "3d-world",
-  "scroll-film",
-  "brutalist",
-  "minimal-luxury",
-  "playful",
-] as const;
 
 export function defaultGalleryFile(): string {
   return path.resolve(import.meta.dirname, "..", "..", "..", "knowledge", "galleries", "curated.json");
@@ -141,37 +138,18 @@ export function choiceSetFrom(
 
 export function referenceCards(
   entries: readonly GalleryEntry[],
-  query: { industry?: string; styleWorld?: string; exclude?: readonly string[]; limit: number },
+  query: {
+    industry?: string;
+    styleWorld?: string;
+    family?: string;
+    exclude?: readonly string[];
+    limit: number;
+    seed?: string;
+    round?: number;
+    lovedUrls?: readonly string[];
+  },
 ): GalleryEntry[] {
-  if (!Number.isFinite(query.limit) || query.limit <= 0) return [];
-  const excluded = new Set(query.exclude ?? []);
-  const godly: GalleryEntry[] = [];
-  const awwwards: GalleryEntry[] = [];
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    if (seen.has(entry.url) || excluded.has(entry.url)) continue;
-    if (query.industry !== undefined && entry.industry !== query.industry) continue;
-    if (query.styleWorld !== undefined && entry.styleWorld !== query.styleWorld) continue;
-    seen.add(entry.url);
-    if (entry.source === "godly") godly.push(entry);
-    else if (entry.source === "awwwards") awwwards.push(entry);
-  }
-  const picked: GalleryEntry[] = [];
-  let godlyIndex = 0;
-  let awwwardsIndex = 0;
-  for (let round = 0; round < PER_SOURCE_CAP; round += 1) {
-    const godlyEntry = godly[godlyIndex];
-    if (godlyEntry !== undefined && picked.length < query.limit) {
-      picked.push(godlyEntry);
-      godlyIndex += 1;
-    }
-    const awwwardsEntry = awwwards[awwwardsIndex];
-    if (awwwardsEntry !== undefined && picked.length < query.limit) {
-      picked.push(awwwardsEntry);
-      awwwardsIndex += 1;
-    }
-  }
-  return picked;
+  return selectReferenceCards(entries, query);
 }
 
 export function loadGallery(file: string): GalleryEntry[] {
@@ -396,27 +374,40 @@ function dedupe(values: readonly string[]): string[] {
 
 function parseGalleryEntry(value: unknown, index: number): GalleryEntry {
   if (!isRecord(value)) throw new Error(`Gallery entry ${index} is not an object.`);
+  const label = entryLabel(index, value);
   const name = readString(value, ["name"]);
   const url = readString(value, ["url"]);
   const source = readString(value, ["source"]);
   const industry = readString(value, ["industry"]);
-  const styleWorld = readString(value, ["styleWorld", "style_world"]);
+  const styleRaw = readString(value, ["styleWorld", "style_world"]);
   const award = readString(value, ["award"]);
   const noted = readString(value, ["noted"]);
   const motionRaw = value.motionLevel ?? value.motion_level;
-  if (name === null || name.length === 0) throw new Error(`Gallery entry ${index} needs a name.`);
-  if (url === null || !isHttpUrl(url)) throw new Error(`Gallery entry ${index} needs an http(s) url.`);
-  if (source !== "awwwards" && source !== "godly" && source !== "other") {
-    throw new Error(`Gallery entry ${index} has a source this pack does not use.`);
+  const familyRaw = readString(value, ["family"]);
+  if (name === null || name.length === 0) throw new Error(`${label} needs a name.`);
+  if (url === null || !isHttpUrl(url)) throw new Error(`${label} needs an http(s) url.`);
+  if (source === null || !isGallerySource(source)) {
+    throw new Error(`${label} has a source this pack does not use.`);
   }
-  if (industry === null || industry.length === 0) throw new Error(`Gallery entry ${index} needs an industry.`);
-  if (styleWorld === null || !isStyleWorld(styleWorld)) {
-    throw new Error(`Gallery entry ${index} has a style world this pack does not use.`);
+  if (industry === null || industry.length === 0) throw new Error(`${label} needs an industry.`);
+  if (familyRaw !== null && !isGalleryFamily(familyRaw)) {
+    throw new Error(`${label} has a family this pack does not use.`);
+  }
+  let styleWorld = styleRaw;
+  if (familyRaw !== null) {
+    const expected = styleWorldForFamily(familyRaw);
+    if (styleWorld === null) styleWorld = expected;
+    else if (styleWorld !== expected) {
+      throw new Error(`${label} style world does not match its family.`);
+    }
+  }
+  if (styleWorld === null || !isGalleryStyleWorld(styleWorld)) {
+    throw new Error(`${label} has a style world this pack does not use.`);
   }
   if (typeof motionRaw !== "number" || !Number.isInteger(motionRaw) || motionRaw < 1 || motionRaw > 10) {
-    throw new Error(`Gallery entry ${index} needs a motion level from 1 to 10.`);
+    throw new Error(`${label} needs a motion level from 1 to 10.`);
   }
-  if (award === null || award.length === 0) throw new Error(`Gallery entry ${index} needs an award.`);
+  if (award === null || award.length === 0) throw new Error(`${label} needs an award.`);
   const awardLower = award.toLowerCase();
   if (awardLower.indexOf("soty") !== -1 && awardLower.indexOf("2026") !== -1) {
     throw new Error("SOTY 2026 is not an award this loader will accept.");
@@ -425,19 +416,88 @@ function parseGalleryEntry(value: unknown, index: number): GalleryEntry {
     throw new Error("A Site of the Day row must not use the award string SOTY.");
   }
   if (noted === null || noted.indexOf("Look at") !== 0) {
-    throw new Error(`Gallery entry ${index} needs a one-line Look at note.`);
+    throw new Error(`${label} needs a one-line Look at note.`);
   }
   if (noted.indexOf("\n") !== -1 || noted.indexOf("!") !== -1) {
-    throw new Error(`Gallery entry ${index} note must be one line, with no exclamation mark.`);
+    throw new Error(`${label} note must be one line, with no exclamation mark.`);
   }
-  return { name, url, source, industry, styleWorld, motionLevel: motionRaw, award, noted };
+  const entry: GalleryEntry = {
+    name,
+    url,
+    source,
+    industry,
+    styleWorld,
+    motionLevel: motionRaw,
+    award,
+    noted,
+  };
+  const id = optionalText(value, "id", label);
+  if (id !== undefined) entry.id = id;
+  const title = optionalText(value, "title", label);
+  if (title !== undefined) entry.title = title;
+  const sourceName = optionalText(value, "sourceName", label);
+  if (sourceName !== undefined) entry.sourceName = sourceName;
+  if (Object.hasOwn(value, "sourcePage")) {
+    if (value.sourcePage === null) entry.sourcePage = null;
+    else {
+      const sourcePage = optionalText(value, "sourcePage", label);
+      if (sourcePage !== undefined) entry.sourcePage = sourcePage;
+    }
+  }
+  if (familyRaw !== null) entry.family = familyRaw;
+  if (Object.hasOwn(value, "styleTags")) entry.styleTags = optionalTags(value.styleTags, label);
+  const why = optionalText(value, "why", label);
+  if (why !== undefined) entry.why = why;
+  if (Object.hasOwn(value, "palette")) {
+    const palette = optionalPalette(value.palette, label);
+    if (palette !== undefined) entry.palette = palette;
+  }
+  const typography = optionalText(value, "typography", label);
+  if (typography !== undefined) entry.typography = typography;
+  const borrow = optionalText(value, "borrow", label);
+  if (borrow !== undefined) entry.borrow = borrow;
+  const attribution = optionalText(value, "attribution", label);
+  if (attribution !== undefined) entry.attribution = attribution;
+  if (Object.hasOwn(value, "verified")) {
+    if (typeof value.verified !== "boolean") throw new Error(`${label} verified must be a boolean.`);
+    entry.verified = value.verified;
+  }
+  const verificationNote = optionalText(value, "verificationNote", label);
+  if (verificationNote !== undefined) entry.verificationNote = verificationNote;
+  const checked = optionalText(value, "checked", label);
+  if (checked !== undefined) entry.checked = checked;
+  return entry;
 }
 
-function isStyleWorld(value: string): boolean {
-  for (const style of STYLE_WORLDS) {
-    if (style === value) return true;
+function entryLabel(index: number, raw: Record<string, unknown>): string {
+  const id = raw.id;
+  if (typeof id === "string" && id.trim() !== "") return `Gallery entry ${index} (${id.trim()})`;
+  return `Gallery entry ${index}`;
+}
+
+function optionalText(raw: Record<string, unknown>, key: string, label: string): string | undefined {
+  if (!Object.hasOwn(raw, key) || raw[key] === undefined) return undefined;
+  if (typeof raw[key] !== "string" || raw[key].trim() === "") {
+    throw new Error(`${label} ${key} must be a non-empty string.`);
   }
-  return false;
+  return raw[key].trim();
+}
+
+function optionalTags(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${label} styleTags must be an array of strings.`);
+  }
+  return value;
+}
+
+function optionalPalette(value: unknown, label: string): GalleryEntry["palette"] {
+  if (!isRecord(value) || typeof value.note !== "string" || !Array.isArray(value.hex)) {
+    throw new Error(`${label} palette must include a note and hex values.`);
+  }
+  if (value.hex.some((item) => typeof item !== "string")) {
+    throw new Error(`${label} palette hex values must be strings.`);
+  }
+  return { note: value.note.trim(), hex: value.hex };
 }
 
 function isHttpUrl(value: string): boolean {

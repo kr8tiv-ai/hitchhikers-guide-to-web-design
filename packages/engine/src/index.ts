@@ -117,6 +117,8 @@ export { briefLoop, isApproval, renderSiteBrief } from "./guide/brief-loop.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback } from "./guide/pushback-judge.ts";
 export { mirrorCue, requestMirror } from "./guide/mirror.ts";
+export { FAMILIES, FAMILY_STYLE, familyOf, selectReferenceCards, styleWorldForFamily } from "./guide/gallery-model.ts";
+export type { GalleryFamily } from "./guide/gallery-model.ts";
 export { choiceSetFrom, isTasteId, loadFacts, loadGallery, referenceCards, suggest, suggestOffer } from "./guide/suggest.ts";
 export { detectLanguage, guideTextIssues, lintClaims, questionCount, validateGuideMessage } from "./guide/validators.ts";
 export type { GuideAcp, GuideSession, GuideTurn, GuideTurnDeps, GuideTurnInput } from "./guide/live-turn.ts";

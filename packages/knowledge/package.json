@@ -16,6 +16,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+    "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "validate:gallery": "node --experimental-strip-types scripts/validate-gallery.ts"
+  },
+  "dependencies": {
+    "@hitchhiker/crawler": "workspace:*",
+    "@hitchhiker/engine": "workspace:*"
   }
 }

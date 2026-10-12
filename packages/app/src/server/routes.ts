@@ -19,10 +19,8 @@ import {
   redact,
   chooseShortlist,
   dealRound,
-  defaultGalleryCacheDir,
   draftThread,
   emptyWalk,
-  galleryCachePaths,
   guideThinkFromScript,
   loadConfig,
   saveConfig,
@@ -199,6 +197,7 @@ const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
 const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
 const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
+const TILE_SOURCE = path.resolve(SRC_ROOT, "gallery", "tile.ts");
 const MOTION_SOURCE = path.resolve(SRC_ROOT, "motion-previews", "index.ts");
 const MOTION_ROOT = path.resolve(SRC_ROOT, "motion-previews");
 const APP_NODE = path.resolve(import.meta.dirname, "..", "..", "node_modules");
@@ -1126,15 +1125,7 @@ async function handleGet(
     sendJson(req, res, 200, galleryJson(opened));
     return;
   }
-  if (pathname === "/api/gallery/shot") {
-    const shot = await readGalleryShot(shotTarget(rawUrl));
-    if (shot === null) {
-      sendJson(req, res, 404, { error: "That shot is not in the cache." });
-      return;
-    }
-    sendBytes(req, res, 200, "image/webp", shot);
-    return;
-  }
+
   if (pathname === "/motion") {
     await deliverHtml(req, res, 200, renderMotion(token, notice), projectDir, token, false);
     return;
@@ -1346,6 +1337,10 @@ async function handleGet(
   }
   if (pathname === "/client/walk.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(WALK_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/tile.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(TILE_SOURCE)));
     return;
   }
   if (pathname.startsWith("/src/") || pathname.startsWith("/public/")) {
@@ -2247,7 +2242,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
     .replace(/from\s+["']\.\/voice-text\.ts["']/g, 'from "/client/voice-text.js"')
     .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"')
-    .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"');
+    .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"')
+    .replace(/from\s+["']\.\/tile\.ts["']/g, 'from "/client/tile.js"');
   moduleCache.set(filePath, js);
   return js;
 }
@@ -2590,12 +2586,13 @@ async function readInside(root: string, relPath: string): Promise<Buffer | null>
 }
 
 /**
- * Gallery walk. The desk reads a local cache and never fetches the site,
- * so a robots denial stays a note on the card. Prompt 047 is not called.
+ * Gallery walk. Cards use a generated tile. The desk does not serve
+ * third-party screenshots. HH_GALLERY_CACHE is left unread on purpose.
  */
 interface GalleryQuery {
   industry: string | null;
   styleWorld: string | null;
+  family: string | null;
 }
 
 interface GalleryDisk {
@@ -2650,7 +2647,7 @@ async function handleGalleryShortlist(
 async function applyVerdict(projectDir: string, input: VerdictInput): Promise<JsonResult> {
   const saved = await readGalleryDisk(projectDir);
   const state = saved?.state ?? emptyWalk();
-  const query = saved?.query ?? { industry: null, styleWorld: null };
+  const query = saved?.query ?? { industry: null, styleWorld: null, family: null };
   const next = recordVerdict(state, input);
   if (walkUnchanged(state, next)) {
     return { status: 400, body: { error: "That site is not in this round." } };
@@ -2671,7 +2668,7 @@ async function applyVerdict(projectDir: string, input: VerdictInput): Promise<Js
 async function applyShortlist(projectDir: string, urls: readonly string[], thread: string): Promise<JsonResult> {
   const saved = await readGalleryDisk(projectDir);
   const state = saved?.state ?? emptyWalk();
-  const query = saved?.query ?? { industry: null, styleWorld: null };
+  const query = saved?.query ?? { industry: null, styleWorld: null, family: null };
   if (state.phase !== "narrowing") {
     return { status: 409, body: { error: "The shortlist is not open." } };
   }
@@ -2679,7 +2676,8 @@ async function applyShortlist(projectDir: string, urls: readonly string[], threa
   if (chosen.shortlistError !== null) {
     return { status: 400, body: { error: chosen.shortlistError } };
   }
-  const pack = readPack();
+  const loaded = readPack();
+  const pack = loaded.entries;
   const note = thread.trim().length > 0 ? thread.trim() : draftThread(chosen, pack);
   try {
     await writeReferences(projectDir, chosen, pack, note);
@@ -2693,9 +2691,15 @@ async function applyShortlist(projectDir: string, urls: readonly string[], threa
 }
 
 async function openGallery(projectDir: string, rawUrl: string): Promise<OpenedGallery> {
-  const pack = readPack();
+  const loaded = readPack();
+  if (loaded.error !== null) {
+    const state = emptyWalk();
+    const view = await toGalleryView(projectDir, state, [], [], loaded.error);
+    return { state, view };
+  }
+  const pack = loaded.entries;
   const saved = await readGalleryDisk(projectDir);
-  let query = saved?.query ?? { industry: null, styleWorld: null };
+  let query = saved?.query ?? { industry: null, styleWorld: null, family: null };
   let state = saved?.state ?? emptyWalk();
   if (isFreshWalk(state)) query = queryFromUrl(rawUrl);
   const deal =
@@ -2703,7 +2707,7 @@ async function openGallery(projectDir: string, rawUrl: string): Promise<OpenedGa
       ? { state, cards: [] as GalleryEntry[] }
       : dealRound(state, pack, toWalkQuery(query));
   await writeGalleryDisk(projectDir, { query, state: deal.state });
-  return { state: deal.state, view: await toGalleryView(projectDir, deal.state, deal.cards, pack) };
+  return { state: deal.state, view: await toGalleryView(projectDir, deal.state, deal.cards, pack, null) };
 }
 
 function galleryJson(opened: OpenedGallery): Record<string, unknown> {
@@ -2745,6 +2749,7 @@ async function toGalleryView(
   state: WalkState,
   cards: readonly GalleryEntry[],
   pack: readonly GalleryEntry[],
+  packError: string | null,
 ): Promise<GalleryView> {
   const nudgeUrl = state.nudge === null ? null : state.nudge.url;
   return {
@@ -2759,20 +2764,37 @@ async function toGalleryView(
     lovesList: lovesOf(state, pack),
     thread: state.phase === "narrowing" ? draftThread(state, pack) : "",
     written: state.phase === "done" ? await writtenNames(projectDir) : [],
+    packError,
   };
 }
 
 function cardModel(entry: GalleryEntry): GalleryCardModel {
-  const shot = readCachedShot(entry.url);
+  const sourceName = entry.sourceName ?? sourceNameFor(entry.source);
   return {
     name: entry.name,
     url: entry.url,
     source: entry.source,
     noted: entry.noted,
     award: entry.award,
-    shotNote: shot.note,
-    imageUrl: shot.image ? `/api/gallery/shot?u=${encodeURIComponent(entry.url)}` : null,
+    family: entry.family ?? "",
+    id: entry.id ?? entry.url,
+    title: entry.title ?? "",
+    why: entry.why ?? entry.noted,
+    borrow: entry.borrow ?? "",
+    typography: entry.typography ?? "",
+    paletteNote: entry.palette?.note ?? "",
+    sourceName,
+    sourcePage: entry.sourcePage ?? null,
   };
+}
+
+function sourceNameFor(source: string): string {
+  if (source === "godly") return "Godly";
+  if (source === "awwwards") return "Awwwards";
+  if (source === "recent") return "Recent (formerly Godly)";
+  if (source === "gsap-showcase") return "GSAP Showcase";
+  if (source === "aura") return "aura.build";
+  return "Direct pick";
 }
 
 function lovesOf(state: WalkState, pack: readonly GalleryEntry[]): GalleryLoveModel[] {
@@ -2785,71 +2807,19 @@ function lovesOf(state: WalkState, pack: readonly GalleryEntry[]): GalleryLoveMo
   return list;
 }
 
-function readCachedShot(url: string): { note: string | null; image: boolean } {
-  const cacheDir = galleryCacheDir();
-  const paths = galleryCachePaths(cacheDir, url);
-  const root = path.resolve(cacheDir);
-  const image = path.resolve(paths.image);
-  const metaPath = path.resolve(paths.meta);
-  if (!isInside(root, image) || !isInside(root, metaPath) || !existsSync(metaPath)) {
-    return { note: null, image: false };
-  }
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(metaPath, "utf8"));
-    if (!isThumbMeta(parsed)) return { note: null, image: false };
-    if (parsed.placeholder) {
-      const note = parsed.note.trim();
-      return { note: note.length > 0 ? note : null, image: false };
-    }
-    return { note: null, image: existsSync(image) };
-  } catch {
-    return { note: null, image: false };
-  }
-}
-
-async function readGalleryShot(url: string | null): Promise<Buffer | null> {
-  if (url === null) return null;
-  const cacheDir = galleryCacheDir();
-  const paths = galleryCachePaths(cacheDir, url);
-  const root = path.resolve(cacheDir);
-  const image = path.resolve(paths.image);
-  const metaPath = path.resolve(paths.meta);
-  if (!isInside(root, image) || !isInside(root, metaPath)) return null;
-  if (!existsSync(metaPath) || !existsSync(image)) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(metaPath, "utf8"));
-  } catch {
-    return null;
-  }
-  if (!isThumbMeta(parsed) || parsed.placeholder) return null;
-  try {
-    const realRoot = await realpath(root);
-    const realImage = await realpath(image);
-    if (!isInside(realRoot, realImage)) return null;
-    return await readFile(realImage);
-  } catch {
-    return null;
-  }
-}
-
 function galleryPackFile(): string {
   const fromEnv = process.env.HH_GALLERY_FILE;
   if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
   return path.resolve(import.meta.dirname, "..", "..", "..", "knowledge", "galleries", "curated.json");
 }
 
-function galleryCacheDir(): string {
-  const fromEnv = process.env.HH_GALLERY_CACHE;
-  if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
-  return defaultGalleryCacheDir();
-}
-
-function readPack(): GalleryEntry[] {
+function readPack(): { entries: GalleryEntry[]; error: string | null } {
   try {
-    return loadGallery(galleryPackFile());
-  } catch {
-    return [];
+    return { entries: loadGallery(galleryPackFile()), error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "The gallery pack could not be read.";
+    console.error(message);
+    return { entries: [], error: message };
   }
 }
 
@@ -2862,12 +2832,15 @@ async function readGalleryDisk(projectDir: string): Promise<GalleryDisk | null> 
     if (state === null) return null;
     const industry = value.query.industry;
     const styleWorld = value.query.styleWorld;
+    const family = value.query.family;
     if (industry !== null && typeof industry !== "string") return null;
     if (styleWorld !== null && typeof styleWorld !== "string") return null;
+    if (family !== undefined && family !== null && typeof family !== "string") return null;
     return {
       query: {
         industry: typeof industry === "string" ? industry : null,
         styleWorld: typeof styleWorld === "string" ? styleWorld : null,
+        family: typeof family === "string" ? family : null,
       },
       state,
     };
@@ -2899,9 +2872,11 @@ function queryFromUrl(rawUrl: string): GalleryQuery {
   const params = new URLSearchParams(rawUrl.split("?")[1] ?? "");
   const industry = params.get("industry");
   const styleWorld = params.get("styleWorld");
+  const family = params.get("family");
   return {
     industry: industry === null || industry.trim() === "" ? null : industry.trim().slice(0, 80),
     styleWorld: styleWorld === null || styleWorld.trim() === "" ? null : styleWorld.trim().slice(0, 40),
+    family: family === null || family.trim() === "" ? null : family.trim().slice(0, 40),
   };
 }
 
@@ -2909,13 +2884,8 @@ function toWalkQuery(query: GalleryQuery): WalkQuery {
   const next: WalkQuery = {};
   if (query.industry !== null && query.industry.trim() !== "") next.industry = query.industry.trim();
   if (query.styleWorld !== null && query.styleWorld.trim() !== "") next.styleWorld = query.styleWorld.trim();
+  if (query.family !== null && query.family.trim() !== "") next.family = query.family.trim();
   return next;
-}
-
-function shotTarget(rawUrl: string): string | null {
-  const value = new URLSearchParams(rawUrl.split("?")[1] ?? "").get("u");
-  if (value === null || value.length === 0 || value.length > 2_000) return null;
-  return value;
 }
 
 function walkUnchanged(before: WalkState, after: WalkState): boolean {
@@ -2989,16 +2959,6 @@ function referenceError(error: unknown): { status: number; message: string } {
     }
   }
   return { status: 500, message: "The shortlist did not save." };
-}
-
-function isThumbMeta(value: unknown): value is { at: number; placeholder: boolean; note: string } {
-  if (!isRecord(value)) return false;
-  return typeof value.at === "number" && typeof value.placeholder === "boolean" && typeof value.note === "string";
-}
-
-function isInside(root: string, target: string): boolean {
-  const rel = path.relative(root, target);
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 function normalizePath(url: string): string | null {

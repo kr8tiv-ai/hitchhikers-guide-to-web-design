@@ -224,8 +224,8 @@ test("a thin industry is filled from the wider pack", () => {
   assert.match(deal.state.fillNote ?? "", /wider pack/);
 });
 
-test("aura.build is included when the pack lists it", () => {
-  const pack = [
+test("aura.build fills an open slot and does not grow a full round past four", () => {
+  const full = [
     ...balanced(2),
     entry({
       name: "Aura plate",
@@ -235,13 +235,32 @@ test("aura.build is included when the pack lists it", () => {
       industry: "saas",
     }),
   ];
-  const deal = dealRound(emptyWalk(), pack, { industry: "saas", styleWorld: "editorial" });
-  assert.equal(deal.cards.filter((card) => card.source === "godly").length, 2);
-  assert.equal(deal.cards.filter((card) => card.source === "awwwards").length, 2);
+  const fullDeal = dealRound(emptyWalk(), full, { industry: "saas", styleWorld: "editorial" });
+  assert.equal(fullDeal.cards.length, 4);
+  assert.equal(fullDeal.cards.filter((card) => card.source === "godly").length, 2);
+  assert.equal(fullDeal.cards.filter((card) => card.source === "awwwards").length, 2);
+  assert.equal(
+    fullDeal.cards.some((card) => card.url === "https://www.aura.build/plates/one"),
+    false,
+  );
+
+  const open = [
+    entry({ url: "https://example.com/open/godly", source: "godly" }),
+    entry({ url: "https://example.com/open/awwwards", source: "awwwards" }),
+    entry({
+      name: "Aura plate",
+      url: "https://www.aura.build/plates/one",
+      source: "other",
+    }),
+    entry({ url: "https://example.com/open/other", source: "other" }),
+  ];
+  const deal = dealRound(emptyWalk(), open, { industry: "saas", styleWorld: "editorial" });
+  assert.equal(deal.cards.length, 4);
   assert.equal(
     deal.cards.some((card) => card.url === "https://www.aura.build/plates/one"),
     true,
   );
+  assert.ok(deal.cards.filter((card) => card.url.includes("aura.build")).length <= 2);
   assert.match(deal.state.fillNote ?? "", /aura\.build/);
 });
 

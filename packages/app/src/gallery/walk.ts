@@ -2,6 +2,7 @@
  * Gallery walk screen. Renders with the 015 example-site card.
  * The browser half posts verdicts. Importing this file in Node does not bind a document.
  */
+import { renderTile } from "./tile.ts";
 
 export interface GalleryCardModel {
   name: string;
@@ -9,8 +10,15 @@ export interface GalleryCardModel {
   source: string;
   noted: string;
   award: string;
-  shotNote: string | null;
-  imageUrl: string | null;
+  family: string;
+  id: string;
+  title: string;
+  why: string;
+  borrow: string;
+  typography: string;
+  paletteNote: string;
+  sourceName: string;
+  sourcePage: string | null;
 }
 
 export interface GalleryLoveModel {
@@ -31,6 +39,7 @@ export interface GalleryView {
   lovesList: GalleryLoveModel[];
   thread: string;
   written: string[];
+  packError: string | null;
 }
 
 export function galleryStatus(view: GalleryView): string {
@@ -44,9 +53,20 @@ export function galleryStatus(view: GalleryView): string {
 export function renderGalleryBody(view: GalleryView): string {
   const open = `<h1 class="hh-headline">Gallery walk</h1>
 <section id="hh-gallery" data-phase="${escapeHtml(view.phase)}" data-loves="${view.loves}" data-round="${view.round}">`;
+  if (view.packError !== null && view.packError.length > 0) {
+    return `${open}\n${renderPackError(view.packError)}\n</section>`;
+  }
   if (view.phase === "done") return `${open}\n${renderDone(view)}\n</section>`;
   if (view.phase === "narrowing") return `${open}\n${renderNarrow(view)}\n</section>`;
   return `${open}\n${renderWalking(view)}\n</section>`;
+}
+
+function renderPackError(message: string): string {
+  return `<div class="hh-gallery__error" role="alert">
+  <h2 class="hh-empty__title">The gallery pack is invalid</h2>
+  <p>${escapeHtml(message)}</p>
+  <p>The gallery pack is invalid. Run pnpm --filter @hitchhiker/knowledge validate:gallery.</p>
+</div>`;
 }
 
 function renderWalking(view: GalleryView): string {
@@ -59,7 +79,7 @@ function renderWalking(view: GalleryView): string {
     view.cards.length === 0
       ? `<div class="hh-empty"><h2 class="hh-empty__title">No sites matched</h2><p>The pack has nothing left to show. Widen the industry filter if you need a wider set.</p><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/gallery" data-tip="Loads the gallery again.">Reload the gallery</a></p></div>`
       : "";
-  return `<p class="hh-dek">Four sites at a time, two from Godly and two from Awwwards. Mark each one love, meh, or hate, and say why.</p>
+  return `<p class="hh-dek">Four sites at a time from our curated list, up to two from Recent and two from Awwwards. Mark each one love, meh, or hate, and say why.</p>
 ${note}
 <p class="hh-gallery__hint">L, M, and H mark the card you are on.</p>
 <div class="hh-sites">${cards}</div>
@@ -77,24 +97,32 @@ function renderCard(card: GalleryCardModel, view: GalleryView, active: boolean):
     nudged && view.nudgeMessage !== null
       ? `<p class="hh-error" data-nudge role="alert">${escapeHtml(view.nudgeMessage)}</p>`
       : `<p class="hh-error" data-nudge role="alert" hidden></p>`;
-  const shot =
-    card.imageUrl !== null && card.imageUrl.startsWith("/api/gallery/shot")
-      ? `<img class="hh-site__img" alt="" src="${escapeHtml(card.imageUrl)}" />`
-      : "";
-  const shotNote =
-    card.shotNote === null ? "" : `<p class="hh-shot-note">${escapeHtml(card.shotNote)}</p>`;
+  const tile = renderTile({ family: card.family, id: card.id, url: card.url });
   const award =
     card.award === "none" ? "" : `<p class="hh-kicker">${escapeHtml(card.award)}</p>`;
+  const headline = card.title === "" ? "" : `<p class="hh-site__headline">${escapeHtml(card.title)}</p>`;
+  const borrow = card.borrow === "" ? "" : `<p class="hh-site__borrow">Borrow: ${escapeHtml(card.borrow)}</p>`;
+  const more =
+    card.typography === "" && card.paletteNote === ""
+      ? ""
+      : `<details class="hh-site__more"><summary>Type and colour</summary>${
+          card.typography === "" ? "" : `<p>${escapeHtml(card.typography)}</p>`
+        }${card.paletteNote === "" ? "" : `<p>${escapeHtml(card.paletteNote)}</p>`}</details>`;
+  const sourceLink = sourcePageLink(card);
   const activeClass = active ? " hh-site is-active" : " hh-site";
   const nudgedAttr = nudged ? ' data-nudged="true"' : "";
-  return `<article class="${activeClass.trim()}" data-url="${escapeHtml(card.url)}" data-gallery="${escapeHtml(card.source)}" data-placeholder="${card.imageUrl === null ? "true" : "false"}"${nudgedAttr} tabindex="0">
-  <div class="hh-site__shot" aria-hidden="true">${shot}<span class="hh-site__mark">${escapeHtml(monogram(card.name))}</span></div>
+  const familyAttr = card.family === "" ? "" : ` data-family="${escapeHtml(card.family)}"`;
+  return `<article class="${activeClass.trim()}" data-url="${escapeHtml(card.url)}" data-gallery="${escapeHtml(card.source)}"${familyAttr} data-placeholder="false"${nudgedAttr} tabindex="0">
+  <div class="hh-site__shot">${tile}<span class="hh-site__mark" aria-hidden="true">${escapeHtml(monogram(card.name))}</span></div>
   <div class="hh-site__body">
     <p class="hh-kicker">${escapeHtml(sourceLabel(card))}</p>
     ${award}
     <h2 class="hh-site__title">${escapeHtml(card.name)}</h2>
-    <p class="hh-site__note">${escapeHtml(card.noted)}</p>
-    ${shotNote}
+    ${headline}
+    <p class="hh-site__note">${escapeHtml(card.why === "" ? card.noted : card.why)}</p>
+    ${borrow}
+    <p class="hh-site__credit">Listed on ${escapeHtml(card.sourceName)}${sourceLink}</p>
+    ${more}
     <div class="hh-gallery__tools">${link}</div>
     <div class="hh-site__votes" role="group" aria-label="${escapeHtml(card.name)}">
       <button class="hh-vote" type="button" data-vote="love" aria-pressed="false" data-tip="Marks this site as one to keep in mind.">Love</button>
@@ -168,8 +196,17 @@ function sourceLabel(card: GalleryCardModel): string {
     // A broken url still gets the source label below.
   }
   if (card.source === "godly") return "Godly";
+  if (card.source === "recent") return "Recent";
   if (card.source === "awwwards") return "Awwwards";
+  if (card.source === "gsap-showcase") return "GSAP Showcase";
+  if (card.source === "aura") return "aura.build";
   return "Listed";
+}
+
+function sourcePageLink(card: GalleryCardModel): string {
+  const href = card.sourcePage === null ? null : safeHref(card.sourcePage);
+  if (href === null) return ".";
+  return `. <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">Listing</a>`;
 }
 
 function monogram(name: string): string {
@@ -259,6 +296,22 @@ function browserEnv(): WalkEnv | null {
 
 function mountWalk(env: WalkEnv): void {
   const token = readToken(env.document);
+  let pending = 0;
+  let navigateWhenQuiet = false;
+  let chain = Promise.resolve();
+  let settle: ReturnType<typeof setTimeout> | null = null;
+  const cancelLeave = (): void => {
+    if (settle !== null) clearTimeout(settle);
+    settle = null;
+  };
+  const scheduleLeave = (): void => {
+    cancelLeave();
+    // A second Keep can land just after the first response. Wait briefly so both saves count.
+    settle = setTimeout(() => {
+      settle = null;
+      if (pending === 0 && navigateWhenQuiet) env.assign("/gallery");
+    }, 250);
+  };
   env.document.addEventListener("click", (event) => {
     const vote = closestAttr(event.target, "data-vote");
     if (vote !== null) {
@@ -269,7 +322,19 @@ function mountWalk(env: WalkEnv): void {
     }
     if (closestAttr(event.target, "data-keep") !== null) {
       const card = cardFrom(event.target);
-      if (card !== null) void keep(env, token, card);
+      if (card !== null) {
+        cancelLeave();
+        pending += 1;
+        chain = chain.then(
+          () => keep(env, token, card),
+          () => keep(env, token, card),
+        ).then((saved) => {
+          if (saved) navigateWhenQuiet = true;
+        }).finally(() => {
+          pending -= 1;
+          if (pending === 0 && navigateWhenQuiet) scheduleLeave();
+        });
+      }
       return;
     }
     if (closestAttr(event.target, "data-shortlist") !== null) {
@@ -302,15 +367,15 @@ function choose(card: WalkElement, verdict: string): void {
   if (verdict === "love" || verdict === "hate") card.querySelector("textarea")?.focus?.();
 }
 
-async function keep(env: WalkEnv, token: string | null, card: WalkElement): Promise<void> {
+async function keep(env: WalkEnv, token: string | null, card: WalkElement): Promise<boolean> {
   if (token === null) {
     show(card, SAVE_FAILED);
-    return;
+    return false;
   }
   const verdict = card.getAttribute("data-choice");
   if (verdict !== "love" && verdict !== "meh" && verdict !== "hate") {
     show(card, CHOOSE);
-    return;
+    return false;
   }
   const url = card.getAttribute("data-url") ?? "";
   const why = card.querySelector("textarea")?.value ?? "";
@@ -325,22 +390,22 @@ async function keep(env: WalkEnv, token: string | null, card: WalkElement): Prom
     );
   } catch {
     show(card, SAVE_FAILED);
-    return;
+    return false;
   }
   if (!isRecord(payload)) {
     show(card, SAVE_FAILED);
-    return;
+    return false;
   }
   if (payload.nudge === true) {
     card.setAttribute("data-nudged", "true");
     show(card, typeof payload.message === "string" ? payload.message : CHOOSE);
-    return;
+    return false;
   }
   if (payload.ok !== true) {
     show(card, typeof payload.error === "string" ? payload.error : SAVE_FAILED);
-    return;
+    return false;
   }
-  env.assign("/gallery");
+  return true;
 }
 
 async function writeShortlist(env: WalkEnv, token: string | null): Promise<void> {
