@@ -1,5 +1,14 @@
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { explainTool, type AnswerRecord, type PathProbeName } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
+import {
+  MAX_ATTACH_FILES,
+  answerWithAttachments,
+  attachQuestionId,
+  collectLinks,
+  type SummaryFile,
+} from "../client/attach.ts";
 
 /**
  * PATH probes shared with `hh doctor` (`probePathTools` in the CLI).
@@ -132,12 +141,18 @@ export interface LogoIntake {
   questionId: string;
 }
 
-const LOGO_ASSET_NAME =
-  /^hh-[0-9a-f]{8}-[A-Za-z0-9_-][A-Za-z0-9._-]{0,47}\.(png|jpe?g|webp|gif|svg|pdf)$/;
+const LOGO_FILE =
+  /^(?:hh-[0-9a-f]{8}-[A-Za-z0-9_-][A-Za-z0-9._-]{0,47}|[A-Za-z0-9][A-Za-z0-9._-]{0,63})\.(png|jpe?g|webp|gif|svg|pdf)$/;
 
 export function isLogoAssetName(name: string): boolean {
-  if (name.includes("..") || name.includes("/") || name.includes("\\")) return false;
-  return LOGO_ASSET_NAME.test(name);
+  if (name.includes("..") || name.includes("\\") || name.includes("\0")) return false;
+  const slash = name.indexOf("/");
+  if (slash === -1) return LOGO_FILE.test(name);
+  if (name.indexOf("/", slash + 1) !== -1) return false;
+  const folder = name.slice(0, slash);
+  const file = name.slice(slash + 1);
+  if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$/.test(folder)) return false;
+  return LOGO_FILE.test(file);
 }
 
 export function isRasterLogo(name: string): boolean {
@@ -311,4 +326,101 @@ export function compactMapLabel(phase: string, index: number, total: number): st
 export function savedFooterLine(questionId: string, left: number): string {
   const remaining = Number.isInteger(left) && left > 0 ? left : 0;
   return `Saved · ${questionId} · ${remaining} left`;
+}
+
+interface ManifestRow {
+  path: string;
+  storedName: string;
+  originalName: string;
+  size: number;
+  type: string;
+}
+
+/**
+ * Draft plus the files and links this project actually has.
+ * A path outside the question folder is dropped. A link is normalized and never fetched.
+ */
+export function composeStoredAnswer(
+  projectDir: string,
+  questionId: string,
+  draft: string,
+  attachments: unknown,
+): string {
+  const files: SummaryFile[] = [];
+  const links: string[] = [];
+  if (!Array.isArray(attachments) || !attachQuestionId(questionId)) {
+    return answerWithAttachments(draft, files, links);
+  }
+  const folder = questionFolder(projectDir, questionId);
+  const byPath = new Map(readManifest(projectDir, questionId).map((row) => [row.path, row]));
+  for (const item of attachments) {
+    if (!isPlain(item)) continue;
+    if (item.kind === "link" && typeof item.url === "string") {
+      const got = collectLinks(links, [item.url]);
+      for (const url of got.added) links.push(url);
+      continue;
+    }
+    if (item.kind !== "file" || typeof item.path !== "string" || folder === null) continue;
+    if (files.length >= MAX_ATTACH_FILES) continue;
+    const relPath = item.path.replaceAll("\\", "/");
+    const prefix = `.hitchhiker/uploads/${questionId}/`;
+    if (!relPath.startsWith(prefix) || relPath.includes("..")) continue;
+    const row = byPath.get(relPath);
+    if (row === undefined) continue;
+    const stored = relPath.slice(prefix.length);
+    if (stored !== row.storedName || stored.includes("/") || stored.includes("..")) continue;
+    const abs = path.resolve(folder, stored);
+    const rel = path.relative(folder, abs);
+    if (rel !== stored || rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    if (!isPlainFile(abs)) continue;
+    files.push({ originalName: row.originalName });
+  }
+  return answerWithAttachments(draft, files, links);
+}
+
+function questionFolder(projectDir: string, questionId: string): string | null {
+  if (!attachQuestionId(questionId)) return null;
+  const root = path.resolve(projectDir, ".hitchhiker", "uploads");
+  const folder = path.resolve(root, questionId);
+  const rel = path.relative(root, folder);
+  if (rel !== questionId || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return folder;
+}
+
+function readManifest(projectDir: string, questionId: string): ManifestRow[] {
+  const folder = questionFolder(projectDir, questionId);
+  if (folder === null) return [];
+  const file = path.join(folder, "manifest.json");
+  if (!existsSync(file)) return [];
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isManifestRow);
+  } catch {
+    return [];
+  }
+}
+
+function isManifestRow(value: unknown): value is ManifestRow {
+  if (!isPlain(value)) return false;
+  return (
+    typeof value.path === "string" &&
+    typeof value.storedName === "string" &&
+    typeof value.originalName === "string" &&
+    typeof value.size === "number" &&
+    typeof value.type === "string"
+  );
+}
+
+function isPlainFile(abs: string): boolean {
+  try {
+    const stat = lstatSync(abs);
+    return stat.isFile() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function isPlain(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

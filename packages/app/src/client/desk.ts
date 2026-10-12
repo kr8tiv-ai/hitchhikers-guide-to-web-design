@@ -1,6 +1,26 @@
 import type { Question } from "@hitchhiker/engine";
-import type { CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
+import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
 import { escapeHtml, renderCard, renderChoiceGroup, VOICE_SERVICE_NOTE } from "../card.ts";
+import {
+  MAX_ATTACH_FILES,
+  type AnswerAttachment,
+  addedFilesMessage,
+  addedLinksMessage,
+  collectLinks,
+  fileCapError,
+  formatBytes,
+  kindsFor,
+  linkLabel,
+  linkTokens,
+  pastedImageName,
+  removedMessage,
+  shortcutMissError,
+  shortcutTarget,
+  textIsOnlyLinks,
+  uploadingMessage,
+  urisFromList,
+  validateFileMeta,
+} from "./attach.ts";
 import {
   engineForDesk,
   voiceChromeFor,
@@ -329,6 +349,10 @@ interface DeskElement {
   /** Present on `<dialog>`. The desk harness omits both. */
   showModal?(): void;
   close?(): void;
+  /** Present on a real button and file input. The harness omits it. */
+  click?(): void;
+  /** Present on a real file input. The harness omits it. */
+  showPicker?(): void;
 }
 
 interface DeskEvent {
@@ -341,7 +365,16 @@ interface DeskEvent {
   shiftKey?: boolean;
   /** True while an IME composition is open. Enter must not submit. */
   isComposing?: boolean;
-  dataTransfer?: { files?: ArrayLike<File> } | null;
+  dataTransfer?: {
+    files?: ArrayLike<File>;
+    types?: ArrayLike<string>;
+    getData?: (type: string) => string;
+  } | null;
+  clipboardData?: {
+    files?: ArrayLike<File>;
+    items?: ArrayLike<{ type: string; getAsFile?: () => File | null }>;
+    getData?: (type: string) => string;
+  } | null;
 }
 
 interface DeskParent {
@@ -349,8 +382,8 @@ interface DeskParent {
 }
 
 interface DeskWindow {
-  addEventListener(type: string, listener: () => void): void;
-  removeEventListener(type: string, listener: () => void): void;
+  addEventListener(type: string, listener: (event?: DeskEvent) => void): void;
+  removeEventListener(type: string, listener: (event?: DeskEvent) => void): void;
 }
 
 interface DeskDocument {
@@ -388,6 +421,24 @@ interface TurnInput {
   questionId: string;
   text?: string;
   assumed?: boolean;
+  attachments?: AnswerAttachment[];
+}
+
+interface HeldChip {
+  id: string;
+  kind: "file" | "link";
+  label: string;
+  detail: string;
+  removeName: string;
+  previewUrl?: string;
+  error?: string;
+  ready: boolean;
+  retry: boolean;
+  path?: string;
+  url?: string;
+  size?: number;
+  type?: string;
+  originalName?: string;
 }
 
 export function parseSession(value: unknown): SessionView | null {
@@ -424,9 +475,15 @@ export async function postTurn(
   input: TurnInput,
   fetcher: typeof fetch = fetch,
 ): Promise<{ ok: true; session: SessionView } | { ok: false; error: string }> {
-  const body: { questionId: string; text?: string; assumed?: true } = { questionId: input.questionId };
+  const body: {
+    questionId: string;
+    text?: string;
+    assumed?: true;
+    attachments?: AnswerAttachment[];
+  } = { questionId: input.questionId };
   if (input.text !== undefined) body.text = input.text;
   if (input.assumed === true) body.assumed = true;
+  if (input.attachments !== undefined && input.attachments.length > 0) body.attachments = input.attachments;
   let response: Response;
   try {
     response = await fetcher(`/api/${action}`, {
@@ -507,6 +564,15 @@ export function mountDesk(env: DeskEnv): () => void {
   let ownWords = false;
   const editing = new Set<string>();
   let logoSaved: { id: string; text: string } | null = null;
+  let chips: HeldChip[] = [];
+  let linkDraft = "";
+  let attachLive = "";
+  let uploadingLabel: string | null = null;
+  let chipSeq = 0;
+  let chipQuestionId: string | null = null;
+  let dragDepth = 0;
+  const filesById = new Map<string, File>();
+  let uploadQueue: Promise<void> = Promise.resolve();
 
   const onClick = (event: DeskEvent): void => {
     if (readMarked(event.target, "data-restart-open") !== null) {
@@ -551,6 +617,38 @@ export function mountDesk(env: DeskEnv): () => void {
       if (id !== null) void requestSuggestion(id);
       return;
     }
+    if (hasMark(event.target, "data-attach-button")) {
+      event.preventDefault();
+      const input = region()?.querySelector("[data-attach-file]");
+      if (input === null || input === undefined) return;
+      if (typeof input.showPicker === "function") {
+        try {
+          input.showPicker();
+          return;
+        } catch {
+          // click still opens the picker when showPicker is refused.
+        }
+      }
+      input.click?.();
+      return;
+    }
+    if (hasMark(event.target, "data-attach-add")) {
+      event.preventDefault();
+      addLinkFromField();
+      return;
+    }
+    const removeId = readMarked(event.target, "data-attach-remove");
+    if (removeId !== null) {
+      event.preventDefault();
+      removeChip(removeId);
+      return;
+    }
+    const retryId = readMarked(event.target, "data-attach-retry");
+    if (retryId !== null) {
+      event.preventDefault();
+      retryChip(retryId);
+      return;
+    }
     const action = readAction(event.target);
     if (action === null) return;
     event.preventDefault();
@@ -558,6 +656,10 @@ export function mountDesk(env: DeskEnv): () => void {
   };
   const onInput = (event: DeskEvent): void => {
     const target = event.target;
+    if (target !== null && target.getAttribute("data-attach-url") !== null) {
+      linkDraft = target.value ?? "";
+      return;
+    }
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     draft = target.value ?? "";
     if (voiceSession) userTouched = true;
@@ -587,6 +689,17 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     if (isTypingTarget(event.target)) {
+      if (
+        event.target !== null &&
+        event.target.getAttribute("data-attach-url") !== null &&
+        event.key === "Enter" &&
+        event.shiftKey !== true &&
+        event.isComposing !== true
+      ) {
+        event.preventDefault();
+        addLinkFromField();
+        return;
+      }
       if (isDraftTarget(event.target) && event.key === "Enter") {
         // Shift+Enter is a newline. An open IME composition is not a submit.
         if (event.shiftKey === true || event.isComposing === true) return;
@@ -655,21 +768,66 @@ export function mountDesk(env: DeskEnv): () => void {
 
   const onChange = (event: DeskEvent): void => {
     const target = event.target;
-    if (target === null || target.getAttribute("data-logo-file") === null) return;
+    if (target === null) return;
+    if (target.getAttribute("data-attach-file") !== null) {
+      const picked = filesFrom(target.files);
+      if (typeof target.value === "string") target.value = "";
+      if (picked.length > 0) void addIncomingFiles(picked);
+      return;
+    }
+    if (target.getAttribute("data-logo-file") === null) return;
     const file = firstFile(target.files);
     if (file === null) return;
     void uploadLogo(file);
   };
+  const onDragEnter = (event: DeskEvent): void => {
+    if (attachZone(event.target) === null) return;
+    event.preventDefault();
+    dragDepth += 1;
+    setDrag(true);
+  };
+  const onDragLeave = (event: DeskEvent): void => {
+    if (attachZone(event.target) === null) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setDrag(false);
+  };
   const onDragOver = (event: DeskEvent): void => {
-    if (dropHost(event.target) === null) return;
+    if (dropHost(event.target) === null && attachZone(event.target) === null) return;
     event.preventDefault();
   };
   const onDrop = (event: DeskEvent): void => {
-    if (dropHost(event.target) === null) return;
+    if (dropHost(event.target) !== null) {
+      event.preventDefault();
+      const file = firstFile(event.dataTransfer?.files);
+      if (file === null) return;
+      void uploadLogo(file);
+      return;
+    }
+    if (attachZone(event.target) === null) return;
     event.preventDefault();
-    const file = firstFile(event.dataTransfer?.files);
-    if (file === null) return;
-    void uploadLogo(file);
+    dragDepth = 0;
+    setDrag(false);
+    void receiveDrop(event);
+  };
+  const onPaste = (event: DeskEvent): void => {
+    if (!insideQuestion(event.target)) return;
+    const questionId = view?.question?.id;
+    const kinds = questionId === undefined ? null : kindsFor(questionId);
+    if (kinds === null) return;
+    const images = kinds.includes("images") || kinds.includes("files") ? pastedImages(event) : [];
+    if (images.length > 0) {
+      event.preventDefault();
+      void addIncomingFiles(images);
+      return;
+    }
+    if (!kinds.includes("links")) return;
+    const text = pasteText(event);
+    if (text === null || !textIsOnlyLinks(text)) return;
+    event.preventDefault();
+    addLinkParts(linkTokens(text));
+  };
+  const onWindowDrag = (event?: DeskEvent): void => {
+    event?.preventDefault();
   };
   const onToggle = (event: DeskEvent): void => {
     const details = langDetails(event.target);
@@ -681,15 +839,22 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("click", onClick);
   env.document.addEventListener("input", onInput);
   env.document.addEventListener("change", onChange);
+  env.document.addEventListener("dragenter", onDragEnter);
+  env.document.addEventListener("dragleave", onDragLeave);
   env.document.addEventListener("dragover", onDragOver);
   env.document.addEventListener("drop", onDrop);
+  env.document.addEventListener("paste", onPaste);
   // toggle does not bubble. Capture still sees it when the summary opens.
   env.document.addEventListener("toggle", onToggle, true);
   env.document.addEventListener("keydown", onKeyDown);
   env.document.addEventListener("contextmenu", onContextMenu);
   env.document.addEventListener("visibilitychange", onVisibility);
   const deskWindow = env.document.defaultView ?? null;
-  if (deskWindow !== null) deskWindow.addEventListener("pagehide", onPageHide);
+  if (deskWindow !== null) {
+    deskWindow.addEventListener("pagehide", onPageHide);
+    deskWindow.addEventListener("dragover", onWindowDrag);
+    deskWindow.addEventListener("drop", onWindowDrag);
+  }
   markTalkSupport();
   const stopTools = mountToolInstall(env);
   const stopTour = mountTour(env.document);
@@ -701,13 +866,21 @@ export function mountDesk(env: DeskEnv): () => void {
     env.document.removeEventListener("click", onClick);
     env.document.removeEventListener("input", onInput);
     env.document.removeEventListener("change", onChange);
+    env.document.removeEventListener("dragenter", onDragEnter);
+    env.document.removeEventListener("dragleave", onDragLeave);
     env.document.removeEventListener("dragover", onDragOver);
     env.document.removeEventListener("drop", onDrop);
+    env.document.removeEventListener("paste", onPaste);
     env.document.removeEventListener("toggle", onToggle, true);
     env.document.removeEventListener("keydown", onKeyDown);
     env.document.removeEventListener("contextmenu", onContextMenu);
     env.document.removeEventListener("visibilitychange", onVisibility);
-    if (deskWindow !== null) deskWindow.removeEventListener("pagehide", onPageHide);
+    if (deskWindow !== null) {
+      deskWindow.removeEventListener("pagehide", onPageHide);
+      deskWindow.removeEventListener("dragover", onWindowDrag);
+      deskWindow.removeEventListener("drop", onWindowDrag);
+    }
+    releaseChips();
     cancelVoice();
     source?.close();
   };
@@ -1216,7 +1389,7 @@ export function mountDesk(env: DeskEnv): () => void {
   function syncAnswerLock(): void {
     const button = region()?.querySelector('[data-action="answer"]');
     if (button === null || button === undefined) return;
-    const locked = pending || draft.trim() === "";
+    const locked = answerLocked(pending);
     button.disabled = locked;
     if (locked) button.setAttribute("disabled", "");
     else button.removeAttribute("disabled");
@@ -1389,7 +1562,8 @@ export function mountDesk(env: DeskEnv): () => void {
       cardHold = false;
       ownWords = false;
     }
-    if (action === "answer" && draft.trim() === "") {
+    if (action === "answer" && uploadingLabel !== null) return;
+    if (action === "answer" && draft.trim() === "" && !hasReadyChip()) {
       error = EMPTY_ANSWER;
       paint();
       return;
@@ -1408,10 +1582,17 @@ export function mountDesk(env: DeskEnv): () => void {
     let focusChoices = false;
     try {
       paint();
+      const attachments = action === "answer" ? attachmentPayload() : [];
       const result = await postTurn(
         action,
         token,
-        action === "answer" ? { questionId, text: draft } : { questionId },
+        action === "answer"
+          ? {
+              questionId,
+              text: draft,
+              ...(attachments.length > 0 ? { attachments } : {}),
+            }
+          : { questionId },
         env.fetch,
       );
       if (!result.ok) {
@@ -1834,7 +2015,7 @@ export function mountDesk(env: DeskEnv): () => void {
     for (const name of ["answer", "suggest", "skip"] as const) {
       const button = question.querySelector(`[data-action="${name}"]`);
       if (button === null) continue;
-      const lock = on || (name === "answer" && draft.trim() === "");
+      const lock = name === "answer" ? answerLocked(on) : on;
       button.disabled = lock;
       if (lock) button.setAttribute("disabled", "");
       else button.removeAttribute("disabled");
@@ -1951,7 +2132,383 @@ export function mountDesk(env: DeskEnv): () => void {
     paint();
   }
 
+  function answerLocked(busy: boolean): boolean {
+    return busy || uploadingLabel !== null || (draft.trim() === "" && !hasReadyChip());
+  }
+
+  function hasReadyChip(): boolean {
+    return chips.some((chip) => chip.ready && chip.error === undefined);
+  }
+
+  function attachmentPayload(): AnswerAttachment[] {
+    const out: AnswerAttachment[] = [];
+    for (const chip of chips) {
+      if (!chip.ready || chip.error !== undefined) continue;
+      if (
+        chip.kind === "file" &&
+        chip.path !== undefined &&
+        chip.originalName !== undefined &&
+        chip.size !== undefined &&
+        chip.type !== undefined
+      ) {
+        out.push({
+          kind: "file",
+          path: chip.path,
+          originalName: chip.originalName,
+          size: chip.size,
+          type: chip.type,
+        });
+        continue;
+      }
+      if (chip.kind === "link" && chip.url !== undefined) out.push({ kind: "link", url: chip.url });
+    }
+    return out;
+  }
+
+  function syncAttachQuestion(): void {
+    const id = view?.question?.id ?? null;
+    if (id === chipQuestionId) return;
+    releaseChips();
+    chipQuestionId = id;
+    linkDraft = "";
+    attachLive = "";
+    uploadingLabel = null;
+    dragDepth = 0;
+  }
+
+  function attachSnapshot(): CardState["attach"] {
+    const id = view?.question?.id;
+    if (id === undefined || kindsFor(id) === null) return undefined;
+    const viewChips: AttachChipView[] = chips.map((chip) => ({
+      id: chip.id,
+      kind: chip.kind,
+      label: chip.label,
+      detail: chip.detail,
+      removeName: chip.removeName,
+      ...(chip.previewUrl === undefined ? {} : { previewUrl: chip.previewUrl }),
+      ...(chip.error === undefined ? {} : { error: chip.error }),
+      ready: chip.ready,
+      ...(chip.retry ? { retry: true } : {}),
+    }));
+    return { linkDraft, uploading: uploadingLabel, live: attachLive, chips: viewChips };
+  }
+
+  function attachSpread(): { attach: NonNullable<CardState["attach"]> } | Record<string, never> {
+    const attach = attachSnapshot();
+    if (attach === undefined) return {};
+    return { attach };
+  }
+
+  function releaseChips(): void {
+    for (const chip of chips) revokePreview(chip.previewUrl);
+    chips = [];
+    filesById.clear();
+  }
+
+  function readLinkField(): void {
+    const field = region()?.querySelector("[data-attach-url]");
+    if (field !== null && field !== undefined && typeof field.value === "string") linkDraft = field.value;
+  }
+
+  function rememberBeforePaint(): void {
+    readDraft();
+    readLinkField();
+  }
+
+  function addLinkFromField(): void {
+    rememberBeforePaint();
+    const id = view?.question?.id;
+    if (id === undefined || kindsFor(id)?.includes("links") !== true) return;
+    const parts = linkTokens(linkDraft);
+    if (parts.length === 0) return;
+    const before = linkUrls();
+    const result = collectLinks(before, parts);
+    for (const url of result.added) chips.push(linkChip(url));
+    const messages: string[] = [];
+    if (result.added.length > 0) messages.push(addedLinksMessage(result.added.map((url) => linkLabel(url))));
+    if (result.errors.length > 0 && result.errors[0] !== undefined) messages.push(result.errors[0]);
+    if (messages.length > 0) attachLive = messages.join(" ");
+    if (result.errors.length === 0 && result.added.length > 0) linkDraft = "";
+    paint();
+  }
+
+  function addLinkParts(parts: readonly string[]): void {
+    rememberBeforePaint();
+    const result = collectLinks(linkUrls(), parts);
+    for (const url of result.added) chips.push(linkChip(url));
+    const messages: string[] = [];
+    if (result.added.length > 0) messages.push(addedLinksMessage(result.added.map((url) => linkLabel(url))));
+    if (result.errors.length > 0 && result.errors[0] !== undefined) messages.push(result.errors[0]);
+    if (messages.length > 0) attachLive = messages.join(" ");
+    paint();
+  }
+
+  function linkUrls(): string[] {
+    const urls: string[] = [];
+    for (const chip of chips) {
+      if (chip.kind === "link" && chip.url !== undefined && chip.error === undefined) urls.push(chip.url);
+    }
+    return urls;
+  }
+
+  function linkChip(url: string): HeldChip {
+    const label = linkLabel(url);
+    chipSeq += 1;
+    return {
+      id: `a${chipSeq}`,
+      kind: "link",
+      label,
+      detail: "",
+      removeName: `Remove ${label}`,
+      ready: true,
+      retry: false,
+      url,
+    };
+  }
+
+  function removeChip(id: string): void {
+    const index = chips.findIndex((chip) => chip.id === id);
+    const chip = chips[index];
+    if (chip === undefined) return;
+    rememberBeforePaint();
+    revokePreview(chip.previewUrl);
+    filesById.delete(id);
+    chips.splice(index, 1);
+    attachLive = removedMessage(chip.label);
+    paint();
+    const next = chips[index] ?? chips[chips.length - 1];
+    const focus =
+      next === undefined
+        ? region()?.querySelector("[data-attach-zone]")
+        : region()?.querySelector(`[data-attach-remove="${next.id}"]`);
+    focus?.focus?.();
+  }
+
+  function retryChip(id: string): void {
+    const chip = chips.find((item) => item.id === id);
+    if (chip === undefined || chip.retry !== true) return;
+    delete chip.error;
+    chip.ready = false;
+    chip.retry = false;
+    rememberBeforePaint();
+    scheduleUploads([id]);
+  }
+
+  async function addIncomingFiles(list: readonly File[]): Promise<void> {
+    const questionId = view?.question?.id;
+    const kinds = questionId === undefined ? null : kindsFor(questionId);
+    if (kinds === null || questionId === undefined) return;
+    rememberBeforePaint();
+    const messages: string[] = [];
+    let added = 0;
+    const toUpload: string[] = [];
+    for (const file of list) {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if ((ext === "url" || ext === "webloc") && kinds.includes("links")) {
+        if (file.size > 65_536) {
+          messages.push(shortcutMissError());
+          chips.push(problemChip(file.name, shortcutMissError()));
+          continue;
+        }
+        let text = "";
+        try {
+          text = await file.text();
+        } catch {
+          text = "";
+        }
+        const target = shortcutTarget(file.name, text);
+        if (target === null || target === "") {
+          messages.push(shortcutMissError());
+          chips.push(problemChip(file.name, shortcutMissError()));
+          continue;
+        }
+        const result = collectLinks(linkUrls(), [target]);
+        for (const url of result.added) chips.push(linkChip(url));
+        if (result.added.length > 0) messages.push(addedLinksMessage(result.added.map((url) => linkLabel(url))));
+        if (result.errors[0] !== undefined) messages.push(result.errors[0]);
+        continue;
+      }
+      if (readyFileCount() >= MAX_ATTACH_FILES) {
+        messages.push(fileCapError());
+        chips.push(problemChip(file.name, fileCapError()));
+        continue;
+      }
+      const meta = validateFileMeta({ name: file.name, type: file.type, size: file.size }, kinds);
+      if (!meta.ok) {
+        messages.push(meta.error);
+        chips.push(problemChip(file.name, meta.error));
+        continue;
+      }
+      const chip = fileChip(file, meta.name);
+      chips.push(chip);
+      filesById.set(chip.id, file);
+      toUpload.push(chip.id);
+      added += 1;
+    }
+    if (added > 0) messages.unshift(addedFilesMessage(added));
+    if (messages.length > 0) attachLive = messages.join(" ");
+    paint();
+    if (toUpload.length > 0) scheduleUploads(toUpload);
+  }
+
+  function readyFileCount(): number {
+    return chips.filter((chip) => chip.kind === "file" && chip.error === undefined).length;
+  }
+
+  function problemChip(name: string, error: string): HeldChip {
+    const label = name.split(/[/\\]/).pop() || "That file";
+    chipSeq += 1;
+    return {
+      id: `a${chipSeq}`,
+      kind: "file",
+      label,
+      detail: "",
+      removeName: `Remove ${label}`,
+      error,
+      ready: false,
+      retry: false,
+    };
+  }
+
+  function fileChip(file: File, stored: string): HeldChip {
+    const label = file.name.split(/[/\\]/).pop() || stored;
+    chipSeq += 1;
+    const previewUrl = objectUrl(file);
+    return {
+      id: `a${chipSeq}`,
+      kind: "file",
+      label,
+      detail: formatBytes(file.size),
+      removeName: `Remove ${label}`,
+      ...(previewUrl === undefined ? {} : { previewUrl }),
+      ready: false,
+      retry: false,
+      originalName: label,
+      size: file.size,
+      type: file.type,
+    };
+  }
+
+  function scheduleUploads(ids: readonly string[]): void {
+    const questionId = view?.question?.id ?? "";
+    const total = ids.length;
+    uploadQueue = uploadQueue
+      .then(async () => {
+        for (let index = 0; index < ids.length; index += 1) {
+          const id = ids[index];
+          if (id === undefined || view?.question?.id !== questionId) return;
+          uploadingLabel = uploadingMessage(index + 1, total);
+          attachLive = uploadingLabel;
+          rememberBeforePaint();
+          paint();
+          await uploadChip(id, questionId);
+        }
+        if (view?.question?.id !== questionId) return;
+        uploadingLabel = null;
+        const problems = chips.flatMap((chip) => (chip.error === undefined ? [] : [chip.error]));
+        if (problems.length > 0) attachLive = problems.join(" ");
+        else {
+          const readyFiles = chips.filter((chip) => chip.kind === "file" && chip.ready).length;
+          if (readyFiles > 0) attachLive = addedFilesMessage(readyFiles);
+        }
+        rememberBeforePaint();
+        paint();
+      })
+      .catch(() => {
+        uploadingLabel = null;
+      });
+  }
+
+  async function uploadChip(id: string, questionId: string): Promise<void> {
+    const chip = chips.find((item) => item.id === id);
+    const file = filesById.get(id);
+    if (chip === undefined || file === undefined || token === null) return;
+    if (view?.question?.id !== questionId) return;
+    const body = new FormData();
+    body.append("file", file, file.name);
+    let response: Response;
+    try {
+      response = await env.fetch(`/api/attach/${encodeURIComponent(questionId)}`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "x-hh-csrf": token },
+        body,
+      });
+    } catch {
+      markUploadFailed(chip, `${chip.label} did not save. Try again.`);
+      return;
+    }
+    if (view?.question?.id !== questionId) return;
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      markUploadFailed(chip, `${chip.label} did not save. Try again.`);
+      return;
+    }
+    const row = firstAttachRow(payload);
+    if (row === null || row.ok !== true) {
+      const error =
+        row !== null && row.ok === false && row.error !== ""
+          ? row.error
+          : `${chip.label} did not save. Try again.`;
+      chip.error = error;
+      chip.ready = false;
+      chip.retry = row !== null && row.ok === false ? false : true;
+      attachLive = error;
+      return;
+    }
+    if (!row.path.startsWith(`.hitchhiker/uploads/${questionId}/`) || row.path.includes("..")) {
+      markUploadFailed(chip, `${chip.label} did not save. Try again.`);
+      return;
+    }
+    chip.ready = true;
+    delete chip.error;
+    chip.retry = false;
+    chip.path = row.path;
+    chip.originalName = row.originalName === "" ? chip.label : row.originalName;
+    chip.size = row.size;
+    chip.type = row.type;
+    chip.label = chip.originalName;
+    chip.removeName = `Remove ${chip.label}`;
+  }
+
+  function markUploadFailed(chip: HeldChip, error: string): void {
+    chip.error = error;
+    chip.ready = false;
+    chip.retry = true;
+    attachLive = error;
+  }
+
+  async function receiveDrop(event: DeskEvent): Promise<void> {
+    const questionId = view?.question?.id;
+    const kinds = questionId === undefined ? null : kindsFor(questionId);
+    if (kinds === null) return;
+    const transfer = event.dataTransfer;
+    const files = filesFrom(transfer?.files);
+    if (files.length > 0) await addIncomingFiles(files);
+    if (!kinds.includes("links") || transfer?.getData === undefined) return;
+    const parts = droppedLinkParts(transfer);
+    if (parts.length > 0) addLinkParts(parts);
+  }
+
+  function setDrag(on: boolean): void {
+    const zone = region()?.querySelector("[data-attach-zone]");
+    if (zone === null || zone === undefined) return;
+    const parts = (zone.getAttribute("class") ?? "").split(/\s+/).filter((part) => part !== "" && part !== "is-drag");
+    if (on) parts.push("is-drag");
+    zone.setAttribute("class", parts.join(" "));
+  }
+
+  function attachZone(start: DeskElement | null): DeskElement | null {
+    return markedHost(start, "data-attach-zone");
+  }
+
   function paint(): void {
+    syncAttachQuestion();
     const question = region();
     if (question !== null && view !== null) {
       const state: CardState = {
@@ -1973,6 +2530,7 @@ export function mountDesk(env: DeskEnv): () => void {
             ? view.choices
             : null,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
+        ...attachSpread(),
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(
@@ -2130,12 +2688,161 @@ function isDraftTarget(start: DeskElement | null): boolean {
   return start !== null && start.getAttribute("id") === "hh-card-draft";
 }
 
+function filesFrom(list: ArrayLike<File> | undefined): File[] {
+  if (list === undefined) return [];
+  const out: File[] = [];
+  for (let index = 0; index < list.length; index += 1) {
+    const file = list[index];
+    if (file !== undefined) out.push(file);
+  }
+  return out;
+}
+
+function pastedImages(event: DeskEvent): File[] {
+  const data = event.clipboardData;
+  const out: File[] = [];
+  const take = (file: File | null | undefined, mime: string): void => {
+    if (file === null || file === undefined) return;
+    const type = file.type !== "" ? file.type : mime;
+    if (!type.startsWith("image/")) return;
+    try {
+      out.push(new File([file], pastedImageName(type, Date.now() + out.length), { type }));
+    } catch {
+      // Leave the clipboard alone when this runtime cannot rename a file.
+    }
+  };
+  if (data?.files !== undefined) {
+    for (let index = 0; index < data.files.length; index += 1) take(data.files[index], "");
+  }
+  if (out.length === 0 && data?.items !== undefined) {
+    for (let index = 0; index < data.items.length; index += 1) {
+      const item = data.items[index];
+      if (item === undefined || !item.type.startsWith("image/")) continue;
+      take(item.getAsFile?.() ?? null, item.type);
+    }
+  }
+  return out;
+}
+
+function pasteText(event: DeskEvent): string | null {
+  const data = event.clipboardData;
+  if (data?.getData === undefined) return null;
+  try {
+    return data.getData("text/plain");
+  } catch {
+    return null;
+  }
+}
+
+function objectUrl(file: File): string | undefined {
+  if (!file.type.startsWith("image/")) return undefined;
+  const create = globalThis.URL?.createObjectURL;
+  if (typeof create !== "function") return undefined;
+  try {
+    // A detached createObjectURL throws Illegal invocation and drops the thumbnail.
+    return create.call(globalThis.URL, file);
+  } catch {
+    return undefined;
+  }
+}
+
+function revokePreview(url: string | undefined): void {
+  if (url === undefined) return;
+  const revoke = globalThis.URL?.revokeObjectURL;
+  if (typeof revoke !== "function") return;
+  try {
+    revoke.call(globalThis.URL, url);
+  } catch {
+    // Already revoked, or this runtime has no object URLs.
+  }
+}
+
+function droppedLinkParts(transfer: {
+  types?: ArrayLike<string>;
+  getData?: (type: string) => string;
+}): string[] {
+  if (transfer.getData === undefined) return [];
+  const types: string[] = [];
+  if (transfer.types !== undefined) {
+    for (let index = 0; index < transfer.types.length; index += 1) {
+      const item = transfer.types[index];
+      if (item !== undefined) types.push(item);
+    }
+  }
+  const read = (type: string): string => transfer.getData?.(type) ?? "";
+  if (types.length === 0 || types.includes("text/uri-list")) {
+    try {
+      const parts = urisFromList(read("text/uri-list"));
+      if (parts.length > 0) return parts;
+    } catch {
+      // text/plain is the fallback when the browser refuses uri-list.
+    }
+  }
+  try {
+    const plain = read("text/plain");
+    if (textIsOnlyLinks(plain)) return linkTokens(plain);
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+function firstAttachRow(payload: unknown): {
+  ok: boolean;
+  path: string;
+  originalName: string;
+  size: number;
+  type: string;
+  error: string;
+} | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+  const files = (payload as { files?: unknown }).files;
+  if (!Array.isArray(files) || files[0] === undefined) return null;
+  const row = files[0];
+  if (typeof row !== "object" || row === null || Array.isArray(row)) return null;
+  const record = row as Record<string, unknown>;
+  if (record.ok === true) {
+    if (typeof record.path !== "string" || record.path.includes("\\") || record.path.includes("..")) return null;
+    return {
+      ok: true,
+      path: record.path,
+      originalName: typeof record.originalName === "string" ? record.originalName : "",
+      size: typeof record.size === "number" ? record.size : 0,
+      type: typeof record.type === "string" ? record.type : "",
+      error: "",
+    };
+  }
+  return {
+    ok: false,
+    path: "",
+    originalName: "",
+    size: 0,
+    type: "",
+    error: typeof record.error === "string" ? record.error : "",
+  };
+}
+
 function isTypingTarget(start: DeskElement | null): boolean {
   if (start === null) return false;
   if (start.getAttribute("id") === "hh-card-draft") return true;
   if (start.getAttribute("data-edit-field") !== null) return true;
   if (start.getAttribute("data-logo-file") !== null) return true;
+  if (start.getAttribute("data-attach-url") !== null) return true;
+  if (start.getAttribute("data-attach-file") !== null) return true;
   return false;
+}
+
+function isAttachControl(start: DeskElement | null): boolean {
+  if (start === null) return false;
+  return (
+    start.getAttribute("data-attach-button") !== null ||
+    start.getAttribute("data-attach-add") !== null ||
+    start.getAttribute("data-attach-remove") !== null ||
+    start.getAttribute("data-attach-retry") !== null ||
+    start.getAttribute("data-attach-url") !== null ||
+    start.getAttribute("data-attach-file") !== null ||
+    start.getAttribute("data-attach-zone") !== null
+  );
 }
 
 function letterChoice(key: string): "A" | "B" | "C" | "D" | null {
@@ -2181,6 +2888,7 @@ function insideAttribute(start: DeskElement | null, name: string): boolean {
 function enterPicksSlippedChoice(start: DeskElement | null): boolean {
   if (start === null || insideChoices(start)) return false;
   if (isVoiceTarget(start)) return false;
+  if (isAttachControl(start)) return false;
   const action = readAction(start);
   if (action === "answer" || action === "skip") return false;
   if (tourControl(start)) return false;
@@ -2386,6 +3094,19 @@ function readMarked(start: DeskElement | null, name: string): string | null {
     node = node.parentElement;
   }
   return null;
+}
+
+/** True when the attribute is present, including a boolean attribute with an empty value. */
+function hasMark(start: DeskElement | null, name: string): boolean {
+  let node = start;
+  const seen = new Set<DeskElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    if (typeof node.getAttribute !== "function") return false;
+    if (node.getAttribute(name) !== null) return true;
+    node = node.parentElement;
+  }
+  return false;
 }
 
 function isQuestionId(value: string): boolean {

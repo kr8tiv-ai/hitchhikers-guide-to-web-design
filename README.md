@@ -384,6 +384,12 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh improve` | Bounded loop on an improve branch. A human merges. [docs/improve.md](docs/improve.md). |
 | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
 
+## Attachments
+
+When a question asks for websites, photos, logos, or files, the card shows a drop zone and an Attach button. Files are saved on this machine under `<project>/.hitchhiker/uploads/<question-id>/`. Nothing is uploaded to a server you do not run. A link is stored as the text you gave. The desk does not fetch it, screenshot it, or open it.
+
+Each file can be up to 25 MB. One answer keeps 8 files and 12 links. Images may be PNG, JPEG, WEBP, GIF, SVG, or AVIF. Other files may be PDF, TXT, MD, or DOCX. The full rules are in [docs/attachments.md](docs/attachments.md).
+
 ## Save and resume
 
 A long build saves itself. After an answer, an approval, or a finished build prompt, the desk writes one pretty-printed JSON file named `<project>.hhproject`. The default place is your Desktop. If that folder is missing, the file is written in your home folder and the desk says where.

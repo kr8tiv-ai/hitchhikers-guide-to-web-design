@@ -104,7 +104,11 @@ test("the card shows one question and the three exact actions", () => {
   assert.match(html, /<p class="hh-qcard__why">The logo anchors color, type, and tone\.<\/p>/);
   assert.equal(html.match(/data-question-id=/g)?.length, 1);
   assert.match(html, /data-question-id="DP-1\.1"/);
-  assert.equal(html.match(/<button\b/g)?.length, 4);
+  assert.equal(html.match(/<button\b/g)?.length, 5);
+  assert.match(
+    html,
+    /<button class="hh-btn hh-btn--secondary hh-attach__button" type="button" data-attach-button>Attach<\/button>/,
+  );
   assert.match(
     html,
     /<button class="hh-btn hh-btn--secondary" type="button" data-voice="hold" aria-pressed="false" data-tip="Starts listening\. Click again to stop\. Spoken words stay in the answer\.">Click to talk<\/button>/,

@@ -59,6 +59,7 @@ import {
   type CardCounts,
   type CardState,
 } from "../card.ts";
+import { attachQuestionId } from "../client/attach.ts";
 import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
@@ -72,6 +73,7 @@ import {
   previousAssumption,
   questionNeedsConfirm,
   renderEmptyBrand,
+  composeStoredAnswer,
   injectBrandLogo,
   isLogoAssetName,
   isRasterLogo,
@@ -109,13 +111,17 @@ import {
 import { readVoiceDeskFlags, type VoiceDeskFlags } from "./voice-flags.ts";
 import { createToolHandler, type ToolDeskOptions, type ToolRuntime } from "./tool-desk.ts";
 import {
+  MAX_ATTACH_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
   acceptAudio,
   acceptUpload,
   audioFilename,
   contentLengthExceeds,
   parseMultipart,
+  parseMultipartFiles,
+  plateExtension,
   readCapped,
+  saveAttachParts,
 } from "./uploads.ts";
 
 interface LiveOverlay {
@@ -182,6 +188,7 @@ const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
+const ATTACH_SOURCE = path.resolve(SRC_ROOT, "client", "attach.ts");
 const TOOL_SOURCE = path.resolve(SRC_ROOT, "client", "tool-install.ts");
 const SAVE_SOURCE = path.resolve(SRC_ROOT, "client", "save-status.ts");
 const VOICE_ENGINE_SOURCE = path.resolve(SRC_ROOT, "client", "voice-engine.ts");
@@ -212,7 +219,7 @@ const SAFE = {
   "referrer-policy": "no-referrer",
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
   "cross-origin-resource-policy": "same-origin",
 } as const;
 
@@ -644,7 +651,17 @@ async function handlePost(
     return;
   }
   if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
-    await handleTurn(req, res, pathname, turn, view, hub, enqueue);
+    await handleTurn(req, res, pathname, turn, view, hub, enqueue, projectDir);
+    return;
+  }
+  if (pathname.startsWith("/api/attach/")) {
+    const questionId = pathname.slice("/api/attach/".length);
+    if (!attachQuestionId(questionId)) {
+      sendJson(req, res, 400, { error: "That question does not take files." });
+      dropRequest(req);
+      return;
+    }
+    await handleAttach(req, res, projectDir, questionId);
     return;
   }
   if (pathname === "/api/upload") {
@@ -815,6 +832,7 @@ async function handleTurn(
   view: () => DeskSession,
   hub: SseHub,
   enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  projectDir: string,
 ): Promise<void> {
   const kind = pathname === "/api/answer" ? "answer" : pathname === "/api/suggest" ? "suggest" : "skip";
   if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
@@ -833,13 +851,21 @@ async function handleTurn(
     sendJson(req, res, 400, { error: parsed.error });
     return;
   }
+  let text = parsed.text;
+  if (kind === "answer") {
+    text = composeStoredAnswer(projectDir, parsed.questionId, parsed.text ?? "", parsed.attachments ?? []);
+    if (text.trim() === "") {
+      sendJson(req, res, 400, { error: "Write an answer or skip." });
+      return;
+    }
+  }
   try {
     const result = await enqueue(async () => {
       const output = asTurnResult(
         await turn({
           kind,
           questionId: parsed.questionId,
-          ...(parsed.text === undefined ? {} : { text: parsed.text }),
+          ...(text === undefined ? {} : { text }),
           ...(parsed.assumed === true ? { assumed: true } : {}),
         }),
       );
@@ -854,6 +880,46 @@ async function handleTurn(
     if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
     sendJson(req, res, mapped.status, { error: mapped.message });
   }
+}
+
+async function handleAttach(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  questionId: string,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], MAX_ATTACH_REQUEST_BYTES)) {
+    sendJson(req, res, 413, { error: "That upload is over 200 MB." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, MAX_ATTACH_REQUEST_BYTES);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That upload is over 200 MB." });
+    dropRequest(req);
+    return;
+  }
+  const parsed = parseMultipartFiles(capped.body, headerOne(req.headers["content-type"]));
+  if ("error" in parsed) {
+    sendJson(req, res, 400, { error: parsed.error });
+    return;
+  }
+  const saved = await saveAttachParts(projectDir, questionId, parsed.files);
+  if (!saved.ok) {
+    sendJson(req, res, 400, { error: saved.error });
+    return;
+  }
+  for (const file of saved.files) {
+    if (!file.ok || !plateExtension(file.storedName)) continue;
+    const relative = `${questionId}/${file.storedName}`;
+    if (!isLogoAssetName(relative)) continue;
+    try {
+      await rememberLogo(projectDir, relative, questionId);
+    } catch {
+      // The file is already in the question folder. The plate can catch up later.
+    }
+  }
+  sendJson(req, res, 200, { ok: true, files: saved.files });
 }
 
 async function handleUpload(
@@ -1233,6 +1299,10 @@ async function handleGet(
   }
   if (pathname === "/client/card.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(CARD_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/attach.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(ATTACH_SOURCE)));
     return;
   }
   if (pathname === "/client/walk.js") {
@@ -2127,6 +2197,8 @@ function browserModule(filePath: string): string {
   const js = stripped
     .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
+    .replace(/from\s+["']\.\/client\/attach\.ts["']/g, 'from "/client/attach.js"')
+    .replace(/from\s+["']\.\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
@@ -2903,7 +2975,7 @@ function normalizePath(url: string): string | null {
 function parseTurnBody(
   raw: string,
   kind: "answer" | "suggest" | "skip",
-): { questionId: string; text?: string; assumed?: boolean } | { error: string } {
+): { questionId: string; text?: string; assumed?: boolean; attachments?: unknown[] } | { error: string } {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -2918,11 +2990,21 @@ function parseTurnBody(
   if (text !== undefined && (typeof text !== "string" || text.length > 20_000)) {
     return { error: "That answer is too long." };
   }
-  if (kind === "answer" && typeof text !== "string") {
+  const attachments = value.attachments;
+  if (attachments !== undefined && !Array.isArray(attachments)) {
+    return { error: "The desk could not read that request." };
+  }
+  if (Array.isArray(attachments) && attachments.length > 20) {
+    return { error: "That answer has too many attachments." };
+  }
+  if (kind === "answer" && typeof text !== "string" && !Array.isArray(attachments)) {
     return { error: "Write an answer or skip." };
   }
-  const body: { questionId: string; text?: string; assumed?: boolean } = { questionId };
+  const body: { questionId: string; text?: string; assumed?: boolean; attachments?: unknown[] } = {
+    questionId,
+  };
   if (typeof text === "string") body.text = text;
+  if (Array.isArray(attachments)) body.attachments = attachments;
   if (kind === "answer" && value.assumed === true) body.assumed = true;
   return body;
 }

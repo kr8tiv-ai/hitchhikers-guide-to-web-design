@@ -157,7 +157,12 @@ test("submit focuses the new question heading and updates the same live region",
     assert.equal(live.textContent, nextAsk);
     assert.match(h.region.innerHTML, /tabindex="-1"/);
     assert.match(h.region.innerHTML, /data-question-id="DP-0\.2"/);
-    assert.equal(h.region.innerHTML.includes('aria-live="polite"'), false);
+    const polite = h.region.innerHTML.match(/aria-live="polite"/g) ?? [];
+    assert.equal(polite.length, 1);
+    assert.match(
+      h.region.innerHTML,
+      /id="hh-attach-live"[^>]*data-attach-live[^>]*aria-live="polite"/,
+    );
   } finally {
     stop();
   }

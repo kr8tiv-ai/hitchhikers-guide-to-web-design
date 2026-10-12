@@ -174,16 +174,30 @@ test("logo questions are DP-0.4 and DP-1.1, and the German line stays out of the
     assert.equal(html.match(/hh-btn--primary/g)?.length, 1);
   }
 
-  for (const id of ["DP-1.2", "DP-1.4"] as const) {
+  for (const id of ["DP-1.2"] as const) {
     const found = all.find((item) => item.id === id);
     assert.ok(found);
     const html = drawn(found);
     assert.equal(html.includes("type=\"file\""), false);
     assert.equal(html.includes("data-logo-drop"), false);
+    assert.equal(html.includes("data-attach-zone"), false);
+    assert.equal(html.includes("data-attach-button"), false);
     assert.equal(html.includes(READ_THIS_IN), true);
     assert.equal(html.includes(german), false);
     assert.equal(html.includes("data-restatement"), false);
   }
+
+  const mood = all.find((item) => item.id === "DP-1.4");
+  assert.ok(mood);
+  const moodHtml = drawn(mood);
+  assert.equal(moodHtml.includes("data-logo-drop"), false);
+  assert.match(moodHtml, /data-attach-zone/);
+  assert.match(moodHtml, /data-attach-button/);
+  assert.match(moodHtml, /type="file"/);
+  assert.match(moodHtml, /Drop images here, or paste a link\./);
+  assert.equal(moodHtml.includes(READ_THIS_IN), true);
+  assert.equal(moodHtml.includes(german), false);
+  assert.equal(moodHtml.includes("data-restatement"), false);
 
   const panel = languagePanel("DP-1.1");
   assert.equal(panel.includes(german), true);

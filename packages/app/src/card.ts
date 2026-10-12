@@ -1,4 +1,5 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
+import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -41,6 +42,26 @@ export interface CardChoiceSet {
 
 export const OTHER_CHOICE_LABEL = "Other: I'll write my own";
 
+/** One saved file or link on the card. Rendered from state, so a repaint keeps it. */
+export interface AttachChipView {
+  id: string;
+  kind: "file" | "link";
+  label: string;
+  detail: string;
+  removeName: string;
+  previewUrl?: string;
+  error?: string;
+  ready: boolean;
+  retry?: boolean;
+}
+
+export interface AttachView {
+  linkDraft: string;
+  uploading: string | null;
+  live: string;
+  chips: AttachChipView[];
+}
+
 export interface CardState {
   question: Question | null;
   draft: string;
@@ -66,6 +87,8 @@ export interface CardState {
   enterHint?: boolean;
   /** Picks under the question. Absent when this card has nothing to choose. */
   choices?: CardChoiceSet | null;
+  /** Files and links already on this question. Absent until the desk has some. */
+  attach?: AttachView;
 }
 
 /**
@@ -364,6 +387,10 @@ export function renderCard(state: CardState): string {
     choiceSet.items.length > 0
       ? `${renderChoiceGroup(choiceSet)}\n`
       : "";
+  const attachHtml = renderAttach(question.id, state.attach);
+  const attachReady = (state.attach?.chips ?? []).some((chip) => chip.ready && chip.error === undefined);
+  const uploading = (state.attach?.uploading ?? null) !== null;
+  const answerOff = state.pending || uploading || (field.trim() === "" && !attachReady);
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
@@ -373,15 +400,71 @@ ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
   </label>
-${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
+${attachHtml}${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
 ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
     ${talkButton(state.pending, state.listening === true)}
-    ${button("answer", "Answer", "primary", state.pending || field.trim() === "")}
+    ${button("answer", "Answer", "primary", answerOff)}
     ${button("suggest", SUGGEST_LABEL, "secondary", state.pending)}
     ${button("skip", SKIP_LABEL, "ghost", state.pending)}
   </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
 </article>`;
+}
+
+function renderAttach(questionId: string, view: AttachView | undefined): string {
+  const copy = zoneCopy(questionId);
+  const kinds = kindsFor(questionId);
+  if (copy === null || kinds === null) return "";
+  const accept = acceptAttribute(kinds);
+  const chips = view?.chips ?? [];
+  const errorIds = chips.filter((chip) => chip.error !== undefined).map((chip) => `hh-attach-err-${chip.id}`);
+  const described = ["hh-attach-live", ...errorIds].join(" ");
+  const live = view?.live ?? "";
+  const linkField = kinds.includes("links")
+    ? `<div class="hh-attach__url">
+    <label class="hh-sr" for="hh-attach-url">Link</label>
+    <input class="hh-attach__input" id="hh-attach-url" type="text" inputmode="url" autocomplete="off" data-attach-url${attr("value", view?.linkDraft ?? "")} />
+    <button class="hh-btn hh-btn--ghost hh-attach__add" type="button" data-attach-add>Add</button>
+  </div>
+  `
+    : "";
+  return `  <div class="hh-attach" data-attach-zone role="group" aria-labelledby="hh-attach-label" aria-describedby="${described}" tabindex="-1">
+    <p class="hh-attach__label" id="hh-attach-label">${escapeHtml(copy.group)}</p>
+    <p class="hh-attach__copy" data-attach-copy><span class="hh-attach__fine">${escapeHtml(copy.fine)}</span><span class="hh-attach__coarse">${escapeHtml(copy.coarse)}</span></p>
+    <button class="hh-btn hh-btn--secondary hh-attach__button" type="button" data-attach-button>Attach</button>
+    <label class="hh-sr" for="hh-attach-file">Choose files</label>
+    <input class="hh-attach__file" id="hh-attach-file" name="attach" type="file" multiple accept="${escapeHtml(accept)}" data-attach-file tabindex="-1" aria-describedby="hh-attach-live" />
+    ${linkField}${renderChips(chips)}<p class="hh-attach__live" id="hh-attach-live" data-attach-live aria-live="polite">${escapeHtml(live)}</p>
+  </div>
+`;
+}
+
+function renderChips(chips: AttachChipView[]): string {
+  if (chips.length === 0) return "";
+  const items = chips.map((chip) => {
+    const src = previewSrc(chip.previewUrl);
+    const thumb = src === null ? "" : `<img class="hh-attach__thumb" alt="" src="${escapeHtml(src)}" />`;
+    const problem =
+      chip.error === undefined
+        ? ""
+        : `<p class="hh-error hh-attach__error" id="hh-attach-err-${escapeHtml(chip.id)}">${escapeHtml(chip.error)}</p>`;
+    const described = chip.error === undefined ? "" : ` aria-describedby="hh-attach-err-${escapeHtml(chip.id)}"`;
+    const retry =
+      chip.retry === true
+        ? `<button class="hh-btn hh-btn--ghost" type="button" data-attach-retry="${escapeHtml(chip.id)}" aria-label="${escapeHtml(`Retry ${chip.label}`)}">Retry</button>`
+        : "";
+    return `    <li class="hh-attach__chip" data-attach-chip="${escapeHtml(chip.id)}">${thumb}<span class="hh-attach__name">${escapeHtml(chip.label)}</span><span class="hh-attach__meta">${escapeHtml(chip.detail)}</span><button class="hh-btn hh-btn--ghost" type="button" data-attach-remove="${escapeHtml(chip.id)}" aria-label="${escapeHtml(chip.removeName)}"${described}>Remove</button>${retry}${problem}</li>`;
+  });
+  return `<ul class="hh-attach__chips" data-attach-chips>
+${items.join("\n")}
+  </ul>
+  `;
+}
+
+function previewSrc(url: string | undefined): string | null {
+  if (url === undefined) return null;
+  if (url.startsWith("blob:") || url.startsWith("data:image/")) return url;
+  return null;
 }
 
 function readAction(start: CardQuery | null): "answer" | "suggest" | "skip" | null {

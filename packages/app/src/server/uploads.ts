@@ -1,7 +1,24 @@
 import { randomBytes } from "node:crypto";
+import { lstat, mkdir, open, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
+import {
+  MAX_ATTACH_FILES,
+  MAX_ATTACH_REQUEST_BYTES,
+  MAX_UPLOAD_BYTES,
+  bytesAllowed,
+  collisionName,
+  displayName,
+  emptyError,
+  extensionsFor,
+  fileCapError,
+  kindsFor,
+  nameError,
+  sanitizeUploadName,
+  sizeError,
+  typeError,
+} from "../client/attach.ts";
 
-/** Whole request cap. A larger Content-Length is refused before the body is read. */
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+export { MAX_ATTACH_REQUEST_BYTES, MAX_UPLOAD_BYTES };
 
 const ALLOWED_EXTENSIONS = [
   "png",
@@ -158,11 +175,11 @@ export interface UploadPart {
   data: Buffer;
 }
 
-/** First file part of a multipart body. Binary parts stay in buffers. */
-export function parseMultipart(
+/** Every file part, in order. Binary parts stay in buffers. */
+export function parseMultipartFiles(
   body: Buffer,
   contentType: string,
-): UploadPart | { error: string } {
+): { files: UploadPart[] } | { error: string } {
   const matched = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
   const boundary = (matched?.[1] ?? matched?.[2] ?? "").trim();
   if (boundary.length === 0 || boundary.length > 200) {
@@ -172,6 +189,7 @@ export function parseMultipart(
   let pos = body.indexOf(marker);
   if (pos < 0) return { error: "Upload body is not multipart." };
   pos += marker.length;
+  const files: UploadPart[] = [];
   while (pos < body.length) {
     const at = body[pos];
     const nextByte = body[pos + 1];
@@ -185,11 +203,22 @@ export function parseMultipart(
     if (next < 0) return { error: "Upload part is truncated." };
     const filename = dispositionFilename(headers);
     if (filename !== null) {
-      return { filename, mime: partMime(headers), data: body.subarray(dataStart, next) };
+      files.push({ filename, mime: partMime(headers), data: body.subarray(dataStart, next) });
     }
     pos = next + 2 + marker.length;
   }
-  return { error: "Upload is missing a file." };
+  if (files.length === 0) return { error: "Upload is missing a file." };
+  return { files };
+}
+
+/** First file part of a multipart body. Binary parts stay in buffers. */
+export function parseMultipart(
+  body: Buffer,
+  contentType: string,
+): UploadPart | { error: string } {
+  const all = parseMultipartFiles(body, contentType);
+  if ("error" in all) return all;
+  return all.files[0] ?? { error: "Upload is missing a file." };
 }
 
 function dispositionFilename(headers: string): string | null {
@@ -204,6 +233,250 @@ function dispositionFilename(headers: string): string | null {
 function partMime(headers: string): string {
   const matched = /^content-type:\s*([^\r\n]+)/im.exec(headers);
   return matched?.[1]?.trim().toLowerCase() ?? "";
+}
+
+export interface AttachStoredFile {
+  ok: true;
+  path: string;
+  storedName: string;
+  originalName: string;
+  size: number;
+  type: string;
+}
+
+export interface AttachRejectedFile {
+  ok: false;
+  originalName: string;
+  error: string;
+}
+
+export type AttachFileResult = AttachStoredFile | AttachRejectedFile;
+
+interface ManifestRow {
+  path: string;
+  storedName: string;
+  originalName: string;
+  size: number;
+  type: string;
+}
+
+const PLATE_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "svg", "pdf"]);
+
+/**
+ * Saves one batch under `.hitchhiker/uploads/<questionId>/`.
+ * A bad part is an error row. It does not erase the parts that saved.
+ * The returned path uses forward slashes and never an absolute path.
+ */
+export async function saveAttachParts(
+  projectDir: string,
+  questionId: string,
+  parts: readonly { filename: string; mime: string; data: Buffer }[],
+): Promise<{ ok: true; files: AttachFileResult[] } | { ok: false; error: string }> {
+  const kinds = kindsFor(questionId);
+  if (kinds === null) return { ok: false, error: "That question does not take files." };
+  const folder = await prepareQuestionDir(projectDir, questionId);
+  if (folder === null) return { ok: false, error: "That upload folder is not available." };
+  const allowed = extensionsFor(kinds).filter((ext) => ext !== "url" && ext !== "webloc");
+  const files: AttachFileResult[] = [];
+  let kept = await manifestCount(folder);
+  for (const part of parts) {
+    const shown = displayName(part.filename);
+    if (kept >= MAX_ATTACH_FILES) {
+      files.push({ ok: false, originalName: shown, error: fileCapError() });
+      continue;
+    }
+    if (part.data.length === 0) {
+      files.push({ ok: false, originalName: shown, error: emptyError(part.filename) });
+      continue;
+    }
+    if (part.data.length > MAX_UPLOAD_BYTES) {
+      files.push({ ok: false, originalName: shown, error: sizeError(part.filename) });
+      continue;
+    }
+    const sanitized = sanitizeUploadName(part.filename, allowed);
+    if (!sanitized.ok) {
+      const error = sanitized.reason === "name" ? nameError(part.filename) : typeError(part.filename, kinds);
+      files.push({ ok: false, originalName: shown, error });
+      continue;
+    }
+    const ext = sanitized.name.slice(sanitized.name.lastIndexOf(".") + 1);
+    if (!bytesAllowed(ext, part.data)) {
+      files.push({ ok: false, originalName: shown, error: typeError(part.filename, kinds) });
+      continue;
+    }
+    try {
+      const storedName = await writeUnique(folder, sanitized.name, part.data);
+      if (storedName === null) {
+        files.push({
+          ok: false,
+          originalName: shown,
+          error: `${shown} did not save. Try a different file name.`,
+        });
+        continue;
+      }
+      const row: ManifestRow = {
+        path: `.hitchhiker/uploads/${questionId}/${storedName}`,
+        storedName,
+        originalName: shown,
+        size: part.data.length,
+        type: canonicalType(ext, part.mime),
+      };
+      try {
+        await appendManifest(folder, row);
+      } catch {
+        await unlink(path.join(folder, storedName)).catch(() => undefined);
+        files.push({ ok: false, originalName: shown, error: `${shown} did not save. Try again.` });
+        continue;
+      }
+      kept += 1;
+      files.push({ ok: true, ...row });
+    } catch {
+      files.push({ ok: false, originalName: shown, error: `${shown} did not save. Try again.` });
+    }
+  }
+  return { ok: true, files };
+}
+
+/** Plate-safe extensions. Avif stays an attachment and is not the brand image. */
+export function plateExtension(storedName: string): boolean {
+  const ext = storedName.slice(storedName.lastIndexOf(".") + 1).toLowerCase();
+  return PLATE_EXT.has(ext);
+}
+
+async function prepareQuestionDir(projectDir: string, questionId: string): Promise<string | null> {
+  const uploads = path.join(projectDir, ".hitchhiker", "uploads");
+  await mkdir(uploads, { recursive: true });
+  const folder = path.join(uploads, questionId);
+  const realUploads = await realpath(uploads);
+  try {
+    const stat = await lstat(folder);
+    if (stat.isSymbolicLink()) {
+      const realFolder = await realpath(folder);
+      if (!sameQuestionDir(realUploads, realFolder, questionId)) return null;
+    }
+  } catch (error: unknown) {
+    if (nodeCode(error) !== "ENOENT") return null;
+  }
+  await mkdir(folder, { recursive: true });
+  let realFolder: string;
+  try {
+    const stat = await lstat(folder);
+    if (stat.isSymbolicLink()) {
+      realFolder = await realpath(folder);
+      if (!sameQuestionDir(realUploads, realFolder, questionId)) return null;
+    }
+    realFolder = await realpath(folder);
+  } catch {
+    return null;
+  }
+  if (!sameQuestionDir(realUploads, realFolder, questionId)) return null;
+  return realFolder;
+}
+
+function sameQuestionDir(realUploads: string, realFolder: string, questionId: string): boolean {
+  const rel = path.relative(realUploads, realFolder);
+  return rel === questionId && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+async function writeUnique(folder: string, name: string, data: Buffer): Promise<string | null> {
+  for (let index = 1; index <= 40; index += 1) {
+    const stored = collisionName(name, index);
+    const target = path.join(folder, stored);
+    const rel = path.relative(folder, target);
+    if (rel !== stored || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+    try {
+      const stat = await lstat(target);
+      if (stat.isSymbolicLink() || stat.isFile() || stat.isDirectory()) continue;
+    } catch (error: unknown) {
+      if (nodeCode(error) !== "ENOENT") throw error;
+    }
+    let handle: Awaited<ReturnType<typeof open>> | null = null;
+    try {
+      handle = await open(target, "wx");
+      await handle.writeFile(data);
+    } catch (error: unknown) {
+      await handle?.close().catch(() => undefined);
+      if (nodeCode(error) === "EEXIST") continue;
+      await unlink(target).catch(() => undefined);
+      throw error;
+    }
+    if (handle === null) return null;
+    await handle.close();
+    let realFile: string;
+    try {
+      realFile = await realpath(target);
+    } catch {
+      await unlink(target).catch(() => undefined);
+      return null;
+    }
+    const back = path.relative(folder, realFile);
+    if (back !== stored || back.startsWith("..") || path.isAbsolute(back)) {
+      await unlink(target).catch(() => undefined);
+      return null;
+    }
+    return stored;
+  }
+  return null;
+}
+
+async function appendManifest(folder: string, row: ManifestRow): Promise<void> {
+  const file = path.join(folder, "manifest.json");
+  const rows = await readManifest(file);
+  rows.push(row);
+  const tmp = path.join(folder, `.manifest-${process.pid}-${Date.now()}.tmp`);
+  try {
+    await writeFile(tmp, `${JSON.stringify(rows)}\n`, { flag: "wx" });
+    await rename(tmp, file);
+  } catch (error: unknown) {
+    await unlink(tmp).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function manifestCount(folder: string): Promise<number> {
+  return (await readManifest(path.join(folder, "manifest.json"))).length;
+}
+
+async function readManifest(file: string): Promise<ManifestRow[]> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isManifestRow);
+  } catch (error: unknown) {
+    if (nodeCode(error) === "ENOENT") return [];
+    return [];
+  }
+}
+
+function isManifestRow(value: unknown): value is ManifestRow {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.path === "string" &&
+    typeof row.storedName === "string" &&
+    typeof row.originalName === "string" &&
+    typeof row.size === "number" &&
+    typeof row.type === "string" &&
+    !row.path.includes("\\") &&
+    !row.path.includes("..")
+  );
+}
+
+function canonicalType(ext: string, mime: string): string {
+  const base = mime.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (base !== "" && base !== "application/octet-stream") return base;
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "svg") return "image/svg+xml";
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "txt" || ext === "md") return "text/plain";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  return `image/${ext}`;
+}
+
+function nodeCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export function audioFilename(mime: string, headerName: string | undefined): string {
