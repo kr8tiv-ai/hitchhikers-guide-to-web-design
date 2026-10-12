@@ -58,7 +58,10 @@ export function resolveOnPath(command: string, env: NodeJS.ProcessEnv): string {
       const needle = `${command}${suffix}`.toLowerCase();
       const found = entries.find((entry) => entry.toLowerCase() === needle);
       if (found === undefined) continue;
-      const candidate = path.win32.join(dir, found);
+      // Host join. readdirSync already opened `dir` on this machine.
+      // path.win32.join rewrites `/tmp/shim` to `\tmp\shim`, which stat misses
+      // on Linux and macOS. On Windows, path.join is path.win32.join.
+      const candidate = path.join(dir, found);
       if (isFile(candidate)) return candidate;
     }
   }

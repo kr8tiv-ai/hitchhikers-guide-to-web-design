@@ -10,6 +10,7 @@ import {
   mergePathEntries,
   parseRegPath,
   refreshWindowsPath,
+  resolveOnPath,
   restoreInstallEnv,
   type ToolInstallRecord,
 } from "../src/index.ts";
@@ -39,6 +40,35 @@ test("windows batch shims launch through cmd.exe and other platforms stay direct
       assert.equal(result.status, 0, result.stderr);
       assert.match(result.stdout, /scoop-ok/);
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("win32 resolve returns the host shim path and PATHEXT lists EXE before CMD", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "hh-pathext-"));
+  try {
+    writeFileSync(path.join(dir, "tool.CMD"), "");
+    writeFileSync(path.join(dir, "tool.EXE"), "");
+    const exeFirst = resolveOnPath("tool", { PATH: dir, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
+    assert.equal(exeFirst, path.join(dir, "tool.EXE"));
+    const cmdFirst = resolveOnPath("tool", { PATH: dir, PATHEXT: ".CMD;.EXE" });
+    assert.equal(cmdFirst, path.join(dir, "tool.CMD"));
+
+    writeFileSync(path.join(dir, "only.cmd"), "");
+    const cmdOnly = resolveOnPath("only", { PATH: dir, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
+    assert.equal(cmdOnly, path.join(dir, "only.cmd"));
+    const spec = launchSpec("only", ["install", "poppler"], {
+      Path: dir,
+      PATH: dir,
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      ComSpec: "cmd.exe",
+    }, "win32");
+    assert.equal(spec.file, "cmd.exe");
+    assert.deepEqual(spec.args.slice(0, 3), ["/d", "/s", "/c"]);
+    assert.equal(spec.verbatim, true);
+    assert.match(spec.args[3] ?? "", /only\.cmd/);
+    assert.match(spec.args[3] ?? "", /install poppler/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
