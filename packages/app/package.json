@@ -28,7 +28,8 @@
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts",
     "e2e": "playwright test",
-    "write-html": "node --experimental-strip-types scripts/write-html.ts"
+    "write-html": "node --experimental-strip-types scripts/write-html.ts",
+    "brand-assets": "node --experimental-strip-types scripts/build-brand-assets.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

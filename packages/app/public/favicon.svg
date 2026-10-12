@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">
+  <title>Guide desk mark</title>
+  <desc>An open book on a desk edge. The colours follow the system theme.</desc>
+  <style>
+    .paper { fill: #f3ebdd; }
+    .ink { fill: #1c1612; }
+    .rust { fill: #8e2f1a; }
+    @media (prefers-color-scheme: dark) {
+      .paper { fill: #12100e; }
+      .ink { fill: #f4ede3; }
+      .rust { fill: #e6a15c; }
+    }
+  </style>
+  <rect class="paper" width="64" height="64"/>
+  <rect class="ink" x="12" y="8" width="16" height="28"/>
+  <rect class="ink" x="32" y="8" width="16" height="28"/>
+  <rect class="paper" x="16" y="12" width="8" height="20"/>
+  <rect class="paper" x="36" y="12" width="8" height="20"/>
+  <rect class="rust" x="36" y="12" width="8" height="8"/>
+  <rect class="rust" x="8" y="40" width="48" height="4"/>
+  <rect class="ink" x="8" y="44" width="48" height="8"/>
+</svg>

@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="docs/assets/banner.svg" alt="Don't Panic. The Hitchhiker's Guide to Web Design." width="100%">
+<img src="docs/assets/social-card.png" alt="Don't Panic. The Hitchhiker's Guide to Web Design." width="100%">
+
+<img src="docs/assets/banner.svg" alt="Guide banner." width="100%">
 
 # The Hitchhiker's Guide to Web Design
 

@@ -169,7 +169,7 @@ test("a script url adds the token and drops the inline theme script", () => {
   );
   assert.match(html, new RegExp(`name="hh-csrf" content="${token}"`));
   assert.match(html, /src="\/client\/drive\.js"/);
-  assert.doesNotMatch(html, /prefers-color-scheme/);
+  assert.doesNotMatch(html, /window\.matchMedia\("\(prefers-color-scheme: dark\)"\)/);
   assert.equal(html.match(/data-action="pause"/g)?.length, 1);
   assert.equal(copy(html).includes("!"), false);
   assert.throws(

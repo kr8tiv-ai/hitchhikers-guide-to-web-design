@@ -2,7 +2,7 @@
 
 The desk can install grok, playwright (Chromium), whisper.cpp, and pdftotext. Whisper models on the desk are tiny, tiny.en, base, and base.en. A small model is not offered. Node and pnpm are prerequisites. The desk does not download them.
 
-The desk is not an installable app.
+The desk is an installable app on localhost. Chrome uses the manifest at /manifest.webmanifest. The Tools page is a different install: grok, playwright, whisper, and pdftotext.
 
 An install stays **unverified** until `scripts/verify-installs.ts` has downloaded it on a machine and this table records that run. A unit test with a mock is not a pass. Unverified rows stay unverified until a later run replaces them.
 

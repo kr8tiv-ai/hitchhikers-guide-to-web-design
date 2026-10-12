@@ -88,6 +88,8 @@ import {
   type InterviewMode,
 } from "./card.ts";
 import { documentHeadExtras } from "../design/document-head.ts";
+import { applyIdentityHead } from "./head.ts";
+import { IDENTITY_CACHE, identityClaim, loadIdentity } from "./identity-files.ts";
 import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
@@ -321,6 +323,27 @@ export async function createDeskApp(opts: {
       const pathname = normalizePath(req.url ?? "/");
       if (pathname === null) {
         sendJson(req, res, 400, { error: "The address could not be read." });
+        return;
+      }
+      const claim = identityClaim(pathname);
+      if (claim !== "no") {
+        if (method !== "GET" && method !== "HEAD") {
+          sendJson(req, res, 405, { error: "That method is not used here." });
+          return;
+        }
+        const file = claim === "file" ? loadIdentity(pathname) : null;
+        if (file === null) {
+          sendBytes(
+            req,
+            res,
+            404,
+            "text/plain; charset=utf-8",
+            Buffer.from("That file is not on the desk.\n"),
+            IDENTITY_CACHE,
+          );
+          return;
+        }
+        sendBytes(req, res, 200, file.type, file.body, { ...IDENTITY_CACHE, ...svgStylePolicy(file.type, file.body) });
         return;
       }
       if (method !== "GET" && method !== "HEAD" && method !== "POST") {
@@ -1275,10 +1298,6 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(THEME_SOURCE)));
     return;
   }
-  if (pathname === "/favicon.ico" || pathname === "/favicon.svg") {
-    sendBytes(req, res, 200, "image/svg+xml", readFileSync(path.resolve(SRC_ROOT, "design", "favicon.svg")));
-    return;
-  }
   if (pathname === "/client/drive.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_SOURCE)));
     return;
@@ -1294,6 +1313,26 @@ async function handleGet(
       200,
       "text/javascript; charset=utf-8",
       Buffer.from(browserModule(path.resolve(SRC_ROOT, "design", "document-head.ts"))),
+    );
+    return;
+  }
+  if (pathname === "/client/head.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "server", "head.ts"))),
+    );
+    return;
+  }
+  if (pathname === "/client/tokens.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "design", "tokens.ts"))),
     );
     return;
   }
@@ -2201,6 +2240,9 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
+    .replace(/from\s+["']\.\.\/server\/head\.ts["']/g, 'from "/client/head.js"')
+    .replace(/from\s+["']\.\.\/design\/tokens\.ts["']/g, 'from "/client/tokens.js"')
+    .replace(/from\s+["']\.\/tokens\.ts["']/g, 'from "/client/tokens.js"')
     .replace(/from\s+["']\.\.\/brand\/approve-cards\.ts["']/g, 'from "/client/approve-cards.js"')
     .replace(/from\s+["']\.\/voice-engine\.ts["']/g, 'from "/client/voice-engine.js"')
     .replace(/from\s+["']\.\/voice-text\.ts["']/g, 'from "/client/voice-text.js"')
@@ -3261,7 +3303,7 @@ function sendHtml(
   html: string,
   headers?: Record<string, string>,
 ): void {
-  sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(html), headers);
+  sendBytes(req, res, status, "text/html; charset=utf-8", Buffer.from(applyIdentityHead(html, req)), headers);
 }
 
 /**
@@ -3288,6 +3330,20 @@ function brandKitHeaders(): Record<string, string> {
       "style-src 'self'",
       "style-src 'self' 'unsafe-inline'",
     ),
+  };
+}
+
+/**
+ * Icon SVGs carry a small style block for light and dark.
+ * The desk CSP blocks inline style, so the hash of that block is the only exception.
+ */
+function svgStylePolicy(type: string, body: Buffer): Record<string, string> {
+  if (type !== "image/svg+xml") return {};
+  const style = /<style>([\s\S]*?)<\/style>/.exec(body.toString("utf8"))?.[1];
+  if (style === undefined) return {};
+  const hash = createHash("sha256").update(style, "utf8").digest("base64");
+  return {
+    "content-security-policy": `default-src 'none'; script-src 'none'; style-src 'sha256-${hash}'; base-uri 'none'`,
   };
 }
 

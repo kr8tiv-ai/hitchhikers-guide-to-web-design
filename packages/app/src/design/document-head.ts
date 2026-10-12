@@ -1,8 +1,10 @@
 /**
- * Shared head tags for pages the desk or before-we-jump server actually serves.
- * Paths are absolute on purpose. Standalone kit files must not use this helper.
+ * Shared head tags for pages the desk or before-we-jump server renders.
+ * Icon, manifest, theme-color, Open Graph, and Twitter tags come from identityHead.
+ * The desk send path calls applyIdentityHead again so og:url uses the request host.
  */
 
+import { DEFAULT_DESCRIPTION, identityHead } from "../server/head.ts";
 import { escapeHtml } from "../card.ts";
 
 const FONT_PRELOADS = [
@@ -11,13 +13,9 @@ const FONT_PRELOADS = [
 ] as const;
 
 export function documentHeadExtras(description: string): string {
-  const safe = escapeHtml(description);
+  const safe = description.trim().length === 0 ? DEFAULT_DESCRIPTION : description;
   const preloads = FONT_PRELOADS.map(
-    (href) => `    <link rel="preload" href="${href}" as="font" type="font/woff2" crossorigin />`,
+    (href) => `    <link rel="preload" href="${escapeHtml(href)}" as="font" type="font/woff2" crossorigin />`,
   );
-  return [
-    `    <meta name="description" content="${safe}" />`,
-    `    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />`,
-    ...preloads,
-  ].join("\n");
+  return [identityHead({ description: safe, imageUrl: "/social-card.png" }), ...preloads].join("\n");
 }

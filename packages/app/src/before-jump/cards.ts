@@ -20,6 +20,7 @@ import {
 } from "@hitchhiker/engine";
 import { escapeHtml, renderCard } from "../card.ts";
 import { documentHeadExtras } from "../design/document-head.ts";
+import { identityClaim, loadIdentity } from "../server/identity-files.ts";
 
 const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 32_768;
@@ -243,8 +244,26 @@ async function handle(server: Server, session: Session, req: IncomingMessage, re
     send(res, 200, "text/css; charset=utf-8", readCss(rel));
     return;
   }
-  if (req.method === "GET" && (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico")) {
-    send(res, 200, "image/svg+xml", readFileSync(path.resolve(appSrc, "design", "favicon.svg")));
+  if (
+    (req.method === "GET" || req.method === "HEAD") &&
+    identityClaim(url.pathname) !== "no"
+  ) {
+    const file = identityClaim(url.pathname) === "file" ? loadIdentity(url.pathname) : null;
+    if (file === null) {
+      send(res, 404, "text/plain; charset=utf-8", "That file is not on the desk.\n");
+      return;
+    }
+    if (req.method === "HEAD") {
+      res.writeHead(200, {
+        "content-type": file.type,
+        "content-length": file.body.length,
+        "cache-control": "no-cache",
+        "x-content-type-options": "nosniff",
+      });
+      res.end();
+      return;
+    }
+    send(res, 200, file.type, file.body);
     return;
   }
   if (req.method === "GET" && url.pathname.startsWith("/public/fonts/")) {
@@ -410,7 +429,7 @@ function renderPage(session: Session): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 ${documentHeadExtras("Anything to add before we jump?")}
-    <title>Before we jump</title>
+    <title>Before we jump, The Hitchhiker's Guide to Web Design</title>
     <link rel="stylesheet" href="/src/design/tokens.css" />
     <link rel="stylesheet" href="/src/design/type.css" />
     <link rel="stylesheet" href="/src/design/components.css" />
