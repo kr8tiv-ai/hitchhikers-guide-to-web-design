@@ -50,6 +50,123 @@ test.afterAll(async () => {
   if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
 });
 
+const HEARD = "Heard you. Check the words, then press Answer.";
+const PUSH_LINE = "Name one concrete detail.";
+const KEPT_SENTENCE = "Yourself, or one named client.";
+
+test("197 pushback: words stay and Answer is enabled after stop", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await showPushback(page);
+  await dictateOnto(page, "", "for", "for me");
+  await expectHeard(page, "for me");
+  expect(answers).toEqual([]);
+});
+
+test("197 pushback: typed text plus a final stays and Answer is enabled", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await showPushback(page);
+  await page.locator("#hh-card-draft").fill("Typed.");
+  await dictateOnto(page, "Typed.", "for", "for me");
+  await expectHeard(page, "Typed. for me");
+  expect(answers).toEqual([]);
+});
+
+test("197 pushback: a silent stop keeps typed text and says nothing was heard", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await showPushback(page);
+  const draft = page.locator("#hh-card-draft");
+  await draft.fill("Typed.");
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  expect(await draft.inputValue()).toBe("Typed.");
+  await button.click();
+  await end(page);
+  await expect(button).toHaveText("Click to talk");
+  expect(await draft.inputValue()).toBe("Typed.");
+  await expect(page.locator('[data-action="answer"]')).toBeEnabled();
+  await expect(page.locator("#hh-card-error")).toHaveText(NOTHING);
+  await expect(page.locator("[data-card-notice]")).toHaveCount(0);
+  expect(answers).toEqual([]);
+});
+
+test("197 plain: typed suggest text is never cleared and words append once", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await page.locator("#hh-card-draft").fill(KEPT_SENTENCE);
+  await dictateOnto(page, KEPT_SENTENCE, "today", "today please");
+  await expectHeard(page, `${KEPT_SENTENCE} today please`);
+  expect(await page.locator("#hh-card-draft").inputValue()).toBe(`${KEPT_SENTENCE} today please`);
+  expect(answers).toEqual([]);
+});
+
+test("197 plain: an empty box keeps the placeholder out and leaves Answer off", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  const draft = page.locator("#hh-card-draft");
+  const placeholder = await draft.getAttribute("placeholder");
+  expect(placeholder).toBe(KEPT_SENTENCE);
+  expect(await draft.inputValue()).toBe("");
+  const button = page.locator('[data-voice="hold"]');
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  expect(await draft.inputValue()).toBe("");
+  await button.click();
+  await end(page);
+  await expect(button).toHaveText("Click to talk");
+  expect(await draft.inputValue()).toBe("");
+  expect(await draft.inputValue()).not.toBe(placeholder);
+  await expect(page.locator('[data-action="answer"]')).toBeDisabled();
+  await expect(page.locator("#hh-card-error")).toHaveText(NOTHING);
+  await expect(page.locator("[data-card-notice]")).toHaveCount(0);
+  expect(await draft.getAttribute("placeholder")).toBe(placeholder);
+  expect(answers).toEqual([]);
+});
+
+test("197 late: a final at 400ms stays on a plain card and a pushback card", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await runLate(page, 400);
+  await showPushback(page);
+  await runLate(page, 400);
+  expect(answers).toEqual([]);
+});
+
+test("197 late: a final at 900ms stays on a plain card and a pushback card", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await runLate(page, 900);
+  await showPushback(page);
+  await runLate(page, 900);
+  expect(answers).toEqual([]);
+});
+
+test("197 late: after the stop wait the box still holds the text and the late words", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await runLateSurvives(page);
+  await showPushback(page);
+  await runLateSurvives(page);
+  expect(answers).toEqual([]);
+});
+
+test("197 repaint: a banner and a view update keep the box and Answer", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await showPushback(page);
+  await page.locator("#hh-card-draft").fill("Typed.");
+  await dictateOnto(page, "Typed.", "for", "for me");
+  await expectHeard(page, "Typed. for me");
+  await paintFromStream(page);
+  await expectHeard(page, "Typed. for me");
+  await repaintSameView(page);
+  await expectHeard(page, "Typed. for me");
+  expect(answers).toEqual([]);
+});
+
 test("interim then a final after stop stays in the draft", async ({ page }) => {
   const answers = trackAnswers(page);
   await openDesk(page, "manual");
@@ -719,6 +836,50 @@ test("multi-cycle: a paint between dictations still appends the later words", as
   expect(answers).toEqual([]);
 });
 
+test("197 suggest: a kept suggestion stays through dictation", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await page.locator('[data-action="suggest"]').click();
+  await expect(page.locator("[data-assumed='suggested']")).toBeVisible();
+  const suggestion = (await page.locator("#hh-card-draft").inputValue()).trim();
+  expect(suggestion.length).toBeGreaterThan(0);
+  await dictateOnto(page, suggestion, "today", "today please");
+  await expectHeard(page, `${suggestion} today please`);
+  expect(answers).toEqual([]);
+});
+
+test("197 choice: Other, then edited text, stays through dictation", async ({ page }) => {
+  const answers = trackAnswers(page);
+  await openDesk(page, "manual");
+  await page.locator('[data-action="suggest"]').click();
+  const card = page.locator("[data-question-id]");
+  await expect(card.getByRole("radio", { name: "Other: I'll write my own" })).toBeVisible();
+  await card.getByRole("radio", { name: "Other: I'll write my own" }).click();
+  const edited = `${KEPT_SENTENCE} today`;
+  await page.locator("#hh-card-draft").fill(edited);
+  await dictateOnto(page, edited, "spoken", "spoken once");
+  await expectHeard(page, `${edited} spoken once`);
+  expect(answers).toEqual([]);
+});
+
+test("197 answer: a stop does not submit, and Answer sends the box once", async ({ page }) => {
+  const bodies: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/answer") bodies.push(request.postData() ?? "");
+  });
+  await openDesk(page, "manual");
+  await showPushback(page);
+  await page.locator("#hh-card-draft").fill("Typed.");
+  await dictateOnto(page, "Typed.", "for", "for me");
+  await expectHeard(page, "Typed. for me");
+  expect(bodies).toEqual([]);
+  await page.locator('[data-action="answer"]').click();
+  await expect.poll(() => bodies.length).toBe(1);
+  const payload = JSON.parse(bodies[0] ?? "{}") as { text?: string };
+  expect(payload.text).toBe("Typed. for me");
+  expect(bodies).toHaveLength(1);
+});
+
 async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<void> {
   await page.addInitScript(installVoice, mode);
   if (clock) await page.clock.install();
@@ -845,6 +1006,100 @@ async function expectIdle(page: Page, value: string): Promise<void> {
   await expect(page.locator('[data-voice="hold"]')).toHaveText("Click to talk");
   await expect(page.locator("#hh-card-draft")).toHaveValue(value);
   await expect(page.locator("[data-card-notice]")).toHaveText(/Heard you\. Check the words, then press Answer\./);
+}
+
+async function showPushback(page: Page, line = PUSH_LINE): Promise<void> {
+  await page.evaluate(async (text) => {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    const session = (await response.json()) as { pushback: string | null };
+    session.pushback = text;
+    const host = window as Window & { __hhPush?: (data: string) => void };
+    host.__hhPush?.(JSON.stringify(session));
+  }, line);
+  await expect(page.locator("[data-pushback]")).toHaveAttribute("data-pushback", line);
+  await expect(page.locator(".hh-qcard__push")).toHaveText(line);
+  await expect(page.locator("#hh-card-draft")).toHaveValue("");
+  await expect(page.locator('[data-action="answer"]')).toBeDisabled();
+}
+
+async function expectHeard(page: Page, value: string): Promise<void> {
+  await expect(page.locator('[data-voice="hold"]')).toHaveText("Click to talk");
+  await expect(page.locator("#hh-card-draft")).toHaveValue(value);
+  await expect(page.locator('[data-action="answer"]')).toBeEnabled();
+  await expect(page.locator("[data-card-notice]")).toHaveText(HEARD);
+  expect(value.trim()).not.toBe("");
+}
+
+/** Talk, interim, final, stop, onend. The box is never blank when it already had text. */
+async function dictateOnto(page: Page, prior: string, interim: string, final: string): Promise<void> {
+  const draft = page.locator("#hh-card-draft");
+  const button = page.locator('[data-voice="hold"]');
+  const joined = (heard: string): string => {
+    const head = prior.trim();
+    const tail = heard.trim();
+    if (head === "") return tail;
+    if (tail === "") return head;
+    return `${head} ${tail}`;
+  };
+  expect(await draft.inputValue()).toBe(prior);
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  expect(await draft.inputValue()).toBe(prior);
+  await emit(page, interim, false);
+  expect(await draft.inputValue()).toBe(joined(interim));
+  await emit(page, final, true);
+  expect(await draft.inputValue()).toBe(joined(final));
+  await button.click();
+  await end(page);
+  await expect(button).toHaveText("Click to talk");
+  expect(await draft.inputValue()).toBe(joined(final));
+}
+
+async function runLate(page: Page, waitMs: number): Promise<void> {
+  const draft = page.locator("#hh-card-draft");
+  const button = page.locator('[data-voice="hold"]');
+  await draft.fill("Hello");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  expect(await draft.inputValue()).toBe("Hello");
+  await button.click();
+  await end(page);
+  await page.waitForTimeout(waitMs);
+  await emit(page, "late words", true);
+  await expectHeard(page, "Hello late words");
+  expect((await draft.inputValue()).split("late words").length - 1).toBe(1);
+}
+
+async function runLateSurvives(page: Page): Promise<void> {
+  const draft = page.locator("#hh-card-draft");
+  const button = page.locator('[data-voice="hold"]');
+  await draft.fill("Hello");
+  await button.click();
+  await expect(button).toHaveText("Stop listening");
+  expect(await draft.inputValue()).toBe("Hello");
+  await button.click();
+  await end(page);
+  await page.waitForTimeout(400);
+  await emit(page, "late words", true);
+  await expectHeard(page, "Hello late words");
+  await page.waitForTimeout(VOICE_STOP_WAIT_MS);
+  await expectHeard(page, "Hello late words");
+  await emit(page, "too late", true);
+  await expect(draft).toHaveValue("Hello late words");
+  await expect(page.locator('[data-action="answer"]')).toBeEnabled();
+  await expect(page.locator("[data-card-notice]")).toHaveText(HEARD);
+  expect(await draft.inputValue()).not.toContain("too late");
+}
+
+async function repaintSameView(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    const session = (await response.json()) as { pushback: string | null };
+    const line = document.querySelector("[data-pushback]")?.getAttribute("data-pushback") ?? null;
+    session.pushback = line;
+    const host = window as Window & { __hhPush?: (data: string) => void };
+    host.__hhPush?.(JSON.stringify(session));
+  });
 }
 
 async function paintFromStream(page: Page): Promise<void> {

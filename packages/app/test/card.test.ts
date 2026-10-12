@@ -154,6 +154,54 @@ test("a draft enables Answer, and pushback keeps the field empty", () => {
   assert.doesNotMatch(held, /<textarea\b[^>]*>fine<\/textarea>/);
 });
 
+test("keepDraft renders the live draft on a pushback card and Answer follows that text", () => {
+  const line = `You wrote "fine". Name one concrete detail.`;
+  const kept = renderCard(
+    state({
+      draft: "Typed. for me",
+      pushback: line,
+      keepDraft: true,
+      notice: "Heard you. Check the words, then press Answer.",
+    }),
+  );
+  assert.match(kept, /data-pushback="You wrote &quot;fine&quot;\. Name one concrete detail\."/);
+  assert.match(kept, /<textarea\b[^>]*>Typed\. for me<\/textarea>/);
+  assert.doesNotMatch(buttonTag(kept, "answer"), /disabled/);
+  assert.match(kept, /Heard you\. Check the words, then press Answer\./);
+  assert.match(kept, /<p class="hh-qcard__push">You wrote &quot;fine&quot;\. Name one concrete detail\.<\/p>/);
+
+  const pending = renderCard(
+    state({
+      draft: "Typed. for me",
+      pushback: line,
+      keepDraft: true,
+      pending: true,
+    }),
+  );
+  assert.match(pending, /<textarea\b[^>]*>Typed\. for me<\/textarea>/);
+  assert.match(buttonTag(pending, "answer"), /\sdisabled(?:\s|>)/);
+
+  const blank = renderCard(
+    state({
+      draft: " \n\t",
+      pushback: line,
+      keepDraft: true,
+    }),
+  );
+  assert.match(buttonTag(blank, "answer"), /\sdisabled(?:\s|>)/);
+
+  const empty = renderCard(
+    state({
+      draft: "",
+      pushback: line,
+      keepDraft: true,
+    }),
+  );
+  assert.match(empty, /<textarea\b[^>]*><\/textarea>/);
+  assert.match(buttonTag(empty, "answer"), /\sdisabled(?:\s|>)/);
+  assert.match(empty, /You wrote &quot;fine&quot;\. Name one concrete detail\./);
+});
+
 test("an empty submit sets the error and does not call command", async () => {
   const session = throwingSession(question("DP-1.1", "Do you have a logo you love?"));
   const current = state();

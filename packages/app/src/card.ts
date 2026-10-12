@@ -89,6 +89,11 @@ export interface CardState {
   choices?: CardChoiceSet | null;
   /** Files and links already on this question. Absent until the desk has some. */
   attach?: AttachView;
+  /**
+   * Repaint of the card already on screen. The live draft stays in the field.
+   * A newly shown pushback leaves this off, so the field starts empty.
+   */
+  keepDraft?: boolean;
 }
 
 /**
@@ -357,8 +362,9 @@ export function renderCard(state: CardState): string {
   const question = state.question;
   if (question === null) return heading(EMPTY_TITLE, EMPTY_WHY, false);
 
-  // A hold shows the pushback and an empty field, so the soft line is not sent again.
-  const field = state.pushback === null ? state.draft : "";
+  // A newly shown pushback starts empty, so the soft line is not sent again.
+  // A repaint (keepDraft) renders the live draft and lets Answer follow that text.
+  const field = state.pushback !== null && state.keepDraft !== true ? "" : state.draft;
   const hint = state.enterHint === true;
   const describedBy = [hint ? "hh-card-hint" : "", state.error === null ? "" : "hh-card-error"]
     .filter((id) => id !== "")

@@ -929,7 +929,7 @@ test("multi-cycle: a paint between dictations still appends the later words", as
   }
 });
 
-function sessionJson(id: string): string {
+function sessionJson(id: string, pushback: string | null = null): string {
   return JSON.stringify({
     question: {
       id,
@@ -939,9 +939,10 @@ function sessionJson(id: string): string {
       why: "The stream moved on.",
       input: ["text", "voice"],
       skipDefault: "Tea.",
+      suggest: "Yourself, or one named client.",
       writes: ["SITE-BRIEF.md#offer"],
     },
-    pushback: null,
+    pushback,
     done: false,
     mapHtml: "",
     transcriptHtml: "",
@@ -1007,4 +1008,297 @@ async function settle(): Promise<void> {
   for (let step = 0; step < 5; step += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+}
+
+const PUSH_LINE = "Name one concrete detail.";
+const KEPT_SENTENCE = "Yourself, or one named client.";
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function answerTag(html: string): string {
+  const match = /<button\b[^>]*data-action="answer"[^>]*>/.exec(html);
+  assert.ok(match, "missing Answer button");
+  return match[0];
+}
+
+function typeDraft(h: VoiceHarness, value: string): void {
+  h.field.value = value;
+  h.fire("input", { target: h.field as FakeEl });
+}
+
+/** A new pushback on the card already loaded by the harness. */
+async function showPushback(h: VoiceHarness & { emitSession(data: string): void }): Promise<void> {
+  await settle();
+  h.emitSession(sessionJson("DP-1.2", PUSH_LINE));
+  assert.match(h.region.innerHTML, /data-pushback="Name one concrete detail\."/);
+  assert.equal(renderedDraft(h.region.innerHTML), "");
+  assert.equal(h.field.value, "");
+  assert.match(answerTag(h.region.innerHTML), /\sdisabled(?:\s|>)/);
+}
+
+function assertBox(h: VoiceHarness, value: string, mode: "heard" | "silent" | "empty"): void {
+  assert.equal(renderedDraft(h.region.innerHTML), value);
+  assert.equal(h.field.value, value);
+  const enabled = value.trim() !== "";
+  if (enabled) assert.doesNotMatch(answerTag(h.region.innerHTML), /disabled/);
+  else assert.match(answerTag(h.region.innerHTML), /\sdisabled(?:\s|>)/);
+  if (mode === "heard") {
+    assert.equal(enabled, true);
+    assert.ok(h.region.innerHTML.includes(VOICE_HEARD));
+  } else {
+    assert.equal(h.region.innerHTML.includes(VOICE_HEARD), false);
+    assert.ok(h.region.innerHTML.includes(VOICE_RELEASE_EMPTY));
+  }
+  if (mode === "empty") {
+    const placeholder = /placeholder="([^"]*)"/.exec(h.region.innerHTML)?.[1] ?? "";
+    assert.notEqual(placeholder, "");
+    assert.equal(value, "");
+    assert.notEqual(value, decodeEntities(placeholder));
+  }
+  assert.equal(answerPosts(h).length, 0);
+}
+
+test("a newly shown pushback opens with the line and an empty field", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    typeDraft(h, "not sent again");
+    await showPushback(h);
+    assert.equal(h.region.innerHTML.includes(PUSH_LINE), true);
+    assert.equal(renderedDraft(h.region.innerHTML), "");
+    assert.match(answerTag(h.region.innerHTML), /\sdisabled(?:\s|>)/);
+  } finally {
+    stop();
+  }
+});
+
+test("pushback: interim, final, stop, and onend keep the words and enable Answer", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await showPushback(h);
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    assert.equal(renderedDraft(h.region.innerHTML), "");
+    rec.say("for", false);
+    assert.equal(renderedDraft(h.region.innerHTML), "for");
+    assert.equal(h.field.value, "for");
+    rec.say("for me", true);
+    assert.equal(renderedDraft(h.region.innerHTML), "for me");
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertBox(h, "for me", "heard");
+    assert.match(h.region.innerHTML, /data-pushback=/);
+  } finally {
+    stop();
+  }
+});
+
+test("pushback: typed text plus a final stays, and Answer is enabled", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await showPushback(h);
+    typeDraft(h, "Typed.");
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    assert.equal(renderedDraft(h.region.innerHTML), "Typed.");
+    assert.equal(h.field.value, "Typed.");
+    rec.say("for me", true);
+    assert.equal(renderedDraft(h.region.innerHTML), "Typed. for me");
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertBox(h, "Typed. for me", "heard");
+  } finally {
+    stop();
+  }
+});
+
+test("pushback: a silent stop keeps typed text and says nothing was heard", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await showPushback(h);
+    typeDraft(h, "Typed.");
+    h.fire("click", { target: talk(), button: 0 });
+    assert.equal(renderedDraft(h.region.innerHTML), "Typed.");
+    h.fire("click", { target: talk() });
+    FakeRecognition.last?.onend?.();
+    await settle();
+    assertBox(h, "Typed.", "silent");
+  } finally {
+    stop();
+  }
+});
+
+test("plain: typed suggest text is never cleared and the words append once", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    typeDraft(h, KEPT_SENTENCE);
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    assert.equal(renderedDraft(h.region.innerHTML), KEPT_SENTENCE);
+    rec.say("today", false);
+    assert.equal(renderedDraft(h.region.innerHTML), `${KEPT_SENTENCE} today`);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertBox(h, `${KEPT_SENTENCE} today`, "heard");
+    assert.equal(renderedDraft(h.region.innerHTML).split(KEPT_SENTENCE).length - 1, 1);
+    assert.equal(renderedDraft(h.region.innerHTML).split("today").length - 1, 1);
+  } finally {
+    stop();
+  }
+});
+
+test("an empty box keeps the placeholder out and leaves Answer off", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    const before = /placeholder="([^"]*)"/.exec(h.region.innerHTML)?.[1] ?? "";
+    assert.notEqual(before, "");
+    h.fire("click", { target: talk(), button: 0 });
+    assert.equal(renderedDraft(h.region.innerHTML), "");
+    h.fire("click", { target: talk() });
+    FakeRecognition.last?.onend?.();
+    await settle();
+    assertBox(h, "", "empty");
+    const after = /placeholder="([^"]*)"/.exec(h.region.innerHTML)?.[1] ?? "";
+    assert.equal(decodeEntities(after), decodeEntities(before));
+  } finally {
+    stop();
+  }
+});
+
+test("pushback and plain: a late final at 400ms stays once and enables Answer", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await lateFinal(h, 400, false);
+    await showPushback(h);
+    await lateFinal(h, 400, true);
+  } finally {
+    stop();
+  }
+});
+
+test("pushback and plain: a late final at 900ms stays once and enables Answer", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await lateFinal(h, 900, false);
+    await showPushback(h);
+    await lateFinal(h, 900, true);
+  } finally {
+    stop();
+  }
+});
+
+test("after the stop wait the box still holds the text and the late words", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await settle();
+    await lateSurvives(h, false);
+    await showPushback(h);
+    await lateSurvives(h, true);
+  } finally {
+    stop();
+  }
+});
+
+test("pushback: Answer submits the box text once after a stop", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await showPushback(h);
+    typeDraft(h, "Typed.");
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.say("for me", true);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertBox(h, "Typed. for me", "heard");
+    h.fire("click", { target: element({ "data-action": "answer" }) });
+    await settle();
+    const posts = answerPosts(h);
+    assert.equal(posts.length, 1);
+    const body = JSON.parse(posts[0]?.body ?? "{}") as { text?: string };
+    assert.equal(body.text, "Typed. for me");
+  } finally {
+    stop();
+  }
+});
+
+test("pushback: a banner paint and a view update keep the box and Answer", async () => {
+  const { h, stop } = useVoiceHarness();
+  try {
+    await showPushback(h);
+    typeDraft(h, "Typed.");
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onstart?.();
+    rec.say("for me", true);
+    h.fire("click", { target: talk() });
+    rec.onend?.();
+    await settle();
+    assertBox(h, "Typed. for me", "heard");
+    h.fireError();
+    h.fireError();
+    h.fireError();
+    assertBox(h, "Typed. for me", "heard");
+    h.emitSession(sessionJson("DP-1.2", PUSH_LINE));
+    assertBox(h, "Typed. for me", "heard");
+  } finally {
+    stop();
+  }
+});
+
+async function lateFinal(h: VoiceHarness, waitMs: number, pushed: boolean): Promise<void> {
+  typeDraft(h, "Hello");
+  h.fire("click", { target: talk(), button: 0 });
+  const rec = FakeRecognition.last;
+  assert.ok(rec);
+  rec.onstart?.();
+  assert.equal(renderedDraft(h.region.innerHTML), "Hello");
+  h.fire("click", { target: talk() });
+  rec.onend?.();
+  await settle();
+  await delay(waitMs);
+  rec.say("late words", true);
+  await settle();
+  assertBox(h, "Hello late words", "heard");
+  if (pushed) assert.match(h.region.innerHTML, /data-pushback=/);
+  assert.equal(renderedDraft(h.region.innerHTML).split("late words").length - 1, 1);
+}
+
+async function lateSurvives(h: VoiceHarness, pushed: boolean): Promise<void> {
+  typeDraft(h, "Hello");
+  h.fire("click", { target: talk(), button: 0 });
+  const rec = FakeRecognition.last;
+  assert.ok(rec);
+  rec.onstart?.();
+  h.fire("click", { target: talk() });
+  rec.onend?.();
+  await settle();
+  await delay(400);
+  rec.say("late words", true);
+  await settle();
+  assertBox(h, "Hello late words", "heard");
+  await delay(VOICE_STOP_WAIT_MS);
+  assertBox(h, "Hello late words", "heard");
+  rec.say("too late", true);
+  await settle();
+  assertBox(h, "Hello late words", "heard");
+  assert.equal(renderedDraft(h.region.innerHTML).includes("too late"), false);
+  if (pushed) assert.match(h.region.innerHTML, /data-pushback=/);
 }

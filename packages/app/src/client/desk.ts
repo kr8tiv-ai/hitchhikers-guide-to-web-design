@@ -905,6 +905,7 @@ export function mountDesk(env: DeskEnv): () => void {
   function startVoice(): void {
     if (voiceSession || stopping !== null || toggled) return;
     if (pending || view === null || view.question === null) return;
+    readDraft();
     const engineNow = activeEngine();
     if (engineNow !== "web-speech") {
       notice = null;
@@ -923,7 +924,6 @@ export function mountDesk(env: DeskEnv): () => void {
     const epoch = voiceEpoch;
     // A stop that ended on a final result used to leave the old recognizer here.
     if (recognition !== null) recognition = null;
-    readDraft();
     voiceBase = draft;
     voiceFinal = "";
     voiceInterim = "";
@@ -1222,11 +1222,18 @@ export function mountDesk(env: DeskEnv): () => void {
       heard = incoming.trim();
       anchor = "";
       // A new session owns the notice. This result only edits its own utterance.
+      // Heard you is only for a box that still has words.
       if (changed && !voiceSession && !capped && !failed) {
-        error = null;
-        notice = VOICE_HEARD;
+        if (draft.trim() === "") {
+          notice = null;
+          error = VOICE_RELEASE_EMPTY;
+        } else {
+          error = null;
+          notice = VOICE_HEARD;
+        }
       }
       if (!patchDraft()) paint();
+      else syncAnswerLock();
       close();
     };
     const close = (): void => {
@@ -1301,7 +1308,7 @@ export function mountDesk(env: DeskEnv): () => void {
     } else if (capped) {
       error = null;
       notice = VOICE_CAP_NOTICE;
-    } else if (heard) {
+    } else if (heard && draft.trim() !== "") {
       error = null;
       notice = VOICE_HEARD;
     } else {
@@ -1393,6 +1400,16 @@ export function mountDesk(env: DeskEnv): () => void {
     button.disabled = locked;
     if (locked) button.setAttribute("disabled", "");
     else button.removeAttribute("disabled");
+  }
+
+  /** After a paint, the textarea shows the live draft and Answer follows that text. */
+  function alignDraftField(): void {
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined && typeof field.value === "string" && field.value !== draft) {
+      // An empty draft must not erase words the person already put in the box.
+      if (draft.trim() !== "" || field.value.trim() === "") field.value = draft;
+    }
+    syncAnswerLock();
   }
 
   function announceVoice(text: string): void {
@@ -2021,15 +2038,22 @@ export function mountDesk(env: DeskEnv): () => void {
       else button.removeAttribute("disabled");
     }
     const voice = question.querySelector('[data-voice="hold"]');
-    if (voice === null) return;
+    if (voice === null) {
+      if (!on) alignDraftField();
+      return;
+    }
     if (on) {
       voice.disabled = true;
       voice.setAttribute("disabled", "");
       return;
     }
-    if ((voice.textContent ?? "") === TALK_NEEDS_CHROMIUM) return;
+    if ((voice.textContent ?? "") === TALK_NEEDS_CHROMIUM) {
+      alignDraftField();
+      return;
+    }
     voice.disabled = false;
     voice.removeAttribute("disabled");
+    alignDraftField();
   }
 
   function firstFile(list: ArrayLike<File> | undefined): File | null {
@@ -2133,7 +2157,9 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function answerLocked(busy: boolean): boolean {
-    return busy || uploadingLabel !== null || (draft.trim() === "" && !hasReadyChip());
+    const field = region()?.querySelector("#hh-card-draft");
+    const text = field !== null && field !== undefined && typeof field.value === "string" ? field.value : draft;
+    return busy || uploadingLabel !== null || (text.trim() === "" && !hasReadyChip());
   }
 
   function hasReadyChip(): boolean {
@@ -2531,6 +2557,7 @@ export function mountDesk(env: DeskEnv): () => void {
             : null,
         ...(voiceDisclosed ? { voiceNote: true } : {}),
         ...attachSpread(),
+        keepDraft: true,
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(
@@ -2568,6 +2595,7 @@ export function mountDesk(env: DeskEnv): () => void {
     applyEdits();
     ensureMotion(env.document, view?.question?.id);
     syncGuideLive();
+    alignDraftField();
   }
 
   function speechReady(): boolean {
