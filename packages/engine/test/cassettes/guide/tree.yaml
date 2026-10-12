@@ -25,10 +25,11 @@ questions:
   - id: DP-0.3
     module: towel-check
     depth: [express, standard, deep]
-    ask: "How new is the web work?"
-    why: "The level changes how much we explain."
+    ask: "How hands-on are you with websites? (a) I design how it looks, but someone else builds it. (b) I build pages myself in a site builder like Wix, Squarespace or Webflow. (c) I write the code myself (HTML, CSS, JavaScript). (d) I'm brand new to all of this."
+    why: "This tells me how much to explain. Pick the closest one, and I'll adjust as we go."
     input: [text]
-    skip_default: "New to it."
+    skip_default: "I'm brand new to all of this."
+    suggest: "Pick the closest one."
     writes:
       - "PROJECT.md#level"
 

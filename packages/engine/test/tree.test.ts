@@ -129,12 +129,35 @@ test("DP-0.7 offers Deep, then Standard, then Express, and skips to Deep", () =>
   assert.match(question.suggest ?? "", /Standard/);
 });
 
-test("DP-0.3 names four comfort rungs", () => {
-  const ask = byId(loadTree(treeFile), "DP-0.3").ask;
-  assert.match(ask, /new to it/i);
-  assert.match(ask, /site builder/i);
-  assert.match(ask, /design or build/i);
-  assert.match(ask, /write code/i);
+const HANDS_ON_ASK =
+  "How hands-on are you with websites? (a) I design how it looks, but someone else builds it. (b) I build pages myself in a site builder like Wix, Squarespace or Webflow. (c) I write the code myself (HTML, CSS, JavaScript). (d) I'm brand new to all of this.";
+const HANDS_ON_OPTIONS = [
+  "I design how it looks, but someone else builds it.",
+  "I build pages myself in a site builder like Wix, Squarespace or Webflow.",
+  "I write the code myself (HTML, CSS, JavaScript).",
+  "I'm brand new to all of this.",
+] as const;
+const HANDS_ON_WHY = "This tells me how much to explain. Pick the closest one, and I'll adjust as we go.";
+
+test("DP-0.3 asks how hands-on the person is, with four options and plain help", () => {
+  const question = byId(loadTree(treeFile), "DP-0.3");
+  assert.equal(question.ask, HANDS_ON_ASK);
+  assert.equal(question.why, HANDS_ON_WHY);
+  assert.equal(question.suggest, "Pick the closest one.");
+  assert.equal(question.skipDefault, "I'm brand new to all of this.");
+  let cursor = question.ask.indexOf("?");
+  assert.ok(cursor > 0);
+  for (const option of HANDS_ON_OPTIONS) {
+    const at = question.ask.indexOf(option, cursor);
+    assert.ok(at > cursor, option);
+    cursor = at + option.length;
+  }
+  for (const field of [question.ask, question.why, question.suggest ?? ""]) {
+    assert.equal(/\brung\b/i.test(field), false, field);
+  }
+  assert.equal(question.module, "towel-check");
+  assert.deepEqual(question.input, ["choice", "text", "voice"]);
+  assert.deepEqual(question.levels, { beginner: "explain", pro: "terse" });
 });
 
 test("DP-1.5 suggest names the six font pairings", () => {

@@ -62,7 +62,7 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     await expect(page.locator("#hh-card-draft")).toHaveValue("");
     await say(page, "it's fine", "one page, tool, or URL", "DP-0.2");
     await say(page, "it's fine", "That note is soft", "DP-0.3");
-    await say(page, "I have used a site builder for a menu page.", "A site builder is a real rung", "DP-0.4");
+    await say(page, "I have used a site builder for a menu page.", "Building pages in a site builder counts", "DP-0.4");
     await say(page, "A logo sketch and a photo of the tins.", "why does this site exist", "DP-2.1");
     await say(page, "The site exists so a neighbor can order tea without calling.", "real sites should we walk", "DP-5.2");
 

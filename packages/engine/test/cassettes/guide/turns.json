@@ -38,14 +38,14 @@
     },
     {
       "result": {
-        "message": "That note is soft, and we can sharpen it later. How comfortable are you with web work, from new to writing code?",
+        "message": "That note is soft, and we can sharpen it later. How hands-on are you with websites?",
         "explanationLevel": "beginner",
         "joke": false
       }
     },
     {
       "result": {
-        "message": "A site builder is a real rung. Do you already have a logo, colors, or photos for the shop?",
+        "message": "Building pages in a site builder counts. Do you already have a logo, colors, or photos for the shop?",
         "explanationLevel": "beginner",
         "joke": false
       }

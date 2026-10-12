@@ -120,6 +120,8 @@ export { mirrorCue, requestMirror } from "./guide/mirror.ts";
 export { FAMILIES, FAMILY_STYLE, familyOf, selectReferenceCards, styleWorldForFamily } from "./guide/gallery-model.ts";
 export type { GalleryFamily } from "./guide/gallery-model.ts";
 export { choiceSetFrom, isTasteId, loadFacts, loadGallery, referenceCards, suggest, suggestOffer } from "./guide/suggest.ts";
+export { classifyHandsOn, SKILL_LEVELS } from "./guide/skill-level.ts";
+export type { SkillLevel } from "./guide/skill-level.ts";
 export { detectLanguage, guideTextIssues, lintClaims, questionCount, validateGuideMessage } from "./guide/validators.ts";
 export type { GuideAcp, GuideSession, GuideTurn, GuideTurnDeps, GuideTurnInput } from "./guide/live-turn.ts";
 export type { MirrorCue } from "./guide/mirror.ts";
