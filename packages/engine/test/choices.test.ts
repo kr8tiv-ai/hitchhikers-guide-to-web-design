@@ -213,9 +213,12 @@ test("a weak answer keeps the sharper line first and a bad list falls back to on
   );
   const judgement = await judgePushback(question, "it's fine", 0, { think: model, facts, language: "en" });
   assert.equal(judgement.action, "push");
-  assert.equal(judgement.choicesOrigin, "model");
-  assert.equal(judgement.choices?.[0]?.label, sharper);
-  assert.equal(judgement.choices?.length, 3);
+  assert.equal(judgement.message, sharper);
+  assert.equal(
+    judgement.choices?.some((choice) => choice.label === sharper),
+    false,
+  );
+  assert.equal(judgement.choices?.length, 2);
 
   const bad = followUpChoices(
     { choices: [{ id: "Z", label: "Nope", why: "Nope", source: "upload:missing.jpg" }] },
@@ -223,9 +226,7 @@ test("a weak answer keeps the sharper line first and a bad list falls back to on
     facts,
     "en",
   );
-  assert.equal(bad.origin, "fallback");
-  assert.equal(bad.choices.length, 1);
-  assert.equal(bad.choices[0]?.label, sharper);
+  assert.equal(bad.choices.length, 0);
 });
 
 test("an assumed pick is stored as SUGGESTED and the next card is asked", async () => {

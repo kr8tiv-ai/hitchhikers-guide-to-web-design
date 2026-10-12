@@ -9,6 +9,7 @@ import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { SAMPLE_LABEL, sampleProjectFile } from "../sample.ts";
 import {
   fileExists,
+  loadConfig,
   loadProjectFile,
   loadState,
   locationLabel,
@@ -17,6 +18,7 @@ import {
   readSaveNotice,
   removeRecentProject,
   restoreProject,
+  saveConfig,
   saveProjectFile,
   type RecentProject,
   type RestorePrefer,
@@ -29,13 +31,21 @@ export interface ProjectPostInput {
   header: string | string[] | undefined;
   raw: string;
   contentType: string;
+  accept?: string;
   tokensMatch: (expected: string, provided: string) => boolean;
 }
 
+export type ProjectJsonBody = {
+  error?: string;
+  ok?: boolean;
+  savedAt?: string;
+  place?: string;
+};
+
 export type ProjectPostResult =
-  | { type: "redirect" }
+  | { type: "redirect"; location?: string }
   | { type: "html"; status: number; html: string }
-  | { type: "json"; status: number; body: { error: string } };
+  | { type: "json"; status: number; body: ProjectJsonBody };
 
 function csrfFrom(raw: string, contentType: string): string | null {
   const mime = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
@@ -59,15 +69,25 @@ function fields(raw: string): URLSearchParams {
   return new URLSearchParams(raw);
 }
 
+function effortControl(projectDir: string): string {
+  let current = "xhigh";
+  try {
+    const saved = loadConfig(projectDir).ai.effort.default;
+    if (saved === "medium" || saved === "high" || saved === "xhigh") current = saved;
+  } catch {
+    current = "xhigh";
+  }
+  const option = (value: string, label: string): string => {
+    const on = current === value ? " checked" : "";
+    return `<label class="hh-effort__opt"><input type="radio" name="guide-effort" value="${value}"${on} /> ${label}</label>`;
+  };
+  return `<div class="hh-effort" data-effort-control role="radiogroup" aria-label="Guide effort">${option("medium", "Medium")}${option("high", "High")}${option("xhigh", "Extra high")}<p class="hh-qcard__why" data-effort-hint>Higher is more thorough and slower.</p></div>`;
+}
+
 function savedStamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  const hh = String(date.getUTCHours()).padStart(2, "0");
-  const mm = String(date.getUTCMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d} ${hh}:${mm} UTC`;
+  return iso;
 }
 
 function hidden(token: string, name: string, value: string): string {
@@ -138,7 +158,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
     line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · ${escapeHtml(reason)}</p>`;
   } else if (filePath !== null && savedAt !== null) {
     const place = locationLabel(filePath);
-    line = `<p class="hh-small" data-save-status data-tip="${statusTip}" title="${escapeHtml(filePath)}">Saved · ${escapeHtml(savedStamp(savedAt))} · ${escapeHtml(place)}</p>
+    line = `<p class="hh-small" data-save-status data-tip="${statusTip}" title="${escapeHtml(filePath)}">Saved · <time datetime="${escapeHtml(savedAt)}" data-local-time>${escapeHtml(savedStamp(savedAt))}</time> · ${escapeHtml(place)}</p>
       <button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(filePath)}" data-tip="Copies the project file path.">Copy path</button>`;
   } else {
     line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · No save yet</p>`;
@@ -154,7 +174,8 @@ export async function projectChrome(projectDir: string, token: string, firstScre
   }
   const saveForm = `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit" data-tip="Writes one project file on this machine. The interview stays where it is.">Save project</button></form>`;
   const name = `<p class="hh-project__name">${escapeHtml(path.basename(projectDir))}</p>`;
-  const bar = `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
+  const effort = effortControl(projectDir);
+  const bar = `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${effort}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
   if (!firstScreen) return bar;
   const items = rows
     .map((row) => {
@@ -188,7 +209,7 @@ export async function projectChrome(projectDir: string, token: string, firstScre
       <p class="hh-small">Pick up a saved project, or open a project file.</p>
       ${list}
     </details>`;
-  return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${saveForm}${resume}${sample}${open}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
+  return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${effort}${saveForm}${resume}${sample}${open}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
 }
 
 export function applyProjectChrome(html: string, chrome: string): string {
@@ -249,8 +270,22 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
   const form = fields(input.raw);
   try {
     if (input.pathname === "/api/project/save") {
-      await saveProjectFile(input.projectDir);
-      return { type: "redirect" };
+      const saved = await saveProjectFile(input.projectDir);
+      if (form.get("tour") === "seen") {
+        try {
+          const current = loadConfig(input.projectDir);
+          if (current.tourSeen !== true) {
+            await saveConfig(input.projectDir, { ...current, tourSeen: true });
+          }
+        } catch {
+          // The project file is already written. Tour memory can catch up later.
+        }
+      }
+      const place = locationLabel(saved.filePath);
+      if ((input.accept ?? "").includes("application/json")) {
+        return { type: "json", status: 200, body: { ok: true, savedAt: saved.savedAt, place } };
+      }
+      return { type: "redirect", location: "/?stay=1" };
     }
     if (input.pathname === "/api/project/remove") {
       const target = form.get("path") ?? "";

@@ -22,15 +22,22 @@ import {
   draftThread,
   emptyWalk,
   guideThinkFromScript,
+  judgePushback,
   loadConfig,
+  loadFacts,
+  loadSessionState,
   saveConfig,
   loadGallery,
   loadState,
   loadTree,
   loveCount,
   openInterview,
+  readRevisitId,
+  writeRevisitId,
+  GUIDE_FAIL_LINE,
+  READING_LINE,
   parseWalkState,
-  questionsForDepth,
+  questionsToAsk,
   recordVerdict,
   requiredIds,
   runTurn,
@@ -97,6 +104,7 @@ import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
+import { blockingNotes, readGuideNotes, renderGuideNotes, upsertGuideNote, type GuideNote } from "./guide-notes.ts";
 import { restartInterview } from "./restart.ts";
 import {
   clearAllDrafts,
@@ -192,6 +200,8 @@ export interface DeskSession {
   savedFiles: SavedFile[];
   /** Set when the interview restarts, so an older browser copy is dropped. */
   draftsClearedAt: string | null;
+  /** Stored answer when Revisit lands on a question that already has one. */
+  answerDraft: string | null;
 }
 
 export interface DeskApp {
@@ -283,7 +293,7 @@ export async function createDeskApp(opts: {
   if (opts.turnHandler === undefined && depth === "express") {
     await seedExpressAssumptions(projectDir);
   }
-  const questions = questionsForDepth(loadTree(treeFile(projectDir)), depth);
+  const questions = questionsToAsk(loadTree(treeFile(projectDir)), depth);
   let interview = await openInterview(projectDir, depth);
   const reloadInterview = async (): Promise<void> => {
     interview = await openInterview(projectDir, depth);
@@ -292,18 +302,20 @@ export async function createDeskApp(opts: {
   const resetLive = (): void => {
     overlay = emptyOverlay();
   };
+  const token = issueToken();
+  const hub = createSseHub();
   const rawTurn =
     opts.turnHandler ??
     createLiveTurn(projectDir, depth, () => interview, (next) => {
       interview = next;
-    }, opts.guideThink ?? selectGuideThink());
+    }, opts.guideThink ?? selectGuideThink(), {
+      publish: (name, data) => hub.publish(name, data),
+    });
   const turn: TurnHandler = async (input) => {
     const output = await rawTurn(input);
     if (output.live !== undefined) overlay = output.live;
     return output;
   };
-  const token = issueToken();
-  const hub = createSseHub();
   let tail: Promise<void> = Promise.resolve();
 
   const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
@@ -404,6 +416,70 @@ export async function createDeskApp(opts: {
   };
 }
 
+function shouldAdvanceFirst(input: { kind: string; assumed?: boolean }): boolean {
+  if (input.kind !== "answer" || input.assumed === true) return false;
+  if (process.env.HH_OPTIMISTIC === "0") return false;
+  if (process.env.HH_GUIDE_REPLAY === "1" && process.env.HH_OPTIMISTIC !== "1") return false;
+  return true;
+}
+
+function shortAsk(ask: string): string {
+  const clean = ask.replace(/\s+/g, " ").trim();
+  if (clean.length <= 80) return clean;
+  return `${clean.slice(0, 77).trimEnd()}…`;
+}
+
+async function checkAnswerInBackground(
+  projectDir: string,
+  question: Question,
+  text: string,
+  model: typeof think,
+  publish?: (name: string, data: unknown) => void,
+): Promise<void> {
+  const ask = shortAsk(question.ask);
+  publish?.("guide-note", {
+    questionId: question.id,
+    ask,
+    message: READING_LINE,
+    status: "checking",
+  });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const judgement = await judgePushback(question, text, 0, {
+        think: model,
+        projectDir,
+        language: "en",
+        facts: loadFacts(projectDir),
+        session: loadSessionState(projectDir),
+        surfaceErrors: true,
+      });
+      if (judgement.action !== "push") {
+        publish?.("guide-note", { questionId: question.id, ask, message: "", status: "kept" });
+        return;
+      }
+      const note: GuideNote = {
+        questionId: question.id,
+        ask,
+        message: judgement.message,
+        status: "open",
+      };
+      await upsertGuideNote(projectDir, note);
+      publish?.("guide-note", note);
+      return;
+    } catch {
+      // One retry, then a note the person can see.
+    }
+  }
+  const failed: GuideNote = {
+    questionId: question.id,
+    ask,
+    message: GUIDE_FAIL_LINE,
+    status: "unchecked",
+  };
+  await upsertGuideNote(projectDir, failed).catch(() => undefined);
+  publish?.("guide-note", failed);
+}
+
 function emptyOverlay(): LiveOverlay {
   return {
     forId: null,
@@ -423,6 +499,7 @@ function createLiveTurn(
   getInterview: () => InterviewSession,
   setInterview: (session: InterviewSession) => void,
   model: typeof think,
+  hooks?: { publish: (name: string, data: unknown) => void },
 ): TurnHandler {
   const reload = async (): Promise<void> => {
     setInterview(await openInterview(projectDir, depth));
@@ -470,6 +547,31 @@ function createLiveTurn(
       } = { kind: input.kind };
       if (input.text !== undefined) turnInput.text = input.text;
       if (input.assumed === true) turnInput.assumed = true;
+      if (shouldAdvanceFirst(input)) {
+        const text = input.text ?? "";
+        await getInterview().command({ type: "keep", text });
+        await reload();
+        const next = getInterview().next();
+        const question = current;
+        void checkAnswerInBackground(projectDir, question, text, model, hooks?.publish);
+        return {
+          next,
+          events: [
+            { type: "turn", kind: input.kind, questionId: input.questionId },
+            { type: "session", questionId: next === null ? null : next.id },
+          ],
+          live: {
+            forId: next === null ? null : next.id,
+            message: null,
+            quote: null,
+            calm: true,
+            status: next === null ? "done" : "asked",
+            cards: [],
+            options: [],
+            choices: null,
+          },
+        };
+      }
       finished = await runTurn(session, turnInput, { think: model });
       await reload();
       return {
@@ -602,9 +704,9 @@ function unavailableGuideThink(): typeof think {
 
 function renderLiveExtras(overlay: LiveOverlay, done: boolean): string {
   const parts: string[] = [];
-  if (overlay.calm && overlay.message !== null) {
+  if (overlay.message !== null && (overlay.calm || overlay.status === "pushed")) {
     parts.push(
-      `<p class="hh-turn" data-calm="true"><span class="hh-turn__who">Guide</span> ${escapeHtml(overlay.message)}</p>`,
+      `<p class="hh-turn" data-calm="${overlay.calm ? "true" : "false"}"><span class="hh-turn__who">Guide</span> ${escapeHtml(overlay.message)}</p>`,
     );
   } else if (done && overlay.message !== null) {
     parts.push(turnLine("Guide", overlay.message, false));
@@ -692,6 +794,14 @@ async function handlePost(
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
     return;
   }
+  if (pathname === "/api/effort") {
+    await handleEffortPost(req, res, projectDir, enqueue);
+    return;
+  }
+  if (pathname === "/api/revisit" || pathname === "/api/guide-note") {
+    await handleGuideNotePost(req, res, pathname, projectDir, enqueue, reloadInterview, hub, view);
+    return;
+  }
   if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
     await handleTurn(req, res, pathname, turn, view, hub, enqueue, projectDir);
     return;
@@ -767,11 +877,12 @@ async function handleProjectRoute(
     header: req.headers["x-hh-csrf"],
     raw: capped.body.toString("utf8"),
     contentType: headerOne(req.headers["content-type"]),
+    accept: headerOne(req.headers.accept),
     tokensMatch,
   });
   if (result.type === "redirect") {
     if (pathname === "/api/project/open") await reloadInterview();
-    res.writeHead(303, { location: "/" });
+    res.writeHead(303, { location: result.location ?? "/" });
     res.end();
     return;
   }
@@ -873,6 +984,122 @@ async function handleBrandPost(
   sendJson(req, res, result.status, result.body);
 }
 
+async function handleEffortPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+): Promise<void> {
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    return;
+  }
+  let effort = "";
+  try {
+    const parsed: unknown = JSON.parse(capped.body.toString("utf8"));
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const value = (parsed as { effort?: unknown }).effort;
+      if (typeof value === "string") effort = value;
+    }
+  } catch {
+    effort = "";
+  }
+  if (effort !== "medium" && effort !== "high" && effort !== "xhigh") {
+    sendJson(req, res, 400, { error: "Pick Medium, High, or Extra high." });
+    return;
+  }
+  try {
+    await enqueue(async () => {
+      const current = loadConfig(projectDir);
+      await saveConfig(projectDir, {
+        ...current,
+        effort,
+        ai: { ...current.ai, effort: { ...current.ai.effort, default: effort } },
+      });
+    });
+  } catch (error: unknown) {
+    logDeskError(error);
+    sendJson(req, res, 500, { error: "The effort setting did not save." });
+    return;
+  }
+  sendJson(req, res, 200, { ok: true, effort });
+}
+
+async function handleGuideNotePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  reloadInterview: () => Promise<void>,
+  hub: SseHub,
+  view: () => DeskSession,
+): Promise<void> {
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    return;
+  }
+  let questionId = "";
+  let action = "";
+  try {
+    const parsed: unknown = JSON.parse(capped.body.toString("utf8"));
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const record = parsed as { questionId?: unknown; action?: unknown };
+      if (typeof record.questionId === "string") questionId = record.questionId;
+      if (typeof record.action === "string") action = record.action;
+    }
+  } catch {
+    questionId = "";
+  }
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(questionId)) {
+    sendJson(req, res, 400, { error: "That question is not on the desk." });
+    return;
+  }
+  const kind = pathname === "/api/revisit" ? "revisit" : action;
+  try {
+    await enqueue(async () => {
+      if (kind === "revisit") {
+        await writeRevisitId(projectDir, questionId);
+        await reloadInterview();
+      } else if (kind === "retry") {
+        const answers = readAnswers(projectDir);
+        let text = "";
+        for (const answer of answers) {
+          if (answer.id === questionId) text = answer.value;
+        }
+        const question = loadTree(treeFile(projectDir)).find((item) => item.id === questionId);
+        if (question === undefined || text.trim() === "") throw new Error("missing");
+        void checkAnswerInBackground(projectDir, question, text, selectGuideThink(), (name, data) =>
+          hub.publish(name, data),
+        );
+      } else if (kind === "keep" || kind === "skip") {
+        const existing = readGuideNotes(projectDir).find((note) => note.questionId === questionId);
+        const note: GuideNote = {
+          questionId,
+          ask: existing?.ask ?? questionId,
+          message: existing?.message ?? "",
+          status: kind === "keep" ? "kept" : "unchecked",
+        };
+        await upsertGuideNote(projectDir, note);
+      } else {
+        throw new Error("unknown");
+      }
+      hub.publish("session", view());
+    });
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.message === "unknown" || error.message === "missing")) {
+      sendJson(req, res, 400, { error: "That note action is not on the desk." });
+      return;
+    }
+    logDeskError(error);
+    sendJson(req, res, 500, { error: "The Guide note did not update." });
+    return;
+  }
+  sendJson(req, res, 200, { ok: true, session: view() });
+}
+
 async function handleTurn(
   req: IncomingMessage,
   res: ServerResponse,
@@ -918,7 +1145,8 @@ async function handleTurn(
           ...(parsed.assumed === true ? { assumed: true } : {}),
         }),
       );
-      const after = view().question;
+      const session = view();
+      const after = session.question;
       const moved = after === null || after.id !== parsed.questionId;
       if ((kind === "answer" || kind === "skip") && moved) {
         try {
@@ -927,8 +1155,7 @@ async function handleTurn(
           logDeskError(error);
         }
       }
-      const session = view();
-      hub.publish("session", session);
+      hub.publish("session", view());
       for (const event of output.events) hub.publish("update", event);
       return { next: output.next, events: output.events, session };
     });
@@ -1148,7 +1375,22 @@ async function handleGet(
     } catch {
       showTour = true;
     }
-    await deliverHtml(req, res, 200, renderDesk(token, session, flags, showTour), projectDir, token, true, foldStyleHeaders());
+    let stay = false;
+    try {
+      stay = new URL(rawUrl, "http://127.0.0.1").searchParams.get("stay") === "1";
+    } catch {
+      stay = false;
+    }
+    await deliverHtml(
+      req,
+      res,
+      200,
+      renderDesk(token, session, flags, showTour, projectDir),
+      projectDir,
+      token,
+      !stay,
+      foldStyleHeaders(),
+    );
     return;
   }
   if (pathname === "/gallery") {
@@ -1455,8 +1697,15 @@ function buildSession(
 ): DeskSession {
   let question = session.next();
   const saved = loadState(projectDir);
+  const notes = readGuideNotes(projectDir);
+  const blocked = blockingNotes(notes);
   const promptId = question === null ? "interview:done" : `interview:${question.id}`;
-  const nextAction = question === null ? "Approve the Site Brief." : `Answer ${question.id}.`;
+  const nextAction =
+    question === null && blocked.length > 0
+      ? `The Guide still wants a look at ${blocked.map((note) => note.questionId).join(", ")}.`
+      : question === null
+        ? "Approve the Site Brief."
+        : `Answer ${question.id}.`;
   const state: GuideState = saved ?? {
     phase: "Don't Panic",
     slice: "The Guide",
@@ -1466,9 +1715,24 @@ function buildSession(
     nextAction,
     updatedAt: "1970-01-01T00:00:00.000Z",
   };
+  if (saved !== null && question === null && blocked.length > 0) {
+    state.nextAction = nextAction;
+  }
   const coverage = session.coverage();
   const answers = readAnswers(projectDir);
   let pushback = session.lastPushback;
+  const revisitId = readRevisitId(projectDir);
+  let answerDraft: string | null = null;
+  if (question !== null && revisitId === question.id) {
+    let stored = "";
+    for (const answer of answers) {
+      if (answer.id === question.id) stored = answer.value;
+    }
+    const clean = stored.replace(/^ASSUMED:\s*/i, "").trim();
+    if (clean !== "") answerDraft = clean;
+    const thought = notes.find((note) => note.questionId === question.id && note.status === "open");
+    if (thought !== undefined && (pushback === null || pushback === "")) pushback = thought.message;
+  }
   const message = overlay.message;
   if (overlay.calm) {
     pushback = null;
@@ -1596,6 +1860,7 @@ function buildSession(
     draft: stored,
     savedFiles,
     draftsClearedAt: drafts.clearedAt,
+    answerDraft,
   };
 }
 
@@ -1783,7 +2048,13 @@ function renderDeskMap(mapHtml: string, phase: string, compactLabel: string): st
           </details>`;
 }
 
-function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags, showTour = false): string {
+function renderDesk(
+  token: string,
+  session: DeskSession,
+  flags?: VoiceDeskFlags,
+  showTour = false,
+  projectDir = "",
+): string {
   const voiceFlags = flags ?? { xaiSetting: false, rateAccepted: false, localWhisper: false };
   const engine = engineForDesk(voiceFlags, true);
   const chrome = voiceChromeFor(engine);
@@ -1844,7 +2115,7 @@ function renderDesk(token: string, session: DeskSession, flags?: VoiceDeskFlags,
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
     "question",
   );
   html = mustReplace(

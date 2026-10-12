@@ -79,13 +79,13 @@ export { loadState, saveState } from "./state.ts";
 export type { GuideState } from "./state.ts";
 export { homeIndexPath, upsertHomeProject } from "./home-index.ts";
 export type { HomeProject } from "./home-index.ts";
-export { TreeError, loadTree, questionsForDepth } from "./tree.ts";
+export { TreeError, loadTree, questionsForDepth, questionsToAsk } from "./tree.ts";
 export type { Question, QuestionResource } from "./tree.ts";
 export { SITE_TYPES } from "./site-types.ts";
 export type { SiteTypeHint } from "./site-types.ts";
 export { missingRequired, renderBrief, requiredIds } from "./required.ts";
 export type { AnswerRecord } from "./required.ts";
-export { InterviewError, openInterview } from "./interview.ts";
+export { InterviewError, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
 export type { InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
 export { coverageReport, pushbackFor } from "./pushback.ts";
 export {
@@ -115,7 +115,19 @@ export type {
 } from "./ingest.ts";
 export { briefLoop, isApproval, renderSiteBrief } from "./guide/brief-loop.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
-export { judgePushback } from "./guide/pushback-judge.ts";
+export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
+export { INTERVIEW_MODEL, planInterview, callCwd, isInterviewTask } from "./guide/interview-call.ts";
+export {
+  loadSessionState,
+  gateQuestion,
+  sessionBlock,
+  filterGuideText,
+  questionsToShow,
+  prefetchStillValid,
+  jargonHits,
+  userFacingText,
+} from "./guide/session-state.ts";
+export { usualRange, usualRangeLine, READING_LINE, GUIDE_FAIL_LINE } from "./guide/guide-progress.ts";
 export { mirrorCue, requestMirror } from "./guide/mirror.ts";
 export { FAMILIES, FAMILY_STYLE, familyOf, selectReferenceCards, styleWorldForFamily } from "./guide/gallery-model.ts";
 export type { GalleryFamily } from "./guide/gallery-model.ts";

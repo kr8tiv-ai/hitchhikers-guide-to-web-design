@@ -17,7 +17,6 @@ const TOWEL = [
   "DP-0.3",
   "DP-0.4",
   "DP-0.5",
-  "DP-0.6",
   "DP-0.7",
 ] as const;
 
@@ -115,18 +114,18 @@ test("depth is a filter and express drops DP-0.5 without dropping the id", () =>
   }
 });
 
-test("DP-0.7 offers Deep, then Standard, then Express, and skips to Deep", () => {
+test("DP-0.7 asks for time once, in plain words", () => {
   const question = byId(loadTree(treeFile), "DP-0.7");
-  const deepAt = question.ask.indexOf("Deep (the full Guide, recommended)");
-  const standardAt = question.ask.indexOf("Standard");
-  const expressAt = question.ask.indexOf("Express");
-  assert.ok(deepAt >= 0);
-  assert.ok(deepAt < standardAt);
-  assert.ok(standardAt < expressAt);
-  assert.equal(question.skipDefault, "Deep");
-  assert.match(question.why, /Every mode keeps every id/);
-  assert.match(question.why, /Express only writes ASSUMED defaults for what it does not ask/);
-  assert.match(question.suggest ?? "", /Standard/);
+  assert.match(question.ask, /Roughly how much time do you have today\?/);
+  const shortAt = question.ask.indexOf("Under 30 minutes");
+  const hourAt = question.ask.indexOf("about an hour");
+  const longAt = question.ask.indexOf("a few hours");
+  assert.ok(shortAt >= 0);
+  assert.ok(shortAt < hourAt);
+  assert.ok(hourAt < longAt);
+  assert.match(question.skipDefault, /few hours/);
+  assert.match(question.why, /sensible default you can change later/);
+  assert.equal(question.topic, "depth-time");
 });
 
 const HANDS_ON_ASK =

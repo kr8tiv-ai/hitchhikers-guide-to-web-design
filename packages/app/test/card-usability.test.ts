@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   loadTree,
   missingRequired,
-  questionsForDepth,
+  questionsToAsk,
   requiredIds,
   type AnswerRecord,
 } from "@hitchhiker/engine";
@@ -60,7 +60,7 @@ function question(id: string, ask = `Ask ${id}`): CardState["question"] {
 
 function state(overrides: Partial<CardState> = {}): CardState {
   return {
-    question: question("DP-0.1", "Is this site for you, or for a client?"),
+    question: question("DP-0.1", "Is this website for your own business, or for a client?"),
     draft: "",
     pushback: null,
     error: null,
@@ -242,15 +242,15 @@ test("assumption, confirm, mode, and mast follow the depth list", () => {
   assert.equal(questionNeedsConfirm({ id: "DP-0.2", requiredFor: ["DP-0.2a"] }, []), true);
   assert.equal(questionNeedsConfirm({ id: "DP-2.1", requiredFor: [] }, ["DP-2.1"]), true);
 
-  assert.equal(modeNote("deep"), "Deep.");
-  assert.equal(modeNote("standard"), "Standard.");
-  assert.match(modeNote("express"), /not dropped/);
+  assert.equal(modeNote("deep"), "Deep interview");
+  assert.equal(modeNote("standard"), "Standard interview");
+  assert.match(modeNote("express"), /sensible default you can change later/);
   assert.equal(mastLine("Don't Panic", "DP-0.2"), "Don't Panic · DP-0.2");
   assert.equal(mastLine("Don't Panic", null), "Don't Panic");
 });
 
 test("rendered card shows the ask once, the counts, one filled Answer, and the assumption", () => {
-  const ask = "Is this site for you, or for a client?";
+  const ask = "Is this website for your own business, or for a client?";
   const html = renderCard(
     state({
       counts: counts(4),
@@ -264,7 +264,7 @@ test("rendered card shows the ask once, the counts, one filled Answer, and the a
   assert.equal(html.match(/<h2\b/g)?.length, 1);
   assert.match(html, new RegExp(`data-card-kicker>DP-0\\.1 · 2 of 40 · ${escapeHtml("Don't Panic")}<`));
   assert.match(html, /data-open-required>4 required still open</);
-  assert.match(html, /data-interview-mode="deep">Deep\.</);
+  assert.match(html, /data-interview-mode="deep">Deep interview</);
   assert.match(html, /data-assumed="skipped">Assumed: For myself\.</);
   assert.equal(html.includes("ASSUMED:"), false);
   assert.equal(html.match(/hh-btn--primary/g)?.length, 1);
@@ -316,9 +316,9 @@ test("the desk page shows one ask, Deep, the open count, and a full mast", async
     const page = await raw(handle.port, "GET", "/");
     assert.equal(page.status, 200);
     const html = page.body;
-    const questions = questionsForDepth(loadTree(treeFile), "deep");
+    const questions = questionsToAsk(loadTree(treeFile), "deep");
     const open = openRequiredCount(questions, readAnswers(dir), requiredIds());
-    const ask = "Is this site for you, or for a client?";
+    const ask = "Is this website for your own business, or for a client?";
     // The card shows the ask once. The clipped live region repeats it for assistive tech.
     assert.equal(occurrences(region(html, "question"), ask), 1);
     assert.equal(occurrences(region(html, "transcript"), ask), 0);
@@ -326,7 +326,7 @@ test("the desk page shows one ask, Deep, the open count, and a full mast", async
     const phase = escapeHtml("Don't Panic");
     assert.match(html, new RegExp(`data-card-kicker>DP-0\\.1 · 1 of ${questions.length} · ${phase}<`));
     assert.match(html, new RegExp(`data-open-required>${open} required still open<`));
-    assert.match(html, /data-interview-mode="deep">Deep\.</);
+    assert.match(html, /data-interview-mode="deep">Deep interview</);
     assert.match(html, /placeholder="Yourself, or one named client\."/);
     assert.equal(html.includes(`id="hh-card-hint">${escapeHtml(ANSWER_HINT)}`), true);
     const card = region(html, "question");
@@ -372,7 +372,7 @@ test("skip marks the assumption on the next card and shrinks the mast", async ()
     assert.ok(isRecord(session.question));
     assert.equal(session.question.id, "DP-0.2");
     assert.equal(session.required, true);
-    const questions = questionsForDepth(loadTree(treeFile), "deep");
+    const questions = questionsToAsk(loadTree(treeFile), "deep");
     const answers = readAnswers(dir);
     const open = openRequiredCount(questions, answers, requiredIds());
     assert.ok(isRecord(session.counts));
@@ -388,8 +388,8 @@ test("skip marks the assumption on the next card and shrinks the mast", async ()
 
     const page = await raw(handle.port, "GET", "/");
     const html = page.body;
-    const ask = "Have you built a website before, and with what? Drop any URLs, including the old ones.";
-    const previous = "Is this site for you, or for a client?";
+    const ask = "Have you had a website before? What did you use to make it? Paste any links you have.";
+    const previous = "Is this website for your own business, or for a client?";
     assert.equal(occurrences(region(html, "question"), ask), 1);
     assert.equal(occurrences(region(html, "transcript"), ask), 0);
     assert.equal(occurrences(region(html, "transcript"), previous), 1);
@@ -409,17 +409,14 @@ test("Express and Standard name the mode without treating seeds as the first ans
   await withDesk("express", async (handle) => {
     const page = await raw(handle.port, "GET", "/");
     assert.match(page.body, /data-interview-mode="express"/);
-    assert.match(
-      page.body,
-      /Express\. Questions outside this depth stay on file as written assumptions, not dropped\./,
-    );
+    assert.match(page.body, /Short interview\. Skipped questions get a sensible default you can change later\./);
     assert.equal(page.body.includes("data-assumed"), false);
     assert.equal(page.body.includes('data-mast="line"'), false);
     assert.match(page.body, /<div data-mast-full>/);
   });
   await withDesk("standard", async (handle) => {
     const page = await raw(handle.port, "GET", "/");
-    assert.match(page.body, /data-interview-mode="standard">Standard\.</);
+    assert.match(page.body, /data-interview-mode="standard">Standard interview</);
   });
 });
 
@@ -471,7 +468,7 @@ function sessionPayload(overrides: Record<string, unknown> = {}): Record<string,
       id: "DP-0.1",
       module: "towel-check",
       depth: ["deep"],
-      ask: "Is this site for you, or for a client?",
+      ask: "Is this website for your own business, or for a client?",
       why: "A client job needs its own workspace.",
       input: ["text"],
       skipDefault: "For myself.",

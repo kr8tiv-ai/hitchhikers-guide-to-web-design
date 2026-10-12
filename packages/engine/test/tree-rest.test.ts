@@ -19,7 +19,6 @@ const EXPECTED_IDS = [
   "DP-0.3",
   "DP-0.4",
   "DP-0.5",
-  "DP-0.6",
   "DP-0.7",
   "DP-1.1",
   "DP-1.2",
@@ -132,7 +131,7 @@ test("DP-6.1 names the eight tools and says magnetic buttons are banned", () => 
 test("DP-6.2 stores appetite as a weight ceiling in every depth", () => {
   const question = byId(loadTree(treeFile), "DP-6.2");
   assert.deepEqual(question.depth, ["express", "standard", "deep"]);
-  assert.equal(question.skipDefault, "3. ASSUMED. Polished, not a spectacle.");
+  assert.equal(question.skipDefault, "3. Polished, not a spectacle.");
   assert.match(question.ask, /1 to 10/);
   assert.doesNotMatch(question.skipDefault, /\b11\b/);
   assert.match(question.why, /The number caps weight and does not remove libraries from the Guide/);

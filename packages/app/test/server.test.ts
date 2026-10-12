@@ -160,7 +160,7 @@ test("POST without a token is rejected and the session advances through the engi
     const parsed = parseSession(JSON.parse(session.body));
     assert.ok(parsed);
     assert.equal(parsed?.question?.id, "DP-0.1");
-    assert.equal(parsed?.question?.ask, "Is this site for you, or for a client?");
+    assert.equal(parsed?.question?.ask, "Is this website for your own business, or for a client?");
 
     const missing = await raw(handle.port, `127.0.0.1:${handle.port}`, "POST", "/api/answer", {
       "content-type": "application/json",
@@ -417,8 +417,9 @@ test("a quiet cassette miss keeps the saved answer and the tree ask", async () =
       session?: { question?: { id?: string }; statusHtml?: string };
     };
     assert.equal(body.session?.question?.id, "DP-0.2");
-    assert.match(body.session?.statusHtml ?? "", /quiet for a moment/);
+    assert.match(body.session?.question?.ask ?? "", /Have you had a website before/);
     assert.equal((body.session?.statusHtml ?? "").includes("live-key"), false);
+    assert.equal((JSON.stringify(body)).includes("UTC"), false);
     const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
       answers: Array<{ id: string }>;
     };

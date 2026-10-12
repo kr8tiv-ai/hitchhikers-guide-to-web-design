@@ -383,7 +383,7 @@ function readInstalls(value: unknown): ToolInstallRecord[] {
 export function defaultConfig(): GuideConfig {
   return {
     model: "grok-4.7",
-    effort: "medium",
+    effort: "xhigh",
     interviewDepth: "deep",
     voiceEngine: "local",
     sessionIdMode: "unknown",
@@ -400,7 +400,7 @@ export function defaultConfig(): GuideConfig {
     },
     ai: {
       model: "grok-4.7",
-      effort: { default: "medium" },
+      effort: { default: "xhigh" },
       timeoutMs: AI_TIMEOUT_MS,
     },
     integrations: {

@@ -155,6 +155,7 @@ export function renderSettingsMain(
           ${choice("effort", "high", "High", view.effort === "high")}
           ${choice("effort", "xhigh", "Extra high", view.effort === "xhigh")}
         </div>
+        <p class="hh-qcard__why" data-effort-hint>Higher is more thorough and slower.</p>
       </div>
       <div class="hh-qcard__actions">
         <button class="hh-btn hh-btn--primary" type="submit" data-tip="Writes voice, model, and effort for this project.">Save settings</button>

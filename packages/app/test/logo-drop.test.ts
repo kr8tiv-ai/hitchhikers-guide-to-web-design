@@ -163,7 +163,7 @@ test("logo questions are DP-0.4 and DP-1.1, and the German line stays out of the
     assert.match(html, /type="file"/);
     assert.match(html, /data-logo-drop/);
     assert.match(html, /data-logo-file/);
-    assert.equal(html.includes(READ_THIS_IN), true);
+    assert.equal(html.includes(READ_THIS_IN), id === "DP-1.1");
     assert.equal(html.includes(german), false);
     assert.equal(html.includes("Falls Sie"), false);
     assert.equal(html.includes("data-restatement"), false);
@@ -182,7 +182,7 @@ test("logo questions are DP-0.4 and DP-1.1, and the German line stays out of the
     assert.equal(html.includes("data-logo-drop"), false);
     assert.equal(html.includes("data-attach-zone"), false);
     assert.equal(html.includes("data-attach-button"), false);
-    assert.equal(html.includes(READ_THIS_IN), true);
+    assert.equal(html.includes(READ_THIS_IN), false);
     assert.equal(html.includes(german), false);
     assert.equal(html.includes("data-restatement"), false);
   }
@@ -195,7 +195,7 @@ test("logo questions are DP-0.4 and DP-1.1, and the German line stays out of the
   assert.match(moodHtml, /data-attach-button/);
   assert.match(moodHtml, /type="file"/);
   assert.match(moodHtml, /Drop images here, or paste a link\./);
-  assert.equal(moodHtml.includes(READ_THIS_IN), true);
+  assert.equal(moodHtml.includes(READ_THIS_IN), false);
   assert.equal(moodHtml.includes(german), false);
   assert.equal(moodHtml.includes("data-restatement"), false);
 
@@ -246,7 +246,7 @@ test("the desk hides German and offers the file input only on logo questions", a
     const firstCard = region(first, "question");
     assert.equal(questionId(firstCard), "DP-0.1");
     assert.equal(firstCard.includes("type=\"file\""), false);
-    assert.equal(firstCard.includes(READ_THIS_IN), true);
+    assert.equal(firstCard.includes(READ_THIS_IN), false);
     assert.equal(first.includes("Falls Sie"), false);
     assert.equal(first.includes("data-restatement"), false);
     assert.equal(firstCard.includes("!"), false);
@@ -264,7 +264,7 @@ test("the desk hides German and offers the file input only on logo questions", a
 
     const between = await skipUntil(handle, token, "DP-0.5");
     assert.equal(region(between, "question").includes("type=\"file\""), false);
-    assert.equal(region(between, "question").includes(READ_THIS_IN), true);
+    assert.equal(region(between, "question").includes(READ_THIS_IN), false);
 
     const mark = await skipUntil(handle, token, "DP-1.1");
     const markCard = region(mark, "question");

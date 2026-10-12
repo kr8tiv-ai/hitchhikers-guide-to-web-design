@@ -1185,6 +1185,35 @@ p.hh-error__next {
   background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
 }
 
+.hh-effort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+.hh-effort__opt,
+[data-settings="effort"] label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  white-space: nowrap;
+  padding: 0 0.5rem;
+}
+
+.hh-effort:focus-within .hh-effort__opt:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.hh-guide-note {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+}
+
 .hh-save-line.hh-project > form,
 .hh-save-line.hh-project .hh-empty {
   display: flex;

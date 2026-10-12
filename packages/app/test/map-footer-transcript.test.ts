@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadTree, questionsForDepth, type AnswerRecord } from "@hitchhiker/engine";
+import { loadTree, questionsToAsk, type AnswerRecord } from "@hitchhiker/engine";
 import { escapeHtml } from "../src/card.ts";
 import { mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { compactMapLabel, savedFooterLine } from "../src/server/card.ts";
@@ -32,7 +32,7 @@ const PHASE_LINKS = [
 ] as const;
 
 function deepQuestions() {
-  return questionsForDepth(loadTree(treeFile), "deep");
+  return questionsToAsk(loadTree(treeFile), "deep");
 }
 
 function writeInterview(dir: string, answers: readonly AnswerRecord[]): void {

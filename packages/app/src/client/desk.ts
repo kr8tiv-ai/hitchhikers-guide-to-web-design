@@ -200,7 +200,9 @@ export function withInterviewExtras(
   if (question === null) return html;
   if (!html.includes(`data-question-id="${escapeHtml(question.id)}"`)) return html;
   let next = html;
-  if (!next.includes("data-lang-toggle")) next = insertBeforeComposer(next, languageToggle());
+  if (germanRestatement(question.id) !== null && !next.includes("data-lang-toggle")) {
+    next = insertBeforeComposer(next, languageToggle());
+  }
   if (isLogoQuestion(question) && !next.includes("data-logo-drop")) {
     next = insertBeforeComposer(next, logoDropZone(logoNote));
   }
@@ -407,6 +409,7 @@ export interface SessionView {
   savedFiles: SavedFileView[];
   /** Set when a restart cleared drafts. Local rows older than this are dropped. */
   draftsClearedAt: string | null;
+  answerDraft: string | null;
 }
 
 interface SavedFileView {
@@ -431,6 +434,8 @@ interface DeskElement {
   open?: boolean;
   setPointerCapture?(pointerId: number): void;
   insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
+  remove?(): void;
+  outerHTML?: string;
   focus?(): void;
   /** Set on real elements. The desk harness omits it. */
   tagName?: string;
@@ -560,6 +565,7 @@ export function parseSession(value: unknown): SessionView | null {
     draftsClearedAt: typeof value.draftsClearedAt === "string" && value.draftsClearedAt.trim() !== ""
       ? value.draftsClearedAt
       : null,
+    answerDraft: typeof value.answerDraft === "string" && value.answerDraft.trim() !== "" ? value.answerDraft : null,
   };
 }
 
@@ -652,6 +658,7 @@ export function mountDesk(env: DeskEnv): () => void {
   let userTouched = false;
   let promotedUtterance = "";
   let emptyRestarts = 0;
+  let softErrorTries = 0;
   let restartDelay = VOICE_RESTART_BASE_MS;
   let cycleHeard = false;
   /** This click heard speechstart. A restart keeps it. The next click clears it. */
@@ -725,6 +732,30 @@ export function mountDesk(env: DeskEnv): () => void {
     if (editId !== null) {
       event.preventDefault();
       toggleEdit(editId);
+      return;
+    }
+    const revisitId = readMarked(event.target, "data-revisit");
+    if (revisitId !== null) {
+      event.preventDefault();
+      void postGuideNote("/api/revisit", revisitId, "");
+      return;
+    }
+    const keepId = readMarked(event.target, "data-keep-answer");
+    if (keepId !== null) {
+      event.preventDefault();
+      void postGuideNote("/api/guide-note", keepId, "keep");
+      return;
+    }
+    const retryId = readMarked(event.target, "data-guide-retry");
+    if (retryId !== null) {
+      event.preventDefault();
+      void postGuideNote("/api/guide-note", retryId, "retry");
+      return;
+    }
+    const skipCheckId = readMarked(event.target, "data-guide-skip");
+    if (skipCheckId !== null) {
+      event.preventDefault();
+      void postGuideNote("/api/guide-note", skipCheckId, "skip");
       return;
     }
     const choiceId = readMarked(event.target, "data-choice-id");
@@ -954,6 +985,15 @@ export function mountDesk(env: DeskEnv): () => void {
     void receiveDrop(event);
   };
   const onPaste = (event: DeskEvent): void => {
+    if (isDraftTarget(event.target)) {
+      const field = event.target;
+      queueMicrotask(() => {
+        if (field !== null && typeof field.value === "string") {
+          draft = field.value;
+          syncAnswerLock();
+        }
+      });
+    }
     if (!insideQuestion(event.target)) return;
     const questionId = view?.question?.id;
     const kinds = questionId === undefined ? null : kindsFor(questionId);
@@ -982,6 +1022,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   env.document.addEventListener("click", onClick);
   env.document.addEventListener("input", onInput);
+  env.document.addEventListener("compositionend", onInput);
   env.document.addEventListener("change", onChange);
   env.document.addEventListener("dragenter", onDragEnter);
   env.document.addEventListener("dragleave", onDragLeave);
@@ -1011,6 +1052,7 @@ export function mountDesk(env: DeskEnv): () => void {
     stopTools();
     env.document.removeEventListener("click", onClick);
     env.document.removeEventListener("input", onInput);
+    env.document.removeEventListener("compositionend", onInput);
     env.document.removeEventListener("change", onChange);
     env.document.removeEventListener("dragenter", onDragEnter);
     env.document.removeEventListener("dragleave", onDragLeave);
@@ -1428,7 +1470,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function startVoice(): void {
     if (voiceSession || stopping !== null || toggled) return;
-    if (pending || view === null || view.question === null) return;
+    if (view === null || view.question === null) return;
     readDraft();
     const engineNow = activeEngine();
     if (engineNow !== "web-speech") {
@@ -1461,6 +1503,7 @@ export function mountDesk(env: DeskEnv): () => void {
     userTouched = false;
     promotedUtterance = "";
     emptyRestarts = 0;
+    softErrorTries = 0;
     restartDelay = VOICE_RESTART_BASE_MS;
     cycleHeard = false;
     speechHeard = false;
@@ -1524,9 +1567,32 @@ export function mountDesk(env: DeskEnv): () => void {
     rec.onerror = (event) => {
       if (epoch !== voiceEpoch) return;
       if (recognition !== rec && lateRec !== rec) return;
-      // aborted is the empty-stop timeout. no-speech is Chrome ending a pause.
-      if (event.error === "aborted" || event.error === "no-speech") return;
-      voiceError = voiceMessage(event.error, heardStart);
+      const kind = event.error;
+      if (kind === "not-allowed" || kind === "service-not-allowed") {
+        voiceError = voiceMessage(kind, heardStart);
+        toggled = false;
+        return;
+      }
+      if (kind === "network" || kind === "aborted" || kind === "no-speech") {
+        softErrorTries += 1;
+        if (softErrorTries > 3) {
+          voiceError = "Click the mic to try again.";
+          toggled = false;
+          return;
+        }
+        const line =
+          kind === "network"
+            ? "Lost the connection to Chrome's speech service. Trying again…"
+            : kind === "aborted"
+              ? "Listening stopped. Starting again…"
+              : "Didn't hear anything. Still listening.";
+        notice = line;
+        voiceError = null;
+        retireRecognizer(rec);
+        beginRecognition(epoch);
+        return;
+      }
+      voiceError = voiceMessage(kind, heardStart);
       toggled = false;
     };
     rec.onend = () => {
@@ -1559,6 +1625,7 @@ export function mountDesk(env: DeskEnv): () => void {
       if (eventOnly.finals !== "") promotedUtterance = "";
       cycleHeard = true;
       emptyRestarts = 0;
+      softErrorTries = 0;
       restartDelay = VOICE_RESTART_BASE_MS;
     }
     applyHeardToDraft();
@@ -2125,6 +2192,50 @@ export function mountDesk(env: DeskEnv): () => void {
     source.addEventListener("tools", (event) => {
       applyToolsEvent(event.data);
     });
+    source.addEventListener("guide-note", (event) => {
+      paintGuideNote(event.data);
+    });
+  }
+
+  async function postGuideNote(path: string, questionId: string, action: string): Promise<void> {
+    if (token === null) return;
+    const response = await env.fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: JSON.stringify(action === "" ? { questionId } : { questionId, action }),
+    });
+    if (!response.ok) return;
+    const payload: unknown = await response.json();
+    if (!isRecord(payload) || !isRecord(payload.session)) return;
+    applyStream(JSON.stringify(payload.session));
+  }
+
+  function paintGuideNote(raw: string): void {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!isRecord(payload) || typeof payload.questionId !== "string") return;
+    const host = env.document.querySelector("[data-guide-notes]");
+    if (host === null) return;
+    const status = typeof payload.status === "string" ? payload.status : "";
+    const existing = host.querySelector(`[data-guide-note="${payload.questionId}"]`);
+    if (status === "kept" || (typeof payload.message === "string" && payload.message === "")) {
+      existing?.remove?.();
+      return;
+    }
+    const ask = typeof payload.ask === "string" ? payload.ask : payload.questionId;
+    const message = typeof payload.message === "string" ? payload.message : "";
+    const busy = status === "checking" ? ` aria-busy="true"` : "";
+    const actions =
+      status === "open"
+        ? `<button class="hh-btn hh-btn--secondary" type="button" data-revisit="${escapeHtml(payload.questionId)}">Revisit</button><button class="hh-btn hh-btn--ghost" type="button" data-keep-answer="${escapeHtml(payload.questionId)}">Keep my answer</button>`
+        : `<button class="hh-btn hh-btn--secondary" type="button" data-guide-retry="${escapeHtml(payload.questionId)}">Retry</button><button class="hh-btn hh-btn--ghost" type="button" data-guide-skip="${escapeHtml(payload.questionId)}">Skip check, keep my answer</button>`;
+    const html = `<article class="hh-guide-note" data-guide-note="${escapeHtml(payload.questionId)}" data-note-status="${escapeHtml(status)}"${busy}><p>The Guide has a thought about your answer to "${escapeHtml(ask)}"</p><p>${escapeHtml(message)}</p>${actions}</article>`;
+    if (existing !== null && existing !== undefined && existing.outerHTML !== undefined) existing.outerHTML = html;
+    else host.insertAdjacentHTML?.("beforeend", html);
   }
 
   function applyStream(raw: string): void {
@@ -2201,7 +2312,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     view = session;
-    draft = "";
+    draft = session.answerDraft !== null ? session.answerDraft : "";
     error = null;
     notice = null;
     pending = false;
@@ -2700,11 +2811,6 @@ export function mountDesk(env: DeskEnv): () => void {
     const voice = question.querySelector('[data-voice="hold"]');
     if (voice === null) {
       if (!on) alignDraftField();
-      return;
-    }
-    if (on) {
-      voice.disabled = true;
-      voice.setAttribute("disabled", "");
       return;
     }
     if ((voice.textContent ?? "") === TALK_NEEDS_CHROMIUM) {

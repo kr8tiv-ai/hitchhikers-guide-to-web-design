@@ -34,7 +34,7 @@ export async function requestMirror(
       {
         task: MIRROR_TASK,
         schema: MIRROR_SCHEMA,
-        effort: "medium",
+
         input: [
           `Cue: ${cue}`,
           "Write exactly three lines of what you heard.",

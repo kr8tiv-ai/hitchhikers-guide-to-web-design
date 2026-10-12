@@ -239,7 +239,7 @@ test("doctor --project writes uuid or alias and leaves unknown untouched", async
     const saved = loadConfig(aliasDir);
     assert.equal(saved.sessionIdMode, "alias");
     assert.equal(saved.model, defaultConfig().model);
-    assert.equal(saved.effort, "medium");
+    assert.equal(saved.effort, "xhigh");
     assert.equal(existsSync(path.join(aliasDir, ".hitchhiker", STATE_LOCK_NAME)), false);
 
     const unknownRun = scripted(gitOk());

@@ -5,9 +5,11 @@
 
 questions:
   - id: DP-0.1
+    topic: audience
+    tip: "Type or click to talk, whatever's faster. You can switch anytime."
     module: towel-check
     depth: [express, standard, deep]
-    ask: "Is this site for you, or for a client?"
+    ask: "Is this website for your own business, or for a client?"
     why: "A client job needs its own workspace and a brief you can hand over. Your own site does not."
     input: [choice, text, voice]
     skip_default: "For myself."
@@ -22,9 +24,10 @@ questions:
       - "PROJECT.md#audience"
 
   - id: DP-0.2
+    topic: prior-site
     module: towel-check
     depth: [express, standard, deep]
-    ask: "Have you built a website before, and with what? Drop any URLs, including the old ones."
+    ask: "Have you had a website before? What did you use to make it? Paste any links you have."
     why: "Prior sites and tools set your level. A URL can be crawled later for assets and for taste."
     input: [text, voice]
     skip_default: "No prior site. No builder named."
@@ -35,6 +38,7 @@ questions:
       - "PROJECT.md#prior-sites"
 
   - id: DP-0.2a
+    topic: prior-taste
     module: towel-check
     depth: [express, standard, deep]
     ask: "What do you love about that site, and what makes you wince?"
@@ -49,6 +53,7 @@ questions:
       - "PROJECT.md#prior-sites"
 
   - id: DP-0.3
+    topic: skill-level
     module: towel-check
     depth: [express, standard, deep]
     ask: "How hands-on are you with websites? (a) I design how it looks, but someone else builds it. (b) I build pages myself in a site builder like Wix, Squarespace or Webflow. (c) I write the code myself (HTML, CSS, JavaScript). (d) I'm brand new to all of this."
@@ -63,9 +68,10 @@ questions:
       - "PROJECT.md#user-profile"
 
   - id: DP-0.4
+    topic: brand-assets
     module: towel-check
     depth: [express, standard, deep]
-    ask: "Do you already have brand assets: a logo, colors, fonts, a guide, or photos? Drop what you have. PDFs, screenshots, and links all work."
+    ask: "Do you already have a logo, colors, fonts, or photos? Drop whatever you have: files, screenshots, or links."
     why: "Existing assets open a fast path. Each field still gets a check for whether you are happy with it."
     input: [upload, text, voice]
     skip_default: "No brand assets yet."
@@ -73,42 +79,37 @@ questions:
     writes:
       - "ASSETS.md#brand-assets"
       - "BRAND.md#imported"
+      - "ASSETS.md#inventory"
+      - "ASSETS.md#protected"
 
   - id: DP-0.5
+    topic: voice-samples
     module: towel-check
     # Express does not ask this. The id stays in the tree and the ASSUMED default is written.
     depth: [standard, deep]
-    ask: "Want to connect your X account so the Guide can read your voice from posts? Optional, and read-only."
-    why: "Posts can supply voice samples and imagery. Nothing is posted. Express does not ask this and writes the ASSUMED default."
+    ask: "Want to connect your X (Twitter) account so the Guide can learn how you write? It only reads, never posts. Optional."
+    why: "Posts can supply voice samples and imagery. Nothing is posted. Skipped questions get a sensible default you can change later."
     input: [choice, voice]
     skip_default: "No X connection."
     suggest: "Skip it if you would rather describe the voice yourself."
     writes:
       - "VOICE.md#x"
 
-  - id: DP-0.6
-    module: towel-check
-    depth: [express, standard, deep]
-    ask: "How do you want to answer: hold the mic, or use the keyboard?"
-    why: "You can talk the whole way. The Guide replies in text either way."
-    input: [choice, voice]
-    skip_default: "Keyboard."
-    suggest: "Mic if speaking is faster. Keyboard if you want to edit each line."
-    writes:
-      - "PROJECT.md#input-mode"
 
   - id: DP-0.7
+    topic: depth-time
     module: towel-check
     depth: [express, standard, deep]
-    ask: "How much time do you have today? Choose a depth: Deep (the full Guide, recommended), Standard, or Express. The interview can be saved and resumed."
-    why: "Every mode keeps every id. Express only writes ASSUMED defaults for what it does not ask. You can change depth later."
+    ask: "Roughly how much time do you have today? Under 30 minutes, about an hour, or a few hours (I'll save and you can come back)."
+    why: "You can switch depth anytime. Anything we skip gets a sensible default you can change later."
     input: [choice, text, voice]
-    skip_default: "Deep"
-    suggest: "Deep if you can stay for the full Guide. Standard if you want every question with a shorter walk. Express if you want speed and will review assumptions."
+    skip_default: "A few hours (I'll save and you can come back)."
+    suggest: "Under 30 minutes if you want the short pass. About an hour for the usual walk. A few hours if you can save and come back."
     writes:
       - "PROJECT.md#interview-depth"
 
   - id: DP-1.1
+    topic: logo
     module: ford-field-notes
     depth: [express, standard, deep]
     ask: "Do you have a logo?"
@@ -121,8 +122,10 @@ questions:
       - "raster under 512px"
     follow_ups:
       - id: DP-1.1a
+
         ask: "Are you happy with it?"
       - id: DP-1.1b
+
         ask: "Want suggestions or an improved version?"
     levels:
       beginner: explain
@@ -134,9 +137,10 @@ questions:
       - "ASSETS.md#logo"
 
   - id: DP-1.2
+    topic: palette
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Which colors do you want, and what should each one mean for this brand?"
+    ask: "Which colors feel like your business? Name them, or say suggest some."
     why: "Color psychology research is mixed. A single color does not have one emotion for all cultures, and a chart of meanings is not a brief. Standing apart from competitors matters more than a borrowed meaning."
     input: [text, voice]
     skip_default: "No palette yet. Babel Fish will draft three, with contrast checked."
@@ -148,6 +152,7 @@ questions:
       - "BRAND.md#color"
 
   - id: DP-1.3
+    topic: tagline
     module: ford-field-notes
     depth: [express, standard, deep]
     ask: "Do you have a slogan or tagline?"
@@ -157,15 +162,17 @@ questions:
     suggest: "Babel Fish can draft a set across several styles, then you keep five."
     follow_ups:
       - id: DP-1.3a
+
         ask: "Want suggestions?"
     writes:
       - "BRAND.md#slogan"
       - "VOICE.md#slogans"
 
   - id: DP-1.4
+    topic: mood
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Which images or backgrounds resonate with you? Drop up to 5, or a board link. For each one, say why it resonates and how it feels."
+    ask: "Show up to 5 pictures whose look you like, and say in a few words why."
     why: "Mood is evidence. Five images, each with a why, beat a folder of unlabeled pictures."
     input: [upload, text, voice]
     skip_default: "No mood images yet."
@@ -178,20 +185,23 @@ questions:
       - "ASSETS.md#mood"
 
   - id: DP-1.5
+    topic: fonts
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Do you have fonts in mind, and what kind of letters feel like you?"
+    ask: "Do you have fonts you use? If not, pick a style from these examples."
     why: "Two families are enough: one for headlines, one for text. The pairing has to survive a real sentence."
     input: [text, voice, upload]
     skip_default: "No type yet. Show the six pairings."
     suggest: "Send screenshots, or set your headline in one of these six pairings: Bebas Neue + Barlow, Space Grotesk + Inter, DM Serif Display + DM Sans, Fraunces + Work Sans, Archivo Black + Archivo, Clash Display + Satoshi."
     follow_ups:
       - id: DP-1.5a
+
         ask: "Send screenshots of fonts you like, or I can show you pairings"
     writes:
       - "BRAND.md#type"
 
   - id: DP-1.6
+    topic: voice
     module: ford-field-notes
     depth: [express, standard, deep]
     ask: "How does your company speak to people? If it were a person or an animal, what would it be?"
@@ -204,15 +214,17 @@ questions:
       - "friendly"
     follow_ups:
       - id: DP-1.6a
+
         ask: "Which brands' voices do you like? I can suggest 5 to 10 that speak to your customers"
     writes:
       - "VOICE.md#character"
 
   - id: DP-1.7
+    topic: origin
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Why did you build this, and what is the origin story?"
-    why: "This is the brand why, the reason the work exists. Deep runs the Why Finder here, along the Golden Circle. Express and Standard keep a one-sentence stub and may defer the long finder to Babel Fish. The site why is a later question."
+    ask: "Why did you start this business? Tell the story in a sentence or two."
+    why: "This is the brand why, the reason the work exists. Deep runs the Why Finder here, along the Golden Circle. A shorter visit keeps a one-sentence stub and may defer the long finder to Babel Fish. The site why is a later question."
     input: [text, voice]
     skip_default: "Brand why not stated. One sentence still owed."
     suggest: "One sentence: To [contribution] so that [impact]."
@@ -221,6 +233,7 @@ questions:
       - "it felt right"
     follow_ups:
       - id: DP-1.7a
+
         ask: "Do you understand your why?"
       - id: DP-1.7-finder
         ask: "Let's find it with the Golden Circle"
@@ -230,6 +243,7 @@ questions:
       - "BRAND.md#why"
 
   - id: DP-1.8
+    topic: kindred
     module: ford-field-notes
     depth: [express, standard, deep]
     ask: "Which brands are like yours, and which unrelated brands do you love?"
@@ -241,9 +255,10 @@ questions:
       - "BRAND.md#kindred"
 
   - id: DP-1.9
+    topic: protected
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "What assets do you already have, and what must never change?"
+    ask: "Is there anything here that must never change?"
     why: "Photos, video, copy, real testimonials, certifications, and press go in the inventory. The protected list is the line the build does not cross."
     input: [upload, text, voice]
     skip_default: "No inventory yet. Nothing marked protected."
@@ -255,9 +270,10 @@ questions:
       - "ASSETS.md#protected"
 
   - id: DP-2.1
+    topic: site-purpose
     module: the-question
     depth: [express, standard, deep]
-    ask: "Why are you building this website, in one sentence?"
+    ask: "What do you want this website to do for your business, in one sentence?"
     why: "This is the site why, the job the website is for. The brand why already lives on its own question. A sentence that only says you want to exist online is not a job."
     input: [text, voice]
     skip_default: "Site why not stated. One sentence still owed."
@@ -272,9 +288,10 @@ questions:
       - "SITE-BRIEF.md"
 
   - id: DP-2.2
+    topic: visitor-action
     module: the-question
     depth: [express, standard, deep]
-    ask: "What do you hope it accomplishes? What is the one action a visitor should take?"
+    ask: "What's the one thing you want a visitor to do: call, book, buy, sign up, something else?"
     why: "One action keeps the page honest. A second action can exist, but it does not get to be the point."
     input: [text, voice]
     skip_default: "One visitor action not named."
@@ -286,9 +303,10 @@ questions:
       - "SITE-BRIEF.md#action"
 
   - id: DP-2.3
+    topic: site-kind
     module: the-question
     depth: [express, standard, deep]
-    ask: "What kind of site is this? Pick any that fit: sales, funnel, calls, reservations, sign-ups, portfolio, content, local, event, personal, nonprofit, recruiting, investor, app."
+    ask: "What kind of site is it? Pick any: selling online, bookings, a shop near you, showing your work, an event, a personal site, a nonprofit, or hiring."
     why: "Multiple types are allowed. Each type has one primary KPI, in words, and one knowledge pack. The packs named for these types include sales-psychology, seo, or ux-conversion. No fake numbers live on the type."
     input: [choice, text]
     skip_default: "No site type chosen."
@@ -301,9 +319,10 @@ questions:
       - "KPIS.md#site-types"
 
   - id: DP-2.4
+    topic: outcomes
     module: the-question
     depth: [express, standard, deep]
-    ask: "What is the key outcome, and which KPIs matter? How many leads, bookings, or sales a month would make you happy?"
+    ask: "How many calls, bookings, or sales a month would make you happy?"
     why: "If you do not know, a four-question helper asks for current numbers, the goal, visitors needed at a stated assumed conversion range, and which page carries it. Ranges are assumptions. Nothing here fills in a rate."
     input: [text, voice]
     skip_default: "KPIs not set. Ranges stay assumptions until you name a goal."
@@ -315,9 +334,10 @@ questions:
       - "KPIS.md"
 
   - id: DP-2.5
+    topic: shape
     module: the-question
     depth: [express, standard, deep]
-    ask: "Should it be a funnel, with one offer and one path, a brand experience, with story and world, or a hybrid?"
+    ask: "Should the site get people to one offer fast, or tell your story and show your world? Or both?"
     why: "A funnel is one offer and one path, short on purpose. A brand experience is story and world, with more than one path, and a hybrid keeps both: an immersive opening plus one path to the offer."
     input: [choice, text, voice]
     skip_default: "Hybrid. An immersive opening and one path to the offer."
@@ -326,6 +346,7 @@ questions:
       - "SITE-BRIEF.md#shape"
 
   - id: DP-2.6
+    topic: visitor
     module: the-question
     depth: [express, standard, deep]
     ask: "Who is the visitor? Name one specific person: what they want, what they fear, and what device they are on."
@@ -342,6 +363,7 @@ questions:
       - "SITE-BRIEF.md#visitor"
 
   - id: DP-2.7
+    topic: offer
     module: the-question
     depth: [express, standard, deep]
     ask: "What do you sell or give away, and why should anyone care?"
@@ -356,9 +378,10 @@ questions:
       - "SITE-BRIEF.md#offer"
 
   - id: DP-2.8
+    topic: pages
     module: the-question
     depth: [express, standard, deep]
-    ask: "Which pages and sections do you think you need? This list gets fixed later."
+    ask: "Which pages do you think you need? We can change this later."
     why: "Your list is a starting sketch. The section plan can add, cut, or rename once the offer and the visitor are clear."
     input: [text, voice]
     skip_default: "Page list not stated. The later plan will draft one."
@@ -367,9 +390,10 @@ questions:
       - "SITE-BRIEF.md#pages"
 
   - id: DP-3.1
+    topic: contact
     module: tools
     depth: [express, standard, deep]
-    ask: "Do you want an email intake or a contact form? The default is yes. Which fields, and where should submissions go?"
+    ask: "Do you want a contact form? Where should messages go (which email)?"
     why: "A form is the ordinary way a stranger reaches you. Fields and the destination matter more than the widget."
     input: [choice, text, voice]
     skip_default: "Yes. A contact form with name, email, and a message, sent to the site owner."
@@ -378,6 +402,7 @@ questions:
       - "SITE-BRIEF.md#contact"
 
   - id: DP-3.2
+    topic: shop
     module: tools
     depth: [express, standard, deep]
     ask: "Do you sell products on the site? How many, and are they physical, digital, or subscriptions?"
@@ -395,6 +420,7 @@ questions:
       - "SITE-BRIEF.md#commerce"
 
   - id: DP-3.3
+    topic: bookings
     module: tools
     depth: [express, standard, deep]
     ask: "Do you need bookings, reservations, or calls?"
@@ -406,9 +432,10 @@ questions:
       - "SITE-BRIEF.md#bookings"
 
   - id: DP-3.4
+    topic: newsletter
     module: tools
     depth: [express, standard, deep]
-    ask: "Do you want a newsletter? If yes, which platform: Kit, Mailchimp, MailerLite, Beehiiv, Brevo, Klaviyo, or Hostinger Reach?"
+    ask: "Do you want to collect emails for a newsletter? If yes, do you already use a tool for it?"
     why: "The platform is a choice, not a guess. The list is the set this Guide knows how to hand off."
     input: [choice, text, voice]
     skip_default: "No newsletter."
@@ -417,17 +444,21 @@ questions:
       - "SITE-BRIEF.md#newsletter"
 
   - id: DP-3.5
+    topic: blog
     module: tools
     depth: [express, standard, deep]
-    ask: "Do you want a blog or another CMS, and do you want to edit the content yourself later?"
+    ask: "Do you want a blog, and do you want to edit the site yourself later? If yes, how often would you post, and about what?"
     why: "Editing later decides the tool. A folder of files is enough for some people. Others need a desk they can open without a code editor."
     input: [choice, text, voice]
     skip_default: "No blog. No later self-editing."
     suggest: "Content collections if you rarely edit. Keystatic or Sanity if you want a desk of your own."
     writes:
       - "SITE-BRIEF.md#blog-cms"
+      - "SITE-BRIEF.md#keyword-posts"
+      - "SITE-BRIEF.md#blog-cadence"
 
   - id: DP-3.6
+    topic: portfolio
     module: tools
     depth: [express, standard, deep]
     ask: "Do you need video, other media, or a portfolio of work on the site?"
@@ -439,9 +470,10 @@ questions:
       - "SITE-BRIEF.md#media"
 
   - id: DP-3.7
+    topic: features
     module: tools
     depth: [express, standard, deep]
-    ask: "Any special features? For example MLS listings, maps, member areas, a configurator, an editor, a visualization, or something unusual like blockchain."
+    ask: "Anything special the site must do, like a map, a members area, or a price calculator?"
     why: "Suggest for me proposes features from the site type and the industry. Anything non-standard can look up APIs and MCP servers. Discovery is approval-gated."
     input: [text, voice]
     skip_default: "No special features."
@@ -453,9 +485,10 @@ questions:
       - "SITE-BRIEF.md#specials"
 
   - id: DP-3.8
+    topic: analytics
     module: tools
     depth: [express, standard, deep]
-    ask: "Which analytics do you want: Plausible, Umami, or GA4 with consent?"
+    ask: "We'll count visitors privately. Change?"
     why: "Plausible and Umami skip the cookie banner. GA4 needs consent before it runs. Events come from the KPI file, not from a template."
     input: [choice, text, voice]
     skip_default: "Plausible. No cookie banner."
@@ -464,9 +497,10 @@ questions:
       - "SITE-BRIEF.md#analytics"
 
   - id: DP-3.9
+    topic: languages
     module: tools
     depth: [express, standard, deep]
-    ask: "Which languages or locales should the site speak?"
+    ask: "Which languages should the site be in?"
     why: "A second locale is a real set of pages, not a toggle pasted on at the end."
     input: [text, voice]
     skip_default: "One locale. The language of this interview."
@@ -475,9 +509,10 @@ questions:
       - "SITE-BRIEF.md#locales"
 
   - id: DP-4.1
+    topic: competitors
     module: vogon-neighbors
     depth: [express, standard, deep]
-    ask: "Who are your main competitors? Drop their sites."
+    ask: "Who are your main competitors? Paste their websites if you know them."
     why: "Names and URLs land here. A later pass can read positioning, audience, visual identity, voice, weaknesses, and complaints, then look for the sea of sameness and three white spaces. This question does not crawl."
     input: [text, voice]
     skip_default: "No competitors named."
@@ -489,6 +524,7 @@ questions:
       - "COMPETITORS.md"
 
   - id: DP-4.2
+    topic: competitor-gap
     module: vogon-neighbors
     depth: [express, standard, deep]
     ask: "What do they do well that you secretly envy, and what is boring about them?"
@@ -503,6 +539,7 @@ questions:
       - "COMPETITORS.md#envy"
 
   - id: DP-4.3
+    topic: blog
     module: vogon-neighbors
     depth: [express, standard, deep]
     ask: "Do you want a blog, and should keyword-based posts be written for you? Bring seed keywords if you have them, including ones competitors already rank for."
@@ -514,6 +551,7 @@ questions:
       - "SITE-BRIEF.md#keyword-posts"
 
   - id: DP-4.4
+    topic: place
     module: vogon-neighbors
     depth: [express, standard, deep]
     ask: "Where are your customers: a local city, a country, or worldwide?"
@@ -525,9 +563,10 @@ questions:
       - "SITE-BRIEF.md#where"
 
   - id: DP-4.5
+    topic: answer-engines
     module: vogon-neighbors
     depth: [express, standard, deep]
-    ask: "Do you have answer-engine goals for Grok, ChatGPT, or Perplexity?"
+    ask: "Do you want AI assistants like Grok or ChatGPT to recommend your business?"
     why: "Clear entity facts, structured data, and a real FAQ help a machine read the site. This does not promise citations."
     input: [choice, text, voice]
     skip_default: "No answer-engine goal."
@@ -536,6 +575,7 @@ questions:
       - "SITE-BRIEF.md#answer-engines"
 
   - id: DP-5.1
+    topic: references
     module: point-of-view-gun
     depth: [express, standard, deep]
     ask: "Name three to five sites you love, from any industry, and exactly what you love about each: type, scroll, layout, color, motion, or menu."
@@ -580,9 +620,10 @@ questions:
       - "SITE-BRIEF.md#references"
 
   - id: DP-5.2
+    topic: reference-walk
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "If you have none, take a guided walk. Each round shows two Godly cards and two Awwwards cards. Say love, meh, or hate, and why."
+    ask: "No favorites yet? Let's look at a few sites together. Say love, meh, or hate."
     why: "The ten-site walk is the gallery instruction, not the saved board. Likes gathered on the walk narrow to three to five before they are saved."
     input: [choice, text, voice]
     skip_default: "No gallery walk."
@@ -594,9 +635,10 @@ questions:
       - "SITE-BRIEF.md#references"
 
   - id: DP-5.3
+    topic: vibe
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "Give the vibe in three words, and three words it must never feel like."
+    ask: "Describe the feel in three words, and three words it must never feel like."
     why: "Three words for the feeling, and three for the feeling to refuse. Empty praise words do not count as a vibe."
     input: [text, voice]
     skip_default: "Vibe not stated. Three words and three never-words still owed."
@@ -614,29 +656,23 @@ questions:
       - "VISUAL-DIRECTION.md#vibe"
 
   - id: DP-5.4
+    topic: signature
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "Visual interview, eight topics in the follow-ups, ending on this: what is the signature moment, the one thing people will screenshot?"
+    ask: "What's the one thing on the site you'd want people to screenshot? That is the signature moment."
     why: "The eight topics settle type, color, motion, texture, and imagery. The signature moment is the last answer, the one picture a person would send to a friend."
     input: [text, voice]
     skip_default: "No signature moment named."
     suggest: "Answer the topics in order. Stop on one signature moment. A second wow splits the page."
     follow_ups:
-      - id: DP-5.4a
-        ask: "Five mood words, and three words it must never feel like."
-      - id: DP-5.4b
-        ask: "Three to five award sites, and exactly which part of each you love."
       - id: DP-5.4c
+
         ask: "How loud should the headlines be, and how large is the contrast with the body text?"
-      - id: DP-5.4d
-        ask: "Color temperature: warm, cool, or neutral, and how often the accent shows up?"
-      - id: DP-5.4e
-        ask: "Motion personality: calm and expensive, snappy and playful, heavy and cinematic, or name another, with a real-world comparison."
       - id: DP-5.4f
+
         ask: "Texture: flat, film grain, paper, glass, noise, or something physical from this world?"
-      - id: DP-5.4g
-        ask: "Imagery: photo, illustration, 3D, or video. What light, and what never shows up?"
       - id: DP-5.4h
+
         ask: "What is the signature moment, the one thing people will screenshot?"
     levels:
       beginner: explain
@@ -645,9 +681,10 @@ questions:
       - "VISUAL-DIRECTION.md#signature"
 
   - id: DP-5.5
+    topic: light
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "Light: dark and moody, bright and airy, or paper and ink?"
+    ask: "Should the site feel dark and moody, bright and airy, or like paper and ink?"
     why: "Three lights, shown later as thumbnails. The choice sets the page ground before any palette math."
     input: [choice, text, voice]
     skip_default: "Paper and ink."
@@ -656,9 +693,10 @@ questions:
       - "VISUAL-DIRECTION.md#light"
 
   - id: DP-5.6
+    topic: imagery
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "Imagery: photography, illustration, 3D, or type-only?"
+    ask: "Should the site use photos, drawings, 3D, or mostly text?"
     why: "The picture system is one of these four. Mixing comes later, and only if this answer cannot carry the page."
     input: [choice, text, voice]
     skip_default: "Photography."
@@ -667,9 +705,10 @@ questions:
       - "VISUAL-DIRECTION.md#imagery"
 
   - id: DP-6.1
+    topic: motion-families
     module: pan-galactic
     depth: [express, standard, deep]
-    ask: "Which motion families belong here? Weighted scroll and reveals, headlines that rise line by line, a page that holds while a story plays, sideways scroll, parallax, a film or frame sequence that scrubs with the scroll, a 3D camera path, pages that melt into each other, menus and intro handoffs, pointer reactions, drawn lines and moving illustration, shader grain and glow, particles, a product or a world, physics, ambient video, and optional sound that stays off until asked."
+    ask: "How should things move on the page?"
     why: "Families cover research ids A1 through H3, each with a short loop from the pack and a real link. Magnetic buttons are banned, not offered. The walk names one tool in a clause and does not lecture."
     input: [choice, text, voice]
     skip_default: "Reveals and a calm headline. No world, no film, no custom cursor."
@@ -684,12 +723,13 @@ questions:
       - "MOTION.md#families"
 
   - id: DP-6.2
+    topic: motion-appetite
     module: pan-galactic
     depth: [express, standard, deep]
-    ask: "Motion appetite from 1 to 10. 1 is a calm brochure. 10 is a world you move through. Pick a whole number in that range."
+    ask: "How much movement do you want, from 1 to 10? 1 is calm. 10 is a world you move through."
     why: "The number caps weight and does not remove libraries from the Guide. A calm brand at the top of the scale gets pushback against the deadline and the visitor device."
     input: [choice, text, voice]
-    skip_default: "3. ASSUMED. Polished, not a spectacle."
+    skip_default: "3. Polished, not a spectacle."
     suggest: "1 calm brochure, 2 gentle, 3 polished, 4 editorial, 5 expressive, 6 cinematic lite, 7 cinematic, 8 a 3D accent, 9 3D-led, 10 a world."
     pushback_if:
       - "11"
@@ -702,6 +742,7 @@ questions:
       - "SITE-BRIEF.md#motion"
 
   - id: DP-6.3
+    topic: motion-structure
     module: pan-galactic
     depth: [express, standard, deep]
     ask: "Do you want the whole site to be one continuous film you scroll through, or a branching story where visitors pick paths?"
@@ -714,9 +755,10 @@ questions:
       - "SITE-BRIEF.md#motion-shape"
 
   - id: DP-6.4
+    topic: 3d
     module: pan-galactic
     depth: [express, standard, deep]
-    ask: "Where does 3D come from: none, pre-rendered, CC0, Tripo, Meshy, an upload, or a brief for a human?"
+    ask: "Do you have 3D models, or should we make or find some? None is fine. Other paths are pre-rendered, CC0, Tripo, Meshy, an upload, or a person."
     why: "None stays flat. Pre-rendered keeps the picture and drops the runtime. CC0 models are license-checked and credited. Tripo or Meshy means generated geometry plus cleanup. An upload is your file. A human brief is the slow careful path."
     input: [choice, upload, text, voice]
     skip_default: "None."
@@ -729,6 +771,8 @@ questions:
       - "MOTION.md#3d-source"
 
   - id: DP-6.5
+    topic: phone-motion
+    surface: default
     module: pan-galactic
     depth: [express, standard, deep]
     ask: "For phone visitors, should heavy motion run lighter, or stay calm?"
@@ -740,6 +784,7 @@ questions:
       - "MOTION.md#phone"
 
   - id: DP-6.6
+    topic: motion-sensitivity
     module: pan-galactic
     depth: [express, standard, deep]
     ask: "Is anyone in the audience sensitive to motion?"
@@ -751,9 +796,10 @@ questions:
       - "MOTION.md#sensitivity"
 
   - id: DP-7.1
+    topic: image-budget
     module: bistromathics
     depth: [express, standard, deep]
-    ask: "What is your comfort spend for generated stills and clips on your account?"
+    ask: "How much are you OK spending on AI-made pictures and videos? $0, a little, a fair amount, or you name it."
     why: "Show the model and the resolution on every line. Do not promise 1080p inside a small cap. Prices live on the cost meter, not in this question. Stop at the cap."
     input: [choice, text, voice]
     skip_default: "$0 DIY. Prompts only."
@@ -765,10 +811,11 @@ questions:
       - "SITE-BRIEF.md#imagine-spend"
 
   - id: DP-7.2
+    topic: 3d-budget
     module: bistromathics
     depth: [standard, deep]
     ask: "What is the budget for custom 3D generation, if you chose Tripo or Meshy?"
-    why: "Only when Tripo or Meshy is the 3D source. Express does not ask this and writes the assumed default. Credits and cleanup still apply."
+    why: "Only when generated 3D was chosen. A shorter visit stores the default. Credits and cleanup still apply."
     input: [text, voice]
     skip_default: "No custom 3D generation budget."
     suggest: "A credit cap, or none."
@@ -776,9 +823,10 @@ questions:
       - "SITE-BRIEF.md#3d-budget"
 
   - id: DP-7.3
+    topic: photos
     module: bistromathics
     depth: [express, standard, deep]
-    ask: "Pictures: stock, your own, or AI?"
+    ask: "Where should photos come from: your own, stock photos, AI-made, or a mix?"
     why: "Stock, pictures you own, or AI. A real person, product, or place is never swapped for a generated stand-in."
     input: [choice, text, voice]
     skip_default: "Own and AI. No stock."
@@ -787,9 +835,10 @@ questions:
       - "ASSETS.md#picture-source"
 
   - id: DP-8.1
+    topic: copy
     module: content
     depth: [express, standard, deep]
-    ask: "Do you have the copy, or should the Guide write it in your voice for you to approve or reject?"
+    ask: "Do you have the words for the site, or should the Guide write them for you to approve?"
     why: "Drafts come from the voice file. You approve or reject them. Unseen copy does not ship."
     input: [choice, text, voice]
     skip_default: "Write it in the voice file. Approve or reject."
@@ -799,6 +848,7 @@ questions:
       - "SITE-BRIEF.md#copy"
 
   - id: DP-8.2
+    topic: proof
     module: content
     depth: [express, standard, deep]
     ask: "What real proof can the site show: testimonials, reviews, numbers, client names, or press?"
@@ -813,6 +863,7 @@ questions:
       - "SITE-BRIEF.md#proof"
 
   - id: DP-8.3
+    topic: blog
     module: content
     depth: [express, standard, deep]
     ask: "If there is a blog, what cadence and which topics?"
@@ -824,9 +875,10 @@ questions:
       - "SITE-BRIEF.md#blog-cadence"
 
   - id: DP-8.4
+    topic: legal
     module: content
     depth: [express, standard, deep]
-    ask: "Which legal pages do you need, and which claims can you not make?"
+    ask: "Do you need privacy or terms pages? Is there anything you are not allowed to say?"
     why: "Privacy, terms, and cookies are named here. Health, finance, real estate, and any other regulated claim stay inside what you can say."
     input: [text, voice]
     skip_default: "Privacy and terms. No extra claims named."
@@ -835,9 +887,10 @@ questions:
       - "SITE-BRIEF.md#legal"
 
   - id: DP-9.1
+    topic: deadline
     module: limits
     depth: [express, standard, deep]
-    ask: "What is the deadline?"
+    ask: "When do you need the site live?"
     why: "The date is checked against motion appetite. A short date and a world-sized site get pushback."
     input: [text, voice]
     skip_default: "No deadline named."
@@ -847,9 +900,10 @@ questions:
       - "PROJECT.md#deadline"
 
   - id: DP-9.2
+    topic: hosting
     module: limits
     depth: [express, standard, deep]
-    ask: "Where should it live? Hostinger is recommended. The other choices are Vercel, Netlify, or Cloudflare, or no idea. Do you own the domain, who is the registrar, and is email on that domain?"
+    ask: "Do you own a web address (like yourbakery.com)? Do you know where you'd like the site hosted? No idea is fine."
     why: "Hostinger is the recommended word, not a forced value. Vercel, Netlify, and Cloudflare are equal choices. No idea is a complete answer."
     input: [choice, text, voice]
     skip_default: "no idea"
@@ -862,9 +916,10 @@ questions:
       - "PROJECT.md#hosting"
 
   - id: DP-9.3
+    topic: maintenance
     module: limits
     depth: [express, standard, deep]
-    ask: "Who maintains the site after launch?"
+    ask: "Who will look after the site once it is live?"
     why: "Someone publishes, renews the name, and answers the form. Name that person."
     input: [text, voice]
     skip_default: "The owner maintains it."
@@ -873,6 +928,8 @@ questions:
       - "SITE-BRIEF.md#maintainer"
 
   - id: DP-9.4
+    topic: accessibility
+    surface: default
     module: limits
     depth: [express, standard, deep]
     ask: "Anything beyond WCAG 2.2 AA?"
@@ -884,6 +941,8 @@ questions:
       - "SITE-BRIEF.md#accessibility"
 
   - id: DP-9.5
+    topic: notes
+    tip: "Accessibility stays at a solid baseline you can change. Say so if someone needs more."
     module: limits
     depth: [express, standard, deep]
     ask: "Anything else the Guide should know?"

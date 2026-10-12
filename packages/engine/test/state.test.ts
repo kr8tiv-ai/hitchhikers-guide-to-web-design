@@ -211,7 +211,7 @@ test("a scaffolded STATE.md loads and the interview opens on the first question"
     const session = await openInterview(dir, "express");
     const question = session.next();
     assert.equal(question?.id, "DP-0.1");
-    assert.equal(question?.ask, "Is this site for you, or for a client?");
+    assert.equal(question?.ask, "Is this website for your own business, or for a client?");
     assert.equal(loadState(dir)?.phase, "Deep Thought");
     const afterOpen = readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8");
     assert.equal(afterOpen, raw);

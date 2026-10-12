@@ -5,6 +5,7 @@ import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
 import { loadState, type GuideState } from "./state.ts";
+import { loadSessionState, questionsToShow } from "./guide/session-state.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 /**
@@ -28,6 +29,7 @@ import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 export type InterviewCommand =
   | { type: "answer"; text: string }
+  | { type: "keep"; text: string }
   | { type: "suggest" }
   | { type: "skip" };
 
@@ -95,10 +97,11 @@ export async function openInterview(
 ): Promise<InterviewSession> {
   const dir = path.join(projectDir, ".hitchhiker");
   await mkdir(dir, { recursive: true });
-  const questions = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
+  const depthQuestions = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
   const saved = loadInterview(path.join(dir, "interview.json"));
+  const questions = questionsToShow(depthQuestions, loadSessionState(projectDir, depthQuestions));
   const state = loadState(projectDir);
-  const cursor = placeCursor(questions, saved.answers, state?.promptId ?? null);
+  const cursor = placeCursor(questions, saved.answers, state?.promptId ?? null, readRevisitId(projectDir));
   const run = new InterviewRun(
     projectDir,
     questions,
@@ -174,6 +177,14 @@ class InterviewRun {
       if (input.type === "answer") {
         return await this.#answer(question, input.text);
       }
+      if (input.type === "keep") {
+        if (input.text.trim() === "") {
+          throw new InterviewError("empty-answer", "An empty answer is not stored. Skip to keep the assumption.");
+        }
+        const record: AnswerRecord = { id: question.id, status: "ANSWERED", value: input.text };
+        await this.#commit(record);
+        return record;
+      }
       const record = recordFor(question, input);
       await this.#commit(record);
       return record;
@@ -215,6 +226,7 @@ class InterviewRun {
     this.#cursor = cursor;
     this.#pendingId = null;
     this.#lastPushback = null;
+    await clearRevisit(this.#projectDir);
   }
 
   async #save(
@@ -262,7 +274,7 @@ class InterviewRun {
 
 function recordFor(
   question: Question,
-  input: Exclude<InterviewCommand, { type: "answer" }>,
+  input: Exclude<InterviewCommand, { type: "answer" } | { type: "keep" }>,
 ): AnswerRecord {
   if (input.type === "suggest") {
     return {
@@ -292,11 +304,44 @@ function addStatus(counts: Coverage, status: AnswerRecord["status"]): void {
  * already stored: the first unanswered id is the recovery. An id the depth
  * does not ask is ignored the same way.
  */
+const REVISIT_FILE = "revisit.json";
+
+/** The question a Revisit should show, even when that answer is already stored. */
+export async function writeRevisitId(projectDir: string, id: string): Promise<void> {
+  const dir = path.join(projectDir, ".hitchhiker");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, REVISIT_FILE), `${JSON.stringify({ id })}\n`, "utf8");
+}
+
+export function readRevisitId(projectDir: string): string | null {
+  const file = path.join(projectDir, ".hitchhiker", REVISIT_FILE);
+  if (!existsSync(file)) return null;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const id = (parsed as { id?: unknown }).id;
+    return typeof id === "string" && id.trim() !== "" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function clearRevisit(projectDir: string): Promise<void> {
+  const file = path.join(projectDir, ".hitchhiker", REVISIT_FILE);
+  if (!existsSync(file)) return;
+  await unlink(file).catch(() => undefined);
+}
+
 function placeCursor(
   questions: readonly Question[],
   answers: readonly AnswerRecord[],
   promptId: string | null,
+  revisitId: string | null = null,
 ): number {
+  if (revisitId !== null) {
+    const index = questions.findIndex((question) => question.id === revisitId);
+    if (index >= 0) return index;
+  }
   if (promptId !== null && promptId.startsWith(INTERVIEW_PREFIX)) {
     const id = promptId.slice(INTERVIEW_PREFIX.length);
     if (id !== "done") {

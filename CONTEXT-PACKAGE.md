@@ -330,7 +330,7 @@ The engine tracks a **coverage map** (answered / suggested / skipped→ASSUMED /
 - DP-0.3 "How comfy are you with web stuff? 🧣 towel-less · 🗺️ I've used Wix · 🛠️ I design/build sites · 🧠 I write code" → level
 - DP-0.4 "Got brand stuff already: logo, colors, fonts, a guide, photos? Drop everything you've got. PDFs, screenshots and links all work." → fast-path flags
 - DP-0.5 "Want to connect your X account so I can learn your voice from your posts? Optional, read-only." (§16)
-- DP-0.6 "How do you want to talk to me: hold the mic button, or type?" (sets the voice default)
+- Click to talk is on every question. There is no separate mic-or-keyboard question.
 - DP-0.7 "Roughly how much time do you have today? The full interview is long and can be saved and resumed anytime."
 
 **Module 1: Ford's Field Notes (brand and assets; Miro board 1)** · skip the whole module if a brand guide is imported. Then ask only "happy with this?" for each item.

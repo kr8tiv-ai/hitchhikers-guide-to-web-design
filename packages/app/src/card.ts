@@ -338,6 +338,13 @@ function sampleAnswer(question: Question): string {
 
 const CHOICE_IDS: readonly CardChoiceId[] = ["A", "B", "C", "D"];
 
+function sameQuestion(label: string, other: string): boolean {
+  const norm = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.?!,:;]+$/g, "");
+  const left = norm(label);
+  const right = norm(other);
+  return left !== "" && left === right;
+}
+
 /**
  * Radiogroup under the question. Letter picks plus Other.
  * The live line counts lettered choices only.
@@ -345,6 +352,7 @@ const CHOICE_IDS: readonly CardChoiceId[] = ["A", "B", "C", "D"];
 export function renderChoiceGroup(set: CardChoiceSet): string {
   const items = set.items.filter((item, index) => item.id === CHOICE_IDS[index]).slice(0, 4);
   if (items.length < 1) return "";
+  const noun = items.length === 1 ? "choice" : "choices";
   const radios = items.map((item, index) => {
     const tab = index === 0 ? "0" : "-1";
     const checked = index === 0 ? "true" : "false";
@@ -357,7 +365,7 @@ export function renderChoiceGroup(set: CardChoiceSet): string {
   return `  <div class="hh-choices" role="radiogroup" aria-labelledby="hh-card-ask" data-choices data-choices-for="${escapeHtml(set.forId)}" data-choices-origin="${set.origin}" tabindex="-1">
 ${radios.join("\n")}
   </div>
-  <p class="hh-choices__live" data-choices-live aria-live="polite">Options ready: ${items.length} choices</p>`;
+  <p class="hh-choices__live" data-choices-live aria-live="polite">Options ready: ${items.length} ${noun}</p>`;
 }
 
 /** HTML for the current question only. Mounts inside data-region="question". */
@@ -390,12 +398,19 @@ export function renderCard(state: CardState): string {
     ? `  <p class="hh-qcard__hint" id="hh-card-hint">${escapeHtml(ANSWER_HINT)}</p>\n`
     : "";
   const choiceSet = state.choices;
+  const visibleItems =
+    choiceSet === undefined || choiceSet === null
+      ? []
+      : choiceSet.items
+          .filter((item) => !sameQuestion(item.label, question.ask) && !sameQuestion(item.label, state.pushback ?? ""))
+          .slice(0, 4)
+          .map((item, index) => ({ ...item, id: CHOICE_IDS[index] ?? item.id }));
   const choicesHtml =
     choiceSet !== undefined &&
     choiceSet !== null &&
     choiceSet.forId === question.id &&
-    choiceSet.items.length > 0
-      ? `${renderChoiceGroup(choiceSet)}\n`
+    visibleItems.length > 0
+      ? `${renderChoiceGroup({ ...choiceSet, items: visibleItems })}\n`
       : "";
   const attachHtml = renderAttach(question.id, state.attach);
   const attachReady = (state.attach?.chips ?? []).some((chip) => chip.ready && chip.error === undefined);
@@ -405,6 +420,7 @@ export function renderCard(state: CardState): string {
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
   <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
+${question.tip !== undefined && state.counts?.index === 1 ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(question.tip)}</p>\n` : ""}
 ${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
@@ -412,10 +428,11 @@ ${choicesHtml}  <label class="hh-qcard__field">
 ${draftStatus(state.draftNote, state.draftFade)}  </label>
 ${attachHtml}${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
 ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
-    ${talkButton(state.pending, state.listening === true)}
+    ${talkButton(false, state.listening === true)}
     ${button("answer", "Answer", "primary", answerOff)}
     ${button("suggest", SUGGEST_LABEL, "secondary", state.pending)}
     ${button("skip", SKIP_LABEL, "ghost", state.pending)}
+    <p class="hh-qcard__reading" data-guide-reading aria-live="polite">${state.pending ? "Guide is reading your answer…" : ""}</p>
   </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
 </article>`;

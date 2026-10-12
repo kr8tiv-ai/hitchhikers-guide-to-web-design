@@ -35,6 +35,12 @@ export interface Question {
   requiredFor?: string[];
   resources?: QuestionResource[];
   writes: string[];
+  /** Stable subject. A second question with the same topic is not asked again. */
+  topic?: string;
+  /** Shown on the first question only, when this is that question. */
+  tip?: string;
+  /** `default` is stored and never asked. Omitted means the question is asked. */
+  surface?: "ask" | "default";
 }
 
 export class TreeError extends Error {
@@ -82,6 +88,9 @@ const QUESTION_KEYS = new Set([
   "required_for",
   "resources",
   "writes",
+  "topic",
+  "tip",
+  "surface",
 ]);
 
 const KEY_RE = /^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/;
@@ -100,6 +109,11 @@ export function loadTree(file: string): Question[] {
 /** Keeps file order. A mode is a filter, not a second tree. */
 export function questionsForDepth(all: Question[], depth: DepthName): Question[] {
   return all.filter((question) => question.depth.includes(depth));
+}
+
+/** Depth filter, then drop questions that are only a stored default. */
+export function questionsToAsk(all: Question[], depth: DepthName): Question[] {
+  return questionsForDepth(all, depth).filter((question) => question.surface !== "default");
 }
 
 function questionsFromYaml(text: string): Question[] {
@@ -160,6 +174,17 @@ function toQuestion(value: Yaml, index: number): Question {
   if (requiredFor !== undefined) question.requiredFor = requiredFor;
   const resources = optionalResources(value, id);
   if (resources !== undefined) question.resources = resources;
+  const topic = optionalString(value, "topic", id);
+  if (topic !== undefined) question.topic = topic;
+  const tip = optionalString(value, "tip", id);
+  if (tip !== undefined) question.tip = tip;
+  const surface = optionalString(value, "surface", id);
+  if (surface !== undefined) {
+    if (surface !== "ask" && surface !== "default") {
+      throw new TreeError("surface", owned(id, `unknown surface token ${surface}`), id);
+    }
+    question.surface = surface;
+  }
   return question;
 }
 

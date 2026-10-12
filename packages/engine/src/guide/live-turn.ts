@@ -18,6 +18,7 @@ import { PersonaError, buildSystemPrompt } from "../persona.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
+import { filterGuideText, loadSessionState, projectMentionsQuotes } from "./session-state.ts";
 import { judgePushback } from "./pushback-judge.ts";
 import {
   GUIDE_MESSAGE_SCHEMA,
@@ -155,6 +156,10 @@ export function guideThinkFromScript(jsonText: string): typeof think {
     if (!isRecord(item) || !Object.hasOwn(item, "result")) {
       throw new Error(`cassette miss: ${req.task} #${index}`);
     }
+    const delay = Number(process.env.HH_GUIDE_DELAY_MS ?? "0");
+    if (Number.isFinite(delay) && delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
     if (req.schema) {
       const errors = validateJson(item.result, req.schema);
       if (errors.length > 0) throw new Error(`cassette schema: ${errors.join("; ")}`);
@@ -202,11 +207,13 @@ async function answerText(
 ): Promise<GuideTurn> {
   const facts = loadFacts(s.projectDir);
   const prior = s.pushes[current.id] ?? 0;
+  const sessionState = loadSessionState(s.projectDir);
   const judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
     language: s.language,
     facts,
+    session: sessionState,
   });
   if (judgement.action === "push") {
     if (judgement.floor) await storeFloorHold(s, text);
@@ -327,8 +334,10 @@ async function askGuide(
       if (isQuiet(error)) return fallback(next);
       throw error;
     }
-    if (validateGuideMessage(text, { language: s.language, facts }).length === 0) {
-      return { message: text, calm: false };
+    const sessionState = loadSessionState(s.projectDir);
+    const kept = filterGuideText(text, sessionState, projectMentionsQuotes(sessionState));
+    if (kept !== null && validateGuideMessage(kept, { language: s.language, facts }).length === 0) {
+      return { message: kept, calm: false };
     }
   }
   return fallback(next);
@@ -352,7 +361,6 @@ async function pullMessage(s: GuideSession, prompt: string, deps: GuideTurnDeps)
     {
       task: GUIDE_MESSAGE_TASK,
       schema: GUIDE_MESSAGE_SCHEMA,
-      effort: "medium",
       input: prompt,
     },
     { projectDir: s.projectDir },

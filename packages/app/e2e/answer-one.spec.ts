@@ -36,7 +36,7 @@ test("answers DP-0.1 at 375 and shows the next question at 1440", async ({ page 
     await page.goto(url);
     await page.locator('[data-region="question"][data-live="true"]').waitFor();
     await expect(page.locator("[data-question-id='DP-0.1']")).toBeVisible();
-    await expect(page.locator("#hh-card-ask")).toContainText("Is this site for you, or for a client?");
+    await expect(page.locator("#hh-card-ask")).toContainText("Is this website for your own business, or for a client?");
     const fits = await page.evaluate(() => {
       const root = document.documentElement;
       return root.scrollWidth <= root.clientWidth + 1;
@@ -54,7 +54,7 @@ test("answers DP-0.1 at 375 and shows the next question at 1440", async ({ page 
     await expect(page.locator('[data-action="answer"]')).toBeEnabled();
     await page.locator('[data-action="answer"]').click();
     await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
-    await expect(page.locator("#hh-card-ask")).toContainText("Have you built a website before");
+    await expect(page.locator("#hh-card-ask")).toContainText("Have you had a website before");
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => {

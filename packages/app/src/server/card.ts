@@ -300,10 +300,10 @@ export function depthTouched(
  */
 export function modeNote(mode: InterviewMode): string {
   if (mode === "express") {
-    return "Express. Questions outside this depth stay on file as written assumptions, not dropped.";
+    return "Short interview. Skipped questions get a sensible default you can change later.";
   }
-  if (mode === "standard") return "Standard.";
-  return "Deep.";
+  if (mode === "standard") return "Standard interview";
+  return "Deep interview";
 }
 
 export function mastLine(phase: string, questionId: string | null): string {

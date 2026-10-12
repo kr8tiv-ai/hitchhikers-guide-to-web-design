@@ -1,0 +1,420 @@
+/**
+ * One picture of what this project has already decided.
+ * Built from files on disk. Guide calls receive it and may not invent files.
+ */
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import type { Question } from "../tree.ts";
+
+export const SESSION_TOPICS = [
+  "audience",
+  "prior-site",
+  "skill-level",
+  "logo",
+  "palette",
+  "fonts",
+  "photos",
+  "brand-assets",
+  "depth-time",
+  "input-method",
+  "blog",
+  "bookings",
+  "shop",
+  "portfolio",
+  "hosting",
+  "accessibility",
+] as const;
+
+export type SessionTopic = (typeof SESSION_TOPICS)[number] | string;
+
+export type UploadRole = "logo" | "brand-kit" | "palette" | "font" | "photo" | "mood" | "3d" | "other";
+
+export interface SessionUpload {
+  safeName: string;
+  originalName: string;
+  questionId: string;
+  role: UploadRole;
+}
+
+export interface SessionAnswer {
+  id: string;
+  text: string;
+  assumed: boolean;
+}
+
+export interface TopicDecision {
+  topic: string;
+  sourceId: string;
+  value: string;
+}
+
+export interface SessionState {
+  answers: SessionAnswer[];
+  uploads: SessionUpload[];
+  decided: TopicDecision[];
+}
+
+const ASSET_TOPICS = new Set(["logo", "palette", "fonts", "photos", "brand-assets", "mood", "3d"]);
+
+const WRITE_TOPIC: Record<string, string> = {
+  "PROJECT.md#audience": "audience",
+  "PROJECT.md#prior-sites": "prior-site",
+  "PROJECT.md#user-profile": "skill-level",
+  "PROJECT.md#interview-depth": "depth-time",
+  "PROJECT.md#input-mode": "input-method",
+  "BRAND.md#logo": "logo",
+  "ASSETS.md#logo": "logo",
+  "BRAND.md#color": "palette",
+  "BRAND.md#type": "fonts",
+  "ASSETS.md#brand-assets": "brand-assets",
+  "BRAND.md#imported": "brand-assets",
+  "SITE-BRIEF.md#blog-cms": "blog",
+  "SITE-BRIEF.md#keyword-posts": "blog",
+  "SITE-BRIEF.md#blog-cadence": "blog",
+  "SITE-BRIEF.md#accessibility": "accessibility",
+  "ASSETS.md#3d": "3d",
+};
+
+const FILE_EXT = /\b[\w.-]+\.(?:png|jpe?g|gif|webp|svg|pdf|docx?|zip|mp4|mov|glb|gltf)\b/gi;
+const JOB_WORD = /\b(?:quotes?|estimates?|invoices?)\b/i;
+
+export function topicFor(question: Question): string | undefined {
+  if (question.topic !== undefined && question.topic !== "") return question.topic;
+  for (const write of question.writes) {
+    const topic = WRITE_TOPIC[write];
+    if (topic !== undefined) return topic;
+  }
+  return undefined;
+}
+
+export function emptySession(): SessionState {
+  return { answers: [], uploads: [], decided: [] };
+}
+
+export function loadSessionState(projectDir: string, questions: readonly Question[] = []): SessionState {
+  const answers = readAnswers(projectDir);
+  const uploads = readUploads(projectDir);
+  return {
+    answers,
+    uploads,
+    decided: decideTopics(questions, answers, uploads),
+  };
+}
+
+export function sessionBlock(state: SessionState): string {
+  const lines = [
+    "Session state.",
+    "Only name files listed under uploads.",
+    "Never name, offer, or assume a file that is not listed.",
+    "If the topic is decided, do not ask it again.",
+  ];
+  if (state.answers.length === 0) lines.push("Answers: none.");
+  else {
+    lines.push("Answers:");
+    for (const answer of state.answers) {
+      const flag = answer.assumed ? " assumed" : "";
+      lines.push(`- ${answer.id}${flag}: ${answer.text}`);
+    }
+  }
+  if (state.uploads.length === 0) lines.push("Uploads: none.");
+  else {
+    lines.push("Uploads:");
+    for (const file of state.uploads) {
+      lines.push(`- ${file.safeName} (${file.originalName}) role ${file.role} from ${file.questionId}`);
+    }
+  }
+  if (state.decided.length === 0) lines.push("Decided topics: none.");
+  else {
+    lines.push("Decided topics:");
+    for (const item of state.decided) {
+      lines.push(`- ${item.topic} from ${item.sourceId}: ${item.value}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export interface GateResult {
+  action: "ask" | "confirm" | "skip";
+  ask: string;
+}
+
+export function gateQuestion(
+  question: Question,
+  state: SessionState,
+  all: readonly Question[] = [question],
+): GateResult {
+  if (question.surface === "default") return { action: "skip", ask: question.ask };
+  if (!conditionHolds(question, state, all)) return { action: "skip", ask: question.ask };
+  // The guided walk is the follow-up when no sites were named. It is not a second ask of the same topic.
+  if (question.id === "DP-5.2") return { action: "ask", ask: question.ask };
+  const topic = topicFor(question);
+  if (topic === undefined) return { action: "ask", ask: question.ask };
+  const decision = state.decided.find((item) => item.topic === topic);
+  if (decision === undefined) return { action: "ask", ask: question.ask };
+  // The question that recorded the decision stays in the list. The cursor skips a filled id.
+  if (decision.sourceId === question.id) return { action: "ask", ask: question.ask };
+  if (ASSET_TOPICS.has(topic)) {
+    return { action: "confirm", ask: confirmAsk(topic, decision.value) };
+  }
+  return { action: "skip", ask: question.ask };
+}
+
+export function confirmAsk(topic: string, value: string): string {
+  const name = path.basename(value.replace(/\\/g, "/"));
+  if (topic === "logo") return `Using the logo you gave earlier (${name}). Change?`;
+  if (topic === "analytics" || /plausible/i.test(value)) return "We'll count visitors privately. Change?";
+  return `Using ${name}. Change?`;
+}
+
+/** Questions still shown, with asset repeats rewritten as confirmations. */
+export function questionsToShow(questions: readonly Question[], state: SessionState): Question[] {
+  const shown: Question[] = [];
+  const askedTopics = new Set<string>();
+  for (const question of questions) {
+    const gate = gateQuestion(question, state, questions);
+    if (gate.action === "skip") continue;
+    const topic = topicFor(question);
+    if (topic !== undefined && gate.action === "ask" && askedTopics.has(topic)) continue;
+    if (topic !== undefined && gate.action === "ask") askedTopics.add(topic);
+    if (gate.action === "confirm") shown.push({ ...question, ask: gate.ask });
+    else shown.push(question);
+  }
+  return shown;
+}
+
+export function duplicateTopics(questions: readonly Question[], state: SessionState): string[] {
+  const seen = new Set<string>();
+  const dupes: string[] = [];
+  for (const question of questions) {
+    const gate = gateQuestion(question, state, questions);
+    if (gate.action !== "ask") continue;
+    const topic = topicFor(question);
+    if (topic === undefined) continue;
+    if (seen.has(topic)) dupes.push(topic);
+    seen.add(topic);
+  }
+  return dupes;
+}
+
+export function filterGuideText(
+  text: string,
+  state: SessionState,
+  aboutQuotes: boolean,
+): string | null {
+  if (!aboutQuotes && JOB_WORD.test(text)) return null;
+  const allowed = new Set<string>();
+  for (const file of state.uploads) {
+    allowed.add(path.basename(file.safeName).toLowerCase());
+    allowed.add(path.basename(file.originalName).toLowerCase());
+  }
+  const named = text.match(FILE_EXT) ?? [];
+  for (const raw of named) {
+    if (!allowed.has(path.basename(raw).toLowerCase())) return null;
+  }
+  return text;
+}
+
+export function projectMentionsQuotes(state: SessionState): boolean {
+  return state.answers.some((answer) => JOB_WORD.test(answer.text));
+}
+
+export function prefetchStillValid(built: SessionState, current: SessionState): boolean {
+  return JSON.stringify(signature(built)) === JSON.stringify(signature(current));
+}
+
+export function normalizeChoiceLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.?!,:;]+$/g, "");
+}
+
+function signature(state: SessionState): unknown {
+  return {
+    decided: state.decided.map((item) => [item.topic, item.sourceId, item.value]),
+    uploads: state.uploads.map((file) => [file.safeName, file.role, file.questionId]),
+  };
+}
+
+function conditionHolds(question: Question, state: SessionState, all: readonly Question[]): boolean {
+  const text = (id: string): string =>
+    state.answers.find((answer) => answer.id === id)?.text.toLowerCase() ?? "";
+  if (question.id === "DP-0.2a") {
+    const prior = text("DP-0.2");
+    if (prior.trim() === "" || /no prior site/.test(prior)) return false;
+  }
+  if (question.id === "DP-5.2" && all.some((item) => item.id === "DP-5.1")) {
+    const loved = text("DP-5.1").trim();
+    if (loved === "") return false;
+    if (!/^(none|no favorites?|no sites?)\b/.test(loved)) return false;
+  }
+  const appetite = appetiteOf(text("DP-6.2"));
+  if (question.id === "DP-6.3" && appetite !== null && appetite <= 4) return false;
+  if (question.id === "DP-6.6" && appetite !== null && appetite < 6) return false;
+  if (question.id === "DP-6.4") {
+    const imagery = text("DP-5.6");
+    const wants3d = /3d|three/.test(imagery);
+    if (appetite !== null && appetite < 8 && !wants3d) return false;
+  }
+  if (question.id === "DP-7.2") {
+    const source = text("DP-6.4");
+    if (!/tripo|meshy|generat/.test(source)) return false;
+  }
+  if (question.id === "DP-3.2" && /no selling|not selling|no products/.test(text("DP-2.3"))) return false;
+  if (question.id === "DP-3.3" && /booking/.test(text("DP-2.3"))) return false;
+  if (question.id === "DP-4.4" && /\blocal\b/.test(text("DP-2.3"))) return false;
+  return true;
+}
+
+function appetiteOf(value: string): number | null {
+  const match = /\b(\d{1,2})\b/.exec(value);
+  if (match === null) return null;
+  const number = Number(match[1]);
+  if (!Number.isInteger(number) || number < 1 || number > 10) return null;
+  return number;
+}
+
+function decideTopics(
+  questions: readonly Question[],
+  answers: readonly SessionAnswer[],
+  uploads: readonly SessionUpload[],
+): TopicDecision[] {
+  const decided: TopicDecision[] = [];
+  const seen = new Set<string>();
+  const add = (topic: string, sourceId: string, value: string): void => {
+    if (seen.has(topic) || value.trim() === "") return;
+    seen.add(topic);
+    decided.push({ topic, sourceId, value: value.trim() });
+  };
+  for (const question of questions) {
+    const topic = topicFor(question);
+    if (topic === undefined) continue;
+    const answer = answers.find((item) => item.id === question.id);
+    if (answer !== undefined) add(topic, question.id, answer.text);
+  }
+  const logo = uploads.find((file) => file.role === "logo");
+  if (logo !== undefined) add("logo", logo.questionId, path.basename(logo.safeName));
+  if (uploads.some((file) => file.questionId === "DP-0.4")) {
+    add("brand-assets", "DP-0.4", uploads.find((file) => file.questionId === "DP-0.4")?.originalName ?? "brand files");
+  }
+  return decided;
+}
+
+function readAnswers(projectDir: string): SessionAnswer[] {
+  const file = path.join(projectDir, ".hitchhiker", "interview.json");
+  if (!existsSync(file)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.answers)) return [];
+  const latest = new Map<string, SessionAnswer>();
+  for (const item of parsed.answers) {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.value !== "string") continue;
+    const text = item.value.trim();
+    if (text === "") continue;
+    const status = typeof item.status === "string" ? item.status : "";
+    latest.set(item.id, {
+      id: item.id,
+      text: text.replace(/^ASSUMED:\s*/i, ""),
+      assumed: status === "SKIPPED" || status === "SUGGESTED" || /^ASSUMED:/i.test(item.value),
+    });
+  }
+  return [...latest.values()];
+}
+
+function readUploads(projectDir: string): SessionUpload[] {
+  const root = path.join(projectDir, ".hitchhiker", "uploads");
+  const files: SessionUpload[] = [];
+  if (existsSync(root)) {
+    let folders: string[] = [];
+    try {
+      folders = readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+    } catch {
+      folders = [];
+    }
+    for (const folder of folders) {
+      const manifest = path.join(root, folder, "manifest.json");
+      if (!existsSync(manifest)) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(readFileSync(manifest, "utf8"));
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed)) continue;
+      for (const row of parsed) {
+        if (!isRecord(row) || typeof row.storedName !== "string") continue;
+        const original = typeof row.originalName === "string" ? row.originalName : row.storedName;
+        files.push({
+          safeName: `${folder}/${row.storedName}`,
+          originalName: original,
+          questionId: folder,
+          role: "other",
+        });
+      }
+    }
+  }
+  const intakePath = path.join(projectDir, ".hitchhiker", "brand", "logo-intake.json");
+  if (existsSync(intakePath)) {
+    try {
+      const intake: unknown = JSON.parse(readFileSync(intakePath, "utf8"));
+      if (isRecord(intake) && typeof intake.safeName === "string") {
+        const safe = intake.safeName.replace(/\\/g, "/");
+        const questionId = typeof intake.questionId === "string" ? intake.questionId : safe.split("/")[0] ?? "";
+        const known = files.find((file) => file.safeName === safe || file.safeName.endsWith(`/${path.basename(safe)}`));
+        if (known !== undefined) known.role = "logo";
+        else {
+          files.push({
+            safeName: safe,
+            originalName: path.basename(safe),
+            questionId,
+            role: "logo",
+          });
+        }
+      }
+    } catch {
+      // A broken intake file does not invent a logo.
+    }
+  }
+  for (const file of files) {
+    if (file.role === "logo") continue;
+    file.role = roleFromQuestion(file.questionId, file.originalName);
+  }
+  return files;
+}
+
+function roleFromQuestion(questionId: string, name: string): UploadRole {
+  if (questionId === "DP-1.1" || questionId === "DP-0.4") {
+    if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "brand-kit";
+  }
+  if (questionId === "DP-1.2") return "palette";
+  if (questionId === "DP-1.4") return "mood";
+  if (questionId === "DP-1.5") return "font";
+  if (questionId === "DP-7.3" || questionId === "DP-3.6") return "photo";
+  if (questionId === "DP-6.4") return "3d";
+  return "other";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const JARGON = [
+  { name: "ASSUMED", test: (text: string) => text.includes("ASSUMED") },
+  { name: "DP-", test: (text: string) => text.includes("DP-") },
+  { name: "id", test: (text: string) => /\bid\b/i.test(text) },
+  { name: "rung", test: (text: string) => /\brung\b/i.test(text) },
+  { name: "Express", test: (text: string) => /\bExpress\b/.test(text) },
+] as const;
+
+export function userFacingText(question: Question): string {
+  const parts = [question.ask, question.why, question.suggest ?? "", question.skipDefault, question.tip ?? ""];
+  for (const follow of question.followUps ?? []) parts.push(follow.ask);
+  return parts.join("\n");
+}
+
+export function jargonHits(text: string): string[] {
+  return JARGON.filter((item) => item.test(text)).map((item) => item.name);
+}

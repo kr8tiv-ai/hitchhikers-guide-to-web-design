@@ -268,7 +268,7 @@ test("express run skips an assumed id and asks the next one", async () => {
     });
     const session = sessionFor(projectDir, "express");
     const result = await runTurn(session, { kind: "answer", text: "The shop is mine." }, { think: model });
-    assert.equal(result.questionId, "DP-0.6");
+    assert.equal(result.questionId, "DP-0.7");
     assert.equal(result.calm, undefined);
     const saved = JSON.parse(readFileSync(path.join(projectDir, ".hitchhiker", "interview.json"), "utf8")) as {
       answers: Array<{ id: string; value: string }>;
@@ -586,13 +586,13 @@ const EXPRESS_TREE = `questions:
     skip_default: "No X connection."
     writes:
       - "VOICE.md#x"
-  - id: DP-0.6
+  - id: DP-0.7
     module: towel-check
     depth: [express, standard, deep]
-    ask: "Keyboard or mic?"
-    why: "Either way the reply is text."
+    ask: "Roughly how much time do you have today?"
+    why: "Time decides how far this visit goes."
     input: [text]
-    skip_default: "Keyboard."
+    skip_default: "A few hours."
     writes:
-      - "PROJECT.md#input-mode"
+      - "PROJECT.md#interview-depth"
 `;

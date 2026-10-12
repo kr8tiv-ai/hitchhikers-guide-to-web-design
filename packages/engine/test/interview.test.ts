@@ -136,19 +136,19 @@ test("open offers one question and does not write answers yet", async () => {
 test("resume continues at the third question", async () => {
   const dir = tempDir("hh-interview-resume-");
   const deep = questionsForDepth(loadTree(treeFile), "deep");
-  const third = deep[2];
-  assert.ok(third);
   try {
     const session = await openInterview(dir, "deep");
     assert.equal(session.next()?.id, deep[0]?.id);
     await session.command({ type: "answer", text: "For myself." });
     await session.command({ type: "answer", text: "No prior site." });
-    assert.equal(session.next()?.id, third.id);
-    assert.equal(loadState(dir)?.promptId, `interview:${third.id}`);
+    const landed = session.next();
+    assert.ok(landed);
+    assert.equal(landed.id, "DP-0.3");
+    assert.equal(loadState(dir)?.promptId, `interview:${landed.id}`);
     assert.equal(session.coverage().answered, 2);
 
     const resumed = await openInterview(dir, "deep");
-    assert.equal(resumed.next()?.id, third.id);
+    assert.equal(resumed.next()?.id, "DP-0.3");
     assert.equal(resumed.coverage().answered, 2);
     const saved = readAnswers(dir);
     assert.equal(saved.length, 2);
@@ -157,7 +157,7 @@ test("resume continues at the third question", async () => {
     assert.equal(file.version, 1);
     assert.equal(file.cursor, 2);
     assert.deepEqual(file.pushedIds, []);
-    assert.equal(loadStateFromIndex(dir)?.promptId, `interview:${third.id}`);
+    assert.equal(loadStateFromIndex(dir)?.promptId, "interview:DP-0.3");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -226,17 +226,22 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
   const depthOffer = express.find((question) => question.id === "DP-0.7");
   assert.ok(motion);
   assert.ok(depthOffer?.suggest);
-  assert.match(depthOffer.suggest, /Standard/);
+  assert.match(depthOffer.suggest, /About an hour/);
   const answerThese = new Set<string>(REQUIRED_BESIDES_MOTION);
   try {
     const session = await openInterview(dir, "express");
     let skippedMotion: AnswerRecord | null = null;
     let suggestedDepth: AnswerRecord | null = null;
+    let walked = 0;
     for (;;) {
       const question = session.next();
       if (question === null) break;
+      walked += 1;
       assert.notEqual(question.id, "DP-0.5");
+      assert.notEqual(question.id, "DP-0.6");
+      assert.notEqual(question.id, "DP-6.5");
       assert.notEqual(question.id, "DP-7.2");
+      assert.notEqual(question.id, "DP-9.4");
       if (question.id === "DP-6.2") {
         skippedMotion = await session.command({ type: "skip" });
         continue;
@@ -255,10 +260,10 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
     assert.equal(skippedMotion.status, "SKIPPED");
     assert.equal(skippedMotion.value, motion.skipDefault);
     assert.equal(suggestedDepth?.status, "SUGGESTED");
-    assert.match(suggestedDepth?.value ?? "", /Standard/);
+    assert.match(suggestedDepth?.value ?? "", /About an hour/);
     const saved = readAnswers(dir);
     assert.deepEqual(missingRequired(saved), []);
-    assert.equal(saved.length, express.length);
+    assert.equal(saved.length, walked);
     assert.equal(session.next(), null);
     assert.equal(loadState(dir)?.promptId, "interview:done");
     const before = readFileSync(answersPath(dir), "utf8");
@@ -271,7 +276,7 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
     assert.equal(session.coverage().suggested, 1);
     assert.equal(
       session.coverage().skipped,
-      express.length - REQUIRED_BESIDES_MOTION.length - 1,
+      walked - REQUIRED_BESIDES_MOTION.length - 1,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

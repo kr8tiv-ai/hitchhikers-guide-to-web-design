@@ -154,7 +154,7 @@ test("an empty card renders one button to the first question", () => {
       id: "DP-0.1",
       module: "ford",
       depth: ["deep"],
-      ask: "Is this site for you, or for a client?",
+      ask: "Is this website for your own business, or for a client?",
       why: "The answer picks the brief.",
       input: ["text"],
       skipDefault: "For myself.",

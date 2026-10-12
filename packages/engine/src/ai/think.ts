@@ -3,6 +3,8 @@ import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Effort, GuideConfig } from "../config.ts";
 import { loadConfig } from "../config.ts";
+import { callCwd, isInterviewTask, planInterview } from "../guide/interview-call.ts";
+import { GUIDE_INTERVIEW_TIMEOUT_MS } from "../guide/guide-progress.ts";
 import {
   CassetteError,
   CassetteMissError,
@@ -98,6 +100,7 @@ export class ThinkRunError extends Error {
 }
 
 interface LogLine {
+  at: string;
   task: string;
   model: string;
   effort: string;
@@ -107,6 +110,7 @@ interface LogLine {
   inputTokens?: number;
   outputTokens?: number;
   policyFlags: string[];
+  error?: string;
 }
 
 function asValue<T>(value: unknown): T {
@@ -200,6 +204,7 @@ async function appendLog(projectDir: string, line: LogLine): Promise<void> {
   const dir = path.join(projectDir, ".hitchhiker", "logs");
   await mkdir(dir, { recursive: true });
   const payload: LogLine = {
+    at: line.at,
     task: line.task,
     model: line.model,
     effort: line.effort,
@@ -208,6 +213,7 @@ async function appendLog(projectDir: string, line: LogLine): Promise<void> {
     outcome: line.outcome,
     policyFlags: line.policyFlags,
   };
+  if (line.error !== undefined && line.error !== "") payload.error = line.error;
   if (line.inputTokens !== undefined) payload.inputTokens = line.inputTokens;
   if (line.outputTokens !== undefined) payload.outputTokens = line.outputTokens;
   await appendFile(path.join(dir, "ai.ndjson"), `${redact(JSON.stringify(payload))}\n`, "utf8");
@@ -225,8 +231,9 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
   const cfg = deps.config ?? loadConfig(projectDir);
   const now = deps.now ?? Date.now;
   const started = now();
-  const model = req.model ?? cfg.ai.model;
-  const effort = resolveEffort(req, cfg);
+  const planned = planInterview(req, cfg);
+  const model = planned.interview ? planned.model : (req.model ?? cfg.ai.model);
+  const effort = planned.interview ? planned.effort : resolveEffort(req, cfg);
   const cassetteDir = deps.cassetteDir ?? packageCassetteDir();
   const plain: ThinkRequest<unknown> = callRequest(req, req.input);
 
@@ -235,10 +242,12 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   let policyFlags: string[] = [];
+  let errorText: string | undefined;
 
   const finishLog = async (): Promise<void> => {
     const durationMs = Math.max(0, now() - started);
     const line: LogLine = {
+      at: new Date(started).toISOString(),
       task: req.task,
       model,
       effort,
@@ -247,6 +256,7 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
       outcome,
       policyFlags,
     };
+    if (errorText !== undefined) line.error = redact(errorText).slice(0, 500);
     if (inputTokens !== undefined) line.inputTokens = inputTokens;
     if (outputTokens !== undefined) line.outputTokens = outputTokens;
     await appendLog(projectDir, line);
@@ -299,6 +309,10 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
     const flags = deps.flags ?? (await probeFlags(spawnImpl, command, env, projectDir, cfg.ai.timeoutMs));
     const scratch = path.join(projectDir, ".hitchhiker", "tmp", `think-${randomUUID()}`);
     await mkdir(scratch, { recursive: true });
+    const cwd = callCwd(req.task, projectDir, scratch);
+    const timeoutMs = isInterviewTask(req.task)
+      ? Math.min(cfg.ai.timeoutMs, GUIDE_INTERVIEW_TIMEOUT_MS)
+      : cfg.ai.timeoutMs;
     try {
       let firstRaw = "";
       let firstErrors: string[] = [];
@@ -321,12 +335,12 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
         const output = await spawnImpl({
           command,
           args: plan.argv,
-          cwd: scratch,
+          cwd,
           env,
-          timeoutMs: cfg.ai.timeoutMs,
+          timeoutMs,
         });
         const parsed = parseGrokStdout(output.stdout);
-        const failure = runFailure(output, parsed, cfg.ai.timeoutMs);
+        const failure = runFailure(output, parsed, timeoutMs);
         if (failure !== undefined) {
           if (failure instanceof ThinkTimeoutError) outcome = "timeout";
           else if (failure instanceof GrokUnavailableError) outcome = "unavailable";
@@ -378,6 +392,7 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
       await rm(scratch, { recursive: true, force: true });
     }
   } catch (error) {
+    errorText = error instanceof Error ? error.message : "error";
     if (error instanceof ThinkInputError) outcome = "input";
     else if (error instanceof GrokMissingError) outcome = "missing";
     else if (error instanceof GrokUnavailableError) outcome = "unavailable";

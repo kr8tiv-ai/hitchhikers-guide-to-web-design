@@ -102,7 +102,8 @@ test("the panel names the prompt, the rule, and Pause the drive", () => {
   assert.match(html, /<p>Three strikes is the cap\.<\/p>/);
   assert.match(html, /Rule 1/);
   assert.match(html, /datetime="2026-10-07T18:04:05.000Z"/);
-  assert.match(html, />2026-10-07 18:04 UTC</);
+  assert.match(html, /data-local-time>2026-10-07</);
+  assert.equal(html.includes("UTC"), false);
   assert.match(html, /Next action: Pause the drive\./);
   assert.match(html, /The drive does not continue from here\./);
   const found = buttons(html);

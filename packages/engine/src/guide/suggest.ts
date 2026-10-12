@@ -20,6 +20,7 @@ import {
   selectReferenceCards,
   styleWorldForFamily,
 } from "./gallery-model.ts";
+import { loadSessionState, sessionBlock } from "./session-state.ts";
 import { guideTextIssues } from "./validators.ts";
 
 /**
@@ -77,14 +78,15 @@ export async function suggestOffer(
       {
         task: SUGGEST_TASK,
         schema: SUGGEST_SCHEMA,
-        effort: "medium",
         input: [
           `Question id: ${questionId}`,
           "Return 2 to 4 choices with ids A, B, C, D in that order.",
           "Each choice has id, label, why, and source.",
           "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts below.",
           "Do not cite a file, answer, note, or industry that is not listed.",
+          "Only name files listed under uploads. Never name a file that is not listed.",
           renderFacts(facts),
+          deps.projectDir === undefined ? "" : sessionBlock(loadSessionState(deps.projectDir)),
         ].join("\n"),
       },
       deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },

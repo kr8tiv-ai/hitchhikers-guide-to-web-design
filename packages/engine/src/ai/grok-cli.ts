@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { GuideConfig } from "../config.ts";
+import { planInterview } from "../guide/interview-call.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import type { ThinkRequest } from "./think.ts";
 
@@ -219,8 +220,9 @@ export function planGrokCall(
   flags: ReadonlySet<string>,
   dir: string,
 ): GrokPlan {
-  const model = req.model ?? cfg.ai.model;
-  const effort = resolveEffort(req, cfg);
+  const planned = planInterview(req, cfg);
+  const model = planned.interview ? planned.model : (req.model ?? cfg.ai.model);
+  const effort = planned.interview ? planned.effort : resolveEffort(req, cfg);
   const turns = resolveTurns(req);
   const prompt = req.input;
   if (prompt.trim().length === 0) throw new ThinkInputError("prompt is empty.");
@@ -234,7 +236,7 @@ export function planGrokCall(
   push(argv, flags, "--no-auto-update");
   push(argv, flags, "--no-alt-screen");
   push(argv, flags, "--permission-mode", "plan");
-  push(argv, flags, "--tools", READ_ONLY_TOOLS);
+  if (!planned.interview) push(argv, flags, "--tools", READ_ONLY_TOOLS);
   push(argv, flags, "--max-turns", String(turns));
   push(argv, flags, "--output-format", "json");
   if (req.schema !== undefined) {
@@ -254,12 +256,14 @@ export function planGrokCall(
     } else if (flags.has("--prompt-json")) {
       argv.push("--prompt-json", json);
     }
-  } else if (Buffer.byteLength(prompt, "utf8") > PROMPT_FILE_BYTES && flags.has("--prompt-file")) {
+  } else if (flags.has("--prompt-file")) {
+    // One file, including a prompt that starts with "---". A split -p flag
+    // would let the CLI read that dash as another option.
     const file = path.join(dir, "prompt.txt");
     files.push({ path: file, body: prompt });
     argv.push("--prompt-file", file);
   } else if (flags.has("-p")) {
-    argv.push("-p", prompt);
+    argv.push(`-p=${prompt}`);
   } else if (flags.has("--single")) {
     argv.push("--single", prompt);
   } else if (flags.has("--prompt-file")) {
@@ -294,11 +298,19 @@ export function promptOffCmdLine(
   ];
   for (const item of inline) {
     const index = argv.indexOf(item.flag);
-    if (index < 0 || index + 1 >= argv.length) continue;
-    const body = argv[index + 1] ?? "";
+    if (index >= 0 && index + 1 < argv.length) {
+      const body = argv[index + 1] ?? "";
+      const file = path.join(dir, item.name);
+      files.push({ path: file, body });
+      argv.splice(index, 2, "--prompt-file", file);
+      continue;
+    }
+    const joined = argv.findIndex((arg) => arg.startsWith(`${item.flag}=`));
+    if (joined < 0) continue;
+    const body = argv[joined]?.slice(item.flag.length + 1) ?? "";
     const file = path.join(dir, item.name);
     files.push({ path: file, body });
-    argv.splice(index, 2, "--prompt-file", file);
+    argv.splice(joined, 1, "--prompt-file", file);
   }
   return { argv, files };
 }
@@ -327,7 +339,13 @@ function resolveTurns(req: ThinkRequest<unknown>): number {
 }
 
 export function hasPromptFlag(argv: readonly string[]): boolean {
-  return argv.includes("-p") || argv.includes("--single") || argv.includes("--prompt-file") || argv.includes("--prompt-json");
+  return (
+    argv.includes("-p") ||
+    argv.some((arg) => arg.startsWith("-p=")) ||
+    argv.includes("--single") ||
+    argv.includes("--prompt-file") ||
+    argv.includes("--prompt-json")
+  );
 }
 
 function finiteNumber(value: unknown): number | undefined {

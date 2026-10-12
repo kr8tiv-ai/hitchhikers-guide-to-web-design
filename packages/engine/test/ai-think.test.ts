@@ -224,8 +224,14 @@ test("a bad answer then a good answer is one repair and two calls", async () => 
   const dir = tempDir();
   const prompts: string[] = [];
   const spawnImpl: SpawnLike = async (request) => {
-    const promptIndex = request.args.indexOf("-p");
-    prompts.push(request.args[promptIndex + 1] ?? "");
+    const fileIndex = request.args.indexOf("--prompt-file");
+    const promptFile = fileIndex >= 0 ? request.args[fileIndex + 1] : undefined;
+    if (promptFile !== undefined) {
+      prompts.push(readFileSync(promptFile, "utf8"));
+    } else {
+      const inline = request.args.find((arg) => arg.startsWith("-p="));
+      prompts.push(inline !== undefined ? inline.slice(3) : "");
+    }
     const text = prompts.length === 1 ? '{"ok":"no"}' : '{"ok":true}';
     return {
       status: 0,

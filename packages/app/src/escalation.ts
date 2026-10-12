@@ -76,14 +76,13 @@ function assertPublishable(value: string): void {
   }
 }
 
-/** Show a Zulu timestamp as a clock time. Anything else stays verbatim. */
+/**
+ * Server fallback is the calendar day only. The browser fills the local clock
+ * from the datetime attribute. The word UTC is never shown.
+ */
 function visibleAt(at: string): string {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}):\d{2}(?:\.\d+)?Z$/.exec(at);
-  if (match === null) return at;
-  const day = match[1];
-  const clock = match[2];
-  if (day === undefined || clock === undefined) return at;
-  return `${day} ${clock} UTC`;
+  const match = /^(\d{4}-\d{2}-\d{2})T/.exec(at);
+  return match?.[1] ?? at;
 }
 
 function titleId(promptId: string, rule: 1 | 2 | 3 | 4): string {
@@ -104,7 +103,7 @@ export function renderEscalation(record: EscalationRecord): string {
   <p class="hh-kicker">Marvin</p>
   <h2 class="hh-error__title hh-qcard__title" id="${id}">Prompt ${escapeHtml(clean.promptId)}</h2>
   <p class="hh-kicker">Rule ${clean.rule}</p>
-  <p class="hh-dek"><time datetime="${escapeHtml(clean.at)}">${escapeHtml(visibleAt(clean.at))}</time></p>
+  <p class="hh-dek"><time datetime="${escapeHtml(clean.at)}" data-local-time>${escapeHtml(visibleAt(clean.at))}</time></p>
   <p>${escapeHtml(clean.reason)}</p>${stack}
   <p class="hh-error__next">${NEXT_ACTION}</p>
   <p>${STOPPED}</p>
