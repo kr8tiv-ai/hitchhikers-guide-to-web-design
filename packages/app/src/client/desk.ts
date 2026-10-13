@@ -589,6 +589,8 @@ interface DeskDocument {
   body?: DeskParent;
   /** Present on a browser document. Harnesses omit it. */
   defaultView?: DeskWindow | null;
+  /** Present on a browser document. Harnesses omit it. */
+  activeElement?: DeskElement | null;
   visibilityState?: string;
 }
 
@@ -2770,7 +2772,9 @@ export function mountDesk(env: DeskEnv): () => void {
       stopAnswerProgress();
       paint();
       if (advance) {
-        if (focusChoices) focusChoiceGroup();
+        // A fill may already be in the box the stream painted. Leave that focus.
+        if (draftFocused()) focusField();
+        else if (focusChoices) focusChoiceGroup();
         else focusNewQuestion();
       }
     }
@@ -2950,7 +2954,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function focusField(): void {
     const field = region()?.querySelector("#hh-card-draft");
-    if (field !== null && field !== undefined && typeof field.focus === "function") field.focus();
+    if (field !== null && field !== undefined && typeof field.focus === "function") field.focus({ preventScroll: true });
   }
 
   function announceChoices(text: string): void {
@@ -3953,6 +3957,8 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function paint(): void {
+    // A fill focuses the box, then inserts the words. Keep that focus across this paint.
+    const returnToDraft = draftFocused();
     if (dropLiveDraft) {
       dropLiveDraft = false;
       // Only the card still on screen. A new question renders its own empty box.
@@ -4038,6 +4044,7 @@ export function mountDesk(env: DeskEnv): () => void {
     ensureMotion(env.document, view?.question?.id);
     syncGuideLive();
     alignDraftField();
+    if (returnToDraft) focusField();
     ensureWriter();
     maybeDraftBrief();
   }
@@ -4133,10 +4140,18 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function focusNewQuestion(): void {
+    // The next card can already be on screen. Do not take the box a fill is using.
+    if (draftFocused()) return;
     const heading = region()?.querySelector("#hh-card-ask");
     if (heading === null || heading === undefined) return;
     if (heading.getAttribute("tabindex") !== "-1") heading.setAttribute("tabindex", "-1");
     if (typeof heading.focus === "function") heading.focus({ preventScroll: true });
+  }
+
+  function draftFocused(): boolean {
+    const active = env.document.activeElement;
+    if (active === null || active === undefined || typeof active.getAttribute !== "function") return false;
+    return active.getAttribute("id") === "hh-card-draft";
   }
 
   /**
