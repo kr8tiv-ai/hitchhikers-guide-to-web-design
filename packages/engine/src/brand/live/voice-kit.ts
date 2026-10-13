@@ -6,6 +6,7 @@
  */
 
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { positioningLine } from "../story.ts";
 import { evidenceFromAnswers } from "../truth.ts";
@@ -43,9 +44,10 @@ interface VoiceModel {
 }
 
 export async function draftVoiceKit(brand: BrandFacts, deps: { think: typeof think }): Promise<VoiceKit> {
+  const bound = { think: bindPacket(deps.think, brand.projectDir ?? "", "brand") };
   assertBrandContrast(brand);
-  const first = parseVoice((await deps.think(request(brand))).value);
-  const model = first !== null && voiceOk(first) ? first : await repair(brand, deps);
+  const first = parseVoice((await bound.think(request(brand))).value);
+  const model = first !== null && voiceOk(first) ? first : await repair(brand, bound);
   const kit = shape(brand, model);
   if (brand.projectDir !== undefined && brand.projectDir.trim() !== "") {
     await recordDraftItems(brand.projectDir, itemsFrom(kit));

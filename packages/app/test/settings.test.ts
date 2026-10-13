@@ -10,8 +10,8 @@ import { startServer, type ServerHandle } from "../src/server/server.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const voiceUrl = new URL("../../voice/src/xai-stt.ts", import.meta.url);
-const ROUTES = ["/", "/brand", "/approve", "/hh-dashboard", "/settings", "/tools", "/gallery", "/motion"] as const;
-const ROUTE_LABELS = ["Desk", "Brand", "Approvals", "Drive", "Settings", "Install tools", "Gallery", "Motion"] as const;
+const ROUTES = ["/", "/context", "/brand", "/approve", "/hh-dashboard", "/settings", "/tools", "/gallery", "/motion"] as const;
+const ROUTE_LABELS = ["Desk", "Context", "Brand", "Approvals", "Drive", "Settings", "Install tools", "Gallery", "Motion"] as const;
 
 interface RateCard {
   rest: { ratePerHour: number; priceText: string };
@@ -172,6 +172,7 @@ test("the desk menu holds Replay tour and the route nav lists every desk page", 
   await withDesk(async (handle) => {
     const pages: ReadonlyArray<readonly [string, string]> = [
       ["/", "/"],
+      ["/context", "/context"],
       ["/brand", "/brand"],
       ["/approve", "/approve"],
       ["/gallery", "/gallery"],

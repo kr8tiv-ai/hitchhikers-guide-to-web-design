@@ -77,6 +77,51 @@ export {
 export type { LockInfo } from "./lock.ts";
 export { loadState, saveState } from "./state.ts";
 export type { GuideState } from "./state.ts";
+export {
+  assertCanAdvance,
+  auditContext,
+  bindPacket,
+  buildContextPacket,
+  emptyContextPacket,
+  factsFromPacket,
+  formatStatusLine,
+  gateForSha,
+  inferAssetRole,
+  loadAssets,
+  loadDecisions,
+  loadNotes,
+  loadSummary,
+  promoteDiscuss,
+  promoteLookahead,
+  readAudit,
+  readLedger,
+  readPhaseStats,
+  readStatus,
+  recordAsset,
+  recordDiscussNote,
+  recordLookahead,
+  recordVerification,
+  refreshSummary,
+  renderContextText,
+  repairAssets,
+  repairCursor,
+  repairDecisions,
+  runGate,
+  summaryAccepts,
+  syncAnswer,
+  syncInterviewFacts,
+  undoLast,
+  withContextPacket,
+  writePhaseAdvisories,
+} from "./context/index.ts";
+export type {
+  AssetRecord,
+  ContextAudit,
+  ContextPacket,
+  DecisionRecord,
+  DoctorFinding,
+  RouterStatus,
+} from "./context/index.ts";
 export { homeIndexPath, upsertHomeProject } from "./home-index.ts";
 export type { HomeProject } from "./home-index.ts";
 export { TreeError, loadTree, questionsForDepth, questionsToAsk } from "./tree.ts";

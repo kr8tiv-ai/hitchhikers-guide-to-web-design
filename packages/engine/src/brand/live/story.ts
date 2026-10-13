@@ -7,6 +7,7 @@
  */
 
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { questionCount } from "../../guide/validators.ts";
 import { countWords, expandOnly } from "../story.ts";
@@ -61,11 +62,12 @@ export async function draftStory(
   brand: BrandFacts,
   deps: { think: typeof think; ask?: (q: string) => Promise<string> },
 ): Promise<StoryDraft> {
+  const bound = { ...deps, think: bindPacket(deps.think, brand.projectDir ?? "", "brand") };
   assertBrandContrast(brand);
-  const origin = await originNotes(brand, deps);
-  const first = parseStory((await deps.think(storyRequest(brand, origin))).value);
+  const origin = await originNotes(brand, bound);
+  const first = parseStory((await bound.think(storyRequest(brand, origin))).value);
   const problem = first === null ? "The JSON did not match the schema." : lengthProblem(first);
-  const draft = problem === null ? first : await repairStory(brand, deps, origin, problem);
+  const draft = problem === null ? first : await repairStory(brand, bound, origin, problem);
   if (draft === null) throw new LiveShapeError("Story did not match the schema.");
   const fitted = fit(draft);
   assertStory(fitted, brand);

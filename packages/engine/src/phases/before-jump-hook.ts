@@ -16,6 +16,8 @@ import path from "node:path";
 import { think, type JsonSchema, type ThinkRequest } from "../ai/index.ts";
 import { BRAND_SECTIONS } from "../brand/approve.ts";
 import type { AnswerRecord } from "../required.ts";
+import { bindPacket } from "../context/index.ts";
+import { isLive, loadDecisions } from "../context/disk.ts";
 import { beforeWeJump } from "../spec/before-jump.ts";
 import { loadTree, type Question } from "../tree.ts";
 import {
@@ -101,11 +103,16 @@ export async function onPhaseStart(
     throw new BeforeJumpError(`Project directory does not exist: ${root}`);
   }
 
-  const drained = await drainPartial(root, deps.think);
+  const boundThink = bindPacket(deps.think, root, "before-jump");
+  const drained = await drainPartial(root, boundThink);
   const answered = readAnsweredIds(root);
-  const generated = beforeWeJump(
-    generatorInput(loadAnswers(root), brandApprovals(root), await hasLegalPage(root), answered),
-  );
+  const openDecisions = loadDecisions(root)
+    .filter((record) => isLive(record) && record.open)
+    .map((record) => ({ id: record.id, text: record.text }));
+  const generated = beforeWeJump({
+    ...generatorInput(loadAnswers(root), brandApprovals(root), await hasLegalPage(root), answered),
+    openDecisions,
+  });
   const tree = loadTree(resolveTree(root));
   const cards: BeforeJumpCard[] = [];
   let overflow: string | null = null;
@@ -141,7 +148,7 @@ export async function onPhaseStart(
   const pending: { answer: BeforeJumpAnswer; section: string }[] = [];
   for (const reply of takeUntilJump(replies)) {
     if (reply.action !== "answer") continue;
-    const section = await findContradiction(root, reply, deps.think);
+    const section = await findContradiction(root, reply, boundThink);
     if (section !== null) {
       pending.push({ answer: reply, section });
       continue;
@@ -306,6 +313,10 @@ function cardFor(question: string, tree: readonly Question[]): BeforeJumpCard | 
   }
   if (question.startsWith("Motion level is still ")) {
     return draft("DP-6.2", question, "This lands on the motion row.", "motion", "appetite", "DP-6.2");
+  }
+  const decision = /^Decision (D-\d+) is still open\./.exec(question);
+  if (decision?.[1] !== undefined) {
+    return draft(decision[1], question, "This is an open decision.", "brief", "decision", null);
   }
   const open = /^The answer ([A-Za-z0-9.-]+) is still /.exec(question);
   const id = open?.[1];

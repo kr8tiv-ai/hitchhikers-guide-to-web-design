@@ -25,6 +25,8 @@ export const COMMANDS: readonly HhCommand[] = [
   { name: "save", skillDir: "hh-save", cli: ["save"], sideEffect: false },
   { name: "doctor", skillDir: "hh-doctor", cli: ["doctor"], sideEffect: false },
   { name: "improve", skillDir: "", cli: ["improve"], sideEffect: false },
+  { name: "context", skillDir: "hh-context", cli: ["context"], sideEffect: false },
+  { name: "next", skillDir: "hh-next", cli: ["next"], sideEffect: false },
 ];
 
 /** Slash-command skills from v2 section 18, in that order. */
@@ -52,6 +54,8 @@ export const SKILL_NAMES: readonly string[] = [
   "hh-doctor",
   "hh-dashboard",
   "hh-help",
+  "hh-context",
+  "hh-next",
 ];
 
 /** The model must not invoke these. The user types the slash command. */

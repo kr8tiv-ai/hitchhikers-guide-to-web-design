@@ -21,6 +21,8 @@ export const IMPLEMENTED_COMMANDS = [
   "save",
   "doctor",
   "improve",
+  "context",
+  "next",
 ] as const;
 
 export type ImplementedCommand = (typeof IMPLEMENTED_COMMANDS)[number];

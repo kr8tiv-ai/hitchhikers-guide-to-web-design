@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { think } from "../ai/think.ts";
+import { bindPacket, syncAnswer, writePhaseAdvisories } from "../context/index.ts";
 import {
   BRIEF_DRAFT_SCHEMA,
   BRIEF_DRAFT_TASK,
@@ -66,16 +67,26 @@ export async function* briefLoop(
   deps: { think: typeof think },
 ): AsyncGenerator<{ draft: SiteBrief; approved: boolean }> {
   const facts = loadFacts(s.projectDir);
-  let draft = await draftOrFallback(s, facts, deps);
+  const bound = { think: bindPacket(deps.think, s.projectDir, "brief") };
+  let draft = await draftOrFallback(s, facts, bound);
   let note: unknown = yield { draft, approved: false };
   while (!isApproval(typeof note === "string" ? note : "")) {
     const correction = typeof note === "string" ? note : "";
-    draft = await reviseOrFallback(s, facts, draft, correction, deps);
+    draft = await reviseOrFallback(s, facts, draft, correction, bound);
     note = yield { draft, approved: false };
   }
   await writeSiteBrief(s.projectDir, draft);
   const { recordApprovalYes } = await import("../project-file/yes.ts");
   await recordApprovalYes(s.projectDir, "brief-yes.json");
+  await syncAnswer(s.projectDir, {
+    questionId: "brief",
+    text: "Brief approved.",
+    source: "approval",
+    moveCursor: false,
+    summarize: true,
+    think: deps.think,
+  });
+  await writePhaseAdvisories(s.projectDir);
   yield { draft, approved: true };
 }
 

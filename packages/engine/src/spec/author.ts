@@ -15,6 +15,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { think } from "../ai/think.ts";
+import { bindPacket } from "../context/index.ts";
 import { estimateTokens } from "./context-doc.ts";
 import {
   AUTHOR_BODY_SCHEMA,
@@ -192,7 +193,7 @@ export async function authorPackage(
   ctx: AuthorContext,
   deps: { think: typeof think },
 ): Promise<AuthorResult> {
-  return runPackage(skeleton, ctx, deps, 0);
+  return runPackage(skeleton, ctx, { think: bindPacket(deps.think, ctx.projectDir, "site-prompt") }, 0);
 }
 
 async function runPackage(

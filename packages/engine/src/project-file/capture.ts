@@ -29,6 +29,10 @@ import { allowSettings, scrubText } from "./scrub.ts";
 
 const SNAPSHOTS = [
   "STATE.md",
+  "PROJECT.md",
+  "DECISIONS.md",
+  "ASSETS.md",
+  "CONTEXT-SUMMARY.md",
   "interview.json",
   "SITE-BRIEF.md",
   "BRAND.md",

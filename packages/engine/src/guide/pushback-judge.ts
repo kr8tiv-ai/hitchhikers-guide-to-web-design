@@ -1,6 +1,7 @@
 import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
 import type { think } from "../ai/think.ts";
+import { buildContextPacket, factsFromPacket, withContextPacket, type ContextPacket } from "../context/index.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
 import {
   choiceAllowed,
@@ -51,6 +52,7 @@ export async function judgePushback(
     projectDir?: string;
     language?: string;
     facts?: Facts;
+    packet?: ContextPacket;
     session?: SessionState;
     /** Tree questions, so a choice cannot re-ask a decided topic. */
     questions?: readonly Question[];
@@ -63,7 +65,10 @@ export async function judgePushback(
   const floor = pushbackFor(question, text) !== null;
   const prior = pushes < 0 ? 0 : pushes;
   const language = deps.language ?? "en";
-  const facts = deps.facts ?? { answers: [], uploads: [], crawlNotes: [] };
+  const packet =
+    deps.packet ?? (deps.projectDir !== undefined && deps.projectDir.trim() !== "" ? buildContextPacket(deps.projectDir, "judge") : undefined);
+  if (packet === undefined) throw new Error("A context packet is required.");
+  const facts = deps.facts ?? factsFromPacket(packet);
   let modelVague = false;
   let quote = "";
   let sharper = "";
@@ -71,7 +76,9 @@ export async function judgePushback(
   let failed: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const result = await deps.think(
+      const request = await withContextPacket(
+        deps.projectDir ?? "",
+        "judge",
         {
           task: PUSHBACK_TASK,
           schema: PUSHBACK_SCHEMA,
@@ -87,8 +94,9 @@ export async function judgePushback(
             deps.session === undefined ? "" : sessionBlock(deps.session),
           ].join("\n"),
         },
-        deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
+        packet,
       );
+      const result = await deps.think(request, deps.projectDir === undefined ? {} : { projectDir: deps.projectDir });
       failed = null;
       raw = result.value;
       const value = asVerdict(result.value);
@@ -235,9 +243,9 @@ function sharperLine(
   question: Question,
   text: string,
   language: string,
-  facts: Facts | undefined,
+  facts: Facts,
 ): string {
-  const ctx = { language, facts: facts ?? { answers: [], uploads: [], crawlNotes: [] } };
+  const ctx = { language, facts };
   if (sharper.trim() !== "" && validateGuideMessage(sharper, ctx).length === 0) return sharper;
   const floorLine = pushbackFor(question, text);
   if (floorLine !== null && (language === "en" || validateGuideMessage(floorLine, ctx).length === 0)) {

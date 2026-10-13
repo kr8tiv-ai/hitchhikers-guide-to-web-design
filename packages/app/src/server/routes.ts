@@ -49,6 +49,14 @@ import {
   seedExpressAssumptions,
   think,
   writeReferences,
+  formatStatusLine,
+  inferAssetRole,
+  loadDecisions,
+  promoteDiscuss,
+  recordAsset,
+  recordDiscussNote,
+  syncAnswer,
+  undoLast,
   type AnswerRecord,
   type GalleryEntry,
   type GuideSession,
@@ -71,7 +79,8 @@ import {
 } from "../card.ts";
 import { attachQuestionId, formatBytes } from "../client/attach.ts";
 import { splitQuestionText } from "../question-parts.ts";
-import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
+import { CONTEXT_LABEL, guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
+import { contextAssetFile, renderContextMain } from "./context-desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
   compactMapLabel,
@@ -268,6 +277,7 @@ const SAFE = {
 
 type RouteName =
   | "/"
+  | "/context"
   | "/brand"
   | "/approve"
   | "/hh-dashboard"
@@ -789,6 +799,10 @@ async function handlePost(
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
     return;
   }
+  if (pathname === "/context") {
+    await handleContextPost(req, res, token, projectDir, enqueue, notice);
+    return;
+  }
   if (pathname === "/api/tour") {
     await handleTourPost(req, res, token, projectDir, enqueue);
     return;
@@ -1216,14 +1230,16 @@ async function handleAttach(
     return;
   }
   for (const file of saved.files) {
-    if (!file.ok || !plateExtension(file.storedName)) continue;
+    if (!file.ok) continue;
     const relative = `${questionId}/${file.storedName}`;
-    if (!isLogoAssetName(relative)) continue;
-    try {
-      await rememberLogo(projectDir, relative, questionId, file.originalName, file.size, true);
-    } catch {
-      // The file is already in the question folder. The plate can catch up later.
+    if (plateExtension(file.storedName) && isLogoAssetName(relative)) {
+      try {
+        await rememberLogo(projectDir, relative, questionId, file.originalName, file.size, true);
+      } catch {
+        // The file is already in the question folder. The plate can catch up later.
+      }
     }
+    await recordUploadAsset(projectDir, relative, file.originalName, questionId);
   }
   sendJson(req, res, 200, { ok: true, files: saved.files });
 }
@@ -1252,17 +1268,13 @@ async function handleUpload(
   }
   await storeUpload(projectDir, decision.safeName, part.data);
   const originalName = originalLeaf(part.filename);
+  const questionId = headerOne(req.headers["x-hh-question"]);
   try {
-    await rememberLogo(
-      projectDir,
-      decision.safeName,
-      headerOne(req.headers["x-hh-question"]),
-      originalName,
-      part.data.length,
-    );
+    await rememberLogo(projectDir, decision.safeName, questionId, originalName, part.data.length);
   } catch {
     // The bytes are already in .hitchhiker/uploads. A brand-folder problem must not hide that.
   }
+  await recordUploadAsset(projectDir, decision.safeName, originalName, questionId);
   sendJson(req, res, 201, {
     ok: true,
     safeName: decision.safeName,
@@ -1298,6 +1310,30 @@ async function rememberLogo(
   const dir = path.join(projectDir, ".hitchhiker", "brand");
   await mkdir(dir, { recursive: true });
   await replaceViaTemp(path.join(dir, "logo-intake.json"), serializeLogoIntake(intake));
+}
+
+async function recordUploadAsset(
+  projectDir: string,
+  saved: string,
+  originalName: string,
+  questionId: string,
+): Promise<void> {
+  const original = originalName.trim() === "" ? path.basename(saved) : originalName.trim();
+  const question = /^[A-Za-z0-9._-]{1,64}$/.test(questionId) ? questionId : "upload";
+  const logoSlot = logoSlotFor(projectDir, question, saved);
+  await recordAsset(projectDir, {
+    saved,
+    original,
+    role: inferAssetRole(question, original, logoSlot),
+    questionId: question,
+  });
+}
+
+function logoSlotFor(projectDir: string, questionId: string, saved: string): boolean {
+  if (questionId === "upload") return false;
+  if (!isLogoAssetName(saved) && !isLogoAssetName(path.basename(saved))) return false;
+  const question = loadTree(treeFile(projectDir)).find((item) => item.id === questionId);
+  return question !== undefined && isLogoQuestion(question);
 }
 
 function originalLeaf(filename: string | undefined): string {
@@ -1519,6 +1555,14 @@ async function handleGet(
       return;
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
+    return;
+  }
+  if (pathname === "/context") {
+    await deliverHtml(req, res, 200, renderContext(token, projectDir, notice), projectDir, token, false);
+    return;
+  }
+  if (pathname === "/context/asset") {
+    await sendContextAsset(req, res, projectDir, queryValue(rawUrl, "name") ?? "");
     return;
   }
   if (pathname === "/brand") {
@@ -2227,7 +2271,8 @@ function renderDesk(
         </div>
         <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
         ${deskMenu(token)}
-        ${routeNav("/")}`,
+        ${routeNav("/")}
+        ${routerLine(projectDir)}`,
     "mast",
   );
   html = mustReplace(
@@ -2301,6 +2346,107 @@ function interviewHead(token: string, session: DeskSession): string {
               <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Saves the project, then starts again at the first question.">Restart the interview</button>
             </form>
           </dialog>`;
+}
+
+function renderContext(token: string, projectDir: string, notice: string | null): string {
+  return renderPanel({
+    notice,
+    token,
+    title: CONTEXT_LABEL,
+    description: "Decisions, assets, and the running summary the Guide carries forward.",
+    current: "/context",
+    kicker: "Context",
+    status: "What the Guide knows is read from this machine.",
+    banner: routerLine(projectDir),
+    main: renderContextMain(projectDir, token),
+  });
+}
+
+async function sendContextAsset(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  name: string,
+): Promise<void> {
+  const located = contextAssetFile(projectDir, name);
+  const ext = path.extname(name).toLowerCase();
+  const type = STATIC_TYPES[ext];
+  const bytes = located === null ? null : await readInside(located.root, located.rel);
+  if (bytes === null || type === undefined || type === "image/svg+xml") {
+    sendJson(req, res, 404, { error: "That asset is not on the desk." });
+    return;
+  }
+  sendBytes(req, res, 200, type, bytes);
+}
+
+async function handleContextPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  notice: string | null,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    await deliverHtml(req, res, 413, renderContext(token, projectDir, notice), projectDir, token, false);
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    await deliverHtml(req, res, 413, renderContext(token, projectDir, notice), projectDir, token, false);
+    dropRequest(req);
+    return;
+  }
+  const raw = capped.body.toString("utf8");
+  const contentType = headerOne(req.headers["content-type"]);
+  if (!settingsTokenOk(token, req.headers["x-hh-csrf"], raw, contentType)) {
+    await deliverHtml(req, res, 403, renderContext(token, projectDir, notice), projectDir, token, false);
+    return;
+  }
+  const params = new URLSearchParams(raw);
+  const action = params.get("action");
+  try {
+    await enqueue(async () => {
+      if (action === "correct") {
+        const id = params.get("id") ?? "";
+        const text = (params.get("text") ?? "").trim();
+        const found = loadDecisions(projectDir).find((row) => row.id === id);
+        if (found === undefined || text === "") return;
+        await syncAnswer(projectDir, {
+          questionId: found.questionId,
+          text,
+          source: "answer",
+          supersedeId: id,
+          moveCursor: false,
+          summarize: false,
+        });
+        return;
+      }
+      if (action === "discuss") {
+        await recordDiscussNote(projectDir, params.get("note") ?? "", params.get("question") ?? "");
+        return;
+      }
+      if (action === "promote") {
+        await promoteDiscuss(projectDir, params.get("note") ?? "");
+        return;
+      }
+      if (action === "undo") {
+        await undoLast(projectDir, params.get("kind") === "upload" ? "upload" : "answer");
+      }
+    });
+  } catch (error: unknown) {
+    logDeskError(error);
+    await deliverHtml(req, res, 500, renderContext(token, projectDir, notice), projectDir, token, false);
+    return;
+  }
+  res.writeHead(303, { location: "/context" });
+  res.end();
+}
+
+function routerLine(projectDir: string): string {
+  if (projectDir.trim() === "") return "";
+  return `<p class="hh-router" data-router-status>${escapeHtml(formatStatusLine(projectDir))}</p>`;
 }
 
 function renderBrand(
@@ -2414,6 +2560,7 @@ function renderPanel(opts: {
   extraCss?: readonly string[];
   script?: string;
   board?: boolean;
+  banner?: string;
 }): string {
   const extra = (opts.extraCss ?? [])
     .map((href) => `    <link rel="stylesheet" href="${escapeHtml(href)}" />`)
@@ -2447,6 +2594,7 @@ ${extra}
         <div class="hh-wordmark" role="img" aria-label="Don't Panic"></div>
         ${deskMenu(opts.token)}
         ${routeNav(opts.current)}
+        ${opts.banner ?? ""}
       </header>
       <main id="main" class="hh-read${opts.board === true ? " hh-read--board" : ""}" data-hh-ready>
         ${opts.main}
@@ -2708,6 +2856,7 @@ function csrfField(raw: string, contentType: string): string | null {
 function navIcon(name: string): string {
   const paths: Record<string, string> = {
     desk: "M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5",
+    context: "M6 4h9l3 3v13H6z M8 11h8 M8 15h5",
     brand: "M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z",
     approve: "M5 12l4 4 10-10",
     drive: "M4 16l4-8h8l4 8z",
@@ -2723,6 +2872,7 @@ function navIcon(name: string): string {
 function routeNav(current: RouteName | null): string {
   const items = [
     { href: "/", label: "Desk", icon: "desk", tip: "The interview. One question, then the next." },
+    { href: "/context", label: "Context", icon: "context", tip: "What the Guide knows. Decisions, assets, and the running summary." },
     { href: "/brand", label: "Brand", icon: "brand", tip: "The brand kit. Palette, letters, and voice after the brief is approved." },
     { href: "/approve", label: "Approvals", icon: "approve", tip: "Decisions waiting for a yes. The queue does not start without one." },
     { href: "/hh-dashboard", label: "Drive", icon: "drive", tip: "The local queue. Pause, cost, and what the build is doing." },

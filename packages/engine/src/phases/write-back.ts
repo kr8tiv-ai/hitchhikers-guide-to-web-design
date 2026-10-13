@@ -16,6 +16,7 @@ import path from "node:path";
 import { BRAND_SECTIONS, applyStatus, redoSection } from "../brand/approve.ts";
 import { renderVoice } from "../brand/voice.ts";
 import { loadConfig, saveConfig, type DeployTarget } from "../config.ts";
+import { syncAnswer } from "../context/index.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { renderBrief, type AnswerRecord } from "../required.ts";
 import { planMotion } from "../spec/motion.ts";
@@ -117,6 +118,15 @@ export async function writeBack(projectDir: string, answer: BeforeJumpAnswer): P
   });
 
   if (written.startsWith("blocked:")) return written;
+  if (answer.answerId !== null && answer.answerId !== "") {
+    await syncAnswer(root, {
+      questionId: answer.answerId,
+      text,
+      source: "before-jump",
+      moveCursor: false,
+      summarize: false,
+    });
+  }
   if (answer.target === "deploy" && answer.field === "deployTarget") {
     const deployTarget = parseDeployTarget(text) ?? "undecided";
     const config = loadConfig(root);

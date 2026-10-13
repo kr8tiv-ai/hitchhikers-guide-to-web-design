@@ -12,6 +12,7 @@ export const INTERVIEW_TASKS = new Set([
   "guide-message",
   "mirror",
   "prefetch",
+  "context-summary",
 ]);
 
 export type EffortName = "medium" | "high" | "xhigh";

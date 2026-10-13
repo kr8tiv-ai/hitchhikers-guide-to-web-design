@@ -18,6 +18,7 @@ import {
   type GuideTurn,
 } from "../src/guide/live-turn.ts";
 import { mirrorCue } from "../src/guide/mirror.ts";
+import { emptyContextPacket } from "../src/context/index.ts";
 import { judgePushback } from "../src/guide/pushback-judge.ts";
 import type { Facts } from "../src/guide/schemas.ts";
 import {
@@ -79,7 +80,7 @@ test("mirror cadence is every eight, and module end is a different next module",
 
 test("the phrase floor pushes even when the model says the answer is concrete", async () => {
   const model = asThink(async () => hit({ vague: false, quote: "", sharperChoice: "" }));
-  const judgement = await judgePushback(towelQuestion, "it's fine", 0, { think: model });
+  const judgement = await judgePushback(towelQuestion, "it's fine", 0, { think: model, packet: emptyContextPacket() });
   assert.equal(judgement.action, "push");
   assert.equal(judgement.floor, true);
   assert.equal(judgement.count, 1);
@@ -89,14 +90,14 @@ test("a model failure still pushes on the phrase floor", async () => {
   const model = asThink(async () => {
     throw new Error("down");
   });
-  const judgement = await judgePushback(towelQuestion, "it's fine", 0, { think: model });
+  const judgement = await judgePushback(towelQuestion, "it's fine", 0, { think: model, packet: emptyContextPacket() });
   assert.equal(judgement.action, "push");
   assert.equal(judgement.count, 1);
 });
 
 test("a concrete answer is accepted", async () => {
   const model = asThink(async () => hit({ vague: false, quote: "", sharperChoice: "" }));
-  const judgement = await judgePushback(towelQuestion, "A tin shop on the corner.", 0, { think: model });
+  const judgement = await judgePushback(towelQuestion, "A tin shop on the corner.", 0, { think: model, packet: emptyContextPacket() });
   assert.equal(judgement.action, "accept");
   assert.equal(judgement.count, 0);
 });
@@ -112,7 +113,7 @@ test("soft, soft, soft gives two pushes and then SOFT", async () => {
   let count = 0;
   const actions: string[] = [];
   for (let index = 0; index < 3; index += 1) {
-    const judgement = await judgePushback(towelQuestion, "it's fine", count, { think: model });
+    const judgement = await judgePushback(towelQuestion, "it's fine", count, { think: model, packet: emptyContextPacket() });
     actions.push(judgement.action);
     count = judgement.count;
   }
@@ -286,6 +287,7 @@ test("two questions are asked again once, then the valid line is kept", async ()
     let guides = 0;
     const model = asThink(async (req) => {
       if (req.task === "pushback-judge") return hit({ vague: false, quote: "", sharperChoice: "" });
+      if (req.task === "context-summary") return hit({ summary: "The shop is mine." });
       guides += 1;
       if (guides === 1) {
         return hit({ message: "Is this yours? Or is it theirs?", explanationLevel: "beginner", joke: false });
@@ -312,6 +314,7 @@ test("two invalid guide messages fall back to the tree ask", async () => {
     let guides = 0;
     const model = asThink(async (req) => {
       if (req.task === "pushback-judge") return hit({ vague: false, quote: "", sharperChoice: "" });
+      if (req.task === "context-summary") return hit({ summary: "The shop is mine." });
       guides += 1;
       return hit({ message: "Is this yours? Or is it theirs?", explanationLevel: "beginner", joke: false });
     });
@@ -394,6 +397,7 @@ test("an ACP string is the guide message, including one re-ask, without a guide 
     const tasks: string[] = [];
     let prompts = 0;
     const model = asThink(async (req) => {
+      if (req.task === "context-summary") return hit({ summary: "The shop is mine." });
       tasks.push(req.task);
       return hit({ vague: false, quote: "", sharperChoice: "" });
     });

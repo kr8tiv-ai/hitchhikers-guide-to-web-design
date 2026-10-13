@@ -140,6 +140,62 @@ function finish(line: string): string {
   return line;
 }
 
+export interface PhaseCostRow {
+  phase: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+}
+
+export interface PhaseCostTotal {
+  phase: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+  runs: number;
+  cost: number | null;
+}
+
+/** Sum tokens and time per phase. Dollars stay null until the caller passes rates. */
+export function aggregatePhaseCosts(rows: readonly PhaseCostRow[], rates?: TokenRates): PhaseCostTotal[] {
+  assertNoUnsourcedPrice(rows);
+  if (rates !== undefined) assertNoUnsourcedPrice(rates);
+  const grouped = new Map<string, PhaseCostTotal>();
+  for (const row of rows) {
+    const inputTokens = assertTokenCount(row.inputTokens, "Input tokens");
+    const outputTokens = assertTokenCount(row.outputTokens, "Output tokens");
+    if (inputTokens === undefined || outputTokens === undefined) {
+      throw new CostError("Measured tokens are required.");
+    }
+    if (!Number.isSafeInteger(row.durationMs) || row.durationMs < 0) {
+      throw new CostError("Duration must be a whole number.");
+    }
+    const current = grouped.get(row.phase) ?? {
+      phase: row.phase,
+      inputTokens: 0,
+      outputTokens: 0,
+      durationMs: 0,
+      runs: 0,
+      cost: null,
+    };
+    current.inputTokens += inputTokens;
+    current.outputTokens += outputTokens;
+    current.durationMs += row.durationMs;
+    current.runs += 1;
+    grouped.set(row.phase, current);
+  }
+  const totals = [...grouped.values()];
+  if (rates !== undefined) {
+    for (const total of totals) {
+      total.cost = priceTokens(
+        { inputTokens: total.inputTokens, outputTokens: total.outputTokens },
+        rates,
+      );
+    }
+  }
+  return totals;
+}
+
 export function formatCost(input: CostInput): string {
   if (typeof input !== "object" || input === null) {
     throw new CostError("Cost input must be an object.");

@@ -6,6 +6,7 @@
  */
 
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { questionCount } from "../../guide/validators.ts";
 import type { GuideSession } from "../../guide/live-turn.ts";
@@ -50,6 +51,7 @@ export async function runWhyFinder(
   s: GuideSession,
   deps: { think: typeof think; ask: (q: string) => Promise<string> },
 ): Promise<{ why: string; how: string; what: string; transcript: string[] }> {
+  const boundThink = bindPacket(deps.think, s.projectDir, "brand");
   const answers = loadAnswers(s.projectDir);
   const transcript: string[] = [];
   const circles = new Set<Circle>();
@@ -57,7 +59,7 @@ export async function runWhyFinder(
   while (transcript.length / 2 < MIN_QUESTIONS || circles.size < 3) {
     if (turns >= MAX_QUESTIONS) break;
     turns += 1;
-    const asked = await oneQuestion(deps.think, answers, transcript);
+    const asked = await oneQuestion(boundThink, answers, transcript);
     const reply = await deps.ask(asked.question);
     transcript.push(`Q: ${asked.question}`, `A: ${reply}`);
     circles.add(asked.circle);
@@ -67,7 +69,7 @@ export async function runWhyFinder(
     throw new LiveShapeError(`Why Finder asked ${askedCount} questions. At least 12 are required.`);
   }
 
-  const compiled = await compileCircle(deps.think, answers, transcript);
+  const compiled = await compileCircle(boundThink, answers, transcript);
   const shaped = shapeWhy(answers, compiled);
   assertCleanProse("how", shaped.how);
   assertCleanProse("what", shaped.what);

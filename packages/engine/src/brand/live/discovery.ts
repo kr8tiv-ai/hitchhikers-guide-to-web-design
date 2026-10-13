@@ -9,6 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { questionCount } from "../../guide/validators.ts";
 import type { GuideSession } from "../../guide/live-turn.ts";
@@ -61,16 +62,17 @@ export async function runDiscovery(
   s: GuideSession,
   deps: { think: typeof think; ask: (q: string) => Promise<string> },
 ): Promise<DiscoveryBrief> {
+  const boundThink = bindPacket(deps.think, s.projectDir, "brand");
   const answers = loadAnswers(s.projectDir);
   const gaps = gapList(answers);
   const notes: GapNote[] = [];
   for (const gap of gaps) {
-    const question = await oneQuestion(deps.think, gap, answers);
+    const question = await oneQuestion(boundThink, gap, answers);
     const reply = await deps.ask(question);
     notes.push({ id: gap.id, answer: reply });
   }
   const filled = applyNotes(answers, notes);
-  const brief = await draftBrief(deps.think, filled, notes);
+  const brief = await draftBrief(boundThink, filled, notes);
   const markdown = renderBrief(brief, filled, s.projectDir);
   assertClaims(markdown, evidenceFromAnswers(filled));
   assertBrandContrast({ name: "", answers: filled, projectDir: s.projectDir });

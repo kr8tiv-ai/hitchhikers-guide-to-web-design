@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { think } from "../src/ai/think.ts";
 import { GUIDE_FAIL_LINE } from "../src/guide/guide-progress.ts";
+import { emptyContextPacket } from "../src/context/index.ts";
 import { judgePushback } from "../src/guide/pushback-judge.ts";
 import { loadTree, type Question } from "../src/tree.ts";
 
@@ -38,7 +39,7 @@ test("five named colours are accepted and the judge still runs", async () => {
     calls += 1;
     return hit({ vague: true, quote: "jungle green", sharperChoice: "" });
   });
-  const judgement = await judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model });
+  const judgement = await judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model, packet: emptyContextPacket() });
   assert.equal(calls, 1);
   assert.equal(judgement.action, "accept");
   assert.equal(judgement.message, "");
@@ -51,7 +52,7 @@ test("a phrase-floor answer stays soft even when it also names colours", async (
     calls += 1;
     return hit({ vague: false, quote: "", sharperChoice: "" });
   });
-  const judgement = await judgePushback(byId("DP-0.4"), `it's fine. ${COLOURS}`, 0, { think: model });
+  const judgement = await judgePushback(byId("DP-0.4"), `it's fine. ${COLOURS}`, 0, { think: model, packet: emptyContextPacket() });
   assert.equal(calls, 1);
   assert.equal(judgement.action, "push");
   assert.equal(judgement.floor, true);
@@ -63,23 +64,24 @@ test("a judge failure is not shown as a soft answer", async () => {
     calls += 1;
     throw new Error("down");
   });
-  const judgement = await judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model });
+  const judgement = await judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model, packet: emptyContextPacket() });
   assert.equal(calls, 2);
   assert.equal(judgement.action, "accept");
   assert.equal(judgement.message, GUIDE_FAIL_LINE);
   assert.equal(judgement.message.includes("still soft"), false);
-  await assert.rejects(() => judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model, surfaceErrors: true }));
+  await assert.rejects(() => judgePushback(byId("DP-0.4"), COLOURS, 0, { think: model, surfaceErrors: true, packet: emptyContextPacket() }));
 });
 
 test("the floor fallback does not fire twice in a row on the same question", async () => {
   const model = asThink(async () => hit({ vague: true, quote: "Aesop", sharperChoice: "not a question" }));
   const question = byId("DP-1.8");
-  const first = await judgePushback(question, "Aesop restraint, wide caps, and a quiet mark.", 0, { think: model });
+  const first = await judgePushback(question, "Aesop restraint, wide caps, and a quiet mark.", 0, { think: model, packet: emptyContextPacket() });
   assert.equal(first.action, "push");
   assert.equal(first.message, FLOOR);
   const second = await judgePushback(question, "The mark, the wide caps, the tagline.", 1, {
     think: model,
     priorMessage: first.message,
+    packet: emptyContextPacket(),
   });
   assert.equal(second.action, "accept");
   assert.equal(second.message.includes("still soft"), false);

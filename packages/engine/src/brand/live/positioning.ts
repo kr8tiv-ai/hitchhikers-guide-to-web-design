@@ -7,6 +7,7 @@
  */
 
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { buildStory, pickArchetype, positioningLine } from "../story.ts";
 import { buildTeardown } from "../teardown.ts";
@@ -51,10 +52,11 @@ export async function draftPositioning(
   brand: BrandFacts,
   deps: { think: typeof think },
 ): Promise<PositioningDraft> {
+  const bound = { think: bindPacket(deps.think, brand.projectDir ?? "", "brand") };
   assertBrandContrast(brand);
-  const first = parsePositioning((await deps.think(request(brand))).value);
+  const first = parsePositioning((await bound.think(request(brand))).value);
   const shaped = first === null ? null : tryShape(brand, first);
-  const draft = shaped ?? (await repair(brand, deps));
+  const draft = shaped ?? (await repair(brand, bound));
   if (brand.projectDir !== undefined && brand.projectDir.trim() !== "") {
     await recordDraftItems(brand.projectDir, [
       { itemId: "archetype", kind: "archetype", text: draft.archetype },

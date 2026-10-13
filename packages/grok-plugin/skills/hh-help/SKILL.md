@@ -19,6 +19,8 @@ The hh CLI can run these today:
 - `hh save --project <dir>` writes the portable project file. `--to <path>` chooses the place.
 - `hh resume <file>` restores a project from that file. `hh resume --project <dir>` shows the prompt id to continue from and does not rewrite state.
 - `hh doctor` or `hh doctor --project <dir>` prints the environment report.
+- `hh context` or `hh context --project <dir>` prints what the Guide knows. `--audit` prints the last call's packet sections.
+- `hh next --status` or `hh next --status --project <dir>` prints the phase, open gates, and the next step. It does not change the project.
 - `hh improve` runs a bounded loop on an improve branch. A human merges. It refuses main and a dirty tree.
 - `hh improve supervise` runs the standing loop on main. It pushes a kept commit with `git push origin main` and stops if origin/main does not contain that commit. It refuses a force push.
 

@@ -83,6 +83,7 @@ export function beforeWeJump(input: {
   answers: AnswerRecord[];
   approvals: Record<string, boolean>;
   hasLegalPage: boolean;
+  openDecisions?: readonly { id: string; text: string }[];
 }): { questions: string[] } {
   const latest = latestById(input.answers);
   const drafts: Draft[] = [];
@@ -128,7 +129,12 @@ export function beforeWeJump(input: {
     });
   }
 
-  return { questions: bound(drafts.map((draft) => draft.question)) };
+  const questions = drafts.map((draft) => draft.question);
+  for (const decision of input.openDecisions ?? []) {
+    const line = `Decision ${decision.id} is still open. ${decision.text}`.trim();
+    if (!questions.includes(line)) questions.unshift(line);
+  }
+  return { questions: bound(questions) };
 }
 
 function hostingDraft(latest: ReadonlyMap<string, AnswerRecord>): Draft | null {

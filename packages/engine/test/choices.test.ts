@@ -7,6 +7,7 @@ import { validateJson } from "../src/ai/schema-validate.ts";
 import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { think } from "../src/ai/think.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { emptyContextPacket } from "../src/context/index.ts";
 import { followUpChoices, judgePushback } from "../src/guide/pushback-judge.ts";
 import { CHOICES_SCHEMA, type Facts } from "../src/guide/schemas.ts";
 import { choiceSetFrom } from "../src/guide/suggest.ts";
@@ -211,7 +212,7 @@ test("a weak answer keeps the sharper line first and a bad list falls back to on
       ],
     }),
   );
-  const judgement = await judgePushback(question, "it's fine", 0, { think: model, facts, language: "en" });
+  const judgement = await judgePushback(question, "it's fine", 0, { think: model, facts, language: "en", packet: emptyContextPacket() });
   assert.equal(judgement.action, "push");
   assert.equal(judgement.message, sharper);
   assert.equal(

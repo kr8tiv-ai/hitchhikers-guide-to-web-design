@@ -4,6 +4,8 @@
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { assetsFileExists, decisionsFileExists, isLive, loadAssets, loadDecisions } from "../context/disk.ts";
+import { ANSWER_SOURCES } from "../context/types.ts";
 import { loadTree, type Question } from "../tree.ts";
 
 export const SESSION_TOPICS = [
@@ -479,6 +481,20 @@ function readAnswers(projectDir: string): SessionAnswer[] {
       assumed: status === "SKIPPED" || status === "SUGGESTED" || /^ASSUMED:/i.test(item.value),
     });
   }
+  if (decisionsFileExists(projectDir)) {
+    for (const record of loadDecisions(projectDir)) {
+      if (!isLive(record) || !ANSWER_SOURCES.has(record.source) || record.questionId === "") continue;
+      const existing = latest.get(record.questionId);
+      if (existing !== undefined) existing.text = record.text;
+      else {
+        latest.set(record.questionId, {
+          id: record.questionId,
+          text: record.text,
+          assumed: record.source === "skip" || record.source === "suggestion accepted",
+        });
+      }
+    }
+  }
   return [...latest.values()];
 }
 
@@ -563,7 +579,45 @@ function readUploads(projectDir: string): SessionUpload[] {
     if (file.role === "logo") continue;
     file.role = roleFromQuestion(file.questionId, file.originalName);
   }
+  if (assetsFileExists(projectDir)) {
+    for (const asset of loadAssets(projectDir)) {
+      if (asset.status !== "live") continue;
+      const known = files.find(
+        (file) => file.safeName === asset.saved || path.basename(file.safeName) === path.basename(asset.saved),
+      );
+      const role = asUploadRole(asset.role);
+      if (known !== undefined) {
+        known.role = role;
+        known.originalName = asset.original;
+        if (asset.questionId !== "") known.questionId = asset.questionId;
+      } else {
+        files.push({
+          safeName: asset.saved,
+          originalName: asset.original,
+          questionId: asset.questionId,
+          role,
+        });
+      }
+    }
+  }
   return files;
+}
+
+function asUploadRole(role: string): UploadRole {
+  if (role === "brand-guide") return "brand-kit";
+  if (
+    role === "logo" ||
+    role === "brand-kit" ||
+    role === "palette" ||
+    role === "font" ||
+    role === "photo" ||
+    role === "mood" ||
+    role === "3d" ||
+    role === "other"
+  ) {
+    return role;
+  }
+  return "other";
 }
 
 function logoDecisionValue(state: SessionState, fallback: string): string {

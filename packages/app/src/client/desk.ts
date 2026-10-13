@@ -69,6 +69,9 @@ export const TALK_NEEDS_CHROMIUM = "Talk needs Chrome or Edge";
 const HOLD_BUTTON =
   /<button class="hh-btn hh-btn--secondary(?: hh-btn--listening)?" type="button" data-voice="hold"(?: aria-pressed="(?:true|false)")?(?: data-tip="[^"]*")?(?: disabled)?>[\s\S]*?<\/button>/;
 
+/** Accessible name for the desk panel that lists what the Guide carries forward. */
+export const CONTEXT_LABEL = "What the Guide knows";
+
 /** Latest Guide line for the polite region. Empty when the desk has not asked. */
 export function guideTurnText(ask: string | null, done: boolean): string {
   if (ask !== null && ask !== "") return ask;

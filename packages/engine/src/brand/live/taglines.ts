@@ -7,6 +7,7 @@
  */
 
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import type { ThinkRequest } from "../../ai/think.ts";
 import { evidenceFromAnswers } from "../truth.ts";
 import { selectTaglines } from "../voice.ts";
@@ -60,9 +61,10 @@ interface Ranked {
 }
 
 export async function draftTaglines(brand: BrandFacts, deps: { think: typeof think }): Promise<TaglineCut> {
+  const bound = { think: bindPacket(deps.think, brand.projectDir ?? "", "brand") };
   assertBrandContrast(brand);
-  const all = await loadThirty(brand, deps);
-  const top5 = await loadTop(brand, deps, all);
+  const all = await loadThirty(brand, bound);
+  const top5 = await loadTop(brand, bound, all);
   const joined = [...all.map((line) => line.text), ...top5.map((line) => `${line.text} ${line.reason}`)].join("\n");
   assertClaims(joined, evidenceFromAnswers([...brand.answers]));
   if (brand.projectDir !== undefined && brand.projectDir.trim() !== "") {

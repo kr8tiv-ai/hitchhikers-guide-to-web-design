@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { think } from "../ai/think.ts";
+import { applyContextFacts, bindPacket } from "../context/index.ts";
 import { validateJson } from "../ai/schema-validate.ts";
 import {
   CHOICES_SCHEMA,
@@ -82,9 +83,10 @@ export async function suggestOffer(
   const fallback = { label: deps.fallbackLabel ?? "" };
   const questions = deps.projectDir === undefined ? [] : projectTree(deps.projectDir);
   const session = deps.projectDir === undefined ? null : loadSessionState(deps.projectDir, questions);
+  const boundThink = bindPacket(deps.think, deps.projectDir ?? "", "suggest");
   let value: unknown;
   try {
-    const result = await deps.think(
+    const result = await boundThink(
       {
         task: SUGGEST_TASK,
         schema: SUGGEST_SCHEMA,
@@ -191,7 +193,7 @@ export function loadFacts(projectDir: string): Facts {
   const crawlNotes = dedupe([...extra.crawlNotes, ...readCrawlNotes(projectDir)]);
   const facts: Facts = { answers, uploads, crawlNotes };
   if (extra.industry !== undefined && extra.industry !== "") facts.industry = extra.industry;
-  return facts;
+  return applyContextFacts(projectDir, facts);
 }
 
 function groundedOptions(value: unknown, facts: Facts, language: string): SuggestOption[] {

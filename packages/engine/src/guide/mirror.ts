@@ -1,4 +1,5 @@
 import type { think } from "../ai/think.ts";
+import { bindPacket } from "../context/index.ts";
 import { MIRROR_SCHEMA, MIRROR_TASK, type Facts } from "./schemas.ts";
 import { guideTextIssues, questionCount } from "./validators.ts";
 
@@ -29,8 +30,9 @@ export async function requestMirror(
   cue: MirrorCue,
   deps: { think: typeof think; projectDir?: string; language?: string },
 ): Promise<[string, string, string] | null> {
+  const boundThink = bindPacket(deps.think, deps.projectDir ?? "", "mirror");
   try {
-    const result = await deps.think(
+    const result = await boundThink(
       {
         task: MIRROR_TASK,
         schema: MIRROR_SCHEMA,

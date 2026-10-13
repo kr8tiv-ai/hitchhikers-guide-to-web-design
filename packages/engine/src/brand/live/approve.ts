@@ -9,6 +9,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { think } from "../../ai/think.ts";
+import { bindPacket } from "../../context/index.ts";
 import { replaceViaTemp, withStateLock } from "../../lock.ts";
 import { scanSecrets } from "../brain.ts";
 import { evidenceFromAnswers } from "../truth.ts";
@@ -133,8 +134,9 @@ export async function redraftRejectedItem(
     throw new ApprovalError("A rejection needs a note before a re-draft.");
   }
   const note = item.note.trim();
-  const first = parseRedraft((await deps.think(redraftRequest(item, note, brand))).value);
-  const text = acceptRedraft(item, first, brand) ?? (await repairRedraft(item, note, brand, deps, first));
+  const bound = { think: bindPacket(deps.think, brand.projectDir ?? projectDir, "brand") };
+  const first = parseRedraft((await bound.think(redraftRequest(item, note, brand))).value);
+  const text = acceptRedraft(item, first, brand) ?? (await repairRedraft(item, note, brand, bound, first));
   const updated: ApprovalItem = {
     itemId: item.itemId,
     kind: item.kind,

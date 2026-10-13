@@ -15,6 +15,7 @@ import { validateJson } from "../ai/schema-validate.ts";
 import { InterviewError, openInterview } from "../interview.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
+import { bindPacket, syncInterviewFacts } from "../context/index.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
@@ -116,10 +117,11 @@ export async function runTurn(
 ): Promise<GuideTurn> {
   await hydrate(s);
   if (s.depth === "express") await seedExpressAssumptions(s.projectDir);
+  const guideDeps = { ...deps, think: bindPacket(deps.think, s.projectDir, "interview") };
   const reportSave = input.kind === "answer" && input.assumed !== true;
   let finished = false;
   try {
-    const turn = await perform(s, input, deps);
+    const turn = await perform(s, input, guideDeps);
     finished = true;
     return turn;
   } finally {
@@ -164,6 +166,7 @@ export async function seedExpressAssumptions(projectDir: string): Promise<string
       "utf8",
     );
   });
+  await syncInterviewFacts(projectDir, { summarize: false, moveCursor: false });
   return ids;
 }
 
@@ -342,6 +345,7 @@ async function advance(
   wasSoft: boolean,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
+  await syncInterviewFacts(s.projectDir, { summarize: true, moveCursor: true, think: deps.think });
   const reopened = await openInterview(s.projectDir, s.depth);
   const next = reopened.next();
   const facts = loadFacts(s.projectDir);
