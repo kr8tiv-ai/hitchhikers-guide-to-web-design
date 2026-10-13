@@ -230,6 +230,16 @@ test("assumption, confirm, mode, and mast follow the depth list", () => {
     previousAssumption(questions, [{ id: "DP-0.1", status: "SUGGESTED", value: "Yourself." }], "DP-0.2"),
     { value: "Yourself.", kind: "suggested" },
   );
+  // A removed question's assumed answer is not the previous card, so it is not shown.
+  const stale: AnswerRecord[] = [
+    { id: "DP-0.1", status: "ANSWERED", value: "For myself." },
+    { id: "DP-0.6", status: "SKIPPED", value: "Keyboard." },
+  ];
+  assert.equal(previousAssumption(questions, stale, "DP-0.2"), null);
+  const staleHtml = renderCard(state({ assumption: previousAssumption(questions, stale, "DP-0.2") }));
+  assert.equal(staleHtml.includes("Assumed: Keyboard."), false);
+  assert.equal(staleHtml.includes("Keyboard"), false);
+
   // An express seed sits outside the depth list, so it does not shrink the mast or mark the card.
   const seeded: AnswerRecord[] = [{ id: "DP-8.4", status: "SKIPPED", value: "ASSUMED: Later." }];
   assert.equal(previousAssumption(questions, seeded, "DP-0.2"), null);
