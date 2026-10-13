@@ -42,6 +42,11 @@ function hideAll(): void {
   for (const pair of pairs) hidePair(pair);
 }
 
+/** Typing in the answer or the choices closes every tip. The desk already listens for input. */
+export function hideOpenTips(): void {
+  hideAll();
+}
+
 const MARGIN = 8;
 const ANSWER = "#hh-card-draft, [data-choices]";
 
@@ -334,15 +339,6 @@ export function mountTooltips(doc: Document): void {
   };
   doc.addEventListener("scroll", follow, true);
   window.addEventListener("resize", follow);
-  doc.addEventListener(
-    "input",
-    (event) => {
-      const target = event.target;
-      if (!(target instanceof Element) || target.closest(ANSWER) === null) return;
-      hideAll();
-    },
-    true,
-  );
   doc.addEventListener(
     "keydown",
     (event) => {

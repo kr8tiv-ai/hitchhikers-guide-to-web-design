@@ -3294,7 +3294,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/draft-store\.ts["']/g, 'from "/client/draft-store.js"')
     .replace(/from\s+["']\.\/tool-install\.ts["']/g, 'from "/client/tool-install.js"')
     .replace(/from\s+["']\.\/tour\.ts["']/g, 'from "/client/tour.js"')
-    .replace(/from\s+["']\.\/tile\.ts["']/g, 'from "/client/tile.js"');
+    .replace(/from\s+["']\.\/tile\.ts["']/g, 'from "/client/tile.js"')
+    .replace(/from\s+["']\.\/tooltip\.ts["']/g, 'from "/client/tooltip.js"');
   moduleCache.set(filePath, js);
   return js;
 }

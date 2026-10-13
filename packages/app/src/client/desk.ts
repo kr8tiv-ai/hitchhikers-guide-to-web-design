@@ -40,6 +40,7 @@ import {
 } from "./voice-engine.ts";
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
 import { handleTourKey, mountTour } from "./tour.ts";
+import { hideOpenTips } from "./tooltip.ts";
 import { joinWords, mergeTranscript, settleVoice, type TranscriptPiece } from "./voice-text.ts";
 import {
   clearDraft,
@@ -554,6 +555,19 @@ interface DeskEvent {
   } | null;
 }
 
+/** The draft and the choice list. Typing there closes a tip without a second document listener. */
+function inAnswer(target: DeskElement | null): boolean {
+  let node = target;
+  const seen = new Set<DeskElement>();
+  while (node !== null && !seen.has(node)) {
+    seen.add(node);
+    if (node.getAttribute("id") === "hh-card-draft") return true;
+    if (node.getAttribute("data-choices") !== null) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 interface DeskParent {
   appendChild(node: DeskElement): void;
 }
@@ -1008,6 +1022,7 @@ export function mountDesk(env: DeskEnv): () => void {
   };
   const onInput = (event: DeskEvent): void => {
     const target = event.target;
+    if (inAnswer(target)) hideOpenTips();
     if (target !== null && target.getAttribute("data-attach-url") !== null) {
       linkDraft = target.value ?? "";
       return;
