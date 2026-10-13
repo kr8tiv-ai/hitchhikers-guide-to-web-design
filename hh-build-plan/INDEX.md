@@ -213,3 +213,4 @@ Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh.
 | 205 | So Long and Thanks for All the Fish | Forty-Two | Fix attach and draft-persist so a failed upload or page change keeps the typed draft | Heart of Gold | xhigh |
 | 206 | So Long and Thanks for All the Fish | Forty-Two | Fix dictation so a revised interim never re-appends the whole sentence (fixed voice base) | Heart of Gold | xhigh |
 | 210 | So Long and Thanks for All the Fish | Forty-Two | Turn main green after 209 ran out of turns, then finish 209's unfinished items | Heart of Gold | xhigh |
+| 216 | So Long and Thanks for All the Fish | Forty-Two | Sync grok-plugin COMMANDS with the new hh brief CLI subcommand so CI is green | Heart of Gold | xhigh |
