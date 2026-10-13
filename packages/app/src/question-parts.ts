@@ -14,6 +14,8 @@ const BUTTON =
 const LEAD =
   /^(?:don't panic\b|this phase\b|that is the name of this phase\b|now back to your site\b|you said\b|so the question is\b)/i;
 const QUESTION_CAP = 200;
+/** A one-line acknowledgment stays with the question. A longer recap stays in help. */
+const PREFACE_CAP = 120;
 
 /** A question id belongs in the eyebrow, never in the heading. */
 export function stripQuestionIds(text: string): string {
@@ -42,11 +44,18 @@ export function splitQuestionText(text: string): QuestionParts {
     const packed = pack(body);
     return promoteQuestion({ lead: join(lead), question: packed.question, help: packed.help });
   }
-  const packed = pack(body.slice(askAt));
+  // Logo confirmations and short acks name the file or the note in the heading.
+  // The Paradise Found recaps are longer than PREFACE_CAP, so they stay below.
+  const preface = join(body.slice(0, askAt));
+  const withQuestion = join(body.slice(0, askAt + 1));
+  const prefaceFits =
+    askAt > 0 && preface.length > 0 && preface.length <= PREFACE_CAP && withQuestion.length <= QUESTION_CAP;
+  const start = prefaceFits ? 0 : askAt;
+  const packed = pack(body.slice(start));
   return {
     lead: join(lead),
     question: packed.question,
-    help: join([...body.slice(0, askAt), ...splitSentences(packed.help)]),
+    help: join([...body.slice(0, start), ...splitSentences(packed.help)]),
   };
 }
 
