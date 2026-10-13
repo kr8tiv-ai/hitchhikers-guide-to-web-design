@@ -86,7 +86,7 @@ function childSource(): string {
     const line = "The site helps a visitor book a visit.";
     const brief = {
       goal: line, visitor: line, action: line, offer: line, vibe: line, references: line,
-      exists: line, protected: line, motion: line, limits: line, hosting: line, coverage: line,
+      exists: line, protected: line, motion: line, limits: line, hosting: line, pages: line, features: line, coverage: line,
     };
     const think = async (req) => {
       if (req.task === "pushback-judge") {

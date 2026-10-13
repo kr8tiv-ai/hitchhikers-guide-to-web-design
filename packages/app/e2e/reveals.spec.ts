@@ -286,6 +286,8 @@ function brief(): SiteBrief {
     motion: "Still, unless the visitor asks.",
     limits: "No stock photography.",
     hosting: "A static host the client already pays for.",
+    pages: "Home, work, and visit.",
+    features: "A contact form and a visit request.",
     coverage: "One city, by appointment.",
   };
 }

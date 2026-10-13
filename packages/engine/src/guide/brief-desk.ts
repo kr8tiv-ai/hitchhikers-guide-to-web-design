@@ -43,6 +43,8 @@ export interface BriefDeskView {
   buildStarted: boolean;
   phase: string;
   nextAction: string;
+  /** Honest draft failure. Empty when the model returned a brief. */
+  error: string;
   revisit: string | null;
 }
 
@@ -50,6 +52,7 @@ interface PendingFile {
   status: "idle" | "drafting" | "pending" | "approved";
   draft: SiteBrief | null;
   buildStarted: boolean;
+  error?: string;
 }
 
 const jobs = new Map<string, Promise<BriefDeskView>>();
@@ -72,7 +75,7 @@ function readPending(projectDir: string): PendingFile {
   try {
     const parsed: unknown = JSON.parse(readFileSync(pendingPath(projectDir), "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return { status: "idle", draft: null, buildStarted: false };
+      return { status: "idle", draft: null, buildStarted: false, error: "" };
     }
     const record = parsed as Record<string, unknown>;
     const status = record.status;
@@ -82,9 +85,10 @@ function readPending(projectDir: string): PendingFile {
       status: known ? status : "idle",
       draft,
       buildStarted: record.buildStarted === true,
+      error: typeof record.error === "string" ? record.error : "",
     };
   } catch {
-    return { status: "idle", draft: null, buildStarted: false };
+    return { status: "idle", draft: null, buildStarted: false, error: "" };
   }
 }
 
@@ -124,6 +128,7 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
     buildStarted: pending.buildStarted,
     phase: state?.phase ?? "Don't Panic",
     nextAction: state?.nextAction ?? "",
+    error: pending.error ?? "",
     revisit: null,
   };
 }
@@ -147,10 +152,15 @@ async function runDraft(projectDir: string, thinkFn: typeof think): Promise<Brie
     const first = await loop.next();
     await loop.return(undefined);
     if (first.value === undefined) throw new Error("The brief did not draft.");
-    writePending(projectDir, { status: "pending", draft: first.value.draft, buildStarted: false });
+    writePending(projectDir, {
+      status: "pending",
+      draft: first.value.draft,
+      buildStarted: false,
+      error: first.value.error,
+    });
     return readBriefDesk(projectDir);
   } catch (error) {
-    writePending(projectDir, { status: "idle", draft: null, buildStarted: false });
+    writePending(projectDir, { status: "idle", draft: null, buildStarted: false, error: "" });
     throw error;
   }
 }
@@ -164,9 +174,10 @@ export function draftSiteBrief(
   const existing = jobs.get(key);
   if (existing) return existing;
   const current = readBriefDesk(projectDir);
-  if (current.status === "pending" || current.status === "approved") return Promise.resolve(current);
+  if (current.buildStarted || current.status === "approved") return Promise.resolve(current);
+  if (current.status === "pending" && current.error === "") return Promise.resolve(current);
   opts?.onProgress?.(BRIEF_PROGRESS_STAGE);
-  writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted });
+  writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted, error: "" });
   const job = runDraft(projectDir, thinkFn);
   jobs.set(key, job);
   void job.finally(() => {
@@ -212,12 +223,12 @@ async function runApprove(projectDir: string, thinkFn: typeof think): Promise<Br
     }
     if (draft === null) throw new Error("The brief is not ready to approve.");
     await runLoopApprove(projectDir, thinkFn, draft);
-    writePending(projectDir, { status: "approved", draft, buildStarted: false });
+    writePending(projectDir, { status: "approved", draft, buildStarted: false, error: "" });
   }
   const file = readPending(projectDir);
   if (!file.buildStarted) {
     await startBuild(projectDir);
-    writePending(projectDir, { status: "approved", draft: file.draft, buildStarted: true });
+    writePending(projectDir, { status: "approved", draft: file.draft, buildStarted: true, error: "" });
   }
   return readBriefDesk(projectDir);
 }
@@ -255,7 +266,7 @@ export async function reviseSiteBrief(
   await loop.return(undefined);
   const draft = revised.value?.draft;
   if (draft === undefined) throw new Error("The brief did not change.");
-  writePending(projectDir, { status: "pending", draft, buildStarted: false });
+  writePending(projectDir, { status: "pending", draft, buildStarted: false, error: "" });
   const questionId = text.match(/DP-\d+\.\d+/)?.[0] ?? "brief";
   const live = loadDecisions(projectDir).find((item) => item.questionId === questionId && item.supersededBy === "");
   await syncAnswer(projectDir, {

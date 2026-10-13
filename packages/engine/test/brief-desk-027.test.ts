@@ -36,6 +36,8 @@ function sampleBrief(goal = LINE): SiteBrief {
     motion: LINE,
     limits: LINE,
     hosting: LINE,
+    pages: LINE,
+    features: LINE,
     coverage: LINE,
   };
 }

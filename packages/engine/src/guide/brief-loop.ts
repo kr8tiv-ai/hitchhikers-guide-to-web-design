@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { think } from "../ai/think.ts";
 import { bindPacket, syncAnswer, writePhaseAdvisories } from "../context/index.ts";
+import type { PacketOptions } from "../context/packet.ts";
 import {
   BRIEF_DRAFT_SCHEMA,
   BRIEF_DRAFT_TASK,
@@ -47,34 +48,71 @@ export const BRIEF_HEADINGS: Record<BriefKey, string> = {
   motion: "Motion",
   limits: "Limits",
   hosting: "Hosting",
+  pages: "Pages",
+  features: "Features",
   coverage: "Coverage",
+};
+
+/** Question ids that fill each field. The primary id stays in BRIEF_ANSWER_IDS. */
+export const BRIEF_SOURCES: Record<BriefKey, readonly string[]> = {
+  goal: ["DP-2.1"],
+  visitor: ["DP-2.6"],
+  action: ["DP-2.2"],
+  offer: ["DP-2.7"],
+  vibe: ["DP-5.3"],
+  references: ["DP-5.1", "DP-5.2"],
+  exists: ["DP-0.2"],
+  protected: ["DP-1.9"],
+  motion: ["DP-6.1", "DP-6.2", "DP-6.3", "DP-6.4", "DP-6.6"],
+  limits: ["DP-8.4", "DP-9.1", "DP-9.5"],
+  hosting: ["DP-9.2"],
+  pages: ["DP-2.8"],
+  features: ["DP-3.7"],
+  coverage: [],
 };
 
 export const BRIEF_ANSWER_IDS: Partial<Record<BriefKey, string>> = {
   goal: "DP-2.1",
   visitor: "DP-2.6",
   action: "DP-2.2",
+  offer: "DP-2.7",
   vibe: "DP-5.3",
   references: "DP-5.2",
   exists: "DP-0.2",
+  protected: "DP-1.9",
   motion: "DP-6.2",
+  limits: "DP-8.4",
   hosting: "DP-9.2",
+  pages: "DP-2.8",
+  features: "DP-3.7",
 };
 
+/** One structured reply. Enough for the schema, not an open-ended agent loop. */
+export const BRIEF_DRAFT_MAX_TURNS = 4;
+
+/** Token budget for the brief packet. Decisions stay; recent rows trim first. */
+export const BRIEF_DRAFT_BUDGET = 1200;
+
+export const BRIEF_DRAFT_ERROR =
+  "The brief draft stopped early. These fields stay filled from the interview. Use Retry to ask again.";
+
 const UNSTATED = "The field is not stated yet.";
+
+const BRIEF_PACKET: PacketOptions = { budgetTokens: BRIEF_DRAFT_BUDGET };
 
 export async function* briefLoop(
   s: GuideSession,
   deps: { think: typeof think },
-): AsyncGenerator<{ draft: SiteBrief; approved: boolean }> {
+): AsyncGenerator<{ draft: SiteBrief; approved: boolean; error: string }> {
   const facts = loadFacts(s.projectDir);
-  const bound = { think: bindPacket(deps.think, s.projectDir, "brief") };
-  let draft = await draftOrFallback(s, facts, bound);
-  let note: unknown = yield { draft, approved: false };
+  const bound = { think: bindPacket(deps.think, s.projectDir, "brief", BRIEF_PACKET) };
+  const drafted = await draftOrFallback(s, facts, bound);
+  let draft = drafted.brief;
+  let note: unknown = yield { draft, approved: false, error: drafted.error };
   while (!isApproval(typeof note === "string" ? note : "")) {
     const correction = typeof note === "string" ? note : "";
     draft = await reviseOrFallback(s, facts, draft, correction, bound);
-    note = yield { draft, approved: false };
+    note = yield { draft, approved: false, error: "" };
   }
   await writeSiteBrief(s.projectDir, draft);
   const { recordApprovalYes } = await import("../project-file/yes.ts");
@@ -88,7 +126,7 @@ export async function* briefLoop(
     think: deps.think,
   });
   await writePhaseAdvisories(s.projectDir);
-  yield { draft, approved: true };
+  yield { draft, approved: true, error: "" };
 }
 
 export function isApproval(text: string): boolean {
@@ -101,12 +139,13 @@ async function draftOrFallback(
   s: GuideSession,
   facts: Facts,
   deps: { think: typeof think },
-): Promise<SiteBrief> {
-  const first = await askDraft(s, facts, deps);
-  if (first !== null) return first;
-  const second = await askDraft(s, facts, deps);
-  if (second !== null) return second;
-  return deterministicBrief(facts, s.language);
+): Promise<{ brief: SiteBrief; error: string }> {
+  const recorded = deterministicBrief(facts, s.language);
+  const first = await askDraft(s, facts, recorded, deps);
+  if (first !== null) return { brief: lockRecorded(first, recorded), error: "" };
+  const second = await askDraft(s, facts, recorded, deps);
+  if (second !== null) return { brief: lockRecorded(second, recorded), error: "" };
+  return { brief: recorded, error: BRIEF_DRAFT_ERROR };
 }
 
 async function reviseOrFallback(
@@ -126,6 +165,7 @@ async function reviseOrFallback(
 async function askDraft(
   s: GuideSession,
   facts: Facts,
+  recorded: SiteBrief,
   deps: { think: typeof think },
 ): Promise<SiteBrief | null> {
   try {
@@ -135,11 +175,16 @@ async function askDraft(
         schema: BRIEF_DRAFT_SCHEMA,
         model: INTERVIEW_MODEL,
         effort: "xhigh",
+        maxTurns: BRIEF_DRAFT_MAX_TURNS,
         input: [
-          "Draft the Site Brief from these answers only.",
+          "Draft the Site Brief from these recorded fields.",
+          "Keep a recorded answer. Write prose only around those facts.",
           "Do not invent testimonials, awards, or numbers.",
+          "Do not replace a recorded field with an empty line.",
           `Reply language: ${s.language}`,
           renderFacts(facts),
+          "Recorded fields:",
+          renderSiteBrief(recorded),
         ].join("\n"),
       },
       { projectDir: s.projectDir },
@@ -242,31 +287,64 @@ function emptyBrief(): SiteBrief {
     motion: "",
     limits: "",
     hosting: "",
+    pages: "",
+    features: "",
     coverage: "",
   };
 }
 
-export function deterministicBrief(facts: Facts, language: string): SiteBrief {
+export function deterministicBrief(facts: Facts, _language: string): SiteBrief {
   const byId = new Map<string, string>();
   for (const answer of facts.answers) byId.set(answer.id, answer.value);
   const brief = emptyBrief();
-  for (const key of BRIEF_KEYS) {
-    const id = BRIEF_ANSWER_IDS[key];
-    const raw = id === undefined ? "" : (byId.get(id) ?? "");
-    brief[key] = safeField(raw, facts, language);
-  }
-  if (brief.offer === UNSTATED) brief.offer = safeField("", facts, language);
-  brief.coverage = safeField("The interview file holds the coverage.", facts, language);
+  for (const key of BRIEF_KEYS) brief[key] = safeField(recordedText(key, byId));
+  brief.coverage = safeField("The interview file holds the coverage.");
   return brief;
 }
 
-function safeField(raw: string, facts: Facts, language: string): string {
+function recordedText(key: BriefKey, byId: ReadonlyMap<string, string>): string {
+  const ids = BRIEF_SOURCES[key];
+  const primary = BRIEF_ANSWER_IDS[key];
+  const ordered =
+    primary !== undefined && ids.includes(primary) ? [primary, ...ids.filter((id) => id !== primary)] : [...ids];
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ordered) {
+    const value = (byId.get(id) ?? "").trim();
+    if (value === "" || seen.has(value)) continue;
+    seen.add(value);
+    parts.push(value);
+  }
+  return parts.join(" ");
+}
+
+/** A recorded answer stays. Model prose may wrap it. An unstated line never replaces it. */
+function lockRecorded(model: SiteBrief, recorded: SiteBrief): SiteBrief {
+  const next = { ...model };
+  for (const key of BRIEF_KEYS) {
+    const fact = recorded[key];
+    if (key === "coverage") {
+      next.coverage = fact;
+      continue;
+    }
+    const prose = next[key].trim();
+    if (fact !== UNSTATED) {
+      if (prose === "" || prose === UNSTATED || prose.includes("not stated yet") || !prose.includes(fact)) {
+        next[key] = fact;
+      }
+    } else if (prose === "") {
+      next[key] = UNSTATED;
+    }
+  }
+  return next;
+}
+
+function safeField(raw: string): string {
   let text = raw.trim();
   if (text.startsWith("ASSUMED:")) text = text.slice("ASSUMED:".length).trim();
   if (text.startsWith("SOFT:")) text = text.slice("SOFT:".length).trim();
   text = stripUnsafe(text);
-  if (text === "" || guideTextIssues(text, { language, facts }).length > 0) return UNSTATED;
-  return text;
+  return text === "" ? UNSTATED : text;
 }
 
 function stripUnsafe(text: string): string {

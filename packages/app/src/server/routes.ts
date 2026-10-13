@@ -1513,6 +1513,7 @@ function briefPayload(desk: BriefDeskView): {
   nextAction: string;
   buildStarted: boolean;
   draft: BriefDeskView["draft"];
+  error: string;
   revisit: string | null;
 } {
   return {
@@ -1521,6 +1522,7 @@ function briefPayload(desk: BriefDeskView): {
     nextAction: desk.nextAction,
     buildStarted: desk.buildStarted,
     draft: desk.draft,
+    error: desk.error,
     revisit: desk.revisit,
   };
 }
@@ -1572,6 +1574,12 @@ async function handleApproveForm(
   try {
     if (action === "approve") {
       await approveSiteBrief(projectDir, guideThink);
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "retry") {
+      await draftSiteBrief(projectDir, guideThink);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;

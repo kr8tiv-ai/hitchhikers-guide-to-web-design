@@ -150,7 +150,7 @@ function spawnLive(command: string, request: BuildSpawnRequest, env: NodeJS.Proc
     hiddenChildOptions({
       cwd: request.cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"] as const,
+      stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
     }),
   );
   let stdout = "";
@@ -562,9 +562,13 @@ function tailText(current: string, chunk: string): string {
 function snapshot(root: string): Map<string, string> {
   const found = new Map<string, string>();
   const walk = (dir: string, prefix: string): void => {
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: { name: string; directory: boolean; file: boolean }[];
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+        name: String(entry.name),
+        directory: entry.isDirectory(),
+        file: entry.isFile(),
+      }));
     } catch {
       return;
     }
@@ -572,11 +576,11 @@ function snapshot(root: string): Map<string, string> {
       if (SKIP_DIRS.has(entry.name)) continue;
       const rel = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
       const abs = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
+      if (entry.directory) {
         walk(abs, rel);
         continue;
       }
-      if (!entry.isFile()) continue;
+      if (!entry.file) continue;
       try {
         const stat = statSync(abs);
         found.set(rel.split("\\").join("/"), `${stat.size}:${stat.mtimeMs}`);

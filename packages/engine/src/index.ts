@@ -158,7 +158,16 @@ export type {
   IngestOptions,
   PdfExtract,
 } from "./ingest.ts";
-export { briefLoop, isApproval, renderSiteBrief, BRIEF_HEADINGS, BRIEF_ANSWER_IDS } from "./guide/brief-loop.ts";
+export {
+  briefLoop,
+  isApproval,
+  renderSiteBrief,
+  BRIEF_ANSWER_IDS,
+  BRIEF_DRAFT_ERROR,
+  BRIEF_DRAFT_MAX_TURNS,
+  BRIEF_HEADINGS,
+  BRIEF_SOURCES,
+} from "./guide/brief-loop.ts";
 export {
   BRIEF_BUILD_ID,
   BRIEF_PROGRESS_STAGE,

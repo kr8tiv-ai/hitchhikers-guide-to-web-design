@@ -26,6 +26,8 @@ function sample() {
     motion: LINE,
     limits: LINE,
     hosting: LINE,
+    pages: LINE,
+    features: LINE,
     coverage: LINE,
   };
 }

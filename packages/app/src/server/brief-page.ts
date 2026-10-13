@@ -19,6 +19,15 @@ export function approveMain(token: string, desk: BriefDeskView): string {
       </div>`;
   }
   const started = desk.buildStarted ? `<p data-build-status>The build is started.</p>` : "";
+  const failure =
+    desk.error === ""
+      ? ""
+      : `<p data-brief-error role="alert">${escapeHtml(desk.error)}</p>
+        <form method="post" action="/approve">
+          <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+          <input type="hidden" name="action" value="retry" />
+          <button class="hh-btn hh-btn--secondary" type="submit">Retry</button>
+        </form>`;
   const sections = desk.sources
     .map((source) => {
       const change =
@@ -41,6 +50,7 @@ export function approveMain(token: string, desk: BriefDeskView): string {
   return `<div class="hh-rise hh-rise--2" data-brief-status="${escapeHtml(desk.status)}">
         <h1 class="hh-title">Site Brief</h1>
         ${started}
+        ${failure}
         ${sections}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />

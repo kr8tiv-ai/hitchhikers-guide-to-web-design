@@ -285,18 +285,24 @@ export async function withContextPacket<T>(
   purpose: string,
   req: ThinkRequest<T>,
   packet?: ContextPacket,
+  options?: PacketOptions,
 ): Promise<ThinkRequest<T>> {
-  const resolved = packet ?? (projectDir.trim() !== "" ? buildContextPacket(projectDir, purpose) : undefined);
+  const resolved = packet ?? (projectDir.trim() !== "" ? buildContextPacket(projectDir, purpose, options ?? {}) : undefined);
   if (resolved === undefined) throw new Error("A context packet is required.");
   const input = withPacketText(req.input, redact(renderContextPacket(resolved)));
   if (projectDir.trim() !== "") writeAudit(projectDir, purpose, resolved);
   return { ...req, input };
 }
 
-export function bindPacket(thinkFn: typeof think, projectDir: string, purpose: string): typeof think {
+export function bindPacket(
+  thinkFn: typeof think,
+  projectDir: string,
+  purpose: string,
+  options?: PacketOptions,
+): typeof think {
   if (projectDir.trim() === "") return thinkFn;
   const wrapped: typeof think = async (req, deps) => {
-    const next = await withContextPacket(projectDir, purpose, req);
+    const next = await withContextPacket(projectDir, purpose, req, undefined, options);
     return thinkFn(next, deps);
   };
   return wrapped;

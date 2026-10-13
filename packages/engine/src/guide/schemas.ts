@@ -106,6 +106,8 @@ const BRIEF_FIELDS = {
   motion: { type: "string", maxLength: 500 },
   limits: { type: "string", maxLength: 500 },
   hosting: { type: "string", maxLength: 500 },
+  pages: { type: "string", maxLength: 500 },
+  features: { type: "string", maxLength: 500 },
   coverage: { type: "string", maxLength: 500 },
 } as const;
 
@@ -121,6 +123,8 @@ export const BRIEF_KEYS = [
   "motion",
   "limits",
   "hosting",
+  "pages",
+  "features",
   "coverage",
 ] as const;
 
@@ -188,6 +192,8 @@ export interface SiteBrief {
   motion: string;
   limits: string;
   hosting: string;
+  pages: string;
+  features: string;
   coverage: string;
 }
 
