@@ -1340,7 +1340,7 @@ export function mountDesk(env: DeskEnv): () => void {
     const line = collapseLine(text);
     if (line === "") return false;
     const question = view?.question ?? null;
-    const fields = [question?.suggest, question?.why, question?.tip, view?.help, ANSWER_HINT, PLACEHOLDER_FALLBACK];
+    const fields = [question?.suggest, question?.why, question?.tip, ANSWER_HINT, PLACEHOLDER_FALLBACK];
     for (const field of fields) {
       const banned = collapseLine(field ?? "");
       if (banned !== "" && banned === line) return true;
