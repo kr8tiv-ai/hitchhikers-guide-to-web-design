@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
@@ -837,6 +837,11 @@ async function handlePost(
     await handleUpload(req, res, projectDir);
     return;
   }
+  if (pathname === "/api/logo/remove") {
+    await forgetLogo(projectDir);
+    sendJson(req, res, 200, { ok: true });
+    return;
+  }
   if (pathname === "/api/audio") {
     await handleAudio(req, res, projectDir);
     return;
@@ -1309,9 +1314,19 @@ function logoFileFrom(intake: LogoIntake | null): DeskSession["logoFile"] {
 }
 
 function logoStatusNote(projectDir: string): string | undefined {
-  const file = logoFileFrom(readLogoIntake(projectDir));
+  const file = logoOnPage(projectDir);
   if (file === null) return undefined;
   return `Saved as ${file.originalName}.`;
+}
+
+function logoOnPage(projectDir: string): DeskSession["logoFile"] {
+  if (projectDir === "") return null;
+  return logoFileFrom(readLogoIntake(projectDir));
+}
+
+async function forgetLogo(projectDir: string): Promise<void> {
+  if (projectDir === "") return;
+  await unlink(path.join(projectDir, ".hitchhiker", "brand", "logo-intake.json")).catch(() => undefined);
 }
 
 function readLogoIntake(projectDir: string): LogoIntake | null {
@@ -2226,10 +2241,11 @@ function renderDesk(
     "transcript",
   );
   const guideLive = escapeHtml(guideTurnText(session.question?.ask ?? null, session.done));
+  const logo = logoOnPage(projectDir);
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question, logoStatusNote(projectDir))}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question, logoStatusNote(projectDir), logo)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
     "question",
   );
   html = mustReplace(

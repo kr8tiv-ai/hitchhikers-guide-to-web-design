@@ -187,6 +187,14 @@ const LOGO_MAX_BYTES = 25 * 1024 * 1024;
 const LOGO_ACCEPT =
   ".png,.jpg,.jpeg,.webp,.gif,.svg,.pdf,image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf";
 
+/** A logo saved in the Logo file slot. previewUrl is a client blob for SVG only. */
+export interface LogoSlotView {
+  originalName: string;
+  safeName: string;
+  bytes: number | null;
+  previewUrl?: string;
+}
+
 /**
  * File input for logo questions, and a closed language toggle on every question.
  * The drop zone is before the composer: at 375 the composer sticks and this zone
@@ -196,6 +204,7 @@ export function withInterviewExtras(
   html: string,
   question: { id: string; input?: readonly string[]; writes?: readonly string[] } | null,
   logoNote?: string,
+  logo?: LogoSlotView | null,
 ): string {
   if (question === null) return html;
   if (!html.includes(`data-question-id="${escapeHtml(question.id)}"`)) return html;
@@ -204,7 +213,7 @@ export function withInterviewExtras(
     next = insertBeforeComposer(next, languageToggle());
   }
   if (isLogoQuestion(question) && !next.includes("data-logo-drop")) {
-    next = insertBeforeComposer(next, logoDropZone(logoNote));
+    next = insertBeforeComposer(next, logoDropZone(logoNote, logo));
   }
   return next;
 }
@@ -213,16 +222,38 @@ function languageToggle(): string {
   return `<details class="hh-qcard__lang" data-lang-toggle>\n    <summary>${READ_THIS_IN}</summary>\n  </details>\n  `;
 }
 
-function logoDropZone(logoNote?: string): string {
+function logoDropZone(logoNote?: string, logo?: LogoSlotView | null): string {
   const status = logoNote === undefined || logoNote === "" ? LOGO_HINT : logoNote;
-  return `<div class="hh-qcard__drop" data-logo-drop role="group" aria-labelledby="hh-logo-label">
-    <label class="hh-qcard__field">
-      <span class="hh-qcard__label" id="hh-logo-label">Logo file</span>
-      <input class="hh-qcard__file" id="hh-logo-file" name="logo" type="file" accept="${LOGO_ACCEPT}" data-logo-file aria-describedby="hh-logo-status" />
-    </label>
-    <p class="hh-qcard__hint" id="hh-logo-status" data-logo-status>${escapeHtml(status)}</p>
+  const choose = logo === undefined || logo === null ? "Choose logo" : "Replace";
+  return `<div class="hh-qcard__drop hh-attach" data-logo-drop role="group" aria-labelledby="hh-logo-label" aria-describedby="hh-logo-status">
+    <p class="hh-attach__label" id="hh-logo-label">Logo file</p>
+    <p class="hh-attach__copy"><span class="hh-attach__fine">${escapeHtml(LOGO_HINT)}</span><span class="hh-attach__coarse">Choose a logo file. It stays on this machine.</span></p>
+    <button class="hh-btn hh-btn--secondary hh-attach__button" type="button" data-logo-button>${choose}</button>
+    <label class="hh-sr" for="hh-logo-file">Logo file</label>
+    <input class="hh-attach__file" id="hh-logo-file" name="logo" type="file" accept="${LOGO_ACCEPT}" data-logo-file tabindex="-1" aria-describedby="hh-logo-status" />
+    ${logoChip(logo)}<p class="hh-attach__live" id="hh-logo-status" data-logo-status>${escapeHtml(status)}</p>
   </div>
   `;
+}
+
+function logoChip(logo: LogoSlotView | null | undefined): string {
+  if (logo === undefined || logo === null || logo.originalName === "") return "";
+  const src = logoThumb(logo);
+  const thumb = src === null ? "" : `<img class="hh-attach__thumb" alt="" src="${escapeHtml(src)}" />`;
+  const size = logo.bytes === null ? "" : formatBytes(logo.bytes);
+  const removeName = `Remove ${logo.originalName}`;
+  return `<ul class="hh-attach__chips" data-logo-chips>
+    <li class="hh-attach__chip" data-logo-chip>${thumb}<span class="hh-attach__name">${escapeHtml(logo.originalName)}</span><span class="hh-attach__meta">${escapeHtml(size)}</span><button class="hh-btn hh-btn--ghost" type="button" data-logo-remove aria-label="${escapeHtml(removeName)}">Remove</button></li>
+  </ul>
+  `;
+}
+
+/** Raster logos use the brand route. SVG uses a blob preview and is not served. */
+function logoThumb(logo: LogoSlotView): string | null {
+  const preview = logo.previewUrl;
+  if (preview !== undefined && (preview.startsWith("blob:") || preview.startsWith("data:image/"))) return preview;
+  if (/\.(?:png|jpe?g|webp|gif)$/i.test(logo.safeName)) return "/brand/logo";
+  return null;
 }
 
 function insertBeforeComposer(html: string, block: string): string {
@@ -692,6 +723,7 @@ export function mountDesk(env: DeskEnv): () => void {
   let ownWords = false;
   const editing = new Set<string>();
   let logoSaved: { id: string; text: string } | null = null;
+  let logoBlob: string | null = null;
   let chips: HeldChip[] = [];
   let linkDraft = "";
   let attachLive = "";
@@ -788,17 +820,17 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     if (hasMark(event.target, "data-attach-button")) {
       event.preventDefault();
-      const input = region()?.querySelector("[data-attach-file]");
-      if (input === null || input === undefined) return;
-      if (typeof input.showPicker === "function") {
-        try {
-          input.showPicker();
-          return;
-        } catch {
-          // click still opens the picker when showPicker is refused.
-        }
-      }
-      input.click?.();
+      openFilePicker("[data-attach-file]");
+      return;
+    }
+    if (hasMark(event.target, "data-logo-button")) {
+      event.preventDefault();
+      openFilePicker("[data-logo-file]");
+      return;
+    }
+    if (hasMark(event.target, "data-logo-remove")) {
+      event.preventDefault();
+      void removeLogo();
       return;
     }
     if (hasMark(event.target, "data-attach-add")) {
@@ -2940,6 +2972,7 @@ export function mountDesk(env: DeskEnv): () => void {
     const line = `Logo file: ${shown}`;
     if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
     logoSaved = { id: question.id, text: `Saved as ${shown}.` };
+    rememberLogoPreview(file);
     if (view !== null) {
       view = {
         ...view,
@@ -2952,6 +2985,68 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     paint();
     rememberDraft(true);
+  }
+
+  function rememberLogoPreview(file: File): void {
+    if (logoBlob !== null && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+      URL.revokeObjectURL(logoBlob);
+    }
+    logoBlob = null;
+    if (!/\.svg$/i.test(file.name)) return;
+    if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return;
+    try {
+      logoBlob = URL.createObjectURL(file);
+    } catch {
+      logoBlob = null;
+    }
+  }
+
+  async function removeLogo(): Promise<void> {
+    const question = view?.question ?? null;
+    if (question === null || token === null) return;
+    let response: Response;
+    try {
+      response = await env.fetch("/api/logo/remove", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "x-hh-csrf": token },
+      });
+    } catch {
+      logoSaved = { id: question.id, text: "The logo did not leave the slot. Try again." };
+      paint();
+      return;
+    }
+    if (!response.ok) {
+      logoSaved = { id: question.id, text: "The logo did not leave the slot. Try again." };
+      paint();
+      return;
+    }
+    if (logoBlob !== null && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+      URL.revokeObjectURL(logoBlob);
+    }
+    logoBlob = null;
+    logoSaved = null;
+    if (view !== null) view = { ...view, logoFile: null };
+    draft = draft
+      .split("\n")
+      .filter((line) => !line.startsWith("Logo file:"))
+      .join("\n")
+      .trim();
+    paint();
+  }
+
+  function openFilePicker(selector: string): void {
+    const input = region()?.querySelector(selector);
+    if (input === null || input === undefined) return;
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // click still opens the picker when showPicker is refused.
+      }
+    }
+    input.click?.();
   }
 
   function answerLocked(busy: boolean): boolean {
@@ -3442,10 +3537,9 @@ export function mountDesk(env: DeskEnv): () => void {
         view.logoFile === null ? undefined : `Saved as ${view.logoFile.originalName}.`;
       const saved =
         logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : fromSlot;
-      const html =
-        saved === undefined
-          ? withInterviewExtras(card, view.question)
-          : withInterviewExtras(card, view.question, saved);
+      const slot = view.logoFile;
+      const logo = slot === null || logoBlob === null ? slot : { ...slot, previewUrl: logoBlob };
+      const html = withInterviewExtras(card, view.question, saved, logo);
       if (!refillSameCard(question, html)) question.innerHTML = html;
     } else if (question !== null && error !== null) {
       question.innerHTML = publicCardError(error);
@@ -3745,7 +3839,10 @@ function isAttachControl(start: DeskElement | null): boolean {
     start.getAttribute("data-attach-retry") !== null ||
     start.getAttribute("data-attach-url") !== null ||
     start.getAttribute("data-attach-file") !== null ||
-    start.getAttribute("data-attach-zone") !== null
+    start.getAttribute("data-attach-zone") !== null ||
+    start.getAttribute("data-logo-button") !== null ||
+    start.getAttribute("data-logo-remove") !== null ||
+    start.getAttribute("data-logo-drop") !== null
   );
 }
 
