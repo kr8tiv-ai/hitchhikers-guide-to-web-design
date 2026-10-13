@@ -100,6 +100,20 @@ function assertFacts(input: string): void {
   assert.match(input, new RegExp(COLOURS.replace(/[ ,]/g, "\\$&")));
 }
 
+test("parallel uploads both land in the asset index", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "hh-213-parallel-"));
+  try {
+    await Promise.all([
+      recordAsset(dir, { saved: "DP-1.1/side.png", original: "side.png", role: "photo", questionId: "DP-1.1" }),
+      recordAsset(dir, { saved: "DP-1.1/logo.svg", original: "logo.svg", role: "other", questionId: "DP-1.1" }),
+    ]);
+    const saved = loadAssets(dir).map((asset) => asset.original).sort();
+    assert.deepEqual(saved, ["logo.svg", "side.png"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 async function seedMemory(dir: string): Promise<void> {
   await saveState(dir, stateFor("Don't Panic"));
   await syncAnswer(dir, {

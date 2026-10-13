@@ -84,6 +84,7 @@ function decisionBlock(record: DecisionRecord, token: string): string {
   return `<article>
     <h3>${escapeHtml(record.id)}</h3>
     <p>${escapeHtml(record.phase === "" ? "No phase" : record.phase)}. ${escapeHtml(record.source)}. ${escapeHtml(state)}.</p>
+    <p>${escapeHtml(record.text)}</p>
     <form method="post" action="/context">
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
       <input type="hidden" name="action" value="correct" />

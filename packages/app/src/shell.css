@@ -97,11 +97,21 @@ button,
 }
 
 .hh-router {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--color-ink);
   font-family: var(--font-text);
-  font-size: var(--type-small);
-  line-height: 1.4;
+  font-size: var(--type-micro);
+  line-height: 1.15;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-field) 92%, transparent);
 }
 
 .hh-context {

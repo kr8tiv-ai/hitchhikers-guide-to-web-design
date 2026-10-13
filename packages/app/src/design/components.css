@@ -50,6 +50,7 @@ textarea {
 }
 
 .hh-mast {
+  position: relative;
   display: grid;
   gap: var(--space-4);
   margin-bottom: var(--space-6);

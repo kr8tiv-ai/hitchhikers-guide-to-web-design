@@ -580,6 +580,7 @@ function readUploads(projectDir: string): SessionUpload[] {
     file.role = roleFromQuestion(file.questionId, file.originalName);
   }
   if (assetsFileExists(projectDir)) {
+    const slotIsLogo = files.some((file) => file.role === "logo");
     for (const asset of loadAssets(projectDir)) {
       if (asset.status !== "live") continue;
       const known = files.find(
@@ -587,10 +588,12 @@ function readUploads(projectDir: string): SessionUpload[] {
       );
       const role = asUploadRole(asset.role);
       if (known !== undefined) {
-        known.role = role;
+        const keepSlot = known.role === "logo";
+        const steal = role === "logo" && slotIsLogo && !keepSlot;
+        if (!keepSlot && !steal) known.role = role;
         known.originalName = asset.original;
         if (asset.questionId !== "") known.questionId = asset.questionId;
-      } else {
+      } else if (!(role === "logo" && slotIsLogo)) {
         files.push({
           safeName: asset.saved,
           originalName: asset.original,

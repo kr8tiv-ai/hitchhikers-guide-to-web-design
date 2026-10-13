@@ -460,7 +460,29 @@ export function upsertAsset(records: AssetRecord[], asset: AssetRecord): boolean
   return true;
 }
 
+const mutationTails = new Map<string, Promise<unknown>>();
+
+/**
+ * In-process writers share one tail per project. A second upload in this
+ * process waits instead of seeing LockHeld from our own pid. A live lock
+ * held by another process still throws.
+ */
 async function mutate(projectDir: string, change: (memory: Memory) => void): Promise<void> {
+  const key = path.resolve(projectDir);
+  const previous = mutationTails.get(key) ?? Promise.resolve();
+  const run = previous.then(
+    () => writeUnderLock(projectDir, change),
+    () => writeUnderLock(projectDir, change),
+  );
+  mutationTails.set(key, run);
+  try {
+    await run;
+  } finally {
+    if (mutationTails.get(key) === run) mutationTails.delete(key);
+  }
+}
+
+async function writeUnderLock(projectDir: string, change: (memory: Memory) => void): Promise<void> {
   await withStateLock(projectDir, async () => {
     const memory = readMemory(projectDir);
     change(memory);

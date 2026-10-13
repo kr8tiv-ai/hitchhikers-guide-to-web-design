@@ -101,6 +101,35 @@ test("a logo-slot file is role logo under its original filename", () => {
   }
 });
 
+test("an asset row that calls the hero a logo does not replace the logo slot", () => {
+  const all = loadTree(treeFile);
+  const dir = mkdtempSync(path.join(tmpdir(), "hh-211-hero-"));
+  try {
+    writeLogoSlot(dir);
+    writeFileSync(
+      path.join(dir, ".hitchhiker", "ASSETS.md"),
+      [
+        "# Assets",
+        "",
+        "| Saved | Original | Role | Question | Status |",
+        "| --- | --- | --- | --- | --- |",
+        "| hh-98860ac8-paradise-found-logo.png | paradise-found-logo.png | logo | DP-0.4 | live |",
+        "| DP-0.4/paradise-found-hero.jpg | paradise-found-hero.jpg | logo | DP-0.4 | live |",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const state = loadSessionState(dir, all);
+    const logos = state.uploads.filter((file) => file.role === "logo");
+    assert.equal(logos.length, 1);
+    assert.equal(logos[0]?.originalName, "paradise-found-logo.png");
+    const gate = gateQuestion(byId(all, "DP-1.1"), state, all);
+    assert.equal(gate.ask, "Using the logo you gave earlier (paradise-found-logo.png). Change?");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a hashed logo slot without originalName still shows the leaf filename", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-211-peel-"));
   try {

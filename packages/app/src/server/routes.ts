@@ -1333,7 +1333,15 @@ function logoSlotFor(projectDir: string, questionId: string, saved: string): boo
   if (questionId === "upload") return false;
   if (!isLogoAssetName(saved) && !isLogoAssetName(path.basename(saved))) return false;
   const question = loadTree(treeFile(projectDir)).find((item) => item.id === questionId);
-  return question !== undefined && isLogoQuestion(question);
+  if (question === undefined || !isLogoQuestion(question)) return false;
+  const intake = readLogoIntake(projectDir);
+  if (intake === null) return false;
+  const savedNorm = saved.replace(/\\/g, "/");
+  const intakeNorm = intake.safeName.replace(/\\/g, "/");
+  if (savedNorm === intakeNorm) return true;
+  const savedBase = savedNorm.slice(savedNorm.lastIndexOf("/") + 1);
+  const intakeBase = intakeNorm.slice(intakeNorm.lastIndexOf("/") + 1);
+  return savedBase !== "" && savedBase === intakeBase;
 }
 
 function originalLeaf(filename: string | undefined): string {
