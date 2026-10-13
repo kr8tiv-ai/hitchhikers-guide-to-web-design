@@ -2466,6 +2466,7 @@ export function mountDesk(env: DeskEnv): () => void {
 
   async function followGuideJob(jobId: string): Promise<void> {
     const questionId = view?.question?.id ?? "";
+    const submitted = draft;
     pending = true;
     error = null;
     paint();
@@ -2476,7 +2477,12 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       return;
     }
-    finishTurn(questionId, result.session, draft);
+    const nextId = result.session.question?.id ?? null;
+    const cardAlready = view?.question?.id === nextId && nextId !== questionId;
+    readDraft();
+    const typedOnNext = cardAlready ? draft : "";
+    finishTurn(questionId, result.session, submitted);
+    if (typedOnNext.trim() !== "" && typedOnNext !== submitted) draft = typedOnNext;
     error = null;
     pending = false;
     paint();
@@ -2597,8 +2603,11 @@ export function mountDesk(env: DeskEnv): () => void {
       publishShown(kept.trim() === "" ? null : kept);
       return;
     }
+    // A late session event must not wipe words the person just typed on this card.
+    readDraft();
+    const typed = sameQuestion ? draft : "";
     view = session;
-    draft = session.answerDraft !== null ? session.answerDraft : "";
+    draft = typed.trim() !== "" ? typed : session.answerDraft !== null ? session.answerDraft : "";
     error = null;
     notice = null;
     pending = false;
@@ -2641,6 +2650,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     skipConfirm = false;
     const questionId = view.question.id;
+    const submitted = draft;
     pending = true;
     error = null;
     notice = null;
@@ -2656,7 +2666,7 @@ export function mountDesk(env: DeskEnv): () => void {
         action === "answer"
           ? {
               questionId,
-              text: draft,
+              text: submitted,
               ...(attachments.length > 0 ? { attachments } : {}),
               ...(answerIsChoice() ? { assumed: true } : {}),
             }
@@ -2667,7 +2677,13 @@ export function mountDesk(env: DeskEnv): () => void {
         error = result.error;
         return;
       }
-      finishTurn(questionId, result.session, draft);
+      // The stream may already be showing the next card. Keep words typed there.
+      const nextId = result.session.question?.id ?? null;
+      const cardAlready = view?.question?.id === nextId && nextId !== questionId;
+      readDraft();
+      const typedOnNext = cardAlready ? draft : "";
+      finishTurn(questionId, result.session, submitted);
+      if (typedOnNext.trim() !== "" && typedOnNext !== submitted) draft = typedOnNext;
       error = null;
       ownWords = false;
       advance = true;
