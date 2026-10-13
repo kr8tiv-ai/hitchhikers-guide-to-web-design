@@ -1,7 +1,10 @@
 /**
  * One tooltip for every control that carries data-tip.
  * Hover, keyboard focus, and a touch hold all open it.
- * Escape dismisses it without moving focus. The pointer can rest on the tip.
+ * Escape dismisses it without moving focus.
+ * The tip sits above or beside its control, and flips when that spot is taken.
+ * It never covers the answer box or the options. The pointer leaving the
+ * control, blur, Escape, and typing in the answer all close it.
  * The tip does not take clicks, so the control under it still activates.
  */
 
@@ -39,22 +42,102 @@ function hideAll(): void {
   for (const pair of pairs) hidePair(pair);
 }
 
+const MARGIN = 8;
+const ANSWER = "#hh-card-draft, [data-choices]";
+
+interface Spot {
+  top: number;
+  left: number;
+  preference: number;
+}
+
+function obstacleRects(doc: Document): DOMRect[] {
+  const rects: DOMRect[] = [];
+  doc.querySelectorAll(ANSWER).forEach((node) => {
+    if (!(node instanceof HTMLElement)) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    rects.push(rect);
+  });
+  return rects;
+}
+
+function hits(spot: Spot, width: number, height: number, obstacles: readonly DOMRect[]): boolean {
+  const right = spot.left + width;
+  const bottom = spot.top + height;
+  for (const obstacle of obstacles) {
+    const clear =
+      right <= obstacle.left ||
+      obstacle.right <= spot.left ||
+      bottom <= obstacle.top ||
+      obstacle.bottom <= spot.top;
+    if (!clear) return true;
+  }
+  return false;
+}
+
+function inView(spot: Spot, width: number, height: number, vw: number, vh: number): boolean {
+  return (
+    spot.left >= MARGIN &&
+    spot.top >= MARGIN &&
+    spot.left + width <= vw - MARGIN &&
+    spot.top + height <= vh - MARGIN
+  );
+}
+
 function place(trigger: HTMLElement, tip: HTMLElement): void {
   const rect = trigger.getBoundingClientRect();
-  const margin = 8;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (rect.width <= 0 || rect.height <= 0 || rect.bottom < MARGIN || rect.top > vh - MARGIN) {
+    tip.hidden = true;
+    return;
+  }
   tip.hidden = false;
-  tip.style.maxWidth = `${Math.max(160, Math.min(256, window.innerWidth - margin * 2))}px`;
+  tip.style.maxWidth = `${Math.max(160, Math.min(256, vw - MARGIN * 2))}px`;
   const box = tip.getBoundingClientRect();
-  let top = rect.bottom + margin;
-  if (top + box.height > window.innerHeight - margin) {
-    top = Math.max(margin, rect.top - box.height - margin);
+  const width = box.width;
+  const height = box.height;
+  const obstacles = obstacleRects(trigger.ownerDocument);
+  const clampLeft = (left: number): number => Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
+  const spots: Spot[] = [
+    { top: rect.top - height - MARGIN, left: clampLeft(rect.left), preference: 0 },
+    { top: rect.top - height - MARGIN, left: clampLeft(rect.right - width), preference: 0 },
+    { top: rect.top, left: rect.right + MARGIN, preference: 1 },
+    { top: rect.bottom - height, left: rect.right + MARGIN, preference: 1 },
+    { top: rect.top, left: rect.left - width - MARGIN, preference: 1 },
+    { top: rect.bottom - height, left: rect.left - width - MARGIN, preference: 1 },
+    { top: rect.bottom + MARGIN, left: clampLeft(rect.left), preference: 2 },
+    { top: rect.bottom + MARGIN, left: clampLeft(rect.right - width), preference: 2 },
+  ];
+  for (const obstacle of obstacles) {
+    spots.push({ top: obstacle.top - height - MARGIN, left: clampLeft(rect.left), preference: 3 });
   }
-  let left = rect.left;
-  if (left + box.width > window.innerWidth - margin) {
-    left = Math.max(margin, window.innerWidth - box.width - margin);
+  let best: Spot | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const spot of spots) {
+    let score = spot.preference;
+    if (!inView(spot, width, height, vw, vh)) score += 10_000;
+    if (hits(spot, width, height, obstacles)) score += 20_000;
+    if (score < bestScore) {
+      best = spot;
+      bestScore = score;
+    }
   }
-  tip.style.top = `${Math.round(top)}px`;
-  tip.style.left = `${Math.round(left)}px`;
+  if (best === null || bestScore >= 10_000) {
+    tip.hidden = true;
+    return;
+  }
+  tip.style.top = `${Math.round(best.top)}px`;
+  tip.style.left = `${Math.round(best.left)}px`;
+}
+
+function coversAnswer(doc: Document): boolean {
+  const nodes = doc.querySelectorAll(ANSWER);
+  for (const node of nodes) {
+    if (node instanceof HTMLElement && nearBox(node)) return true;
+  }
+  return false;
 }
 
 function showPair(pair: TipPair): void {
@@ -88,9 +171,11 @@ function scheduleHide(pair: TipPair): void {
   clearTimer(pair.hideTimer);
   pair.hideTimer = setTimeout(() => {
     pair.hideTimer = null;
-    const active = pair.trigger.ownerDocument.activeElement;
-    if (active === pair.trigger) return;
-    if (nearBox(pair.trigger) || nearBox(pair.tip)) {
+    if (coversAnswer(pair.trigger.ownerDocument)) {
+      pair.tip.hidden = true;
+      return;
+    }
+    if (nearBox(pair.trigger)) {
       scheduleHide(pair);
       return;
     }
@@ -138,7 +223,7 @@ function bind(doc: Document, trigger: HTMLElement): void {
   trigger.addEventListener("focusout", (event) => {
     const next = event.relatedTarget;
     if (next instanceof Node && trigger.contains(next)) return;
-    scheduleHide(pair);
+    hidePair(pair);
   });
   trigger.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch") return;
@@ -238,6 +323,23 @@ export function mountTooltips(doc: Document): void {
       for (const pair of pairs) {
         if (!dialog.contains(pair.trigger)) hidePair(pair);
       }
+    },
+    true,
+  );
+  const follow = (): void => {
+    for (const pair of pairs) {
+      if (pair.tip.hidden) continue;
+      place(pair.trigger, pair.tip);
+    }
+  };
+  doc.addEventListener("scroll", follow, true);
+  window.addEventListener("resize", follow);
+  doc.addEventListener(
+    "input",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest(ANSWER) === null) return;
+      hideAll();
     },
     true,
   );
