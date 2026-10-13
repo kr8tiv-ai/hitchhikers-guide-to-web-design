@@ -15,9 +15,14 @@ const LEAD =
   /^(?:don't panic\b|this phase\b|that is the name of this phase\b|now back to your site\b|you said\b|so the question is\b)/i;
 const QUESTION_CAP = 200;
 
+/** A question id belongs in the eyebrow, never in the heading. */
+export function stripQuestionIds(text: string): string {
+  return text.replace(/\bDP-\d+(?:\.\d+)?[a-z]?(?:-[a-z0-9]+)?\b\.?\s*/gi, " ").replace(/\s+/g, " ").trim();
+}
+
 /** Split legacy combined copy. Button instructions are dropped, not shown as help. */
 export function splitQuestionText(text: string): QuestionParts {
-  const sentences = splitSentences(text).filter((sentence) => !BUTTON.test(sentence));
+  const sentences = splitSentences(stripQuestionIds(text)).filter((sentence) => !BUTTON.test(sentence));
   const lead: string[] = [];
   const body: string[] = [];
   let takingLead = true;

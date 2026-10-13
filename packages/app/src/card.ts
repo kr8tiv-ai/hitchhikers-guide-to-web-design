@@ -1,5 +1,6 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
 import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
+import { stripQuestionIds } from "./question-parts.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -310,6 +311,11 @@ ${items.join("\n")}
 `;
 }
 
+/** Last guard. The eyebrow keeps the id. The heading does not. */
+function headingAsk(ask: string): string {
+  return stripQuestionIds(ask);
+}
+
 function heading(title: string, why: string, done: boolean): string {
   const marker = done ? ' data-done="true"' : "";
   return `<article class="hh-qcard"${marker} aria-labelledby="hh-card-ask">
@@ -465,7 +471,7 @@ export function renderCard(state: CardState): string {
   const answerOff = state.pending || uploading || (field.trim() === "" && !attachReady);
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
-${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(state.lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
+${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(state.lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(headingAsk(question.ask))}</h2>
 ${helpBlock(state.help)}  <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
 ${tipLine}${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">

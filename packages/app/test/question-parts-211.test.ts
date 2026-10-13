@@ -85,6 +85,37 @@ test("step 003 and step 006a split into a short question", () => {
   assert.equal(html.includes("!"), false);
 });
 
+const DP_IN_HEADING = /\bDP-\d+(?:\.\d+)?[a-z]?(?:-[a-z0-9]+)?\b/i;
+const MODEL_HEADING = "DP-0.2a. What do you love about that site, and what makes you wince?";
+
+test("a model heading that leads with DP-0.2a keeps the id out of the h2", () => {
+  const parts = splitQuestionText(MODEL_HEADING);
+  const html = card(parts.question === "" ? MODEL_HEADING : parts.question, parts.lead, parts.help);
+  const h2 = heading(html);
+  assert.equal(DP_IN_HEADING.test(h2), false, h2);
+  assert.match(h2, /What do you love about that site/);
+  const direct = heading(card(MODEL_HEADING));
+  assert.equal(DP_IN_HEADING.test(direct), false, direct);
+});
+
+test("every question, follow-up, and stubbed lead-in keeps a DP id out of the h2", () => {
+  const all = loadTree(treeFile);
+  for (const item of all) {
+    const texts = [
+      item.ask,
+      ...((item.followUps ?? []).map((follow) => `${follow.id}. ${follow.ask}`)),
+      `Don't Panic. This phase is just the name. ${item.id}. ${item.ask}`,
+    ];
+    for (const text of texts) {
+      const parts = splitQuestionText(text);
+      const ask = parts.question === "" ? text : parts.question;
+      const h2 = heading(card(ask, parts.lead, parts.help));
+      assert.equal(DP_IN_HEADING.test(h2), false, `${item.id}: ${h2}`);
+      assert.equal(h2.length > 0 && h2.length <= 200, true, item.id);
+    }
+  }
+});
+
 test("every DP-0 and DP-1 ask stays under 200 characters in the heading", () => {
   const all = loadTree(treeFile);
   for (const item of all) {
