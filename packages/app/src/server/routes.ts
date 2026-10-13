@@ -26,6 +26,7 @@ import {
   loadConfig,
   loadFacts,
   loadSessionState,
+  gateQuestion,
   saveConfig,
   loadGallery,
   loadState,
@@ -444,12 +445,14 @@ async function checkAnswerInBackground(
   });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
+      const tree = loadTree(treeFile(projectDir));
       const judgement = await judgePushback(question, text, 0, {
         think: model,
         projectDir,
         language: "en",
         facts: loadFacts(projectDir),
-        session: loadSessionState(projectDir),
+        session: loadSessionState(projectDir, tree),
+        questions: tree,
         surfaceErrors: true,
       });
       if (judgement.action !== "push") {
@@ -1695,6 +1698,11 @@ function buildSession(
   depth: InterviewMode,
 ): DeskSession {
   let question = session.next();
+  if (question !== null && projectDir !== "") {
+    const sessionState = loadSessionState(projectDir, questions);
+    const gate = gateQuestion(question, sessionState, questions);
+    if (gate.action === "confirm") question = { ...question, ask: gate.ask };
+  }
   const saved = loadState(projectDir);
   const notes = readGuideNotes(projectDir);
   const blocked = blockingNotes(notes);

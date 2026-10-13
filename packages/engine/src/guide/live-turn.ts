@@ -207,13 +207,15 @@ async function answerText(
 ): Promise<GuideTurn> {
   const facts = loadFacts(s.projectDir);
   const prior = s.pushes[current.id] ?? 0;
-  const sessionState = loadSessionState(s.projectDir);
+  const questions = loadTree(resolveTreePath(s.projectDir));
+  const sessionState = loadSessionState(s.projectDir, questions);
   const judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
     language: s.language,
     facts,
     session: sessionState,
+    questions,
   });
   if (judgement.action === "push") {
     if (judgement.floor) await storeFloorHold(s, text);
@@ -334,7 +336,7 @@ async function askGuide(
       if (isQuiet(error)) return fallback(next);
       throw error;
     }
-    const sessionState = loadSessionState(s.projectDir);
+    const sessionState = loadSessionState(s.projectDir, loadTree(resolveTreePath(s.projectDir)));
     const kept = filterGuideText(text, sessionState, projectMentionsQuotes(sessionState));
     if (kept !== null && validateGuideMessage(kept, { language: s.language, facts }).length === 0) {
       return { message: kept, calm: false };

@@ -2,7 +2,7 @@ import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
 import type { think } from "../ai/think.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
-import { filterGuideText, normalizeChoiceLabel, projectMentionsQuotes, sessionBlock, type SessionState } from "./session-state.ts";
+import { choiceAllowed, normalizeChoiceLabel, projectMentionsQuotes, sessionBlock, type SessionState } from "./session-state.ts";
 import { choiceSetFrom } from "./suggest.ts";
 import { validateGuideMessage } from "./validators.ts";
 
@@ -40,6 +40,8 @@ export async function judgePushback(
     language?: string;
     facts?: Facts;
     session?: SessionState;
+    /** Tree questions, so a choice cannot re-ask a decided topic. */
+    questions?: readonly Question[];
     /** When set, a model timeout or crash is thrown instead of treated as a clear answer. */
     surfaceErrors?: boolean;
   },
@@ -95,8 +97,9 @@ export async function judgePushback(
   const follow = followUpChoices(raw, message, facts, language, question.ask);
   if (deps.session !== undefined) {
     const about = projectMentionsQuotes(deps.session);
-    follow.choices = follow.choices.filter(
-      (item) => filterGuideText(item.label, deps.session as SessionState, about) !== null,
+    const questions = deps.questions ?? [question];
+    follow.choices = follow.choices.filter((item) =>
+      choiceAllowed(item.label, deps.session as SessionState, questions, about),
     );
   }
   return {

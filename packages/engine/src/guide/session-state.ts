@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import type { Question } from "../tree.ts";
+import { loadTree, type Question } from "../tree.ts";
 
 export const SESSION_TOPICS = [
   "audience",
@@ -91,7 +91,20 @@ export function emptySession(): SessionState {
   return { answers: [], uploads: [], decided: [] };
 }
 
-export function loadSessionState(projectDir: string, questions: readonly Question[] = []): SessionState {
+/** The project's tree, or the packaged tree when the project has none. */
+export function projectTree(projectDir: string): Question[] {
+  const local = path.join(projectDir, "interview", "tree.yaml");
+  const file = existsSync(local)
+    ? local
+    : path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  try {
+    return loadTree(file);
+  } catch {
+    return [];
+  }
+}
+
+export function loadSessionState(projectDir: string, questions: readonly Question[] = projectTree(projectDir)): SessionState {
   const answers = readAnswers(projectDir);
   const uploads = readUploads(projectDir);
   return {
@@ -212,6 +225,24 @@ export function filterGuideText(
     if (!allowed.has(path.basename(raw).toLowerCase())) return null;
   }
   return text;
+}
+
+/** A choice may not name a missing file, a job word, or a question whose topic is already decided. */
+export function choiceAllowed(
+  label: string,
+  state: SessionState,
+  questions: readonly Question[],
+  aboutQuotes: boolean,
+): boolean {
+  if (filterGuideText(label, state, aboutQuotes) === null) return false;
+  const norm = normalizeChoiceLabel(label);
+  for (const question of questions) {
+    const topic = topicFor(question);
+    if (topic === undefined) continue;
+    if (!state.decided.some((item) => item.topic === topic)) continue;
+    if (normalizeChoiceLabel(question.ask) === norm) return false;
+  }
+  return true;
 }
 
 export function projectMentionsQuotes(state: SessionState): boolean {

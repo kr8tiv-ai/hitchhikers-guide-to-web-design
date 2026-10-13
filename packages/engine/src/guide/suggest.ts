@@ -20,7 +20,7 @@ import {
   selectReferenceCards,
   styleWorldForFamily,
 } from "./gallery-model.ts";
-import { loadSessionState, sessionBlock } from "./session-state.ts";
+import { choiceAllowed, loadSessionState, projectMentionsQuotes, projectTree, sessionBlock } from "./session-state.ts";
 import { guideTextIssues } from "./validators.ts";
 
 /**
@@ -72,6 +72,8 @@ export async function suggestOffer(
 ): Promise<SuggestOffer> {
   const language = deps.language ?? "en";
   const fallback = { label: deps.fallbackLabel ?? "" };
+  const questions = deps.projectDir === undefined ? [] : projectTree(deps.projectDir);
+  const session = deps.projectDir === undefined ? null : loadSessionState(deps.projectDir, questions);
   let value: unknown;
   try {
     const result = await deps.think(
@@ -86,7 +88,7 @@ export async function suggestOffer(
           "Do not cite a file, answer, note, or industry that is not listed.",
           "Only name files listed under uploads. Never name a file that is not listed.",
           renderFacts(facts),
-          deps.projectDir === undefined ? "" : sessionBlock(loadSessionState(deps.projectDir)),
+          session === null ? "" : sessionBlock(session),
         ].join("\n"),
       },
       deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
@@ -97,9 +99,12 @@ export async function suggestOffer(
     return { options: [], choices: set.choices, origin: set.origin };
   }
   const set = choiceSetFrom(value, facts, language, fallback);
+  const about = session === null ? false : projectMentionsQuotes(session);
+  const choices =
+    session === null ? set.choices : set.choices.filter((item) => choiceAllowed(item.label, session, questions, about));
   return {
     options: groundedOptions(value, facts, language).slice(0, 4),
-    choices: set.choices,
+    choices,
     origin: set.origin,
   };
 }
