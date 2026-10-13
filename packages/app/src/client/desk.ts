@@ -1484,7 +1484,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
   }
 
-  function releaseDraft(questionId: string): void {
+  function releaseDraft(questionId: string, post = true): void {
     if (draftPostTimer !== null) {
       clearTimeout(draftPostTimer);
       draftPostTimer = null;
@@ -1501,6 +1501,11 @@ export function mountDesk(env: DeskEnv): () => void {
       const storage = browserStorage();
       if (storage !== null && projectKey !== "") clearDraft(storage, projectKey, questionId);
     }
+    // A session event can show the next card while the guide job still holds
+    // the project lock. Posting the clear then returns 500. Remember the key
+    // and post it after the job returns.
+    if (savedHere) postedQuestions.add(questionId);
+    if (!post) return;
     postedQuestions.add(questionId);
     if (savedHere) {
       queueDraftPost(
@@ -2594,7 +2599,7 @@ export function mountDesk(env: DeskEnv): () => void {
         const leavingId = view.question?.id ?? null;
         const same = leavingId !== null && next.question?.id === leavingId;
         // The stream can show the next card before the turn POST drops the old key.
-        if (!same && leavingId !== null) releaseDraft(leavingId);
+        if (!same && leavingId !== null) releaseDraft(leavingId, false);
         view = next;
         draft = kept.trim() === "" ? "" : kept;
         error = null;
@@ -2640,7 +2645,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     // The stream can show the next card before the turn POST drops the old key.
-    if (!sameQuestion && leavingId !== null) releaseDraft(leavingId);
+    if (!sameQuestion && leavingId !== null) releaseDraft(leavingId, false);
     // A late session event must not wipe words the person just typed on this card.
     readDraft();
     const typed = sameQuestion ? draft : "";
