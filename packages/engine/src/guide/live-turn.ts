@@ -48,6 +48,7 @@ import {
   suggestOffer,
 } from "./suggest.ts";
 import { detectLanguage, validateGuideMessage } from "./validators.ts";
+import { type AnswerProgressStage, isAnswerProgressStage } from "./guide-progress.ts";
 
 /**
  * One live interview turn.
@@ -77,6 +78,8 @@ export interface GuideTurnDeps {
   acp?: GuideAcp;
   gallery?: readonly GalleryEntry[];
   galleryFile?: string;
+  /** Fired from the real check, the next question, and the save. Not a timer. */
+  onProgress?: (stage: AnswerProgressStage) => void;
 }
 
 export interface GuideTurnInput {
@@ -113,11 +116,21 @@ export async function runTurn(
 ): Promise<GuideTurn> {
   await hydrate(s);
   if (s.depth === "express") await seedExpressAssumptions(s.projectDir);
+  const reportSave = input.kind === "answer" && input.assumed !== true;
+  let finished = false;
   try {
-    return await perform(s, input, deps);
+    const turn = await perform(s, input, deps);
+    finished = true;
+    return turn;
   } finally {
+    if (reportSave && finished) reportStage(deps, "Saving");
     await persistSession(s);
   }
+}
+
+function reportStage(deps: GuideTurnDeps, stage: AnswerProgressStage): void {
+  if (!isAnswerProgressStage(stage)) return;
+  deps.onProgress?.(stage);
 }
 
 /**
@@ -223,6 +236,7 @@ async function answerText(
   const bound = await bindNamedLogo(s.projectDir, current, text, sessionState);
   const judgedState = bound ? loadSessionState(s.projectDir, questions) : sessionState;
   const facts = loadFacts(s.projectDir);
+  reportStage(deps, "Checking your answer");
   const judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
@@ -239,14 +253,14 @@ async function answerText(
   }
   if (judgement.unchecked === true) {
     await storePlain(s, text);
-    const turn = await advance(s, current, false, deps);
+    const turn = await advanceAnswer(s, current, false, deps);
     turn.calm = true;
     turn.message = judgement.message;
     return turn;
   }
   if (judgement.action === "push" && bound && !judgement.floor) {
     await storePlain(s, text);
-    return advance(s, current, false, deps);
+    return advanceAnswer(s, current, false, deps);
   }
   if (judgement.action === "push") {
     if (judgement.floor) await storeFloorHold(s, text);
@@ -268,7 +282,17 @@ async function answerText(
   else await storePlain(s, text);
   if (judgement.action === "soft" && !judgement.floor) await markLatestSoft(s.projectDir, current.id);
   if (judgement.action === "soft") s.pushes[current.id] = judgement.count;
-  return advance(s, current, judgement.action === "soft", deps);
+  return advanceAnswer(s, current, judgement.action === "soft", deps);
+}
+
+async function advanceAnswer(
+  s: GuideSession,
+  current: Question,
+  wasSoft: boolean,
+  deps: GuideTurnDeps,
+): Promise<GuideTurn> {
+  reportStage(deps, "Writing the next question");
+  return advance(s, current, wasSoft, deps);
 }
 
 async function answerSuggest(

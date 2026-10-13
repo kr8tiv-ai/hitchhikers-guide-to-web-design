@@ -17,6 +17,19 @@ export type GuideStage = (typeof GUIDE_STAGES)[number];
 export const READING_LINE = "Guide is reading your answer…";
 export const GUIDE_FAIL_LINE = "The Guide couldn't finish checking this answer.";
 
+/** Real stages for one answered question. A skip does not emit these. */
+export const ANSWER_PROGRESS = [
+  "Checking your answer",
+  "Writing the next question",
+  "Saving",
+] as const;
+
+export type AnswerProgressStage = (typeof ANSWER_PROGRESS)[number];
+
+export function isAnswerProgressStage(value: string): value is AnswerProgressStage {
+  return (ANSWER_PROGRESS as readonly string[]).includes(value);
+}
+
 /** Median and 90th percentile of the last samples. Hidden until there are 3. */
 export function usualRange(samples: readonly number[]): { low: number; high: number } | null {
   const recent = samples.filter((value) => Number.isFinite(value) && value >= 0).slice(-10);

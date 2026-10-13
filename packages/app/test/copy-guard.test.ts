@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GUIDE_FAIL_LINE, READING_LINE, jargonHits } from "@hitchhiker/engine";
+import { ANSWER_PROGRESS, GUIDE_FAIL_LINE, READING_LINE, jargonHits } from "@hitchhiker/engine";
 import {
   OTHER_CHOICE_LABEL,
   SKIP_CONFIRM,
@@ -57,6 +57,7 @@ const LINES = [
   VOICE_UNSUPPORTED,
   READING_LINE,
   GUIDE_FAIL_LINE,
+  ...ANSWER_PROGRESS,
   modeNote("express"),
   modeNote("standard"),
   modeNote("deep"),

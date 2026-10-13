@@ -191,6 +191,16 @@ export function questionFocusTarget(width: number, height: number): "draft" | "h
   return "draft";
 }
 
+/** Same three lines as ANSWER_PROGRESS in the engine. The browser bundle does not import it. */
+const ANSWER_PROGRESS_STAGES = ["Checking your answer", "Writing the next question", "Saving"] as const;
+
+/** Honest stage plus elapsed seconds. Unknown stages and fake percentages stay off the card. */
+export function answerProgressLine(stage: string, elapsedSeconds: number): string | null {
+  if (!(ANSWER_PROGRESS_STAGES as readonly string[]).includes(stage)) return null;
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0) return null;
+  return `${stage} · ${elapsedSeconds}s`;
+}
+
 /** Matches the server cap in uploads.ts. The server still refuses a larger body. */
 const LOGO_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -548,7 +558,10 @@ interface DeskMessage {
 }
 
 interface DeskSource {
-  addEventListener(type: "session" | "tools" | "guide-note", listener: (event: DeskMessage) => void): void;
+  addEventListener(
+    type: "session" | "tools" | "guide-note" | "answer-progress",
+    listener: (event: DeskMessage) => void,
+  ): void;
   addEventListener(type: "error", listener: () => void): void;
   close(): void;
 }
@@ -687,6 +700,11 @@ export function mountDesk(env: DeskEnv): () => void {
   let choiceWait: string | null = null;
   let ready = false;
   let source: DeskSource | null = null;
+  /** Stage named by the server while an answer POST is in flight. */
+  let progressStage: string | null = null;
+  let progressLine: string | null = null;
+  let progressStarted = 0;
+  let progressTimer: ReturnType<typeof setInterval> | null = null;
   let notice: string | null = null;
   let streamFailures = 0;
   let connection: string | null = null;
@@ -1139,6 +1157,7 @@ export function mountDesk(env: DeskEnv): () => void {
     writer?.stop();
     releaseChips();
     cancelVoice();
+    stopAnswerProgress();
     source?.close();
   };
 
@@ -2263,6 +2282,9 @@ export function mountDesk(env: DeskEnv): () => void {
     source.addEventListener("guide-note", (event) => {
       paintGuideNote(event.data);
     });
+    source.addEventListener("answer-progress", (event) => {
+      applyAnswerProgress(event.data);
+    });
   }
 
   async function postGuideNote(path: string, questionId: string, action: string): Promise<void> {
@@ -2430,6 +2452,7 @@ export function mountDesk(env: DeskEnv): () => void {
     let focusChoices = false;
     try {
       paint();
+      if (action === "answer") startAnswerProgress();
       const attachments = action === "answer" ? attachmentPayload() : [];
       const result = await postTurn(
         action,
@@ -2459,6 +2482,7 @@ export function mountDesk(env: DeskEnv): () => void {
       error = DRAFT_KEPT;
     } finally {
       pending = false;
+      stopAnswerProgress();
       paint();
       if (advance) {
         if (focusChoices) focusChoiceGroup();
@@ -2528,6 +2552,7 @@ export function mountDesk(env: DeskEnv): () => void {
     error = null;
     notice = null;
     setBusy(true);
+    startAnswerProgress();
     let advance = false;
     try {
       const result = await postTurn("answer", token, { questionId: held.questionId, text: draft }, env.fetch);
@@ -2545,6 +2570,7 @@ export function mountDesk(env: DeskEnv): () => void {
       showFieldError(DRAFT_KEPT);
     } finally {
       pending = false;
+      stopAnswerProgress();
       if (advance) {
         paint();
         focusNewQuestion();
@@ -3540,6 +3566,7 @@ export function mountDesk(env: DeskEnv): () => void {
         ...(voiceDisclosed ? { voiceNote: true } : {}),
         ...attachSpread(),
         keepDraft: true,
+        ...(pending && progressLine !== null ? { reading: progressLine } : {}),
         ...(draftNote !== null && draftNote !== "" ? { draftNote, draftFade } : {}),
         ...(view.lead !== "" ? { lead: view.lead } : {}),
         ...(view.help !== "" ? { help: view.help } : {}),
@@ -3621,6 +3648,55 @@ export function mountDesk(env: DeskEnv): () => void {
     const next = guideTurnText(view?.question?.ask ?? null, view?.done === true);
     if ((node.textContent ?? "") === next) return;
     node.textContent = next;
+  }
+
+  function stopAnswerProgress(): void {
+    if (progressTimer !== null) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+    progressStage = null;
+    progressLine = null;
+  }
+
+  function elapsedAnswerSeconds(): number {
+    return Math.max(0, Math.floor((Date.now() - progressStarted) / 1000));
+  }
+
+  function writeReading(line: string): void {
+    const node = region()?.querySelector("[data-guide-reading]");
+    if (node === null || node === undefined || !("textContent" in node)) return;
+    node.textContent = line;
+  }
+
+  function startAnswerProgress(): void {
+    stopAnswerProgress();
+    progressStarted = Date.now();
+    progressTimer = setInterval(() => {
+      if (!pending || progressStage === null) return;
+      const line = answerProgressLine(progressStage, elapsedAnswerSeconds());
+      if (line === null) return;
+      progressLine = line;
+      writeReading(line);
+    }, 1000);
+    const timer = progressTimer as { unref?: () => void };
+    if (typeof timer.unref === "function") timer.unref();
+  }
+
+  function applyAnswerProgress(raw: string): void {
+    if (!pending) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!isRecord(payload) || typeof payload.stage !== "string") return;
+    const line = answerProgressLine(payload.stage, elapsedAnswerSeconds());
+    if (line === null) return;
+    progressStage = payload.stage;
+    progressLine = line;
+    writeReading(line);
   }
 
   function focusNewQuestion(): void {

@@ -132,7 +132,15 @@ export {
   guardLogoText,
   reletterChoices,
 } from "./guide/session-state.ts";
-export { usualRange, usualRangeLine, READING_LINE, GUIDE_FAIL_LINE } from "./guide/guide-progress.ts";
+export {
+  usualRange,
+  usualRangeLine,
+  READING_LINE,
+  GUIDE_FAIL_LINE,
+  ANSWER_PROGRESS,
+  isAnswerProgressStage,
+} from "./guide/guide-progress.ts";
+export type { AnswerProgressStage } from "./guide/guide-progress.ts";
 export { mirrorCue, requestMirror } from "./guide/mirror.ts";
 export { FAMILIES, FAMILY_STYLE, familyOf, selectReferenceCards, styleWorldForFamily } from "./guide/gallery-model.ts";
 export type { GalleryFamily } from "./guide/gallery-model.ts";

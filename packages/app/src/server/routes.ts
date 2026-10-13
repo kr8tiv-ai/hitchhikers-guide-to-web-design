@@ -585,7 +585,10 @@ function createLiveTurn(
           },
         };
       }
-      finished = await runTurn(session, turnInput, { think: model });
+      finished = await runTurn(session, turnInput, {
+        think: model,
+        onProgress: (stage) => hooks?.publish("answer-progress", { stage }),
+      });
       await reload();
       return {
         next: getInterview().next(),

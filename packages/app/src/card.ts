@@ -102,6 +102,8 @@ export interface CardState {
   lead?: string;
   /** Extra sentences that are not the question and not button instructions. */
   help?: string;
+  /** Stage line while an answer is in flight. Absent until the server names a stage. */
+  reading?: string;
 }
 
 /**
@@ -451,7 +453,7 @@ ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard_
     ${button("answer", "Answer", "primary", answerOff)}
     ${button("suggest", SUGGEST_LABEL, "secondary", state.pending)}
     ${button("skip", SKIP_LABEL, "ghost", state.pending)}
-    <p class="hh-qcard__reading" data-guide-reading aria-live="polite">${state.pending ? "Guide is reading your answer…" : ""}</p>
+    <p class="hh-qcard__reading" data-guide-reading aria-live="polite">${state.pending ? escapeHtml(state.reading && state.reading !== "" ? state.reading : "Guide is reading your answer…") : ""}</p>
   </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
 </article>`;
