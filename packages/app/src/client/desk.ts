@@ -2467,15 +2467,34 @@ export function mountDesk(env: DeskEnv): () => void {
   /** Words typed after the stream already painted this turn's card. The same sentence still counts. */
   function textTypedDuringTurn(questionId: string, session: SessionView): string {
     const nextId = session.question?.id ?? null;
-    const cardAlready = view?.question?.id === nextId && nextId !== questionId;
+    const shown = region()?.querySelector("[data-question-id]")?.getAttribute("data-question-id") ?? "";
+    const cardAlready =
+      nextId !== null && nextId !== questionId && (view?.question?.id === nextId || shown === nextId);
     const pushbackAlready =
       (session.pushback ?? "") !== "" &&
       session.question?.id === questionId &&
-      view?.question?.id === questionId &&
-      (view.pushback ?? "") === (session.pushback ?? "");
+      (view?.question?.id === questionId || shown === questionId) &&
+      (view?.pushback ?? "") === (session.pushback ?? "");
     if (!cardAlready && !pushbackAlready) return "";
     readDraft();
     return draft;
+  }
+
+  /**
+   * Words already in the box on the card this turn is showing, other than the
+   * answer just sent. A late paint must not wipe them. The same sentence is
+   * kept by textTypedDuringTurn; copying it here would put a pushback's
+   * cleared line back in the box.
+   */
+  function unmatchedFieldText(submitted: string): string {
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field === null || field === undefined || typeof field.value !== "string") return "";
+    const text = field.value;
+    if (text.trim() === "" || text === submitted) return "";
+    const shown = region()?.querySelector("[data-question-id]")?.getAttribute("data-question-id") ?? "";
+    const current = view?.question?.id ?? "";
+    if (shown === "" || shown !== current) return "";
+    return text;
   }
 
   async function followGuideJob(jobId: string): Promise<void> {
@@ -2493,7 +2512,8 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const typedNow = textTypedDuringTurn(questionId, result.session);
     finishTurn(questionId, result.session, submitted);
-    if (typedNow.trim() !== "") draft = typedNow;
+    const extra = typedNow.trim() !== "" ? typedNow : unmatchedFieldText(submitted);
+    if (extra.trim() !== "") draft = extra;
     error = null;
     pending = false;
     paint();
@@ -2698,7 +2718,8 @@ export function mountDesk(env: DeskEnv): () => void {
       // The stream may already be showing the next card or the pushback. Keep words typed there.
       const typedNow = textTypedDuringTurn(questionId, result.session);
       finishTurn(questionId, result.session, submitted);
-      if (typedNow.trim() !== "") draft = typedNow;
+      const extra = typedNow.trim() !== "" ? typedNow : unmatchedFieldText(submitted);
+      if (extra.trim() !== "") draft = extra;
       error = null;
       ownWords = false;
       advance = true;
