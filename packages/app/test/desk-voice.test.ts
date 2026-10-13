@@ -189,7 +189,10 @@ function memoryStorage(): DraftStorage {
   };
 }
 
-function harness(Recognition: DeskEnv["SpeechRecognition"], options?: { storage?: DraftStorage; projectKey?: string }) {
+function harness(
+  Recognition: DeskEnv["SpeechRecognition"],
+  options?: { storage?: DraftStorage; projectKey?: string; hangSuggest?: boolean },
+) {
   const meta = element({ content: "csrf-token" });
   const field = element({ id: "hh-card-draft" });
   field.value = "";
@@ -255,6 +258,10 @@ function harness(Recognition: DeskEnv["SpeechRecognition"], options?: { storage?
     },
     fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (options?.hangSuggest === true && url.includes("/api/suggest")) {
+        posts.push({ url, body: typeof init?.body === "string" ? init.body : "" });
+        return new Promise<Response>(() => {});
+      }
       if (url.includes("/api/answer") || url.includes("/api/skip") || url.includes("/api/suggest")) {
         posts.push({ url, body: typeof init?.body === "string" ? init.body : "" });
         return Response.json({
@@ -1071,8 +1078,8 @@ function sessionJson(id: string, pushback: string | null = null): string {
   });
 }
 
-function liveHarness() {
-  const h = harness(FakeRecognition);
+function liveHarness(options?: { hangSuggest?: boolean }) {
+  const h = harness(FakeRecognition, options);
   let notice: FakeEl | null = null;
   let note: FakeEl | null = null;
   const button = element({ class: "hh-btn hh-btn--secondary", "data-voice": "hold" });
@@ -1801,6 +1808,157 @@ test("a mid-dictation restore, repaint, or programmatic write does not repeat th
     await settle();
     assertDraft(h, heardOnce);
     assert.equal(h.inputBinds(), 1);
+  } finally {
+    stop();
+  }
+});
+
+test("soft speech errors name the problem, start one fresh recognizer, and keep the next words", async () => {
+  const cases = [
+    ["network", "Lost the connection to Chrome's speech service. Trying again…"],
+    ["aborted", "Listening stopped. Starting again…"],
+    ["no-speech", "Didn't hear anything. Still listening."],
+  ] as const;
+  for (const [kind, line] of cases) {
+    FakeRecognition.all = [];
+    FakeRecognition.last = null;
+    const h = liveHarness();
+    const stop = mountDesk(h.env);
+    try {
+      await settle();
+      resetVoiceInvariant();
+      FakeRecognition.all = [];
+      h.fire("click", { target: h.button, button: 0 });
+      const first = FakeRecognition.last;
+      assert.ok(first, kind);
+      first.onerror?.({ error: kind });
+      assert.equal(h.notice?.textContent, line, kind);
+      const next = FakeRecognition.last;
+      assert.ok(next, kind);
+      assert.notEqual(next, first, kind);
+      assert.equal(first.aborted, true, kind);
+      assert.equal(next.started, true, kind);
+      assert.equal(liveCount(), 1, kind);
+      assert.equal(readVoiceInvariant().live, 1, kind);
+      next.onstart?.();
+      next.say(`kept ${kind}`, true);
+      assert.equal(h.field.value, `kept ${kind}`, kind);
+      assert.equal(h.button.getAttribute("disabled"), null, kind);
+    } finally {
+      stop();
+    }
+  }
+});
+
+test("the fourth soft speech error stops and asks for another click", async () => {
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    resetVoiceInvariant();
+    FakeRecognition.all = [];
+    h.fire("click", { target: talk(), button: 0 });
+    let rec = FakeRecognition.last;
+    assert.ok(rec);
+    for (let n = 0; n < 3; n += 1) {
+      rec.onerror?.({ error: "network" });
+      const next = FakeRecognition.last;
+      assert.ok(next);
+      assert.notEqual(next, rec);
+      assert.equal(next.started, true);
+      rec = next;
+    }
+    const count = FakeRecognition.all.length;
+    rec.onerror?.({ error: "aborted" });
+    assert.equal(FakeRecognition.all.length, count);
+    rec.onend?.();
+    await settle();
+    assert.match(h.region.innerHTML, /Click the mic to try again\./);
+    assert.equal(rec.onresult, null);
+    assert.equal(readVoiceInvariant().live, 0);
+    const before = renderedDraft(h.region.innerHTML);
+    rec.say("should not land", true);
+    assert.equal(renderedDraft(h.region.innerHTML), before);
+  } finally {
+    stop();
+  }
+});
+
+test("not-allowed shows the blocked line and does not start another recognizer", async () => {
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    FakeRecognition.all = [];
+    h.fire("click", { target: talk(), button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    rec.onerror?.({ error: "not-allowed" });
+    rec.onend?.();
+    await settle();
+    assert.equal(FakeRecognition.all.length, 1);
+    assert.match(h.region.innerHTML, /role="alert"/);
+    assert.ok(h.region.innerHTML.includes(VOICE_BLOCKED));
+    assert.equal(rec.onresult, null);
+  } finally {
+    stop();
+  }
+});
+
+test("after twelve question changes the next dictation lands once on one recognizer", async () => {
+  const h = harness(FakeRecognition);
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    resetVoiceInvariant();
+    FakeRecognition.all = [];
+    for (let n = 1; n <= 12; n += 1) {
+      h.fire("click", { target: talk(), button: 0 });
+      const rec = FakeRecognition.last;
+      assert.ok(rec);
+      rec.onstart?.();
+      rec.say(`word${n}`, true);
+      h.emitSession(sessionJson(`DP-9.${n}`));
+      assert.equal(rec.stopped, true);
+      rec.onend?.();
+      await settle();
+      assert.equal(liveCount(), 0);
+    }
+    h.fire("click", { target: talk(), button: 0 });
+    const last = FakeRecognition.last;
+    assert.ok(last);
+    assert.equal(liveCount(), 1);
+    assert.equal(readVoiceInvariant().live, 1);
+    last.onstart?.();
+    last.say("once", true);
+    assert.equal(occurrences(renderedDraft(h.region.innerHTML), "once"), 1);
+    assert.equal(liveCount(), 1);
+  } finally {
+    stop();
+  }
+});
+
+test("a hung Guide leaves the mic on and dictation still lands", async () => {
+  const h = liveHarness({ hangSuggest: true });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    resetVoiceInvariant();
+    FakeRecognition.all = [];
+    h.fire("click", { target: element({ "data-action": "suggest" }) });
+    await Promise.resolve();
+    assert.equal(h.posts.some((item) => item.url.includes("/api/suggest")), true);
+    assert.equal(h.button.getAttribute("disabled"), null);
+    assert.equal(h.button.disabled, false);
+    h.fire("click", { target: h.button, button: 0 });
+    const rec = FakeRecognition.last;
+    assert.ok(rec);
+    assert.equal(rec.started, true);
+    assert.equal(liveCount(), 1);
+    rec.onstart?.();
+    rec.say("while the Guide is busy", true);
+    assert.equal(h.field.value, "while the Guide is busy");
+    assert.equal(h.button.getAttribute("disabled"), null);
   } finally {
     stop();
   }

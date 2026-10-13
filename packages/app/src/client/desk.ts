@@ -1588,6 +1588,9 @@ export function mountDesk(env: DeskEnv): () => void {
               : "Didn't hear anything. Still listening.";
         notice = line;
         voiceError = null;
+        const question = region();
+        if (question !== null) patchNotice(question, line);
+        announceVoice(line);
         retireRecognizer(rec);
         beginRecognition(epoch);
         return;
