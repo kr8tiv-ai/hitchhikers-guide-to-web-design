@@ -5,7 +5,7 @@
 import { escapeHtml } from "../card.ts";
 import type { BriefDeskView } from "@hitchhiker/engine";
 
-export function approveMain(token: string, desk: BriefDeskView): string {
+export function approveMain(token: string, desk: BriefDeskView, changeError = ""): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
         <h1 class="hh-empty__title">Drafting the Site Brief</h1>
@@ -67,8 +67,9 @@ export function approveMain(token: string, desk: BriefDeskView): string {
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           <input type="hidden" name="action" value="change" />
           <label>Change something
-            <textarea name="correction" rows="3"></textarea>
+            <textarea name="correction" id="brief-correction" rows="3"${changeError === "" ? "" : ' aria-invalid="true" aria-describedby="brief-change-error"'}></textarea>
           </label>
+          ${changeError === "" ? "" : `<p id="brief-change-error" data-change-error role="alert">${escapeHtml(changeError)}</p>`}
           <button class="hh-btn hh-btn--secondary" type="submit" data-brief-change${desk.status === "revising" ? " disabled" : ""}>Change something</button>
         </form>
       </div>`;

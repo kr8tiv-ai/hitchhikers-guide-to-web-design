@@ -74,7 +74,22 @@ function bind(): void {
     watch(Date.now(), true);
   }
   form.addEventListener("submit", (event) => {
-    if (field.value.trim() === "") return;
+    if (field.value.trim() === "") {
+      event.preventDefault();
+      let note = form.querySelector("[data-change-error]");
+      if (!(note instanceof HTMLElement)) {
+        note = document.createElement("p");
+        note.id = "brief-change-error";
+        note.setAttribute("data-change-error", "");
+        note.setAttribute("role", "alert");
+        field.insertAdjacentElement("afterend", note);
+      }
+      note.textContent = "Write the change.";
+      field.setAttribute("aria-invalid", "true");
+      field.setAttribute("aria-describedby", "brief-change-error");
+      field.focus();
+      return;
+    }
     event.preventDefault();
     if (button.disabled) return;
     button.disabled = true;

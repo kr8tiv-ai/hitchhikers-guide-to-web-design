@@ -1588,7 +1588,12 @@ async function handleApproveForm(
     }
     if (action === "change") {
       if (correction.trim() === "") {
-        sendJson(req, res, 400, { error: "Write the change." });
+        if (mime === "application/json") {
+          sendJson(req, res, 400, { error: "Write the change." });
+          return;
+        }
+        const brief = readBriefDesk(projectDir);
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, "Write the change."), projectDir, token, false);
         return;
       }
       const jump = /^DP-\d+\.\d+$/.test(correction.trim());
@@ -2738,7 +2743,7 @@ function renderBrandBrief(token: string, notice: string | null, desk: BriefDeskV
   });
 }
 
-function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView): string {
+function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView, changeError = ""): string {
   const status =
     desk.buildStarted
       ? "The build is started."
@@ -2755,7 +2760,7 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk),
+    main: approveMain(token, desk, changeError),
     script: "/client/brief-change.js",
   });
 }
