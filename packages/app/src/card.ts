@@ -98,6 +98,10 @@ export interface CardState {
   draftNote?: string | null;
   /** True after the saved line has faded. Reduced motion keeps the words visible. */
   draftFade?: boolean;
+  /** Phase lead-in and recap. Rendered above the question, never inside the heading. */
+  lead?: string;
+  /** Extra sentences that are not the question and not button instructions. */
+  help?: string;
 }
 
 /**
@@ -331,6 +335,18 @@ function confirmBlock(state: CardState): string {
   return `  <p class="hh-qcard__confirm" data-skip-confirm>${escapeHtml(SKIP_CONFIRM)}</p>\n`;
 }
 
+function leadBlock(lead: string | undefined): string {
+  const text = (lead ?? "").trim();
+  if (text === "") return "";
+  return `  <p class="hh-qcard__lead" data-card-lead>${escapeHtml(text)}</p>\n`;
+}
+
+function helpBlock(help: string | undefined): string {
+  const text = (help ?? "").trim();
+  if (text === "" || /suggest for me|skipping is allowed|three ways forward/i.test(text)) return "";
+  return `  <p class="hh-qcard__help" data-card-help>${escapeHtml(text)}</p>\n`;
+}
+
 function sampleAnswer(question: Question): string {
   const suggest = question.suggest?.trim() ?? "";
   return suggest === "" ? PLACEHOLDER_FALLBACK : suggest;
@@ -422,8 +438,8 @@ export function renderCard(state: CardState): string {
   const answerOff = state.pending || uploading || (field.trim() === "" && !attachReady);
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
-${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
-  <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
+${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(state.lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
+${helpBlock(state.help)}  <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
 ${tipLine}${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>

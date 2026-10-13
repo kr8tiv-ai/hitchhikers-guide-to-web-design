@@ -412,6 +412,10 @@ export interface SessionView {
   answerDraft: string | null;
   /** Logo file slot. Null when the session has no saved logo. */
   logoFile: { originalName: string; safeName: string; bytes: number | null } | null;
+  /** Phase lead-in and recap, already split from the question. */
+  lead: string;
+  /** Extra sentences under the question. Empty when there are none. */
+  help: string;
 }
 
 interface SavedFileView {
@@ -569,6 +573,8 @@ export function parseSession(value: unknown): SessionView | null {
       : null,
     answerDraft: typeof value.answerDraft === "string" && value.answerDraft.trim() !== "" ? value.answerDraft : null,
     logoFile: parseLogoFile(value.logoFile),
+    lead: typeof value.lead === "string" ? value.lead : "",
+    help: typeof value.help === "string" ? value.help : "",
   };
 }
 
@@ -3423,6 +3429,8 @@ export function mountDesk(env: DeskEnv): () => void {
         ...attachSpread(),
         keepDraft: true,
         ...(draftNote !== null && draftNote !== "" ? { draftNote, draftFade } : {}),
+        ...(view.lead !== "" ? { lead: view.lead } : {}),
+        ...(view.help !== "" ? { help: view.help } : {}),
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(

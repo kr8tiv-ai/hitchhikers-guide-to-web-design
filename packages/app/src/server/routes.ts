@@ -70,6 +70,7 @@ import {
   type CardState,
 } from "../card.ts";
 import { attachQuestionId, formatBytes } from "../client/attach.ts";
+import { splitQuestionText } from "../question-parts.ts";
 import { guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
@@ -209,6 +210,10 @@ export interface DeskSession {
   answerDraft: string | null;
   /** Logo file slot. Null when no logo has been saved. */
   logoFile: { originalName: string; safeName: string; bytes: number | null } | null;
+  /** Phase lead-in and recap. Empty when this question has none. */
+  lead: string;
+  /** Sentences after the question that are not button instructions. */
+  help: string;
 }
 
 export interface DeskApp {
@@ -1844,6 +1849,16 @@ function buildSession(
   const guarded = applyLogoGuard(projectDir, question, questions, choices);
   question = guarded.question;
   choices = guarded.choices;
+  const parts = splitQuestionText(question?.ask ?? "");
+  let lead = parts.lead;
+  let help = parts.help;
+  if (question !== null && parts.question !== "" && parts.question !== question.ask) {
+    question = { ...question, ask: parts.question };
+  }
+  if (question === null) {
+    lead = "";
+    help = "";
+  }
   const card: CardState = {
     question,
     draft: "",
@@ -1857,6 +1872,8 @@ function buildSession(
     enterHint: true,
     choices,
     ...(savedFiles.length > 0 ? { attach: chipsFromSaved(savedFiles) } : {}),
+    ...(lead !== "" ? { lead } : {}),
+    ...(help !== "" ? { help } : {}),
   };
   const compact = depthTouched(questions, answers);
   const stepTotal = questions.length;
@@ -1926,6 +1943,8 @@ function buildSession(
     draftsClearedAt: drafts.clearedAt,
     answerDraft,
     logoFile: logoFileFrom(projectDir === "" ? null : readLogoIntake(projectDir)),
+    lead,
+    help,
   };
 }
 
