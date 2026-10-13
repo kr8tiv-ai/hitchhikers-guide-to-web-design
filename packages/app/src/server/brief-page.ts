@@ -19,6 +19,11 @@ export function approveMain(token: string, desk: BriefDeskView): string {
       </div>`;
   }
   const started = desk.buildStarted ? `<p data-build-status>The build is started.</p>` : "";
+  const progress =
+    desk.status === "revising"
+      ? `<p data-brief-progress>Reading the change · 0s</p>`
+      : `<p data-brief-progress hidden></p>`;
+  const same = desk.note === "" ? "" : `<p data-brief-note>${escapeHtml(desk.note)}</p>`;
   const failure =
     desk.error === ""
       ? ""
@@ -51,6 +56,8 @@ export function approveMain(token: string, desk: BriefDeskView): string {
         <h1 class="hh-title">Site Brief</h1>
         ${started}
         ${failure}
+        ${progress}
+        ${same}
         ${sections}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
@@ -62,7 +69,7 @@ export function approveMain(token: string, desk: BriefDeskView): string {
           <label>Change something
             <textarea name="correction" rows="3"></textarea>
           </label>
-          <button class="hh-btn hh-btn--secondary" type="submit">Change something</button>
+          <button class="hh-btn hh-btn--secondary" type="submit" data-brief-change${desk.status === "revising" ? " disabled" : ""}>Change something</button>
         </form>
       </div>`;
 }

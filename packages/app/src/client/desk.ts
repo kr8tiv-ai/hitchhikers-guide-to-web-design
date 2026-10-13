@@ -488,7 +488,7 @@ export interface SessionView {
   /** Extra sentences under the question. Empty when there are none. */
   help: string;
   /** Null until the interview is finished. Then idle, drafting, pending, or approved. */
-  briefStatus?: "idle" | "drafting" | "pending" | "approved" | null;
+  briefStatus?: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
 }
 
 interface SavedFileView {
@@ -661,8 +661,16 @@ export function parseSession(value: unknown): SessionView | null {
   };
 }
 
-function parseBriefStatus(value: unknown): "idle" | "drafting" | "pending" | "approved" | null {
-  if (value === "idle" || value === "drafting" || value === "pending" || value === "approved") return value;
+function parseBriefStatus(value: unknown): "idle" | "drafting" | "pending" | "approved" | "revising" | null {
+  if (
+    value === "idle" ||
+    value === "drafting" ||
+    value === "pending" ||
+    value === "approved" ||
+    value === "revising"
+  ) {
+    return value;
+  }
   return null;
 }
 
@@ -3766,7 +3774,8 @@ export function mountDesk(env: DeskEnv): () => void {
         ...(view.briefStatus === "idle" ||
         view.briefStatus === "drafting" ||
         view.briefStatus === "pending" ||
-        view.briefStatus === "approved"
+        view.briefStatus === "approved" ||
+        view.briefStatus === "revising"
           ? { brief: { status: view.briefStatus } }
           : {}),
       };

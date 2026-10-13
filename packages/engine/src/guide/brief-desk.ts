@@ -24,6 +24,8 @@ import type { GuideSession } from "./live-turn.ts";
 export const BRIEF_BUILD_ID = "guide-entry";
 export const BRIEF_NEXT_PHASE = "Babel Fish";
 export const BRIEF_PROGRESS_STAGE = "Drafting the Site Brief";
+export const BRIEF_SAME_NOTE = "The draft is the same.";
+export const BRIEF_REVISE_STAGES = ["Reading the change", "Rewriting the brief", "Saving the revision"] as const;
 
 const QUESTION_ID = /^DP-\d+\.\d+$/;
 
@@ -36,7 +38,7 @@ export interface BriefSource {
 }
 
 export interface BriefDeskView {
-  status: "idle" | "drafting" | "pending" | "approved";
+  status: "idle" | "drafting" | "revising" | "pending" | "approved";
   draft: SiteBrief | null;
   markdown: string;
   sources: BriefSource[];
@@ -45,18 +47,22 @@ export interface BriefDeskView {
   nextAction: string;
   /** Honest draft failure. Empty when the model returned a brief. */
   error: string;
+  /** Set when a revision comes back identical to the pending draft. */
+  note: string;
   revisit: string | null;
 }
 
 interface PendingFile {
-  status: "idle" | "drafting" | "pending" | "approved";
+  status: "idle" | "drafting" | "revising" | "pending" | "approved";
   draft: SiteBrief | null;
   buildStarted: boolean;
   error?: string;
+  note?: string;
 }
 
 const jobs = new Map<string, Promise<BriefDeskView>>();
 const approving = new Map<string, Promise<BriefDeskView>>();
+const revisions = new Map<string, Promise<BriefDeskView>>();
 
 function pendingPath(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "brief-pending.json");
@@ -75,20 +81,26 @@ function readPending(projectDir: string): PendingFile {
   try {
     const parsed: unknown = JSON.parse(readFileSync(pendingPath(projectDir), "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return { status: "idle", draft: null, buildStarted: false, error: "" };
+      return { status: "idle", draft: null, buildStarted: false, error: "", note: "" };
     }
     const record = parsed as Record<string, unknown>;
     const status = record.status;
-    const known = status === "idle" || status === "drafting" || status === "pending" || status === "approved";
+    const known =
+      status === "idle" ||
+      status === "drafting" ||
+      status === "revising" ||
+      status === "pending" ||
+      status === "approved";
     const draft = isBrief(record.draft) ? record.draft : null;
     return {
       status: known ? status : "idle",
       draft,
       buildStarted: record.buildStarted === true,
       error: typeof record.error === "string" ? record.error : "",
+      note: typeof record.note === "string" ? record.note : "",
     };
   } catch {
-    return { status: "idle", draft: null, buildStarted: false, error: "" };
+    return { status: "idle", draft: null, buildStarted: false, error: "", note: "" };
   }
 }
 
@@ -118,7 +130,8 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
   const pending = readPending(projectDir);
   let status = pending.status;
   if (status === "drafting" && !jobs.has(key)) status = "idle";
-  if (jobs.has(key) && status !== "pending" && status !== "approved") status = "drafting";
+  if (status === "revising" && !revisions.has(key)) status = pending.draft === null ? "idle" : "pending";
+  if (jobs.has(key) && status !== "pending" && status !== "approved" && status !== "revising") status = "drafting";
   const state = loadState(projectDir);
   return {
     status,
@@ -129,6 +142,7 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
     phase: state?.phase ?? "Don't Panic",
     nextAction: state?.nextAction ?? "",
     error: pending.error ?? "",
+    note: pending.note ?? "",
     revisit: null,
   };
 }
@@ -174,7 +188,7 @@ export function draftSiteBrief(
   const existing = jobs.get(key);
   if (existing) return existing;
   const current = readBriefDesk(projectDir);
-  if (current.buildStarted || current.status === "approved") return Promise.resolve(current);
+  if (current.buildStarted || current.status === "approved" || current.status === "revising") return Promise.resolve(current);
   if (current.status === "pending" && current.error === "") return Promise.resolve(current);
   opts?.onProgress?.(BRIEF_PROGRESS_STAGE);
   writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted, error: "" });
@@ -245,38 +259,104 @@ export function approveSiteBrief(projectDir: string, thinkFn: typeof think): Pro
   return job;
 }
 
-export async function reviseSiteBrief(
+export function reviseSiteBrief(
   projectDir: string,
   correction: string,
   thinkFn: typeof think,
+  opts?: { onProgress?: (stage: string) => void },
 ): Promise<BriefDeskView> {
   const text = correction.trim();
-  if (text === "") throw new Error("Write the change.");
-  if (QUESTION_ID.test(text)) {
-    await writeRevisitId(projectDir, text);
-    return { ...readBriefDesk(projectDir), revisit: text };
-  }
-  if (isApproval(text)) throw new Error("Use Approve to accept the brief.");
+  if (text === "") return Promise.reject(new Error("Write the change."));
+  if (QUESTION_ID.test(text)) return reviseQuestion(projectDir, text);
+  if (isApproval(text)) return Promise.reject(new Error("Use Approve to accept the brief."));
+  const key = path.resolve(projectDir);
+  const existing = revisions.get(key);
+  if (existing) return existing;
   const current = readBriefDesk(projectDir);
-  if (current.draft === null) throw new Error("The brief is not ready to change.");
-  const loop = briefLoop(guideSession(projectDir), { think: resumeThink(thinkFn, current.draft) });
-  const opened = await loop.next();
-  if (opened.done || opened.value === undefined) throw new Error("The brief did not resume.");
-  const revised = await loop.next(text);
-  await loop.return(undefined);
-  const draft = revised.value?.draft;
-  if (draft === undefined) throw new Error("The brief did not change.");
-  writePending(projectDir, { status: "pending", draft, buildStarted: false, error: "" });
-  const questionId = text.match(/DP-\d+\.\d+/)?.[0] ?? "brief";
-  const live = loadDecisions(projectDir).find((item) => item.questionId === questionId && item.supersededBy === "");
+  if (current.draft === null) return Promise.reject(new Error("The brief is not ready to change."));
+  opts?.onProgress?.(BRIEF_REVISE_STAGES[0]);
+  writePending(projectDir, {
+    status: "revising",
+    draft: current.draft,
+    buildStarted: current.buildStarted,
+    error: "",
+    note: "",
+  });
+  const job = runRevise(projectDir, text, current.draft, thinkFn, opts?.onProgress);
+  revisions.set(key, job);
+  void job.finally(() => {
+    if (revisions.get(key) === job) revisions.delete(key);
+  });
+  return job;
+}
+
+async function reviseQuestion(projectDir: string, text: string): Promise<BriefDeskView> {
+  await writeRevisitId(projectDir, text);
+  return { ...readBriefDesk(projectDir), revisit: text };
+}
+
+async function runRevise(
+  projectDir: string,
+  text: string,
+  before: SiteBrief,
+  thinkFn: typeof think,
+  onProgress?: (stage: string) => void,
+): Promise<BriefDeskView> {
+  try {
+    onProgress?.(BRIEF_REVISE_STAGES[1]);
+    const loop = briefLoop(guideSession(projectDir), { think: resumeThink(thinkFn, before) });
+    const opened = await loop.next();
+    if (opened.done || opened.value === undefined) throw new Error("The brief did not resume.");
+    const revised = await loop.next(text);
+    await loop.return(undefined);
+    const draft = revised.value?.draft;
+    if (draft === undefined) throw new Error("The brief did not change.");
+    const note = sameBrief(before, draft) ? BRIEF_SAME_NOTE : "";
+    onProgress?.(BRIEF_REVISE_STAGES[2]);
+    writePending(projectDir, { status: "pending", draft, buildStarted: false, error: "", note });
+    await recordRevision(projectDir, text, before, draft, thinkFn);
+    return readBriefDesk(projectDir);
+  } catch (error) {
+    writePending(projectDir, { status: "pending", draft: before, buildStarted: false, error: "", note: "" });
+    throw error;
+  }
+}
+
+function sameBrief(left: SiteBrief, right: SiteBrief): boolean {
+  for (const key of BRIEF_KEYS) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
+}
+
+async function recordRevision(
+  projectDir: string,
+  text: string,
+  before: SiteBrief,
+  after: SiteBrief,
+  thinkFn: typeof think,
+): Promise<void> {
   await syncAnswer(projectDir, {
-    questionId,
+    questionId: "brief",
     text,
-    source: "answer",
+    source: "brief-correction",
     moveCursor: false,
     summarize: false,
     think: thinkFn,
-    ...(live === undefined ? {} : { supersedeId: live.id }),
   });
-  return readBriefDesk(projectDir);
+  for (const key of BRIEF_KEYS) {
+    if (before[key] === after[key]) continue;
+    const questionId = BRIEF_ANSWER_IDS[key];
+    if (questionId === undefined || questionId === "") continue;
+    const live = loadDecisions(projectDir).find((item) => item.questionId === questionId && item.supersededBy === "");
+    await syncAnswer(projectDir, {
+      questionId,
+      text: after[key],
+      source: "brief-correction",
+      moveCursor: false,
+      summarize: false,
+      think: thinkFn,
+      ...(live === undefined ? {} : { supersedeId: live.id }),
+    });
+  }
 }

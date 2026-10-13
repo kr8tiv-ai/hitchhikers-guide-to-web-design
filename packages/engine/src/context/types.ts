@@ -21,7 +21,8 @@ export type DecisionSource =
   | "approval"
   | "skip"
   | "before-jump"
-  | "discuss";
+  | "discuss"
+  | "brief-correction";
 
 export type DecisionKind = "decision" | "adr";
 

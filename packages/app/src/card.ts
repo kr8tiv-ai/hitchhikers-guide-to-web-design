@@ -108,7 +108,7 @@ export interface CardState {
    * Set only after the interview is finished.
    * Omitted, the done card stays a heading with no action.
    */
-  brief?: { status: "idle" | "drafting" | "pending" | "approved" } | null;
+  brief?: { status: "idle" | "drafting" | "pending" | "approved" | "revising" } | null;
 }
 
 /**
@@ -327,7 +327,7 @@ function doneCard(brief: CardState["brief"]): string {
     action = `  <p class="hh-qcard__next"><button type="button" class="hh-btn hh-btn--primary" data-action="draft-brief" data-brief-auto="once">Draft the Site Brief</button></p>\n`;
   } else if (status === "drafting") {
     action = `  <p class="hh-qcard__reading" data-guide-reading aria-live="polite">Drafting the Site Brief · 0s</p>\n  <p class="hh-qcard__next"><button type="button" class="hh-btn hh-btn--primary" data-action="draft-brief" disabled>Draft the Site Brief</button></p>\n`;
-  } else if (status === "pending") {
+  } else if (status === "pending" || status === "revising") {
     action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Review the Site Brief</a></p>\n`;
   } else {
     action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard">The build is started.</a></p>\n`;

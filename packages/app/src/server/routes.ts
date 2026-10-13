@@ -233,7 +233,7 @@ export interface DeskSession {
   /** Sentences after the question that are not button instructions. */
   help: string;
   /** Null until every asked question has an answer. */
-  briefStatus: "idle" | "drafting" | "pending" | "approved" | null;
+  briefStatus: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
 }
 
 export interface DeskApp {
@@ -1514,6 +1514,7 @@ function briefPayload(desk: BriefDeskView): {
   buildStarted: boolean;
   draft: BriefDeskView["draft"];
   error: string;
+  note: string;
   revisit: string | null;
 } {
   return {
@@ -1523,6 +1524,7 @@ function briefPayload(desk: BriefDeskView): {
     buildStarted: desk.buildStarted,
     draft: desk.draft,
     error: desk.error,
+    note: desk.note,
     revisit: desk.revisit,
   };
 }
@@ -1589,9 +1591,18 @@ async function handleApproveForm(
         sendJson(req, res, 400, { error: "Write the change." });
         return;
       }
-      const next = await reviseSiteBrief(projectDir, correction, guideThink);
-      if (next.revisit !== null) await reloadInterview();
-      res.writeHead(303, { location: next.revisit === null ? "/approve" : "/" });
+      const jump = /^DP-\d+\.\d+$/.test(correction.trim());
+      const job = reviseSiteBrief(projectDir, correction, guideThink);
+      if (jump) {
+        const next = await job;
+        if (next.revisit !== null) await reloadInterview();
+        res.writeHead(303, { location: "/" });
+        res.end();
+        return;
+      }
+      void job.catch((error: unknown) => logDeskError(error));
+      await Promise.race([job, new Promise((resolve) => setTimeout(resolve, 0))]);
+      res.writeHead(303, { location: "/approve" });
       res.end();
       return;
     }
@@ -1644,10 +1655,24 @@ async function handleBriefPost(
     return;
   }
   try {
-    const desk = await reviseSiteBrief(projectDir, correction, guideThink);
-    if (desk.revisit !== null) await reloadInterview();
-    hub.publish("session", view());
-    sendJson(req, res, 200, briefPayload(desk));
+    const jump = /^DP-\d+\.\d+$/.test(correction.trim());
+    const job = reviseSiteBrief(projectDir, correction, guideThink, {
+      onProgress(stage) {
+        hub.publish("brief-progress", { stage });
+      },
+    });
+    if (jump) {
+      const desk = await job;
+      if (desk.revisit !== null) await reloadInterview();
+      hub.publish("session", view());
+      sendJson(req, res, 200, briefPayload(desk));
+      return;
+    }
+    void job
+      .then(() => hub.publish("session", view()))
+      .catch((error: unknown) => logDeskError(error));
+    await Promise.race([job, new Promise((resolve) => setTimeout(resolve, 0))]);
+    sendJson(req, res, 200, briefPayload(readBriefDesk(projectDir)));
   } catch (error: unknown) {
     logDeskError(error);
     const message = error instanceof Error && error.message.trim() !== "" ? error.message : "The brief did not change.";
@@ -1912,6 +1937,16 @@ async function handleGet(
   }
   if (pathname === "/client/theme.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(THEME_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/brief-change.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "client", "brief-change.ts"))),
+    );
     return;
   }
   if (pathname === "/client/drive.js") {
@@ -2709,7 +2744,9 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
       ? "The build is started."
       : desk.status === "drafting"
         ? "Drafting the Site Brief"
-        : "The Site Brief is ready for a yes.";
+        : desk.status === "revising"
+          ? "Revising the Site Brief"
+          : "The Site Brief is ready for a yes.";
   return renderPanel({
     notice,
     token,
@@ -2719,6 +2756,7 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
     kicker: "Approvals",
     status,
     main: approveMain(token, desk),
+    script: "/client/brief-change.js",
   });
 }
 
