@@ -15,6 +15,12 @@ import { generateSkeleton, SITE_RULES, type SitePromptSkeleton } from "../spec/s
 
 export const BUILD_MODEL = "grok-4.7-build-fast";
 export const BUILD_EFFORT = "xhigh";
+/** How often a live build looks for a running row whose process is gone. */
+export const BUILD_WATCHDOG_INTERVAL_MS = 30_000;
+/** A live child with no stream output for this long is settled. */
+export const BUILD_IDLE_MS = 30 * 60 * 1000;
+/** After a stream `end` event, wait this long for the child to exit. */
+export const BUILD_EXIT_GRACE_MS = 5_000;
 
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
@@ -52,10 +58,33 @@ export interface BuildSpawnResult {
 
 export interface BuildSpawnHandle {
   pid: number;
+  /** Resolves on stdio `close` or spawn error. May never resolve if the pipes stay open. */
   done: Promise<BuildSpawnResult>;
+  /**
+   * Resolves on child `exit`, which can arrive before `close`.
+   * When omitted, `done` is the only exit signal.
+   */
+  exited?: Promise<number | null>;
+  /** Stop a child that is still alive after the stream has ended. */
+  stop?: () => void;
 }
 
 export type BuildSpawn = (request: BuildSpawnRequest) => BuildSpawnHandle;
+
+export interface SiteBuildGateInfo {
+  projectDir: string;
+  promptId: string;
+  files: readonly string[];
+}
+
+/** Runs after a clean exit, before the row is marked passed. Throw to fail the row. */
+export type SiteBuildGate = (info: SiteBuildGateInfo) => Promise<void> | void;
+
+export interface SiteBuildWatch {
+  intervalMs: number;
+  idleMs: number;
+  exitGraceMs: number;
+}
 
 export interface BuildRunView {
   promptId: string;
@@ -86,6 +115,28 @@ interface RunFile {
 let runner: BuildSpawn | null = null;
 const projectRunners = new Map<string, BuildSpawn | null>();
 const jobs = new Map<string, Promise<void>>();
+const watchOverrides = new Map<string, SiteBuildWatch>();
+const buildGates = new Map<string, SiteBuildGate>();
+
+interface LiveBuild {
+  projectDir: string;
+  promptId: string;
+  pid: number | null;
+  intervalMs: number;
+  idleMs: number;
+  lastActivity: number;
+  lastScan: number;
+  force: (result: BuildSpawnResult) => void;
+}
+
+const liveBuilds = new Map<string, LiveBuild>();
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+const DEFAULT_WATCH: SiteBuildWatch = {
+  intervalMs: BUILD_WATCHDOG_INTERVAL_MS,
+  idleMs: BUILD_IDLE_MS,
+  exitGraceMs: BUILD_EXIT_GRACE_MS,
+};
 
 export function setBuildRunner(next: BuildSpawn | null): void {
   runner = next;
@@ -106,6 +157,55 @@ export function clearProjectBuildRunner(projectDir: string): void {
 
 export function hasProjectBuildRunner(projectDir: string): boolean {
   return projectRunners.has(path.resolve(projectDir));
+}
+
+export function siteBuildWatchConfig(projectDir?: string): SiteBuildWatch {
+  if (projectDir === undefined) return { ...DEFAULT_WATCH };
+  return { ...(watchOverrides.get(path.resolve(projectDir)) ?? DEFAULT_WATCH) };
+}
+
+export function configureSiteBuildWatch(projectDir: string, options: Partial<SiteBuildWatch>): void {
+  const key = path.resolve(projectDir);
+  const prev = watchOverrides.get(key) ?? DEFAULT_WATCH;
+  watchOverrides.set(key, {
+    intervalMs: finiteMs(options.intervalMs, prev.intervalMs),
+    idleMs: finiteMs(options.idleMs, prev.idleMs),
+    exitGraceMs: finiteMs(options.exitGraceMs, prev.exitGraceMs),
+  });
+  rearmWatch();
+}
+
+export function setSiteBuildGate(projectDir: string, gate: SiteBuildGate | null): void {
+  const key = path.resolve(projectDir);
+  if (gate === null) buildGates.delete(key);
+  else buildGates.set(key, gate);
+}
+
+export function resetSiteBuildWatch(projectDir: string): void {
+  const key = path.resolve(projectDir);
+  watchOverrides.delete(key);
+  buildGates.delete(key);
+  liveBuilds.delete(key);
+  rearmWatch();
+}
+
+/**
+ * Settle a running row whose child is gone or whose stream has gone quiet.
+ * Pass a project directory to scan that build immediately. The interval
+ * uses each build's own period so a short test interval cannot fail another build.
+ */
+export function runBuildWatchdog(projectDir?: string): void {
+  const now = Date.now();
+  const only = projectDir === undefined ? null : path.resolve(projectDir);
+  for (const job of liveBuilds.values()) {
+    if (only !== null && job.projectDir !== only) continue;
+    if (only === null && now - job.lastScan < job.intervalMs) continue;
+    job.lastScan = now;
+    const dead = !pidAlive(job.pid);
+    const idle = now - job.lastActivity >= job.idleMs;
+    if (!dead && !idle) continue;
+    job.force(watchResult());
+  }
 }
 
 export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
@@ -165,11 +265,24 @@ function spawnLive(command: string, request: BuildSpawnRequest, env: NodeJS.Proc
   child.stderr?.setEncoding("utf8");
   child.stdout?.on("data", (chunk: string) => take(chunk, "out"));
   child.stderr?.on("data", (chunk: string) => take(chunk, "err"));
+  child.stdout?.on("error", () => undefined);
+  child.stderr?.on("error", () => undefined);
   let settled = false;
+  let resolveExit: (code: number | null) => void = () => undefined;
+  const exited = new Promise<number | null>((resolve) => {
+    resolveExit = resolve;
+  });
+  let exitNotified = false;
+  const notifyExit = (code: number | null): void => {
+    if (exitNotified) return;
+    exitNotified = true;
+    resolveExit(code);
+  };
   const done = new Promise<BuildSpawnResult>((resolve) => {
     const finish = (result: BuildSpawnResult): void => {
       if (settled) return;
       settled = true;
+      notifyExit(result.code);
       resolve(result);
     };
     child.on("error", (error: NodeJS.ErrnoException) => {
@@ -180,11 +293,30 @@ function spawnLive(command: string, request: BuildSpawnRequest, env: NodeJS.Proc
         errorCode: error.code ?? "SPAWN",
       });
     });
+    // `exit` fires when the process is gone. `close` waits for stdio, which can
+    // hang after grok has already ended the turn and left the queue running.
+    child.on("exit", (code) => {
+      notifyExit(code ?? null);
+      finish({ code: code ?? null, stdout, stderr, errorCode: null });
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    });
     child.on("close", (code) => {
       finish({ code: code ?? null, stdout, stderr, errorCode: null });
     });
   });
-  return { pid: child.pid ?? 0, done };
+  return {
+    pid: child.pid ?? 0,
+    done,
+    exited,
+    stop: () => {
+      try {
+        child.kill();
+      } catch {
+        // The process is already gone.
+      }
+    },
+  };
 }
 
 function runnerFor(projectDir: string): BuildSpawn | null {
@@ -278,10 +410,26 @@ async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
   if (stale) return;
   const current = readRunFile(projectDir);
   if (current?.status === "running" && pidAlive(current.pid)) return;
-  await runQueue(projectDir, spawnFn);
+  try {
+    await runQueue(projectDir, spawnFn);
+  } catch (error: unknown) {
+    const run = readRunFile(projectDir);
+    if (run?.status !== "running") return;
+    const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
+    await settleItem(
+      projectDir,
+      run.promptId,
+      "failed",
+      reason === "" ? "The build did not finish." : reason,
+      run.lastLines,
+      run.filesWritten,
+      run.startedAt,
+    );
+  }
 }
 
 async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
+  const key = path.resolve(projectDir);
   for (;;) {
     const queue = await loadBuildQueue(projectDir);
     const next = queue?.items.find((item) => item.status === "queued" && PROMPT_ID.test(item.id));
@@ -294,13 +442,16 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
       exists = false;
     }
     if (!exists) {
-      await finishItem(projectDir, next.id, "failed", "The prompt file is missing.", [], []);
+      await settleItem(projectDir, next.id, "failed", "The prompt file is missing.", [], []);
       return;
     }
     const startedAt = new Date().toISOString();
     const lines: string[] = [];
     const before = snapshot(projectDir);
-    let pid: number | null = null;
+    const pidBox = { pid: null as number | null };
+    const buffered: string[] = [];
+    let feed: ((chunk: string) => void) | null = null;
+    let sealed = false;
     let handle: BuildSpawnHandle;
     try {
       handle = spawnFn({
@@ -311,32 +462,264 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         model: BUILD_MODEL,
         effort: BUILD_EFFORT,
         onOutput: (chunk) => {
+          if (sealed) return;
+          if (feed) feed(chunk);
+          else buffered.push(chunk);
           pushLines(lines, chunk);
-          const files = diffSnapshots(before, snapshot(projectDir));
-          writeRun(projectDir, liveRun(next.id, startedAt, lines, files, pid));
+          try {
+            writeRun(projectDir, liveRun(next.id, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
+          } catch {
+            // A progress write must not skip settlement.
+          }
         },
       });
-      pid = handle.pid > 0 ? handle.pid : null;
+      pidBox.pid = handle.pid > 0 ? handle.pid : null;
     } catch (error: unknown) {
       const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
-      await finishItem(projectDir, next.id, "failed", reason === "" ? "The build did not start." : reason, lines, []);
+      await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not start." : reason, lines, []);
       return;
     }
-    if (handle.pid > 0) {
-      await setStatus(projectDir, next.id, "running");
-      writeRun(
-        projectDir,
-        liveRun(next.id, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), handle.pid),
-      );
+    const watch = siteBuildWatchConfig(projectDir);
+    const control = trackSettlement(handle, watch.exitGraceMs);
+    if (pidBox.pid !== null) {
+      registerLive({
+        projectDir: key,
+        promptId: next.id,
+        pid: pidBox.pid,
+        intervalMs: watch.intervalMs,
+        idleMs: watch.idleMs,
+        lastActivity: Date.now(),
+        lastScan: Date.now(),
+        force: control.force,
+      });
     }
-    const result = await handle.done;
+    feed = (chunk) => {
+      control.feed(chunk);
+      const job = liveBuilds.get(key);
+      if (job !== undefined && job.promptId === next.id) job.lastActivity = Date.now();
+    };
+    for (const chunk of buffered) feed(chunk);
+    if (pidBox.pid !== null) {
+      try {
+        await setStatus(projectDir, next.id, "running");
+        writeRun(projectDir, liveRun(next.id, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
+      } catch (error: unknown) {
+        control.force({
+          code: 1,
+          stdout: "",
+          stderr: error instanceof Error ? error.message : "The build did not start.",
+          errorCode: "SETTLE",
+        });
+        sealed = true;
+        if (liveBuilds.get(key)?.promptId === next.id) unregisterLive(key);
+        const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
+        await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not start." : reason, lines, []);
+        return;
+      }
+    }
+    let result: BuildSpawnResult;
+    try {
+      result = await control.done;
+    } finally {
+      sealed = true;
+      if (liveBuilds.get(key)?.promptId === next.id) unregisterLive(key);
+    }
     const files = diffSnapshots(before, snapshot(projectDir));
     if (result.code === 0 && result.errorCode === null) {
-      await finishItem(projectDir, next.id, "passed", "", lines, files, startedAt);
+      try {
+        const gate = buildGates.get(key);
+        if (gate !== undefined) await gate({ projectDir, promptId: next.id, files });
+        await settleItem(projectDir, next.id, "passed", "", lines, files, startedAt);
+      } catch (error: unknown) {
+        const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
+        await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not finish." : reason, lines, files, startedAt);
+        return;
+      }
       continue;
     }
-    await finishItem(projectDir, next.id, "failed", failureReason(result), lines, files, startedAt);
+    await settleItem(projectDir, next.id, "failed", failureReason(result), lines, files, startedAt);
     return;
+  }
+}
+
+function finiteMs(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback;
+  return value;
+}
+
+function watchResult(): BuildSpawnResult {
+  return { code: null, stdout: "", stderr: "", errorCode: "WATCH" };
+}
+
+function rearmWatch(): void {
+  if (watchTimer !== null) {
+    clearInterval(watchTimer);
+    watchTimer = null;
+  }
+  if (liveBuilds.size === 0) return;
+  let interval = DEFAULT_WATCH.intervalMs;
+  for (const job of liveBuilds.values()) interval = Math.min(interval, job.intervalMs);
+  watchTimer = setInterval(() => {
+    runBuildWatchdog();
+  }, Math.max(10, interval));
+}
+
+function registerLive(job: LiveBuild): void {
+  liveBuilds.set(job.projectDir, job);
+  rearmWatch();
+}
+
+function unregisterLive(projectDir: string): void {
+  liveBuilds.delete(projectDir);
+  rearmWatch();
+}
+
+interface Settlement {
+  done: Promise<BuildSpawnResult>;
+  force: (result: BuildSpawnResult) => void;
+  feed: (chunk: string) => void;
+}
+
+/**
+ * Settle on the first of child exit/close or a streaming-json `end` event.
+ * An `end` event waits a bounded grace for the exit code so a late close
+ * cannot leave the row running. The promise resolves exactly once.
+ */
+function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement {
+  let resolveOut: (result: BuildSpawnResult) => void = () => undefined;
+  const done = new Promise<BuildSpawnResult>((resolve) => {
+    resolveOut = resolve;
+  });
+  let finished = false;
+  let endReason: string | null = null;
+  let buffer = "";
+  let grace: ReturnType<typeof setTimeout> | null = null;
+
+  const finish = (result: BuildSpawnResult): void => {
+    if (finished) return;
+    finished = true;
+    if (grace !== null) {
+      clearTimeout(grace);
+      grace = null;
+    }
+    resolveOut(result);
+  };
+
+  const snapshotResult = (code: number | null, extra?: Partial<BuildSpawnResult>): BuildSpawnResult => ({
+    code,
+    stdout: extra?.stdout ?? "",
+    stderr: extra?.stderr ?? "",
+    errorCode: extra?.errorCode ?? null,
+  });
+
+  const armGrace = (): void => {
+    if (finished || grace !== null) return;
+    grace = setTimeout(() => {
+      grace = null;
+      if (finished) return;
+      try {
+        handle.stop?.();
+      } catch {
+        // Stopping a dead child is fine.
+      }
+      if (endReason === "end_turn") finish(snapshotResult(0));
+      else finish({ code: null, stdout: "", stderr: "", errorCode: "ENDED" });
+    }, graceMs);
+  };
+
+  if (handle.exited !== undefined) {
+    void handle.exited.then(
+      (code) => {
+        // Let `done` (stdio close) win when it resolves in the same turn and carries stderr.
+        queueMicrotask(() => {
+          finish(snapshotResult(code));
+        });
+      },
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : "The build did not finish.";
+        finish({ code: 1, stdout: "", stderr: message, errorCode: "SETTLE" });
+      },
+    );
+  }
+  void handle.done.then(
+    (result) => {
+      finish(result);
+    },
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : "The build did not finish.";
+      finish({ code: 1, stdout: "", stderr: message, errorCode: "SETTLE" });
+    },
+  );
+
+  return {
+    done,
+    force: finish,
+    feed: (chunk) => {
+      if (finished || endReason !== null) return;
+      buffer = (buffer + chunk).slice(-32_000);
+      const reason = readEndReason(buffer);
+      if (reason === null) return;
+      endReason = reason;
+      if (!finished) armGrace();
+    },
+  };
+}
+
+function readEndReason(buffer: string): string | null {
+  let found: string | null = null;
+  for (const line of buffer.split(/\r?\n/)) {
+    const start = line.indexOf("{");
+    if (start < 0) continue;
+    const slice = line.slice(start).trim();
+    if (!/"type"\s*:\s*"end"/.test(slice)) continue;
+    try {
+      const parsed = JSON.parse(slice) as { type?: unknown; stopReason?: unknown };
+      if (parsed.type !== "end") continue;
+      found = typeof parsed.stopReason === "string" ? parsed.stopReason : "";
+    } catch {
+      continue;
+    }
+  }
+  return found;
+}
+
+async function settleItem(
+  projectDir: string,
+  promptId: string,
+  status: "passed" | "failed",
+  reason: string,
+  lines: readonly string[],
+  files: readonly string[],
+  startedAt = new Date().toISOString(),
+): Promise<void> {
+  try {
+    await finishItem(projectDir, promptId, status, reason, lines, files, startedAt);
+  } catch (error: unknown) {
+    const fallback = error instanceof Error ? publicText(error.message) : "";
+    const text = publicText(fallback === "" ? reason : fallback);
+    try {
+      await setStatus(projectDir, promptId, "failed");
+    } catch {
+      // The run file below is what the desk reads when the queue lock fails.
+    }
+    try {
+      const previous = readRunFile(projectDir);
+      const started = previous?.promptId === promptId ? previous.startedAt : startedAt;
+      writeRun(projectDir, {
+        promptId,
+        status: "failed",
+        model: BUILD_MODEL,
+        effort: BUILD_EFFORT,
+        startedAt: started,
+        elapsedMs: Math.max(0, Date.now() - Date.parse(started)),
+        lastLines: [...lines],
+        filesWritten: [...files],
+        reason: text === "" ? "The build did not finish." : text,
+        pid: null,
+      });
+    } catch {
+      // A second disk failure leaves the watchdog to catch a still-running row.
+    }
   }
 }
 
@@ -460,6 +843,13 @@ function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet:
 }
 
 function failureReason(result: BuildSpawnResult): string {
+  if (result.errorCode === "WATCH" || result.errorCode === "ENDED") {
+    return "The build process ended without reporting.";
+  }
+  if (result.errorCode === "SETTLE") {
+    const text = publicText(result.stderr);
+    return text === "" ? "The build did not finish." : text;
+  }
   const blob = `${result.stderr}\n${result.stdout}`;
   if (result.errorCode === "ENOENT" || /grok is not on PATH/i.test(blob)) {
     return "grok is not on PATH. Run hh doctor.";

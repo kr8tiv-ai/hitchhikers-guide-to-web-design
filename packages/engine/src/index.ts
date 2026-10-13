@@ -179,9 +179,13 @@ export {
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export {
   BUILD_EFFORT,
+  BUILD_EXIT_GRACE_MS,
+  BUILD_IDLE_MS,
   BUILD_MODEL,
+  BUILD_WATCHDOG_INTERVAL_MS,
   buildSpawnArgs,
   clearProjectBuildRunner,
+  configureSiteBuildWatch,
   ensureSiteBuild,
   getBuildRunner,
   hasProjectBuildRunner,
@@ -189,13 +193,25 @@ export {
   prepareSiteBuild,
   readBuildRun,
   reconcileSiteBuild,
+  resetSiteBuildWatch,
   resumeSiteBuild,
   retrySiteBuild,
+  runBuildWatchdog,
   setBuildRunner,
   setProjectBuildRunner,
+  setSiteBuildGate,
   siteBuildSettled,
+  siteBuildWatchConfig,
 } from "./guide/site-build.ts";
-export type { BuildRunView, BuildSpawn, BuildSpawnHandle, BuildSpawnRequest, BuildSpawnResult } from "./guide/site-build.ts";
+export type {
+  BuildRunView,
+  BuildSpawn,
+  BuildSpawnHandle,
+  BuildSpawnRequest,
+  BuildSpawnResult,
+  SiteBuildGate,
+  SiteBuildWatch,
+} from "./guide/site-build.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
 export { STATIC_ANSWER_ERROR, bannedAnswer } from "./guide/answer-guard.ts";
