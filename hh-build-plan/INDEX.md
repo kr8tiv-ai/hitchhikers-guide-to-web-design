@@ -215,3 +215,4 @@ Effort guide: complex work that spans engine schema, app UI, and e2e uses xhigh.
 | 210 | So Long and Thanks for All the Fish | Forty-Two | Turn main green after 209 ran out of turns, then finish 209's unfinished items | Heart of Gold | xhigh |
 | 216 | So Long and Thanks for All the Fish | Forty-Two | Sync grok-plugin COMMANDS with the new hh brief CLI subcommand so CI is green | Heart of Gold | xhigh |
 | 217 | So Long and Thanks for All the Fish | Forty-Two | Fix draft-persist Suggest E2E to match BUG-015 (choices only, no auto-save) | Heart of Gold | xhigh |
+| 219 | So Long and Thanks for All the Fish | Forty-Two | Turn main green after 218 ran out of turns (brief revise keeps the correction), then finish 218's PERF-001 leftover | Heart of Gold | xhigh |
