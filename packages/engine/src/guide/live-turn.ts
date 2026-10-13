@@ -409,8 +409,9 @@ async function advance(
   wasSoft: boolean,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
-  await syncInterviewFacts(s.projectDir, { summarize: false, moveCursor: true, think: deps.think });
-  const reopened = await openInterview(s.projectDir, s.depth);
+  // The decision write does not feed the interview read. Overlap them, then ask the model.
+  const synced = syncInterviewFacts(s.projectDir, { summarize: false, moveCursor: true, think: deps.think });
+  const reopened = await openInterview(s.projectDir, s.depth).finally(() => synced);
   const next = reopened.next();
   const facts = loadFacts(s.projectDir);
   const accepted =

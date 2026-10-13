@@ -2535,8 +2535,8 @@ export function mountDesk(env: DeskEnv): () => void {
     let advance = false;
     let focusChoices = false;
     try {
-      paint();
       if (action === "answer") startAnswerProgress();
+      else paint();
       const attachments = action === "answer" ? attachmentPayload() : [];
       const result = await postTurn(
         action,
