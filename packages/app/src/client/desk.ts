@@ -803,6 +803,8 @@ export function mountDesk(env: DeskEnv): () => void {
   const token = readToken(env.document);
   let view: SessionView | null = null;
   let draft = "";
+  /** The next paint empties the box. A pushback must not keep the answer just sent. */
+  let dropLiveDraft = false;
   let error: string | null = null;
   let pending = false;
   /** Latest choice pressed while the suggest POST is still pending. */
@@ -1029,6 +1031,11 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     if (target === null || target.getAttribute("id") !== "hh-card-draft") return;
     const next = target.value ?? "";
+    // A repaint can detach the node Playwright filled. The live box still needs the words.
+    const live = region()?.querySelector("#hh-card-draft");
+    if (live !== null && live !== undefined && live !== target && typeof live.value === "string" && live.value !== next) {
+      live.value = next;
+    }
     // patchDraft, repaint, and restore write lastWritten. That echo is not typing.
     if (voiceSession && next === lastWritten) return;
     draft = next;
@@ -1533,6 +1540,7 @@ export function mountDesk(env: DeskEnv): () => void {
       view = session;
     }
     draft = "";
+    dropLiveDraft = true;
     selectedChoiceLabel = null;
     draftNote = null;
     draftFade = false;
@@ -2324,12 +2332,23 @@ export function mountDesk(env: DeskEnv): () => void {
     else button.removeAttribute("disabled");
   }
 
+  function blankDraftField(): void {
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field === null || field === undefined || typeof field.value !== "string") return;
+    field.value = "";
+  }
+
   /** After a paint, the textarea shows the live draft and Answer follows that text. */
   function alignDraftField(): void {
     const field = region()?.querySelector("#hh-card-draft");
     if (field !== null && field !== undefined && typeof field.value === "string" && field.value !== draft) {
       // An empty draft must not erase words the person already put in the box.
       if (draft.trim() !== "" || field.value.trim() === "") field.value = draft;
+      else {
+        draft = field.value;
+        pageTyped = true;
+        rememberDraft(false);
+      }
     }
     syncAnswerLock();
   }
@@ -2634,6 +2653,7 @@ export function mountDesk(env: DeskEnv): () => void {
       }
       view = session;
       draft = "";
+      dropLiveDraft = true;
       error = null;
       notice = null;
       pending = false;
@@ -3918,6 +3938,13 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function paint(): void {
+    if (dropLiveDraft) {
+      dropLiveDraft = false;
+      // Only the card still on screen. A new question renders its own empty box.
+      const shown = region()?.querySelector("[data-question-id]")?.getAttribute("data-question-id") ?? "";
+      const current = view?.question?.id ?? "";
+      if (draft.trim() === "" && shown !== "" && shown === current) blankDraftField();
+    }
     syncAttachQuestion();
     adoptSavedFiles();
     const question = region();
@@ -4448,13 +4475,50 @@ function refillSameCard(region: DeskElement, html: string): boolean {
   const open = html.slice(openAt, openEnd);
   const idMatch = /data-question-id="([^"]*)"/.exec(open);
   if (idMatch === null || decodeAttr(idMatch[1] ?? "") !== existing.getAttribute("data-question-id")) return false;
+  // Same question: keep the textarea node. Replacing it drops a fill that already
+  // holds the previous node, and Answer stays disabled on an empty box.
+  const parked = existing.querySelector("#hh-card-draft");
   existing.innerHTML = html.slice(openEnd + 1, closeAt);
+  keepDraftControl(existing, parked);
   const push = /data-pushback="([^"]*)"/.exec(open);
   if (push !== null) existing.setAttribute("data-pushback", decodeAttr(push[1] ?? ""));
   else existing.removeAttribute("data-pushback");
   if (/aria-busy="true"/.test(open)) existing.setAttribute("aria-busy", "true");
   else existing.removeAttribute("aria-busy");
   return true;
+}
+
+/** Put the previous answer box back so an in-flight fill still lands in the card. */
+function keepDraftControl(article: DeskElement, parked: DeskElement | null): void {
+  if (parked === null) return;
+  const fresh = article.querySelector("#hh-card-draft");
+  if (fresh === null || fresh === parked) return;
+  const parkedValue = typeof parked.value === "string" ? parked.value : "";
+  const freshValue = typeof fresh.value === "string" ? fresh.value : "";
+  const swap = (fresh as { replaceWith?: (node: DeskElement) => void }).replaceWith;
+  if (typeof swap === "function") {
+    copyDraftAttrs(fresh, parked);
+    if (freshValue.trim() !== "" && parkedValue !== freshValue && typeof parked.value === "string") parked.value = freshValue;
+    swap.call(fresh, parked);
+    return;
+  }
+  if (parkedValue.trim() === "" || freshValue.trim() !== "" || typeof fresh.value !== "string") return;
+  fresh.value = parkedValue;
+  if ("textContent" in fresh) fresh.textContent = parkedValue;
+}
+
+function copyDraftAttrs(from: DeskElement, to: DeskElement): void {
+  const names = (from as { getAttributeNames?: () => string[] }).getAttributeNames;
+  if (typeof names !== "function") return;
+  const seen = new Set(names.call(from));
+  for (const name of seen) {
+    if (name === "id" || name === "value") continue;
+    const value = from.getAttribute(name);
+    if (value === null) to.removeAttribute(name);
+    else to.setAttribute(name, value);
+  }
+  if (!seen.has("aria-invalid")) to.removeAttribute("aria-invalid");
+  if (!seen.has("aria-describedby")) to.removeAttribute("aria-describedby");
 }
 
 function decodeAttr(value: string): string {
