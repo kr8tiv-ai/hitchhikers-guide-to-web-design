@@ -1,24 +1,26 @@
 ---
-id: "214"
+id: "215"
 kind: fix
 phase: so-long-and-thanks-for-all-the-fish
 slice: Forty-Two
-title: "Paradise Found e2e fixes, round 2 (BUG-003 S1, BUG-002 jargon, BUG-008 to BUG-024)"
+title: "Paradise Found e2e fixes, round 2 (BUG-027 brief-to-build first, BUG-003 S1, BUG-002 jargon, BUG-008 to BUG-026)"
 tier: Heart of Gold
 effort: xhigh
 model: grok-4.7-build-fast
 always_approve: true
-depends_on: ["213"]
-files: ["packages/app/src/client/", "packages/app/src/server/", "packages/engine/src/guide/", "packages/engine/src/context/", "packages/engine/src/project-file/", "packages/app/test/", "packages/engine/test/", "packages/app/e2e/", "interview/tree.yaml"]
+depends_on: ["214"]
+files: ["packages/app/src/client/", "packages/app/src/server/", "packages/engine/src/guide/", "packages/engine/src/context/", "packages/engine/src/project-file/", "packages/app/test/", "packages/engine/test/", "packages/app/e2e/", "packages/cli/src/", "interview/tree.yaml"]
 review_checkpoint_embedded: false
 ---
 
-# 214. Paradise Found e2e fixes, round 2
+# 215. Paradise Found e2e fixes, round 2
 ## RULES
 
 Same RULES block as 211 (TypeScript strict, tests ship with the behavior, no secrets, MIT-compatible only, anti-slop copy, cross-platform, Matt's answers and DECISIONS.md win, commit when checks pass, do not push, no repo creation, no deploy).
 
 Additional rules for this session only:
+
+- Sessions are being cut off after about 55 minutes. Commit as soon as each bug is green, at least every 20 minutes of work. Never hold more than one bug uncommitted.
 
 - Spec first: write the failing regression test, watch it fail, fix the root cause, watch it pass.
 - At most two real attempts per bug. If still failing, revert that bug's partial product change, mark it BLOCKED with the reason in the summary, move on. Never leave the tree red.
@@ -32,18 +34,28 @@ Additional rules for this session only:
 
 ## Why this prompt exists
 
-Desk Tester continued the Paradise Found run (desk built from a728d211, before 211/212/213) and logged BUG-008 to BUG-024, escalated BUG-003 to S1, and widened BUG-002. Evidence (read-only): `C:\Users\lucid\Desktop\paradise-found\bugs\BUGS.md`, `run\shots\step-NNN.png`, `run\snap\step-N.yml`, `run\qa.tsv`, `PARADISE-FOUND-BRIEF.md`. Step numbers below refer to those files.
+Desk Tester continued the Paradise Found run (desk built from a728d211, before 211/212/213) and logged BUG-008 to BUG-027 (full entries in `bugs\BUG-NNN.md`), escalated BUG-003 to S1, and widened BUG-002. Evidence (read-only): `C:\Users\lucid\Desktop\paradise-found\bugs\BUGS.md`, `run\shots\step-NNN.png`, `run\snap\step-N.yml`, `run\qa.tsv`, `PARADISE-FOUND-BRIEF.md`. Step numbers below refer to those files.
 
-211/212 fixed BUG-001, 004, 005, 006, 007 and PERF-001 feedback, and a first BUG-003/BUG-002 pass. 213 (GSD parity) added the persistent context store and one context packet for every Grok call. Several bugs below are likely already fixed by 213; for those, first prove it with a regression test, and only change product code if the test fails.
+211/212 fixed BUG-001, 004, 005, 006, 007 and PERF-001 feedback, and a first BUG-003/BUG-002 pass. 213 and 214 (GSD parity) added the persistent context store and one context packet for every Grok call. Several bugs below are likely already fixed by 213; for those, first prove it with a regression test, and only change product code if the test fails.
 
 ## Read first
 
-- `hh-build-plan/prompts/211-paradise-found-e2e-fixes.md`, `212-finish-211-green-main.md`, `213-gsd-parity.md` and `.hitchhiker-dev/summaries/211.md`, `212.md`, `213.md`
+- `hh-build-plan/prompts/211-paradise-found-e2e-fixes.md`, `212-finish-211-green-main.md`, `213-gsd-parity.md`, `214-finish-213-green-main.md` and `.hitchhiker-dev/summaries/211.md`, `212.md`, `214.md`
 - `packages/engine/src/guide/pushback-judge.ts`, `interview-call.ts`, `suggest.ts`, `session-state.ts`, `live-turn.ts`, the 213 context module
 - `packages/app/src/server/routes.ts`, `card.ts`, `packages/app/src/client/desk.ts`
 - `interview/tree.yaml` (DP-1.4, 1.5, 2.2, 3.1, 3.4, 3.5, 4.1, 4.3, 5.2, 7.2, 8.1)
 
-## Group A: S1 blockers (do first)
+## Group 0: BUG-027 (S1 BLOCKER, top priority). No path from the last question to the Site Brief and the build
+Repro: step 150, `run\shots\step-150.png`, `step-151-approve.png`. After the last question the desk says "Guide Entry is next. The questions on this desk are finished." with no button. STATE.md next action is "Approve the Site Brief.", but /approve says "Nothing is waiting for a yes" and /brand links back to /. `briefLoop` (`packages/engine/src/guide/brief-loop.ts`) is exported but only called from tests (`engine/test/guide-live.test.ts`, `app/e2e/live-guide.spec.ts`).
+Acceptance criteria:
+- [ ] When the interview finishes, the desk shows a primary "Draft the Site Brief" action (and does it automatically once, with progress feedback per PERF-001). A server route runs `briefLoop` with the 213 context packet on `grok-4.7-build-fast` at the chosen effort, async, writing the brief through the context store.
+- [ ] /approve shows the drafted brief (readable sections, sources), with Approve and "Change something" (which returns to the right question or edits through a superseding decision). It never says "Nothing is waiting for a yes" while a brief is pending.
+- [ ] Approving records the approval, advances STATE, and starts the build (the existing next phase / build entry point), with visible status. /brand and /hh-dashboard reflect the approved brief and the new phase; /brand no longer just links to /.
+- [ ] CLI parity: `hh brief` drafts/shows, `hh brief --approve` approves and starts the next phase, using the same engine path.
+- [ ] Idempotent: re-approving or reloading does not start a second build.
+Tests: engine test that the route/CLI call `briefLoop` with the packet; server route tests (draft, show, approve, double-approve); Playwright E2E with a stubbed Guide covering interview finish -> brief drafted -> /approve shows it -> approve -> build started, /brand and /hh-dashboard updated, with a reload between steps.
+
+## Group A: S1 blockers
 
 ### A1. BUG-003 (S1, escalated). The soft-answer judge rejects concrete answers and loops
 Repro: steps 7, 33, 34, 46, 71-73, 87, 105: "30 qualified inquiries a month", "Yes." to a yes/no follow-up, named URLs, five named colours all got "That answer is still soft...", repeatedly, until the user pressed Skip.
@@ -67,7 +79,9 @@ Tests: server test that posting the helper text as an answer is rejected; engine
 ### B1. BUG-012 (S2). A picked option plus Answer is not recorded
 Repro: steps 41-42, DP-2.2: chose option A, pressed Answer; no transcript entry; the question came back reworded.
 - [ ] Choosing an option and pressing Answer records the option text as the answer (through the 213 context store), shows it in the transcript, and advances.
-Tests: route test; Playwright: pick A, Answer, transcript shows A's text, next question differs.
+- [ ] Update: clicking an option must not auto-send. It selects; Answer sends; the user can change the pick before sending, and the last answer has an Undo (a superseding write, per 213).
+- [ ] Options never show stale DP ids (an option labelled with another question's id, or any DP id in option text).
+Tests: route test; Playwright: pick A (nothing sent), change to B, Answer, transcript shows B's text, Undo restores the question; option text contains no `DP-` pattern.
 
 ### B2. BUG-019 (S2). Skipping the soft follow-up threw away the answer
 Repro: steps 87-89, DP-4.1: the user named competitors, skipped the follow-up, next question said "You named no competitors".
@@ -87,7 +101,7 @@ Tests: parser/normaliser test on the step-25 output; constraint test with a stub
 ## Group C: the server must not block
 
 ### C1. BUG-009 (S2). The desk stopped answering GET / for >30 s during a Guide call
-- [ ] Guide calls run fully async (no sync spawn, sync fs or sync waits on the request path); GET /, static assets and status routes answer in under 1 s while a Guide call is in flight.
+- [ ] Update: the tester saw page loads blocked for 51 s. Guide calls run fully async (no sync spawn, sync fs or sync waits on the request path); GET /, static assets and status routes answer in under 1 s while a Guide call is in flight.
 Tests: server test that starts a stubbed slow Guide call (e.g. 10 s) and asserts GET / and a status route return under 1 s meanwhile; a grep test that routes do not use `spawnSync`/`execSync` on request paths.
 
 ### C2. BUG-017 (S2). Follow-ups are unbounded and re-ask the same thing
@@ -108,7 +122,7 @@ Tests: server test for the file path from name+folder; Playwright: set name and 
 For each: write the regression test against the 213 context packet with a stubbed Guide. If it passes without product change, commit the test as `test(app): <id> regression`. If it fails, fix the root cause.
 - E1. BUG-008 (step 22, DP-1.4): "No pictures or board came in" right after discussing the attached hero. The packet must list the attached images; the follow-up must not deny them.
 - E2. BUG-014 (steps 59-61, DP-3.1): asks whether to wait for the receiving email after the user gave it two turns earlier.
-- E3. BUG-020 (steps 85, 91, DP-4.3): attributes statements the user never made ("Earlier you said no blog..."). Add a guard: any "you said"/"earlier you" claim in Guide text must be supported by a decision in the packet, otherwise the line is regenerated once or dropped.
+- E3. BUG-020 (steps 85, 91, DP-4.3): attributes statements the user never made ("Earlier you said no blog..."). Update: it recurred after the user corrected it; the test must cover a correction (superseded decision) and assert the superseded claim is never attributed again. Add a guard: any "you said"/"earlier you" claim in Guide text must be supported by a decision in the packet, otherwise the line is regenerated once or dropped.
 - E4. BUG-021 (step 108, DP-5.2): "No favorites yet?" after the user named four favourite sites.
 - E5. BUG-023 (step 125, DP-7.2): asks the 3D budget after "3D: None". A None answer makes dependent questions not applicable (tree rule, not just phrasing).
 
@@ -133,14 +147,24 @@ Repro: step 108, DP-5.2.
 - [ ] That prompt shows real site cards inline (from the gallery data) or a working link to /gallery, never the text alone.
 Tests: Playwright.
 
-### F5. BUG-024 (S3, needs confirm). Gallery Keep is not visible after reload
-- [ ] First reproduce. If confirmed: Love/Meh + Keep persists (through the context store) and /gallery shows the kept items after reload. If not reproducible, write the regression test and note it.
+### F5. BUG-024 (S3, confirmed). Gallery verdicts are saved but never shown
+- [ ] Verdicts are saved to `gallery-walk.json` but nothing displays them. /gallery shows kept/loved/meh state per site after reload, and the verdicts feed the context packet (and DP-5.2).
 Tests: Playwright with reload.
+
+### F6. BUG-026 (S2). Assumed and skip values shown as the user's speech
+Repro: step 150: transcript shows "You The owner maintains it.", "You WCAG 2.2 AA..." though the user never said them; "owner maintains it" contradicts the user's "the Guide fixes them".
+- [ ] Assumed/skip values render in the transcript labelled as the Guide's assumption ("Assumed: ..."), visually distinct, never with the "You" speaker. An assumption that contradicts a recorded user answer is not written; the user answer wins.
+Tests: render test for assumed vs user entries; engine test for the contradiction guard.
+
+### F7. BUG-025 (S3). Internal instruction text leaks into helper copy
+Repro: step 140, DP-9.2: helper says "Hostinger is the recommended word, not a forced value."
+- [ ] Authoring notes in `interview/tree.yaml` and prompts are kept in a field that is never rendered. A guard strips/rejects user-facing text that contains instruction-style phrases (e.g. "not a forced value", "the model should", "recommended word").
+Tests: sweep test over every rendered helper/why string in the tree; guard unit test.
 
 ## Steps
 
 1. Baseline: `pnpm lint`, `pnpm typecheck`, `pnpm -r test`, `pnpm exec tsc -b --pretty false`, Playwright. Record failures and fix any before starting.
-2. Groups A, B, C, D, E, F in that order. Commit after each bug.
+2. Group 0 (BUG-027) first, then groups A, B, C, D, E, F in that order. Commit after each bug.
 3. Re-run the whole verification block. Re-check every acceptance criterion; fix at most one defect in a `fix(review):` commit.
 4. Low on turns: stop starting new bugs, keep the tree committed and green, list what is left.
 
@@ -160,10 +184,10 @@ pnpm --filter @hitchhiker/app exec playwright test
 
 ## Report back
 
-At most 250 words in the last commit body and `.hitchhiker-dev/summaries/214.md`: a table of BUG-002, 003, 008-024 with status (fixed and tested / already fixed by 213, regression added / BLOCKED with reason), root causes, tests added, verification results.
+At most 250 words in the last commit body and `.hitchhiker-dev/summaries/215.md`: a table of BUG-002, 003, 008-027 with status (fixed and tested / already fixed by 213, regression added / BLOCKED with reason), root causes, tests added, verification results.
 
 ## Commit
 
 ```
-fix(app): Paradise Found e2e fixes, round 2 (214)
+fix(app): Paradise Found e2e fixes, round 2 (215)
 ```
