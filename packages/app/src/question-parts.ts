@@ -20,6 +20,9 @@ export function stripQuestionIds(text: string): string {
   return text.replace(/\bDP-\d+(?:\.\d+)?[a-z]?(?:-[a-z0-9]+)?\b\.?\s*/gi, " ").replace(/\s+/g, " ").trim();
 }
 
+const IMPERATIVE =
+  /^(?:name|tell|describe|pick|choose|list|say|write|add|drop|keep|show|give|send|paste|let's|change|walk|set|mark|share|note|point)\b/i;
+
 /** Split legacy combined copy. Button instructions are dropped, not shown as help. */
 export function splitQuestionText(text: string): QuestionParts {
   const sentences = splitSentences(stripQuestionIds(text)).filter((sentence) => !BUTTON.test(sentence));
@@ -33,10 +36,25 @@ export function splitQuestionText(text: string): QuestionParts {
       body.push(sentence);
     }
   }
+  let askAt = body.findIndex((sentence) => sentence.endsWith("?"));
+  if (askAt < 0) askAt = body.findIndex((sentence) => IMPERATIVE.test(sentence));
+  if (askAt < 0) {
+    const packed = pack(body);
+    return promoteQuestion({ lead: join(lead), question: packed.question, help: packed.help });
+  }
+  const packed = pack(body.slice(askAt));
+  return {
+    lead: join(lead),
+    question: packed.question,
+    help: join([...body.slice(0, askAt), ...splitSentences(packed.help)]),
+  };
+}
+
+function pack(sentences: readonly string[]): { question: string; help: string } {
   const question: string[] = [];
   const help: string[] = [];
   let closed = false;
-  for (const sentence of body) {
+  for (const sentence of sentences) {
     if (closed) {
       help.push(sentence);
       continue;
@@ -55,7 +73,44 @@ export function splitQuestionText(text: string): QuestionParts {
     }
     closed = true;
   }
-  return { lead: join(lead), question: join(question), help: join(help) };
+  return { question: join(question), help: join(help) };
+}
+
+/**
+ * A heading with no question is a recap that pushed the ask downward.
+ * The last question sentence becomes the heading. The recap sits below it.
+ */
+function promoteQuestion(parts: QuestionParts): QuestionParts {
+  if (parts.question.includes("?")) return parts;
+  const fromHelp = takeLastQuestion(parts.help);
+  if (fromHelp !== null) {
+    return {
+      lead: parts.lead,
+      question: fromHelp.sentence,
+      help: join([parts.question, fromHelp.rest]),
+    };
+  }
+  const fromLead = takeLastQuestion(parts.lead);
+  if (fromLead !== null) {
+    return {
+      lead: fromLead.rest,
+      question: fromLead.sentence,
+      help: join([parts.question, parts.help]),
+    };
+  }
+  return parts;
+}
+
+function takeLastQuestion(text: string): { sentence: string; rest: string } | null {
+  const sentences = splitSentences(text);
+  let index = -1;
+  for (let cursor = 0; cursor < sentences.length; cursor += 1) {
+    if ((sentences[cursor] ?? "").endsWith("?")) index = cursor;
+  }
+  if (index < 0) return null;
+  const sentence = sentences[index] ?? "";
+  const rest = join(sentences.filter((_, cursor) => cursor !== index));
+  return { sentence, rest };
 }
 
 function splitSentences(text: string): string[] {
