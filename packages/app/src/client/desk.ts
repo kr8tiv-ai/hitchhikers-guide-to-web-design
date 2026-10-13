@@ -2624,14 +2624,25 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function placeSuggestion(session: SessionView, questionId: string): void {
-    const kept = draft;
-    suggestHold = { questionId, suggestion: "", session };
+    const incoming = suggestionText(session, questionId);
+    const previous = suggestHold;
+    const edited = previous !== null && draft.trim() !== previous.suggestion.trim();
+    const suggestion = incoming !== "" ? incoming : (previous?.suggestion ?? "");
+    suggestHold = {
+      questionId,
+      suggestion: edited && previous !== null ? previous.suggestion : suggestion,
+      session,
+    };
     cardHold = true;
-    draft = kept;
-    const field = region()?.querySelector("#hh-card-draft");
-    if (field !== null && field !== undefined) field.value = kept;
-    if (kept.trim() === "") hideAssumed();
-    clearFieldError();
+    if (!edited) {
+      draft = suggestion;
+      const field = region()?.querySelector("#hh-card-draft");
+      if (field !== null && field !== undefined) field.value = suggestion;
+      if (suggestion !== "") showAssumed(suggestion);
+      else hideAssumed();
+      clearFieldError();
+      if (suggestion.trim() !== "") rememberDraft(true);
+    }
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null) transcript.innerHTML = session.transcriptHtml;
     if (mountChoices(session, questionId)) focusChoiceGroup();

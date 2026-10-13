@@ -387,6 +387,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
 | `hh context` | What the Guide knows: summary, decisions, and assets. `--audit` prints the last packet sections. |
 | `hh next` | `hh next --status` prints the phase, open gates, and the next step. It does not change the project. |
+| `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
 
 ## Attachments
 
@@ -421,7 +422,7 @@ The file includes a plain-language brief and a short resume prompt. Another codi
 | `/hh-settings` | Model, effort, voice, deploy, depth. The desk screen is `/settings`. |
 | `/hh-help` | Which commands `hh` can run today. |
 
-`/hh-assets`, `/hh-mostly-harmless`, `/hh-elevate`, `/hh-progress`, `/hh-pause`, `/hh-resume`, `/hh-doctor`, `/hh-dashboard`, `/hh-context`, and `/hh-next` are skills that also have an `hh` command in the table above.
+`/hh-assets`, `/hh-mostly-harmless`, `/hh-elevate`, `/hh-progress`, `/hh-pause`, `/hh-resume`, `/hh-doctor`, `/hh-dashboard`, `/hh-context`, `/hh-next`, and `/hh-brief` are skills that also have an `hh` command in the table above.
 
 The companion app is that local dashboard: a chat-style desk with a push-to-talk mic, uploads, example-site cards, approval buttons, and the prompt queue. Open it with `pnpm exec hh app`.
 

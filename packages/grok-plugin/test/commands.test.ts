@@ -186,13 +186,16 @@ function inspectSkills(payload: unknown, projectDir: string): InspectSkill[] {
   return found;
 }
 
-test("skill directories are the 22 commands plus the guide persona", () => {
+test("skill directories are the 26 commands plus the guide persona", () => {
   const names = skillFiles().map((file) => path.basename(path.dirname(file)));
+  assert.equal(SKILL_NAMES.length, 26);
+  assert.equal(names.includes("hh-brief"), true);
   assert.deepEqual(
     names.filter((name) => name !== "guide-persona").sort(),
     [...SKILL_NAMES].sort(),
   );
   assert.equal(names.includes("guide-persona"), true);
+  assert.equal(names.length, 27);
   assert.equal(names.length, SKILL_NAMES.length + 1);
 });
 
@@ -403,6 +406,10 @@ test("hh install copies skills, agents, the deny hook, and the rules", () => {
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     const installed = path.join(project, ".grok", "skills", "hh-new", "SKILL.md");
     assert.equal(read(installed), read(path.join(pluginRoot, "skills", "hh-new", "SKILL.md")));
+    assert.equal(
+      read(path.join(project, ".grok", "skills", "hh-brief", "SKILL.md")),
+      read(path.join(pluginRoot, "skills", "hh-brief", "SKILL.md")),
+    );
     assert.equal(
       existsSync(path.join(project, ".grok", "skills", "hh-guide-persona", "SKILL.md")),
       true,
