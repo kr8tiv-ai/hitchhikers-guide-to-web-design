@@ -1753,7 +1753,7 @@ function buildSession(
   if (question !== null && projectDir !== "") {
     const sessionState = loadSessionState(projectDir, questions);
     const gate = gateQuestion(question, sessionState, questions);
-    if (gate.action === "confirm") question = { ...question, ask: gate.ask };
+    if (gate.action !== "skip" && gate.ask !== question.ask) question = { ...question, ask: gate.ask };
   }
   const saved = loadState(projectDir);
   const notes = readGuideNotes(projectDir);

@@ -23,6 +23,7 @@ import {
   assetNamedIn,
   filterGuideText,
   guardLogoText,
+  guardPriorSiteText,
   loadSessionState,
   projectMentionsQuotes,
   sessionBlock,
@@ -355,8 +356,9 @@ async function askGuide(
     const sessionState = loadSessionState(s.projectDir, questions);
     const kept = filterGuideText(text, sessionState, projectMentionsQuotes(sessionState));
     const guarded = kept === null ? null : guardLogoText(kept, sessionState, next ?? current, questions);
-    if (guarded !== null && validateGuideMessage(guarded, { language: s.language, facts }).length === 0) {
-      return { message: guarded, calm: false };
+    const voiced = guarded === null ? null : guardPriorSiteText(guarded, sessionState, (next ?? current).id);
+    if (voiced !== null && validateGuideMessage(voiced, { language: s.language, facts }).length === 0) {
+      return { message: voiced, calm: false };
     }
   }
   return fallback(next);
@@ -430,7 +432,11 @@ function promptContext(s: GuideSession, question: Question): string {
   try {
     const questions = loadTree(resolveTreePath(s.projectDir));
     const state = loadSessionState(s.projectDir, questions);
-    const ask = guardLogoText(question.ask, state, question, questions);
+    const ask = guardPriorSiteText(
+      guardLogoText(question.ask, state, question, questions),
+      state,
+      question.id,
+    );
     return `${sessionBlock(state)}\nQuestion to ask: ${safePromptLine(ask)}`;
   } catch {
     return "";

@@ -213,6 +213,41 @@ export function sessionBlock(state: SessionState): string {
   return lines.join("\n");
 }
 
+export const ADMIRED_SITES_ASK = "What do you love about a site you admire, and what makes you wince?";
+
+const SITE_BUILDERS =
+  /\b(?:wordpress|webflow|wix|squarespace|framer|shopify|cargo|ghost|weebly|carrd)\b/i;
+const SITE_URL = /\b(?:https?:\/\/|www\.)\S+/i;
+const NO_SITE_PATTERNS = [
+  /no prior site/i,
+  /first site/i,
+  /no website/i,
+  /never had/i,
+  /(?:don't|do not) have a (?:site|website)/i,
+];
+const BANNED_SITE_PHRASES = [/\bthat site\b/i, /\byour current site\b/i, /\byour site\b/i];
+
+/**
+ * True when the prior-site answer says there is nothing to review.
+ * A URL or a named builder means a site exists, and the taste question stays.
+ */
+export function noPriorSite(text: string): boolean {
+  const value = text.trim();
+  if (value === "") return false;
+  if (SITE_BUILDERS.test(value) || SITE_URL.test(value)) return false;
+  if (NO_SITE_PATTERNS.some((pattern) => pattern.test(value))) return true;
+  return /^(?:no|nope|none)\b/i.test(value);
+}
+
+/** The no-site branch never keeps "that site", "your site", or "your current site". */
+export function guardPriorSiteText(text: string, state: SessionState, questionId: string): string {
+  if (questionId !== "DP-0.2a") return text;
+  const prior = state.answers.find((answer) => answer.id === "DP-0.2");
+  if (prior === undefined || !noPriorSite(prior.text)) return text;
+  if (BANNED_SITE_PHRASES.some((pattern) => pattern.test(text))) return ADMIRED_SITES_ASK;
+  return text;
+}
+
 export interface GateResult {
   action: "ask" | "confirm" | "skip";
   ask: string;
@@ -225,6 +260,10 @@ export function gateQuestion(
 ): GateResult {
   if (question.surface === "default") return { action: "skip", ask: question.ask };
   if (!conditionHolds(question, state, all)) return { action: "skip", ask: question.ask };
+  if (question.id === "DP-0.2a") {
+    const prior = state.answers.find((answer) => answer.id === "DP-0.2");
+    if (prior !== undefined && noPriorSite(prior.text)) return { action: "ask", ask: ADMIRED_SITES_ASK };
+  }
   // The guided walk is the follow-up when no sites were named. It is not a second ask of the same topic.
   if (question.id === "DP-5.2") return { action: "ask", ask: question.ask };
   const topic = topicFor(question);
@@ -257,7 +296,7 @@ export function questionsToShow(questions: readonly Question[], state: SessionSt
     const topic = topicFor(question);
     if (topic !== undefined && gate.action === "ask" && askedTopics.has(topic)) continue;
     if (topic !== undefined && gate.action === "ask") askedTopics.add(topic);
-    if (gate.action === "confirm") shown.push({ ...question, ask: gate.ask });
+    if (gate.ask !== question.ask) shown.push({ ...question, ask: gate.ask });
     else shown.push(question);
   }
   return shown;
