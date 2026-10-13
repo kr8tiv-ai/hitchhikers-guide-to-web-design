@@ -88,6 +88,28 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
       tokensMatch: (expected, provided) => expected === provided,
     });
     assert.deepEqual(saved, { type: "redirect", location: "/?stay=1" });
+    const json = await runProjectPost({
+      pathname: "/api/project/save",
+      projectDir: dir,
+      token,
+      header: undefined,
+      raw: `csrf=${token}`,
+      contentType: "application/x-www-form-urlencoded",
+      accept: "application/json",
+      tokensMatch: (expected, provided) => expected === provided,
+    });
+    assert.equal(json.type, "json");
+    if (json.type === "json") {
+      const body = json.body as { ok?: boolean; savedAt?: string; place?: string };
+      assert.equal(body.ok, true);
+      assert.equal(typeof body.savedAt, "string");
+      assert.equal(body.savedAt?.includes("UTC"), false);
+      assert.equal(typeof body.place, "string");
+    }
+    const stayed = await projectChrome(dir, token, false);
+    assert.equal(stayed.includes("Resume a project"), false);
+    assert.match(stayed, /<time datetime="/);
+    assert.equal(stayed.includes("UTC"), false);
     const filePath = projectFile(home);
     const kept = path.join(home, "keep-me.hhproject");
     writeFileSync(kept, "{}\n");
