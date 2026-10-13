@@ -2464,6 +2464,20 @@ export function mountDesk(env: DeskEnv): () => void {
     if (session.guideJob?.status === "running") void followGuideJob(session.guideJob.id);
   }
 
+  /** Words typed after the stream already painted this turn's card. The same sentence still counts. */
+  function textTypedDuringTurn(questionId: string, session: SessionView): string {
+    const nextId = session.question?.id ?? null;
+    const cardAlready = view?.question?.id === nextId && nextId !== questionId;
+    const pushbackAlready =
+      (session.pushback ?? "") !== "" &&
+      session.question?.id === questionId &&
+      view?.question?.id === questionId &&
+      (view.pushback ?? "") === (session.pushback ?? "");
+    if (!cardAlready && !pushbackAlready) return "";
+    readDraft();
+    return draft;
+  }
+
   async function followGuideJob(jobId: string): Promise<void> {
     const questionId = view?.question?.id ?? "";
     const submitted = draft;
@@ -2477,12 +2491,9 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       return;
     }
-    const nextId = result.session.question?.id ?? null;
-    const cardAlready = view?.question?.id === nextId && nextId !== questionId;
-    readDraft();
-    const typedOnNext = cardAlready ? draft : "";
+    const typedNow = textTypedDuringTurn(questionId, result.session);
     finishTurn(questionId, result.session, submitted);
-    if (typedOnNext.trim() !== "" && typedOnNext !== submitted) draft = typedOnNext;
+    if (typedNow.trim() !== "") draft = typedNow;
     error = null;
     pending = false;
     paint();
@@ -2677,13 +2688,10 @@ export function mountDesk(env: DeskEnv): () => void {
         error = result.error;
         return;
       }
-      // The stream may already be showing the next card. Keep words typed there.
-      const nextId = result.session.question?.id ?? null;
-      const cardAlready = view?.question?.id === nextId && nextId !== questionId;
-      readDraft();
-      const typedOnNext = cardAlready ? draft : "";
+      // The stream may already be showing the next card or the pushback. Keep words typed there.
+      const typedNow = textTypedDuringTurn(questionId, result.session);
       finishTurn(questionId, result.session, submitted);
-      if (typedOnNext.trim() !== "" && typedOnNext !== submitted) draft = typedOnNext;
+      if (typedNow.trim() !== "") draft = typedNow;
       error = null;
       ownWords = false;
       advance = true;
