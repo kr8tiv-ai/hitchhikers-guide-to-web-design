@@ -291,3 +291,45 @@ test("many keystrokes write once after the wait, and pagehide or a hidden tab fl
   for (const listener of listeners.get("pagehide") ?? []) listener();
   assert.equal(readRecord(storage, PROJECT, QUESTION).text, "Left the page");
 });
+
+test("suspend drops a pending save until resume", () => {
+  const storage = memoryStorage();
+  let queued: (() => void) | null = null;
+  const writer = createDraftWriter({
+    storage,
+    projectKey: PROJECT,
+    questionId: QUESTION,
+    step: 1,
+    now: () => NOW,
+    schedule(fn) {
+      queued = fn;
+      return {
+        cancel() {
+          if (queued === fn) queued = null;
+        },
+      };
+    },
+    lifecycle: {
+      addEventListener() {},
+      removeEventListener() {},
+      hidden() {
+        return false;
+      },
+    },
+  });
+  writer.push("Still typing");
+  assert.ok(queued);
+  writer.suspend();
+  assert.equal(queued, null);
+  assert.equal(storage.length, 0);
+  writer.flush();
+  assert.equal(storage.length, 0);
+  writer.resume();
+  assert.ok(queued);
+  const run = queued;
+  queued = null;
+  if (run === null) throw new Error("resume did not schedule");
+  run();
+  assert.equal(readRecord(storage, PROJECT, QUESTION).text, "Still typing");
+  writer.stop();
+});

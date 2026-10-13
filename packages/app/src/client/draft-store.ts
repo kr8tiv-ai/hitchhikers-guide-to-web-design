@@ -47,6 +47,9 @@ export interface DraftWriter {
   flush(): void;
   clear(): void;
   stop(): void;
+  /** Cancel a pending save. A turn can hold the project lock without a draft POST. */
+  suspend(): void;
+  resume(): void;
 }
 
 export function draftStorageKey(projectKey: string, questionId: string): string {
@@ -171,10 +174,11 @@ export function createDraftWriter(opts: {
   let current = "";
   let dirty = false;
   let stopped = false;
+  let suspended = false;
   let timer: { cancel(): void } | null = null;
 
   const flush = (): void => {
-    if (stopped) return;
+    if (stopped || suspended) return;
     timer?.cancel();
     timer = null;
     if (!dirty) return;
@@ -216,9 +220,23 @@ export function createDraftWriter(opts: {
       current = text;
       dirty = true;
       timer?.cancel();
+      timer = null;
+      if (suspended) return;
       timer = opts.schedule(flush, DRAFT_DEBOUNCE_MS);
     },
     flush,
+    suspend(): void {
+      suspended = true;
+      timer?.cancel();
+      timer = null;
+    },
+    resume(): void {
+      if (!suspended) return;
+      suspended = false;
+      if (stopped || !dirty) return;
+      timer?.cancel();
+      timer = opts.schedule(flush, DRAFT_DEBOUNCE_MS);
+    },
     clear(): void {
       timer?.cancel();
       timer = null;
@@ -228,6 +246,7 @@ export function createDraftWriter(opts: {
     },
     stop(): void {
       if (stopped) return;
+      suspended = false;
       flush();
       stopped = true;
       opts.lifecycle.removeEventListener("pagehide", onHide);

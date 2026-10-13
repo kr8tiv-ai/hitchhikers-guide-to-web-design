@@ -1458,6 +1458,14 @@ export function mountDesk(env: DeskEnv): () => void {
     return session.done || (session.question?.id ?? null) !== questionId;
   }
 
+  function pauseDraftSave(): void {
+    writer?.suspend();
+  }
+
+  function continueDraftSave(): void {
+    writer?.resume();
+  }
+
   function rememberDraft(immediate: boolean): void {
     try {
       ensureWriter();
@@ -2715,6 +2723,8 @@ export function mountDesk(env: DeskEnv): () => void {
     const questionId = view.question.id;
     const submitted = draft;
     pending = true;
+    // The debounce would POST /api/draft while this turn holds the project lock.
+    pauseDraftSave();
     error = null;
     notice = null;
     let advance = false;
@@ -2756,6 +2766,7 @@ export function mountDesk(env: DeskEnv): () => void {
       error = DRAFT_KEPT;
     } finally {
       pending = false;
+      if (writer !== null) continueDraftSave();
       stopAnswerProgress();
       paint();
       if (advance) {
@@ -2768,6 +2779,7 @@ export function mountDesk(env: DeskEnv): () => void {
   async function requestSuggestion(questionId: string): Promise<void> {
     if (token === null) return;
     pending = true;
+    pauseDraftSave();
     choiceWait = null;
     error = null;
     notice = null;
@@ -2781,6 +2793,7 @@ export function mountDesk(env: DeskEnv): () => void {
       result = { ok: false, error: DRAFT_KEPT };
     }
     pending = false;
+    if (writer !== null) continueDraftSave();
     if (!result.ok) {
       // A session event may already have placed the suggestion. Do not paint over it.
       if (suggestHold !== null) {
@@ -2823,6 +2836,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     pending = true;
+    pauseDraftSave();
     error = null;
     notice = null;
     setBusy(true);
@@ -2849,6 +2863,7 @@ export function mountDesk(env: DeskEnv): () => void {
       showFieldError(DRAFT_KEPT);
     } finally {
       pending = false;
+      if (writer !== null) continueDraftSave();
       stopAnswerProgress();
       if (advance) {
         paint();
@@ -4181,6 +4196,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     pending = true;
+    pauseDraftSave();
     error = null;
     notice = null;
     try {
@@ -4196,6 +4212,7 @@ export function mountDesk(env: DeskEnv): () => void {
       error = DRAFT_KEPT;
     } finally {
       pending = false;
+      if (writer !== null) continueDraftSave();
       paint();
     }
   }
