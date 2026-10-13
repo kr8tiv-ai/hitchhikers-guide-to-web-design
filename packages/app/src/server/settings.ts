@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   ConfigError,
   LockHeld,
+  interviewEffort,
   loadConfig,
   parseConfig,
   replaceViaTemp,
@@ -188,7 +189,7 @@ export async function applySettingsPost(
     ai: {
       model: parsed.model,
       timeoutMs: current.ai.timeoutMs,
-      effort: { ...current.ai.effort, default: parsed.effort },
+      effort: { ...current.ai.effort, default: parsed.effort, picked: "yes" },
     },
   };
 
@@ -252,7 +253,8 @@ function isRateSide(value: unknown): value is RateSide {
 
 function viewFrom(config: GuideConfig, quote: QuoteFile | null, rates: XaiSttRates): SettingsView {
   const accepted = acceptanceMatches(quote, rates);
-  const effort = isEffort(config.ai.effort.default) ? config.ai.effort.default : config.effort;
+  const shown = interviewEffort(config);
+  const effort = isEffort(shown) ? shown : config.effort;
   return {
     voice: displayedVoice(config, quote, accepted),
     model: config.ai.model,

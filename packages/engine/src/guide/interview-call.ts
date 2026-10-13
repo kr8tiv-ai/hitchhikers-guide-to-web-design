@@ -26,23 +26,33 @@ export function chosenEffort(effort: string | undefined): EffortName {
 }
 
 /**
+ * The effort the next interview call will use.
+ * Factory medium stays Extra high. A saved High or Extra high is kept.
+ * Medium counts only after the person saves it (`picked`).
+ */
+export function interviewEffort(cfg: {
+  ai: { effort: { default: string; picked?: string } };
+}): EffortName {
+  const saved = chosenEffort(cfg.ai.effort.default);
+  if (cfg.ai.effort.picked === "yes") return saved;
+  if (saved === "high" || saved === "xhigh") return saved;
+  return INTERVIEW_EFFORT_DEFAULT;
+}
+
+/**
  * Interview tasks always use INTERVIEW_MODEL.
  * Effort is the saved setting, or Extra high when nothing is saved.
  * A per-request effort cannot lower or raise that choice.
  */
 export function planInterview(
   req: { task: string; model?: string; effort?: string },
-  cfg: { ai: { model: string; effort: { default: string } } },
+  cfg: { ai: { model: string; effort: { default: string; picked?: string } } },
 ): { model: string; effort: EffortName; interview: boolean } {
   if (!isInterviewTask(req.task)) {
     const effort = chosenEffort(req.effort ?? cfg.ai.effort.default);
     return { model: req.model ?? cfg.ai.model, effort, interview: false };
   }
-  // Build and cassette defaults stay medium. Interview starts at Extra high.
-  // A saved High or Extra high is the person's choice and is kept.
-  const saved = chosenEffort(cfg.ai.effort.default);
-  const effort = saved === "high" || saved === "xhigh" ? saved : INTERVIEW_EFFORT_DEFAULT;
-  return { model: INTERVIEW_MODEL, effort, interview: true };
+  return { model: INTERVIEW_MODEL, effort: interviewEffort(cfg), interview: true };
 }
 
 /** Interview calls stay inside the project. Other calls keep the scratch dir. */

@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { expect, test } from "@playwright/test";
+import { type Page, expect, test } from "@playwright/test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,6 +73,109 @@ test("save stays on question 3 with the draft and a local time", async ({ page }
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+test("guide effort fits a 360px screen and the choice survives a restart", async ({ page }) => {
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-effort-e2e-"));
+  let child = startDesk(projectDir);
+  try {
+    let url = await readUrl(child);
+    await page.setViewportSize({ width: 360, height: 740 });
+    await openDesk(page, url);
+    const control = page.locator("[data-effort-control]");
+    await expect(control).toBeVisible();
+    await expect(page.getByText("Higher is more thorough and slower.")).toBeVisible();
+    await expect(page.locator('input[name="guide-effort"][value="xhigh"]')).toBeChecked();
+    await assertFits(page, "[data-effort-control]");
+    const options = page.locator(".hh-effort__opt");
+    await expect(options).toHaveCount(3);
+    for (const value of ["medium", "high", "xhigh"]) {
+      await assertFits(page, `.hh-effort__opt:has(input[value="${value}"])`);
+    }
+    const labelFit = await options.evaluateAll((nodes) =>
+      nodes.every((node) => node.scrollWidth <= node.clientWidth + 1 && node.getBoundingClientRect().height >= 44),
+    );
+    expect(labelFit).toBe(true);
+
+    await page.locator('input[name="guide-effort"][value="xhigh"]').focus();
+    const highPost = page.waitForResponse(
+      (response) => response.url().includes("/api/effort") && response.request().method() === "POST",
+    );
+    await page.keyboard.press("ArrowLeft");
+    expect((await highPost).ok()).toBe(true);
+    await expect(page.locator('input[name="guide-effort"][value="high"]')).toBeChecked();
+    await expectEffort(projectDir, "high");
+
+    await page.reload();
+    await openDesk(page, page.url());
+    await expect(page.locator('input[name="guide-effort"][value="high"]')).toBeChecked();
+
+    const mediumPost = page.waitForResponse(
+      (response) => response.url().includes("/api/effort") && response.request().method() === "POST",
+    );
+    await page.locator('input[name="guide-effort"][value="medium"]').click();
+    expect((await mediumPost).ok()).toBe(true);
+    await expect(page.locator('input[name="guide-effort"][value="medium"]')).toBeChecked();
+    await expectEffort(projectDir, "medium");
+
+    await stopChild(child);
+    child = startDesk(projectDir);
+    url = await readUrl(child);
+    await openDesk(page, url);
+    await expect(page.locator('input[name="guide-effort"][value="medium"]')).toBeChecked();
+
+    await page.goto(new URL("/settings", url).href);
+    await expect(page.locator('[data-settings="effort"]')).toBeVisible();
+    await expect(page.locator('[data-settings="effort"] input[value="medium"]')).toBeChecked();
+    await assertFits(page, '[data-settings="effort"]');
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+function startDesk(projectDir: string): ChildProcess {
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  return spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", childSource()], {
+    env: {
+      ...process.env,
+      HH_E2E_PROJECT: projectDir,
+      HH_E2E_SERVER: pathToFileURL(serverFile).href,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+async function openDesk(page: Page, url: string): Promise<void> {
+  if (page.url() !== url) await page.goto(url);
+  await page.locator('[data-region="question"][data-live="true"]').waitFor();
+  const skip = page.getByRole("button", { name: "Skip tour" });
+  if (await skip.isVisible()) await skip.click();
+  await page.locator("[data-effort-control]").scrollIntoViewIfNeeded();
+}
+
+async function assertFits(page: Page, selector: string): Promise<void> {
+  const box = await page.locator(selector).boundingBox();
+  expect(box).not.toBeNull();
+  if (box === null) return;
+  expect(box.x).toBeGreaterThanOrEqual(-1);
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(361);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+  );
+  expect(overflow).toBe(true);
+}
+
+async function expectEffort(projectDir: string, effort: string): Promise<void> {
+  const raw = JSON.parse(await readFile(path.join(projectDir, ".hitchhiker", "config.json"), "utf8")) as {
+    effort?: string;
+    ai?: { effort?: { default?: string; picked?: string } };
+  };
+  expect(raw.effort).toBe(effort);
+  expect(raw.ai?.effort?.default).toBe(effort);
+  expect(raw.ai?.effort?.picked).toBe("yes");
+}
 
 function childSource(): string {
   return `

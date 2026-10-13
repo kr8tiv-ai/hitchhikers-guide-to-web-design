@@ -9,6 +9,7 @@ import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { SAMPLE_LABEL, sampleProjectFile } from "../sample.ts";
 import {
   fileExists,
+  interviewEffort,
   loadConfig,
   loadProjectFile,
   loadState,
@@ -72,8 +73,7 @@ function fields(raw: string): URLSearchParams {
 function effortControl(projectDir: string): string {
   let current = "xhigh";
   try {
-    const saved = loadConfig(projectDir).ai.effort.default;
-    if (saved === "medium" || saved === "high" || saved === "xhigh") current = saved;
+    current = interviewEffort(loadConfig(projectDir));
   } catch {
     current = "xhigh";
   }

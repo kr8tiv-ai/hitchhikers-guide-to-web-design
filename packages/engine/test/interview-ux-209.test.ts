@@ -140,6 +140,15 @@ test("interview calls plan grok-4.7-build-fast and do not pass a leading-dash pr
   const saved = buildGrokArgv({ task: "suggest", input: prompt, effort: "medium" }, high, FLAGS);
   assert.equal(saved[saved.indexOf("--effort") + 1], "high");
   assert.equal(saved[saved.indexOf("-m") + 1], "grok-4.7-build-fast");
+  for (const level of ["medium", "high", "xhigh"] as const) {
+    const chosen = parseConfig({ ai: { effort: { default: level, picked: "yes" } } });
+    for (const task of tasks) {
+      const asked = level === "medium" ? "xhigh" : "medium";
+      const argv = buildGrokArgv({ task, input: prompt, effort: asked }, chosen, FLAGS);
+      assert.equal(argv[argv.indexOf("--effort") + 1], level, `${task} stays ${level}`);
+      assert.equal(argv[argv.indexOf("-m") + 1], "grok-4.7-build-fast", task);
+    }
+  }
 });
 
 test("an old project with a removed mic answer still maps the other answers", async () => {

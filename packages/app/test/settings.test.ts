@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "@hitchhiker/engine";
+import { defaultConfig, loadConfig, saveConfig } from "@hitchhiker/engine";
 import { STT_QUOTE_FILENAME } from "../src/server/settings.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 
@@ -124,9 +124,11 @@ test("GET /settings shows voice, model, effort, and both rates, with xAI off", a
     assert.match(html, /Microsoft/);
     assert.match(html, /may leave/);
     assert.match(html, /name="model"[^>]*value="grok-4\.7"/);
-    assert.match(html, /name="effort" value="medium" checked/);
+    assert.match(html, /name="effort" value="xhigh" checked/);
+    assert.match(html, /name="effort" value="medium"/);
+    assert.doesNotMatch(html, /name="effort" value="medium" checked/);
     assert.match(html, /name="effort" value="high"/);
-    assert.match(html, /name="effort" value="xhigh"/);
+    assert.match(html, /Higher is more thorough and slower/);
     assert.match(html, new RegExp(`data-stt-rate="rest"[^>]*data-per-hour="${rates.rest.ratePerHour}"`));
     assert.match(
       html,
@@ -148,6 +150,21 @@ test("GET /settings shows voice, model, effort, and both rates, with xAI off", a
     assert.equal(menu.includes('href="/settings"'), false);
     assert.match(menu, /Replay tour/);
     assert.doesNotMatch(menu, /aria-current/);
+  });
+});
+
+test("a saved Medium stays checked on the settings page", async () => {
+  await withDesk(async (handle, dir) => {
+    const chosen = defaultConfig();
+    chosen.effort = "medium";
+    chosen.ai.effort.default = "medium";
+    chosen.ai.effort.picked = "yes";
+    await saveConfig(dir, chosen);
+    const html = await get(handle, "/settings");
+    assert.match(html, /name="effort" value="medium" checked/);
+    assert.doesNotMatch(html, /name="effort" value="xhigh" checked/);
+    assert.match(html, /Higher is more thorough and slower/);
+    assert.equal(loadConfig(dir).ai.effort.picked, "yes");
   });
 });
 
@@ -248,6 +265,7 @@ test("xAI speech-to-text is refused until the quote is accepted, then it saves",
     assert.equal(loadConfig(dir).voiceEngine, "local");
     assert.equal(loadConfig(dir).effort, "xhigh");
     assert.equal(loadConfig(dir).ai.effort.default, "xhigh");
+    assert.equal(loadConfig(dir).ai.effort.picked, "yes");
 
     const enabled = await fetch(new URL("/settings", handle.url), {
       method: "POST",

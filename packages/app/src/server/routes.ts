@@ -1017,7 +1017,7 @@ async function handleEffortPost(
       await saveConfig(projectDir, {
         ...current,
         effort,
-        ai: { ...current.ai, effort: { ...current.ai.effort, default: effort } },
+        ai: { ...current.ai, effort: { ...current.ai.effort, default: effort, picked: "yes" } },
       });
     });
   } catch (error: unknown) {

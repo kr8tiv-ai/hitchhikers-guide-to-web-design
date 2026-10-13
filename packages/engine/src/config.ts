@@ -25,7 +25,9 @@ export type DeployTarget =
  */
 export interface AiEffort {
   default: Effort;
-  [task: string]: string;
+  /** Set when the person saves Guide effort. Absent means the factory medium. */
+  picked?: "yes";
+  [task: string]: string | undefined;
 }
 
 export interface AiConfig {
@@ -304,6 +306,11 @@ function readAiEffort(value: unknown, fallback: Effort): AiEffort {
   };
   for (const key of Object.keys(checked)) {
     if (key === "default") continue;
+    if (key === "picked") {
+      if (checked.picked !== "yes") fail("ai.effort.picked", "expected yes.");
+      result.picked = "yes";
+      continue;
+    }
     if (key.trim().length === 0) fail("ai.effort", "task name is empty.");
     result[key] = readEnum(
       `ai.effort.${key}`,

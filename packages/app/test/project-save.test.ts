@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { loadProjectFile, saveState } from "@hitchhiker/engine";
+import { defaultConfig, loadConfig, loadProjectFile, saveConfig, saveState } from "@hitchhiker/engine";
 import { postBrandDecision } from "../src/server/brand-desk.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "../src/server/project-desk.ts";
 
@@ -170,6 +170,40 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
     assert.equal(existsSync(kept), true);
     assert.equal(existsSync(filePath), true);
     assert.equal(readFileSync(kept, "utf8"), "{}\n");
+  } finally {
+    if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
+    else process.env.HH_PROJECT_HOME = priorHome;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("factory medium shows Extra high, and a saved Medium stays Medium", async () => {
+  const dir = tempDir();
+  const home = path.join(dir, ".hh-save-home");
+  process.env.HH_PROJECT_HOME = home;
+  try {
+    await saveConfig(dir, defaultConfig());
+    const factory = await projectChrome(dir, "csrf-token", false);
+    assert.match(factory, /value="xhigh" checked/);
+    assert.equal(factory.includes('value="medium" checked'), false);
+    assert.match(factory, /role="radiogroup" aria-label="Guide effort"/);
+    assert.match(factory, /Higher is more thorough and slower/);
+    const fresh = defaultConfig();
+    assert.equal(fresh.effort, "medium");
+    assert.equal(fresh.ai.effort.default, "medium");
+    assert.equal(fresh.ai.effort.picked, undefined);
+    const chosen = defaultConfig();
+    chosen.effort = "medium";
+    chosen.ai.effort.default = "medium";
+    chosen.ai.effort.picked = "yes";
+    await saveConfig(dir, chosen);
+    const medium = await projectChrome(dir, "csrf-token", false);
+    assert.match(medium, /value="medium" checked/);
+    assert.equal(medium.includes('value="xhigh" checked'), false);
+    const loaded = loadConfig(dir);
+    assert.equal(loaded.effort, "medium");
+    assert.equal(loaded.ai.effort.default, "medium");
+    assert.equal(loaded.ai.effort.picked, "yes");
   } finally {
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = priorHome;

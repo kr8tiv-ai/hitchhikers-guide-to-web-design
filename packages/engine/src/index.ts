@@ -116,7 +116,7 @@ export type {
 export { briefLoop, isApproval, renderSiteBrief } from "./guide/brief-loop.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
-export { INTERVIEW_MODEL, planInterview, callCwd, isInterviewTask } from "./guide/interview-call.ts";
+export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTask } from "./guide/interview-call.ts";
 export {
   loadSessionState,
   gateQuestion,
