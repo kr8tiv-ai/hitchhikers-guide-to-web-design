@@ -859,6 +859,10 @@ async function handlePost(
     await handleTurn(req, res, pathname, turn, view, hub, enqueue, projectDir);
     return;
   }
+  if (pathname === "/api/undo") {
+    await handleUndo(req, res, projectDir, enqueue, hub, view);
+    return;
+  }
   if (pathname === "/api/draft") {
     await handleDraftPost(req, res, projectDir, enqueue);
     return;
@@ -1166,6 +1170,33 @@ async function handleGuideNotePost(
     return;
   }
   sendJson(req, res, 200, { ok: true, session: view() });
+}
+
+async function handleUndo(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
+  hub: SseHub,
+  view: () => DeskSession,
+): Promise<void> {
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    return;
+  }
+  try {
+    const written = await enqueue(() => undoLast(projectDir, "answer"));
+    if (written === null) {
+      sendJson(req, res, 404, { error: "There is no answer to undo." });
+      return;
+    }
+    hub.publish("session", view());
+    sendJson(req, res, 200, { ok: true, session: view() });
+  } catch (error: unknown) {
+    logDeskError(error);
+    sendJson(req, res, 500, { error: "The last answer could not be undone." });
+  }
 }
 
 async function handleTurn(
@@ -2390,26 +2421,30 @@ function renderTranscript(
   if (splitAt > 0) {
     const earlier = turns
       .slice(0, splitAt)
-      .map((turn, index) => renderLoggedTurn(turn, index))
+      .map((turn, index) => renderLoggedTurn(turn, index, false))
       .join("\n");
     parts.push(
       `<details class="hh-qcard__look" data-earlier><summary>Earlier</summary>\n${earlier}\n</details>`,
     );
   }
+  const visible = turns.slice(splitAt);
   parts.push(
-    ...turns.slice(splitAt).map((turn, index) => renderLoggedTurn(turn, splitAt + index)),
+    ...visible.map((turn, index) => renderLoggedTurn(turn, splitAt + index, index === visible.length - 1)),
   );
   return parts.join("\n");
 }
 
-function renderLoggedTurn(turn: LoggedTurn, index: number): string {
+function renderLoggedTurn(turn: LoggedTurn, index: number, undo: boolean): string {
   const ask = turn.ask === null ? "" : `${turnLine("Guide", turn.ask, false)}\n`;
   const id = escapeHtml(turn.id);
   const fieldId = `hh-edit-${index}`;
+  const undoButton = undo
+    ? `\n            <button type="button" class="hh-btn hh-btn--ghost" data-undo="answer">Undo</button>`
+    : "";
   return `${ask}<div class="hh-turn hh-turn--you" data-answer-id="${id}">
             <span class="hh-turn__who">You</span>
             <span data-answer-text>${escapeHtml(turn.value)}</span>
-            <button type="button" class="hh-btn hh-btn--ghost" data-edit="${id}">Edit</button>
+            <button type="button" class="hh-btn hh-btn--ghost" data-edit="${id}">Edit</button>${undoButton}
             <form hidden class="hh-qcard__composer" data-edit-form="${id}">
               <label class="hh-qcard__label" for="${fieldId}">Edit this answer</label>
               <textarea class="hh-qcard__input" id="${fieldId}" data-edit-field="${id}" rows="3" autocomplete="off">${escapeHtml(turn.value)}</textarea>

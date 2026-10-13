@@ -343,7 +343,17 @@ test("a picked choice posts the original question as assumed", async () => {
     assert.ok(group);
     assert.equal(h.region.querySelector("#transcript, [data-region='transcript'] [role='radiogroup']"), null);
     assert.equal(h.transcript.querySelector("[role='radiogroup']"), null);
+    h.fire("click", { target: article.querySelector('[data-choice-id="A"]') });
+    await settle();
+    assert.equal(bodies.length, 0);
+    assert.equal(article.querySelector('[data-choice-id="A"]')?.getAttribute("aria-checked"), "true");
     h.fire("click", { target: article.querySelector('[data-choice-id="B"]') });
+    await settle();
+    assert.equal(bodies.length, 0);
+    assert.equal(article.querySelector('[data-choice-id="B"]')?.getAttribute("aria-checked"), "true");
+    assert.equal(article.querySelector('[data-choice-id="A"]')?.getAttribute("aria-checked"), "false");
+    assert.equal(h.region.querySelector("[data-question-id]")?.getAttribute("data-question-id"), "DP-0.1");
+    h.fire("click", { target: article.querySelector('[data-action="answer"]') });
     await settle();
     assert.equal(bodies.length, 1);
     const body = JSON.parse(bodies[0] ?? "{}") as { questionId?: string; text?: string; assumed?: boolean };
@@ -427,6 +437,10 @@ test("arrow keys while suggest is still pending still pick the second choice", a
     assert.equal(article.isConnected, true);
 
     release(Response.json({ session: suggested }));
+    await settle();
+    assert.equal(bodies.length, 0);
+    assert.equal(article.querySelector("#hh-card-draft")?.value, picked);
+    h.fire("click", { target: article.querySelector('[data-action="answer"]') });
     await settle();
     assert.equal(bodies.length, 1);
     const body = JSON.parse(bodies[0] ?? "{}") as { questionId?: string; text?: string; assumed?: boolean };

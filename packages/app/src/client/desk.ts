@@ -3,6 +3,7 @@ import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardSta
 import {
   ANSWER_HINT,
   PLACEHOLDER_FALLBACK,
+  buildChoicesForQuestion,
   escapeHtml,
   renderCard,
   renderChipItems,
@@ -734,6 +735,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let pending = false;
   /** Latest choice pressed while the suggest POST is still pending. */
   let choiceWait: string | null = null;
+  /** Label of the choice selected on this card. Sent only when Answer is pressed. */
+  let selectedChoiceLabel: string | null = null;
   let ready = false;
   let source: DeskSource | null = null;
   /** Stage named by the server while an answer POST is in flight. */
@@ -850,6 +853,12 @@ export function mountDesk(env: DeskEnv): () => void {
       void saveEdit(saveId);
       return;
     }
+    const undoKind = readMarked(event.target, "data-undo");
+    if (undoKind !== null) {
+      event.preventDefault();
+      void postUndo();
+      return;
+    }
     const editId = readMarked(event.target, "data-edit");
     if (editId !== null) {
       event.preventDefault();
@@ -946,6 +955,10 @@ export function mountDesk(env: DeskEnv): () => void {
     if (voiceSession && next === lastWritten) return;
     draft = next;
     pageTyped = true;
+    if (selectedChoiceLabel !== null && next.trim() !== selectedChoiceLabel.trim()) {
+      selectedChoiceLabel = null;
+      ownWords = true;
+    }
     offerOnFocus = null;
     rememberDraft(false);
     if (voiceSession) userTouched = true;
@@ -1437,6 +1450,7 @@ export function mountDesk(env: DeskEnv): () => void {
       view = session;
     }
     draft = "";
+    selectedChoiceLabel = null;
     draftNote = null;
     draftFade = false;
   }
@@ -2546,6 +2560,7 @@ export function mountDesk(env: DeskEnv): () => void {
               questionId,
               text: draft,
               ...(attachments.length > 0 ? { attachments } : {}),
+              ...(answerIsChoice() ? { assumed: true } : {}),
             }
           : { questionId },
         env.fetch,
@@ -2639,7 +2654,12 @@ export function mountDesk(env: DeskEnv): () => void {
     startAnswerProgress();
     let advance = false;
     try {
-      const result = await postTurn("answer", token, { questionId: held.questionId, text: draft }, env.fetch);
+      const result = await postTurn(
+        "answer",
+        token,
+        { questionId: held.questionId, text: draft, ...(answerIsChoice() ? { assumed: true } : {}) },
+        env.fetch,
+      );
       if (!result.ok) {
         showFieldError(result.error);
         return;
@@ -2712,10 +2732,13 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function mountChoices(session: SessionView, questionId: string): boolean {
-    const set = session.choices;
-    if (set === null || set.forId !== questionId || set.items.length < 1) return false;
+    const ask = session.question?.id === questionId ? (session.question.ask ?? "") : "";
+    const set = buildChoicesForQuestion(questionId, ask, session.pushback, session.choices);
+    if (set === null) return false;
     const article = region()?.querySelector(`[data-question-id="${questionId}"]`);
     if (article === null || article === undefined) return false;
+    const stale = article.querySelector("[data-choices]");
+    if (stale !== null && stale.getAttribute("data-choices-for") !== questionId) stale.remove?.();
     if (article.querySelector("[data-choices]") !== null) return false;
     const html = renderChoiceGroup(set);
     if (html === "") return false;
@@ -2787,6 +2810,44 @@ export function mountDesk(env: DeskEnv): () => void {
     void pickChoice(id);
   }
 
+  function answerIsChoice(): boolean {
+    if (ownWords || selectedChoiceLabel === null) return false;
+    return draft.trim() === selectedChoiceLabel.trim();
+  }
+
+  async function postUndo(): Promise<void> {
+    if (token === null || pending) return;
+    pending = true;
+    setBusy(true);
+    try {
+      const response = await env.fetch("/api/undo", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json", "x-hh-csrf": token },
+        body: JSON.stringify({ kind: "answer" }),
+      });
+      let payload: unknown = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      const session = isRecord(payload) ? parseSession(payload.session) : null;
+      if (!response.ok || session === null) {
+        showFieldError(isRecord(payload) && typeof payload.error === "string" ? payload.error : DRAFT_KEPT);
+        return;
+      }
+      view = session;
+      error = null;
+    } catch {
+      showFieldError(DRAFT_KEPT);
+    } finally {
+      pending = false;
+      setBusy(false);
+      paint();
+    }
+  }
+
   async function pickChoice(id: string): Promise<void> {
     if (token === null) return;
     if (pending) {
@@ -2796,20 +2857,22 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     choiceWait = null;
     if (voiceActive()) await stopVoice();
+    selectChoice(id);
+  }
+
+  /** Marks one radio and fills the draft. Nothing is sent until Answer. */
+  function selectChoice(id: string): void {
     if (id === "other") {
       ownWords = true;
-      // Other asks for a blank box. Do not offer the pushback draft back on focus.
+      selectedChoiceLabel = null;
       offerOnFocus = null;
       draft = "";
       const field = region()?.querySelector("#hh-card-draft");
       if (field !== null && field !== undefined) field.value = "";
+      markChoice("other");
       rememberDraft(true);
       hideAssumed();
-      const button = region()?.querySelector('[data-action="answer"]');
-      if (button !== null && button !== undefined) {
-        button.disabled = true;
-        button.setAttribute("disabled", "");
-      }
+      syncAnswerLock();
       announceChoices("Write your own answer.");
       focusField();
       return;
@@ -2819,66 +2882,24 @@ export function mountDesk(env: DeskEnv): () => void {
     const label = node.getAttribute("data-choice-label") ?? "";
     if (label.trim() === "") return;
     ownWords = false;
+    selectedChoiceLabel = label;
     draft = label;
     const field = region()?.querySelector("#hh-card-draft");
     if (field !== null && field !== undefined) field.value = label;
+    markChoice(id);
     showAssumed(label);
-    announceChoices(`Assumed: ${label}`);
+    announceChoices(`Selected: ${label}`);
     rememberDraft(true);
-    if (suggestHold !== null) {
-      if (label.trim() === suggestHold.suggestion.trim() && suggestionMoved(suggestHold.session, suggestHold.questionId)) {
-        const held = suggestHold;
-        releaseDraft(held.questionId);
-        suggestHold = null;
-        cardHold = false;
-        view = held.session;
-        draft = "";
-        draftNote = null;
-        draftFade = false;
-        error = null;
-        notice = null;
-        pending = false;
-        paint();
-        focusNewQuestion();
-        return;
-      }
-      await postAssumed(suggestHold.questionId, label);
-      return;
-    }
-    const questionId = view?.question?.id ?? null;
-    if (questionId === null) return;
-    await postAssumed(questionId, label);
+    syncAnswerLock();
   }
 
-  async function postAssumed(questionId: string, text: string): Promise<void> {
-    if (token === null) return;
-    pending = true;
-    error = null;
-    notice = null;
-    setBusy(true);
-    let advance = false;
-    try {
-      const result = await postTurn("answer", token, { questionId, text, assumed: true }, env.fetch);
-      if (!result.ok) {
-        showFieldError(result.error);
-        return;
-      }
-      finishTurn(questionId, result.session, text);
-      suggestHold = null;
-      cardHold = false;
-      ownWords = false;
-      error = null;
-      advance = true;
-    } catch {
-      showFieldError(DRAFT_KEPT);
-    } finally {
-      pending = false;
-      if (advance) {
-        paint();
-        focusNewQuestion();
-      } else {
-        setBusy(false);
-      }
+  function markChoice(id: string): void {
+    for (const item of ["A", "B", "C", "D", "other"]) {
+      const node = choiceNode(item);
+      if (node === null) continue;
+      const on = item === id;
+      node.setAttribute("aria-checked", on ? "true" : "false");
+      node.setAttribute("tabindex", on ? "0" : "-1");
     }
   }
 
@@ -3746,6 +3767,9 @@ export function mountDesk(env: DeskEnv): () => void {
     adoptSavedFiles();
     const question = region();
     if (question !== null && view !== null) {
+      if (view.choices !== null && (view.question === null || view.choices.forId !== view.question.id)) {
+        view = { ...view, choices: null };
+      }
       const state: CardState = {
         question: view.question,
         draft,

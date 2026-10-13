@@ -386,6 +386,47 @@ function sampleAnswer(question: Question): string {
 }
 
 const CHOICE_IDS: readonly CardChoiceId[] = ["A", "B", "C", "D"];
+const CHOICE_DP = /\bDP-\d+(?:\.\d+)?[a-z]?(?:-[a-z0-9]+)?\b/gi;
+
+/** Option labels and values never carry a question id. */
+export function choiceCopy(value: string): string {
+  return value
+    .replace(CHOICE_DP, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+:/g, ":")
+    .replace(/:\s*$/g, "")
+    .trim();
+}
+
+/**
+ * Choices for this question only. A set keyed to another id is dropped.
+ * Letters are reassigned so a filtered list stays A, B, C, D.
+ */
+export function buildChoicesForQuestion(
+  questionId: string,
+  ask: string,
+  pushback: string | null,
+  set: CardChoiceSet | null | undefined,
+): CardChoiceSet | null {
+  if (set === null || set === undefined || set.forId !== questionId) return null;
+  const items: CardChoice[] = [];
+  for (const item of set.items) {
+    const label = choiceCopy(item.label);
+    if (label === "") continue;
+    if (sameQuestion(label, ask) || sameQuestion(label, pushback ?? "")) continue;
+    const id = CHOICE_IDS[items.length];
+    if (id === undefined) break;
+    const source = choiceCopy(item.source);
+    items.push({
+      id,
+      label,
+      why: choiceCopy(item.why),
+      source: source === "" ? "choice" : source,
+    });
+  }
+  if (items.length === 0) return null;
+  return { forId: questionId, origin: set.origin, items };
+}
 
 function sameQuestion(label: string, other: string): boolean {
   const norm = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.?!,:;]+$/g, "");
@@ -405,8 +446,11 @@ export function renderChoiceGroup(set: CardChoiceSet): string {
   const radios = items.map((item, index) => {
     const tab = index === 0 ? "0" : "-1";
     const checked = "false";
-    const name = `${item.id}. ${item.label}`;
-    return `    <div class="hh-choice" role="radio" aria-checked="${checked}" tabindex="${tab}" data-choice-id="${item.id}" data-choice-label="${escapeHtml(item.label)}" data-suggest-option="${escapeHtml(item.source)}" aria-label="${escapeHtml(name)}"><span class="hh-choice__key">${item.id}</span><span class="hh-choice__label">${escapeHtml(item.label)}</span></div>`;
+    const label = choiceCopy(item.label);
+    const source = choiceCopy(item.source);
+    const shownSource = source === "" ? "choice" : source;
+    const name = `${item.id}. ${label}`;
+    return `    <div class="hh-choice" role="radio" aria-checked="${checked}" tabindex="${tab}" data-choice-id="${item.id}" data-choice-label="${escapeHtml(label)}" data-suggest-option="${escapeHtml(shownSource)}" aria-label="${escapeHtml(name)}"><span class="hh-choice__key">${item.id}</span><span class="hh-choice__label">${escapeHtml(label)}</span></div>`;
   });
   radios.push(
     `    <div class="hh-choice" role="radio" aria-checked="false" tabindex="-1" data-choice-id="other" aria-label="${escapeHtml(OTHER_CHOICE_LABEL)}"><span class="hh-choice__label">${escapeHtml(OTHER_CHOICE_LABEL)}</span></div>`,
@@ -446,21 +490,8 @@ export function renderCard(state: CardState): string {
   const hintLine = hint
     ? `  <p class="hh-qcard__hint" id="hh-card-hint">${escapeHtml(ANSWER_HINT)}</p>\n`
     : "";
-  const choiceSet = state.choices;
-  const visibleItems =
-    choiceSet === undefined || choiceSet === null
-      ? []
-      : choiceSet.items
-          .filter((item) => !sameQuestion(item.label, question.ask) && !sameQuestion(item.label, state.pushback ?? ""))
-          .slice(0, 4)
-          .map((item, index) => ({ ...item, id: CHOICE_IDS[index] ?? item.id }));
-  const choicesHtml =
-    choiceSet !== undefined &&
-    choiceSet !== null &&
-    choiceSet.forId === question.id &&
-    visibleItems.length > 0
-      ? `${renderChoiceGroup({ ...choiceSet, items: visibleItems })}\n`
-      : "";
+  const prepared = buildChoicesForQuestion(question.id, question.ask, state.pushback, state.choices);
+  const choicesHtml = prepared === null ? "" : `${renderChoiceGroup(prepared)}\n`;
   const tipLine =
     question.tip !== undefined && state.counts?.index === 1
       ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(question.tip)}</p>\n`

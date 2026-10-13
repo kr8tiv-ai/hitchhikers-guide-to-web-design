@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -116,6 +116,9 @@ for (const viewport of VIEWPORTS) {
       await expectChoices(card, [CHOICE_A, CHOICE_B, CHOICE_C]);
 
       await card.getByRole("radio", { name: /^B\./ }).click();
+      await expect(card).toBeVisible();
+      await expect(card.getByRole("radio", { name: /^B\./ })).toHaveAttribute("aria-checked", "true");
+      await page.locator('[data-action="answer"]').click();
 
       const next = page.locator("[data-question-id='DP-0.2']");
       await expect(next).toBeVisible();
@@ -144,6 +147,8 @@ for (const viewport of VIEWPORTS) {
       await expect(group).toBeVisible();
       await group.focus();
       await page.keyboard.press("a");
+      await expect(page.locator("[data-question-id='DP-0.1']")).toBeVisible();
+      await page.locator('[data-action="answer"]').click();
 
       const next = page.locator("[data-question-id='DP-0.2']");
       await expect(next).toBeVisible();
@@ -171,6 +176,8 @@ for (const viewport of VIEWPORTS) {
       await expect(group).toBeVisible();
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
+      await expect(page.locator("[data-question-id='DP-0.1']")).toBeVisible();
+      await page.locator('[data-action="answer"]').click();
 
       const next = page.locator("[data-question-id='DP-0.2']");
       await expect(next).toBeVisible();
@@ -302,6 +309,65 @@ for (const viewport of VIEWPORTS) {
     }
   });
 }
+
+test("a click only selects, Answer sends the last pick, and the next card drops the old options", async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = trackErrors(page);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-choices-012-"));
+  await seedFacts(projectDir);
+  const child = startDesk(projectDir, GOOD);
+  try {
+    const url = await readUrl(child);
+    await openCard(page, url, { width: 1440, height: 900 });
+    await page.locator('[data-action="suggest"]').click();
+    const card = page.locator("[data-question-id='DP-0.1']");
+    await expectChoices(card, [CHOICE_A, CHOICE_B, CHOICE_C]);
+    const options = card.locator("[data-choice-id]");
+    const count = await options.count();
+    for (let index = 0; index < count; index += 1) {
+      const option = options.nth(index);
+      expect(await option.innerText()).not.toMatch(/DP-/);
+      const label = await option.getAttribute("data-choice-label");
+      const source = await option.getAttribute("data-suggest-option");
+      if (label !== null) expect(label).not.toMatch(/DP-/);
+      if (source !== null) expect(source).not.toMatch(/DP-/);
+    }
+
+    const posted = page
+      .waitForRequest((req) => req.method() === "POST" && req.url().includes("/api/answer"), { timeout: 600 })
+      .then(() => true, () => false);
+    await card.getByRole("radio", { name: /^A\./ }).click();
+    expect(await posted).toBe(false);
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("radio", { name: /^A\./ })).toHaveAttribute("aria-checked", "true");
+
+    await card.getByRole("radio", { name: /^B\./ }).click();
+    await expect(card.getByRole("radio", { name: /^B\./ })).toHaveAttribute("aria-checked", "true");
+    await expect(card.getByRole("radio", { name: /^A\./ })).toHaveAttribute("aria-checked", "false");
+    await expect(page.locator("#hh-card-draft")).toHaveValue(CHOICE_B);
+
+    await page.locator('[data-action="answer"]').click();
+    const next = page.locator("[data-question-id='DP-0.2']");
+    await expect(next).toBeVisible();
+    await expect(page.locator("#transcript")).toContainText(CHOICE_B);
+    await expect(next.getByText(CHOICE_A)).toHaveCount(0);
+    await expect(next.locator("[data-choices]")).toHaveCount(0);
+    const undo = page.locator("#transcript [data-undo='answer']");
+    await expect(undo).toBeVisible();
+    await undo.click();
+    await expect.poll(async () => {
+      try {
+        return await readFile(path.join(projectDir, ".hitchhiker", "DECISIONS.md"), "utf8");
+      } catch {
+        return "";
+      }
+    }).toMatch(/Superseded by: \S+/);
+    expect(errors).toEqual([]);
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
 
 async function expectChoices(card: Locator, labels: readonly string[]): Promise<void> {
   const group = card.getByRole("radiogroup");
