@@ -40,10 +40,14 @@ import {
   withContextPacket,
   writePhaseAdvisories,
 } from "../src/context/index.ts";
+import { briefLoop } from "../src/guide/brief-loop.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { requestMirror } from "../src/guide/mirror.ts";
 import { judgePushback } from "../src/guide/pushback-judge.ts";
 import type { Facts } from "../src/guide/schemas.ts";
 import { suggestOffer } from "../src/guide/suggest.ts";
+import { authorPackage, type AuthorContext } from "../src/spec/author.ts";
+import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
 import { saveProjectFile, restoreProject } from "../src/project-file/index.ts";
 import { beforeWeJump } from "../src/spec/before-jump.ts";
 import { saveState, type GuideState } from "../src/state.ts";
@@ -306,6 +310,58 @@ test("context survives a project-file restore and the next calls still name the 
       assertFacts(input);
     }
     assert.equal(readStatus(dir).phase, "Babel Fish");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("mirror, brief, and site-prompt calls carry the seeded decision and logo", async () => {
+  const dir = tempDir();
+  try {
+    await seedMemory(dir);
+    const seen: string[] = [];
+    const model = asThink(async (req) => {
+      seen.push(`${req.task}\n${req.input}`);
+      if (req.task === "context-summary") return hit({ summary: `D-001 ${LOGO} ${COLOURS}` });
+      if (req.task === "author-site-prompt") return hit({ body: "not a prompt body" });
+      return hit({ message: "not a brief" });
+    });
+    const facts: Facts = { answers: [], uploads: [], crawlNotes: [] };
+    await requestMirror(facts, "cadence", { think: model, projectDir: dir, language: "en" });
+    const session: GuideSession = { projectDir: dir, depth: "standard", language: "en", pushes: {} };
+    const loop = briefLoop(session, { think: model });
+    await loop.next();
+    await loop.return(undefined);
+    const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    const ctx: AuthorContext = {
+      contextMd: "# Context\n\n## Brand\n\nInk and paper.\n",
+      packsDir: path.join(repo, "packages", "knowledge", "packs"),
+      goldenDir: path.join(repo, "packages", "knowledge", "golden"),
+      templatesDir: path.join(repo, "packages", "templates"),
+      projectDir: dir,
+    };
+    const entry: SitePromptSkeleton = {
+      id: "001",
+      phase: "improbability-drive",
+      slice: "Vogon Constructor Fleet",
+      title: "Credits",
+      tier: "Towel",
+      effort: "medium",
+      model: "grok-4.7",
+      dependsOn: [],
+      filesModified: ["src/pages/credits.astro"],
+      requirements: ["REQ-CREDITS"],
+      protected: [],
+      reviewAfter: false,
+      maxTurns: 40,
+      kind: "build",
+    };
+    await authorPackage([entry], ctx, { think: model });
+    const tasks = seen.map((input) => input.slice(0, input.indexOf("\n")));
+    assert.ok(tasks.includes("mirror"));
+    assert.ok(tasks.includes("brief-draft"));
+    assert.ok(tasks.includes("author-site-prompt"));
+    for (const input of seen) assertFacts(input);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
