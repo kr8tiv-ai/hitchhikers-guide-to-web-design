@@ -2571,7 +2571,10 @@ export function mountDesk(env: DeskEnv): () => void {
         await stopVoice();
         if (view === null || signature(next) === signature(view)) return;
         const kept = draft;
-        const same = view.question !== null && next.question?.id === view.question.id;
+        const leavingId = view.question?.id ?? null;
+        const same = leavingId !== null && next.question?.id === leavingId;
+        // The stream can show the next card before the turn POST drops the old key.
+        if (!same && leavingId !== null) releaseDraft(leavingId);
         view = next;
         draft = kept.trim() === "" ? "" : kept;
         error = null;
@@ -2586,7 +2589,9 @@ export function mountDesk(env: DeskEnv): () => void {
       })();
       return;
     }
-    const sameQuestion = view.question !== null && session.question?.id === view.question.id;
+    const leavingId = view.question?.id ?? null;
+    const arrivingId = session.question?.id ?? null;
+    const sameQuestion = leavingId !== null && leavingId === arrivingId;
     const pushbackArrived =
       ready &&
       sameQuestion &&
@@ -2614,6 +2619,8 @@ export function mountDesk(env: DeskEnv): () => void {
       publishShown(kept.trim() === "" ? null : kept);
       return;
     }
+    // The stream can show the next card before the turn POST drops the old key.
+    if (!sameQuestion && leavingId !== null) releaseDraft(leavingId);
     // A late session event must not wipe words the person just typed on this card.
     readDraft();
     const typed = sameQuestion ? draft : "";
