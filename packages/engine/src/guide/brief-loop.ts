@@ -155,11 +155,13 @@ async function reviseOrFallback(
   correction: string,
   deps: { think: typeof think },
 ): Promise<SiteBrief> {
-  const first = await askRevise(s, facts, draft, correction, deps);
+  const recorded = deterministicBrief(facts, s.language);
+  const first = await askRevise(s, facts, draft, correction, recorded, deps);
   if (first !== null) return first;
-  const second = await askRevise(s, facts, draft, correction, deps);
+  const second = await askRevise(s, facts, draft, correction, recorded, deps);
   if (second !== null) return second;
-  return deterministicBrief(facts, s.language);
+  // A failed revise keeps the brief under correction. The recorded answers must not replace it.
+  return draft;
 }
 
 async function askDraft(
@@ -191,7 +193,7 @@ async function askDraft(
     );
     const brief = asBrief(result.value, true);
     if (brief === null) return null;
-    if (briefIssues(brief, facts, s.language).length > 0) return null;
+    if (briefIssues(brief, facts, s.language, recorded).length > 0) return null;
     return brief;
   } catch {
     return null;
@@ -203,6 +205,7 @@ async function askRevise(
   facts: Facts,
   draft: SiteBrief,
   correction: string,
+  recorded: SiteBrief,
   deps: { think: typeof think },
 ): Promise<SiteBrief | null> {
   try {
@@ -227,16 +230,18 @@ async function askRevise(
     const partial = asBrief(result.value, false);
     if (partial === null) return null;
     const merged = mergeBrief(draft, partial);
-    if (briefIssues(merged, facts, s.language).length > 0) return null;
+    if (briefIssues(merged, facts, s.language, recorded).length > 0) return null;
     return merged;
   } catch {
     return null;
   }
 }
 
-function briefIssues(brief: SiteBrief, facts: Facts, language: string): string[] {
+function briefIssues(brief: SiteBrief, facts: Facts, language: string, recorded?: SiteBrief): string[] {
   const issues: string[] = [];
   for (const key of BRIEF_KEYS) {
+    // A recorded answer is the person's words. It must not veto a correction to another field.
+    if (recorded !== undefined && brief[key] === recorded[key]) continue;
     issues.push(...guideTextIssues(brief[key], { language, facts }));
   }
   return issues;
@@ -318,7 +323,10 @@ function recordedText(key: BriefKey, byId: ReadonlyMap<string, string>): string 
   return parts.join(" ");
 }
 
-/** A recorded answer stays. Model prose may wrap it. An unstated line never replaces it. */
+/**
+ * A recorded answer fills a field the model left empty or "not stated yet".
+ * Other prose stays, including a correction that does not repeat the original answer.
+ */
 function lockRecorded(model: SiteBrief, recorded: SiteBrief): SiteBrief {
   const next = { ...model };
   for (const key of BRIEF_KEYS) {
@@ -329,7 +337,7 @@ function lockRecorded(model: SiteBrief, recorded: SiteBrief): SiteBrief {
     }
     const prose = next[key].trim();
     if (fact !== UNSTATED) {
-      if (prose === "" || prose === UNSTATED || prose.includes("not stated yet") || !prose.includes(fact)) {
+      if (prose === "" || prose === UNSTATED || prose.includes("not stated yet")) {
         next[key] = fact;
       }
     } else if (prose === "") {
