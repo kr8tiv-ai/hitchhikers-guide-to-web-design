@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CassetteError, CassetteMissError } from "../ai/cassette.ts";
 import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
@@ -15,7 +15,7 @@ import { validateJson } from "../ai/schema-validate.ts";
 import { InterviewError, openInterview } from "../interview.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
-import { bindPacket, syncInterviewFacts } from "../context/index.ts";
+import { bindPacket, refreshSummary, syncInterviewFacts } from "../context/index.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
@@ -51,6 +51,7 @@ import {
 } from "./suggest.ts";
 import { detectLanguage, validateGuideMessage } from "./validators.ts";
 import { type AnswerProgressStage, isAnswerProgressStage } from "./guide-progress.ts";
+import { INTERVIEW_EFFORT_DEFAULT, INTERVIEW_MODEL } from "./interview-call.ts";
 
 /**
  * One live interview turn.
@@ -118,18 +119,69 @@ export async function runTurn(
   input: GuideTurnInput,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
+  const clock = stageClock(s.projectDir);
+  const guideDeps = { ...deps, think: bindPacket(deps.think, s.projectDir, "interview") };
+  const timed: GuideTurnDeps = {
+    ...guideDeps,
+    onProgress(stage) {
+      if (input.kind === "answer" && input.assumed !== true) clock.mark(stage);
+      deps.onProgress?.(stage);
+    },
+  };
+  const reportSave = input.kind === "answer" && input.assumed !== true;
+  if (reportSave) timed.onProgress?.("Checking your answer");
   await hydrate(s);
   if (s.depth === "express") await seedExpressAssumptions(s.projectDir);
-  const guideDeps = { ...deps, think: bindPacket(deps.think, s.projectDir, "interview") };
-  const reportSave = input.kind === "answer" && input.assumed !== true;
   let finished = false;
   try {
-    const turn = await perform(s, input, guideDeps);
+    const turn = await perform(s, input, timed);
     finished = true;
     return turn;
   } finally {
-    if (reportSave && finished) reportStage(deps, "Saving");
+    if (reportSave && finished) timed.onProgress?.("Saving");
     await persistSession(s);
+    await clock.finish();
+  }
+}
+
+/** Durations for one answer. Writes share the model log and do not block the model. */
+function stageClock(projectDir: string): { mark(stage: string): void; finish(): Promise<void> } {
+  let current: { name: string; started: number } | null = null;
+  const writes: Promise<void>[] = [];
+  const mark = (stage: string): void => {
+    const now = Date.now();
+    const previous = current;
+    current = { name: stage, started: now };
+    if (previous !== null) writes.push(writeStage(projectDir, previous.name, now - previous.started));
+  };
+  return {
+    mark,
+    async finish() {
+      if (current !== null) {
+        const previous = current;
+        current = null;
+        writes.push(writeStage(projectDir, previous.name, Date.now() - previous.started));
+      }
+      await Promise.all(writes);
+    },
+  };
+}
+
+async function writeStage(projectDir: string, stage: string, durationMs: number): Promise<void> {
+  try {
+    const dir = path.join(projectDir, ".hitchhiker", "logs");
+    await mkdir(dir, { recursive: true });
+    const line = JSON.stringify({
+      at: new Date().toISOString(),
+      task: "answer-stage",
+      stage,
+      durationMs,
+      model: INTERVIEW_MODEL,
+      effort: INTERVIEW_EFFORT_DEFAULT,
+    });
+    await appendFile(path.join(dir, "ai.ndjson"), `${line}\n`, "utf8");
+  } catch {
+    // A log problem must not fail the answer.
   }
 }
 
@@ -246,7 +298,6 @@ async function answerText(
   const bound = await bindNamedLogo(s.projectDir, current, text, sessionState);
   const judgedState = bound ? loadSessionState(s.projectDir, questions) : sessionState;
   const facts = loadFacts(s.projectDir);
-  reportStage(deps, "Checking your answer");
   const judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
@@ -358,7 +409,7 @@ async function advance(
   wasSoft: boolean,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
-  await syncInterviewFacts(s.projectDir, { summarize: true, moveCursor: true, think: deps.think });
+  await syncInterviewFacts(s.projectDir, { summarize: false, moveCursor: true, think: deps.think });
   const reopened = await openInterview(s.projectDir, s.depth);
   const next = reopened.next();
   const facts = loadFacts(s.projectDir);
@@ -374,7 +425,13 @@ async function advance(
     projectDir: s.projectDir,
     language: s.language,
   });
-  const guide = await askGuide(s, next, current, facts, deps);
+  const summary = refreshSummary(s.projectDir, deps.think);
+  let guide: { message: string; calm: boolean };
+  try {
+    guide = await askGuide(s, next, current, facts, deps);
+  } finally {
+    await summary;
+  }
   let message = guide.message;
   if (!guide.calm && lines !== null) {
     const combined = `${lines[0]}\n${lines[1]}\n${lines[2]}\n${guide.message}`;

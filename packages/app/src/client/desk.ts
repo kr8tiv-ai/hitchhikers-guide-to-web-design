@@ -3881,6 +3881,9 @@ export function mountDesk(env: DeskEnv): () => void {
   function startAnswerProgress(): void {
     stopAnswerProgress();
     progressStarted = Date.now();
+    progressStage = "Checking your answer";
+    progressLine = answerProgressLine(progressStage, 0);
+    paint();
     progressTimer = setInterval(() => {
       if (!pending || progressStage === null) return;
       const line = answerProgressLine(progressStage, elapsedAnswerSeconds());
