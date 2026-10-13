@@ -30,6 +30,7 @@ import {
   parseLogoIntake,
 } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleResponse } from "./settle-guide-job.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "..", "..", "..", "interview", "tree.yaml");
@@ -503,11 +504,11 @@ async function skipUntil(handle: ServerHandle, token: string, target: string): P
     const card = region(html, "question");
     const id = questionId(card);
     if (id === target) return html;
-    const skipped = await fetch(new URL("/api/skip", handle.url), {
+    const skipped = await settleResponse(await fetch(new URL("/api/skip", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: id }),
-    });
+    }));
     assert.equal(skipped.status, 200);
   }
   assert.fail(target);

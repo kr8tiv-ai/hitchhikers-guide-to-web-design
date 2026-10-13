@@ -200,9 +200,7 @@ export function draftSiteBrief(
   writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted, error: "" });
   const job = runDraft(projectDir, thinkFn, priorError);
   jobs.set(key, job);
-  void job.finally(() => {
-    if (jobs.get(key) === job) jobs.delete(key);
-  });
+  dropJob(jobs, key, job);
   return job;
 }
 
@@ -259,9 +257,7 @@ export function approveSiteBrief(projectDir: string, thinkFn: typeof think): Pro
   if (existing) return existing;
   const job = runApprove(projectDir, thinkFn);
   approving.set(key, job);
-  void job.finally(() => {
-    if (approving.get(key) === job) approving.delete(key);
-  });
+  dropJob(approving, key, job);
   return job;
 }
 
@@ -290,9 +286,7 @@ export function reviseSiteBrief(
   });
   const job = runRevise(projectDir, text, current.draft, thinkFn, opts?.onProgress);
   revisions.set(key, job);
-  void job.finally(() => {
-    if (revisions.get(key) === job) revisions.delete(key);
-  });
+  dropJob(revisions, key, job);
   return job;
 }
 
@@ -326,6 +320,13 @@ async function runRevise(
     writePending(projectDir, { status: "pending", draft: before, buildStarted: false, error: "", note: "" });
     throw error;
   }
+}
+
+/** Drop the cached job when it settles. The shadow promise must not reject twice. */
+function dropJob<T>(map: Map<string, Promise<T>>, key: string, job: Promise<T>): void {
+  void job.finally(() => {
+    if (map.get(key) === job) map.delete(key);
+  }).catch(() => undefined);
 }
 
 function sameBrief(left: SiteBrief, right: SiteBrief): boolean {

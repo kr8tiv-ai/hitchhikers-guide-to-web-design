@@ -8,6 +8,7 @@ import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleResponse } from "./settle-guide-job.ts";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x11, 0x22]);
 
@@ -85,11 +86,11 @@ test("a Logo file upload is named on the DP-1.1 call and survives reload", async
       html = await (await fetch(handle.url)).text();
       const id = questionId(html);
       if (id === "DP-1.1") break;
-      const skipped = await fetch(new URL("/api/skip", handle.url), {
+      const skipped = await settleResponse(await fetch(new URL("/api/skip", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: id }),
-      });
+      }));
       assert.equal(skipped.status, 200);
     }
     assert.equal(questionId(html), "DP-1.1");
@@ -110,16 +111,16 @@ test("a Logo file upload is named on the DP-1.1 call and survives reload", async
     assert.match(prompt, /paradise-found-logo\.png/);
     assert.match(prompt, /role logo/);
 
-    const answered = await fetch(new URL("/api/answer", handle.url), {
+    const answered = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({
         questionId: "DP-1.1",
         text: "Neither. Use paradise-found-logo.png, the full logo I put in the Logo file slot.",
       }),
-    });
+    }));
     assert.equal(answered.status, 200);
-    const body = (await answered.json()) as { session?: { question?: { id?: string; ask?: string } } };
+    const body = JSON.parse(answered.text) as { session?: { question?: { id?: string; ask?: string } } };
     assert.notEqual(body.session?.question?.id, "DP-1.1");
     assert.equal((body.session?.question?.ask ?? "").includes("paradise-found-hero.jpg"), false);
     const judge = seen.find((item) => item.startsWith("pushback-judge") && item.includes("DP-1.1"));

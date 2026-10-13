@@ -490,6 +490,8 @@ export interface SessionView {
   help: string;
   /** Null until the interview is finished. Then idle, drafting, pending, or approved. */
   briefStatus?: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
+  /** Set while a Guide job for this desk is still running. Reload reattaches to it. */
+  guideJob?: { id: string; status: "running" } | null;
 }
 
 interface SavedFileView {
@@ -659,7 +661,15 @@ export function parseSession(value: unknown): SessionView | null {
     lead: typeof value.lead === "string" ? value.lead : "",
     help: typeof value.help === "string" ? value.help : "",
     briefStatus: parseBriefStatus(value.briefStatus),
+    guideJob: parseGuideJob(value.guideJob),
   };
+}
+
+function parseGuideJob(value: unknown): { id: string; status: "running" } | null {
+  if (!isRecord(value) || value.status !== "running" || typeof value.id !== "string") return null;
+  const id = value.id.trim();
+  if (id === "") return null;
+  return { id, status: "running" };
 }
 
 function parseBriefStatus(value: unknown): "idle" | "drafting" | "pending" | "approved" | "revising" | null {
@@ -721,9 +731,57 @@ export async function postTurn(
     const message = isRecord(payload) && typeof payload.error === "string" ? payload.error : DRAFT_KEPT;
     return { ok: false, error: message };
   }
-  const session = isRecord(payload) ? parseSession(payload.session) : null;
-  if (session === null) return { ok: false, error: DRAFT_KEPT };
-  return { ok: true, session };
+  if (!isRecord(payload)) return { ok: false, error: DRAFT_KEPT };
+  const direct = parseSession(payload.session);
+  if (direct !== null) return { ok: true, session: direct };
+  if (typeof payload.jobId === "string" && payload.jobId.trim() !== "") {
+    return pollGuideJob(payload.jobId, fetcher);
+  }
+  return { ok: false, error: DRAFT_KEPT };
+}
+
+const GUIDE_JOB_WAIT_MS = 20 * 60 * 1000;
+
+async function pollGuideJob(
+  jobId: string,
+  fetcher: typeof fetch,
+): Promise<{ ok: true; session: SessionView } | { ok: false; error: string }> {
+  const deadline = Date.now() + GUIDE_JOB_WAIT_MS;
+  while (Date.now() < deadline) {
+    let response: Response;
+    try {
+      response = await fetcher(`/api/guide-job/${jobId}`, { cache: "no-store" });
+    } catch {
+      return { ok: false, error: DRAFT_KEPT };
+    }
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!isRecord(payload)) return { ok: false, error: DRAFT_KEPT };
+    if (payload.status === "running") {
+      await wait(40);
+      continue;
+    }
+    if (payload.status === "failed" || (typeof payload.httpStatus === "number" && payload.httpStatus >= 400)) {
+      const message = typeof payload.error === "string" && payload.error.trim() !== "" ? payload.error : DRAFT_KEPT;
+      return { ok: false, error: message };
+    }
+    const session = parseSession(payload.session);
+    if (session === null) return { ok: false, error: DRAFT_KEPT };
+    return { ok: true, session: { ...session, guideJob: null } };
+  }
+  return { ok: false, error: DRAFT_KEPT };
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    const ref = timer as { unref?: () => void };
+    if (typeof ref.unref === "function") ref.unref();
+  });
 }
 
 /** Wire the current document. Returns a cleanup, or does nothing outside a browser. */
@@ -2383,6 +2441,26 @@ export function mountDesk(env: DeskEnv): () => void {
     source.addEventListener("brief-progress", (event) => {
       applyBriefProgress(event.data);
     });
+    if (session.guideJob?.status === "running") void followGuideJob(session.guideJob.id);
+  }
+
+  async function followGuideJob(jobId: string): Promise<void> {
+    const questionId = view?.question?.id ?? "";
+    pending = true;
+    error = null;
+    paint();
+    const result = await pollGuideJob(jobId, env.fetch);
+    if (!result.ok) {
+      error = result.error;
+      pending = false;
+      paint();
+      return;
+    }
+    finishTurn(questionId, result.session, draft);
+    error = null;
+    pending = false;
+    paint();
+    focusNewQuestion();
   }
 
   async function postGuideNote(path: string, questionId: string, action: string): Promise<void> {

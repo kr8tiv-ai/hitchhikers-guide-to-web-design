@@ -87,6 +87,7 @@ import {
 } from "../card.ts";
 import { attachQuestionId, formatBytes } from "../client/attach.ts";
 import { splitQuestionText } from "../question-parts.ts";
+import { forgetGuideJobs, guideJobsFor } from "./guide-jobs.ts";
 import { CONTEXT_LABEL, guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { contextAssetFile, renderContextMain } from "./context-desk.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
@@ -234,6 +235,8 @@ export interface DeskSession {
   help: string;
   /** Null until every asked question has an answer. */
   briefStatus: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
+  /** Set while a Guide job for this desk is still running. */
+  guideJob?: { id: string; status: "running" } | null;
 }
 
 export interface DeskApp {
@@ -364,8 +367,10 @@ export async function createDeskApp(opts: {
 
   const notice = opts.cassetteNotice ?? null;
   let preflight = opts.preflight ?? null;
-  const view = (): DeskSession =>
-    buildSession(projectDir, interview, questions, overlay, notice, preflight, depth);
+  const view = (): DeskSession => {
+    const session = buildSession(projectDir, interview, questions, overlay, notice, preflight, depth);
+    return { ...session, guideJob: guideJobsFor(projectDir).running() };
+  };
   const toolOptions: ToolDeskOptions = {
     projectDir,
     getPreflight: () => preflight,
@@ -383,6 +388,7 @@ export async function createDeskApp(opts: {
     token,
     close() {
       hub.close();
+      forgetGuideJobs(projectDir);
     },
     async handle(req, res) {
       const method = req.method ?? "GET";
@@ -856,7 +862,7 @@ async function handlePost(
     return;
   }
   if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
-    await handleTurn(req, res, pathname, turn, view, hub, enqueue, projectDir);
+    await handleTurn(req, res, pathname, turn, view, hub, projectDir);
     return;
   }
   if (pathname === "/api/undo") {
@@ -1199,6 +1205,45 @@ async function handleUndo(
   }
 }
 
+async function runDeskTurn(
+  turn: TurnHandler,
+  view: () => DeskSession,
+  hub: SseHub,
+  projectDir: string,
+  kind: "answer" | "suggest" | "skip",
+  questionId: string,
+  text: string | undefined,
+  assumed: boolean,
+): Promise<{ httpStatus: number; body: Record<string, unknown> }> {
+  try {
+    const output = asTurnResult(
+      await turn({
+        kind,
+        questionId,
+        ...(text === undefined ? {} : { text }),
+        ...(assumed ? { assumed: true } : {}),
+      }),
+    );
+    const after = view().question;
+    const moved = after === null || after.id !== questionId;
+    if ((kind === "answer" || kind === "skip") && moved) {
+      try {
+        await clearQuestionDraft(projectDir, questionId);
+      } catch (error: unknown) {
+        logDeskError(error);
+      }
+    }
+    const session = view();
+    hub.publish("session", session);
+    for (const event of output.events) hub.publish("update", event);
+    return { httpStatus: 200, body: { next: output.next, events: output.events, session } };
+  } catch (error: unknown) {
+    const mapped = turnError(error);
+    if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
+    return { httpStatus: mapped.status, body: { error: mapped.message } };
+  }
+}
+
 async function handleTurn(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1206,7 +1251,6 @@ async function handleTurn(
   turn: TurnHandler,
   view: () => DeskSession,
   hub: SseHub,
-  enqueue: <T>(task: () => Promise<T>) => Promise<T>,
   projectDir: string,
 ): Promise<void> {
   const kind = pathname === "/api/answer" ? "answer" : pathname === "/api/suggest" ? "suggest" : "skip";
@@ -1242,36 +1286,11 @@ async function handleTurn(
       }
     }
   }
-  try {
-    const result = await enqueue(async () => {
-      const output = asTurnResult(
-        await turn({
-          kind,
-          questionId: parsed.questionId,
-          ...(text === undefined ? {} : { text }),
-          ...(parsed.assumed === true ? { assumed: true } : {}),
-        }),
-      );
-      const session = view();
-      const after = session.question;
-      const moved = after === null || after.id !== parsed.questionId;
-      if ((kind === "answer" || kind === "skip") && moved) {
-        try {
-          await clearQuestionDraft(projectDir, parsed.questionId);
-        } catch (error: unknown) {
-          logDeskError(error);
-        }
-      }
-      hub.publish("session", view());
-      for (const event of output.events) hub.publish("update", event);
-      return { next: output.next, events: output.events, session };
-    });
-    sendJson(req, res, 200, result);
-  } catch (error: unknown) {
-    const mapped = turnError(error);
-    if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
-    sendJson(req, res, mapped.status, { error: mapped.message });
-  }
+  const key = `${kind}\u0000${parsed.questionId}\u0000${text ?? ""}\u0000${parsed.assumed === true ? "1" : "0"}`;
+  const job = guideJobsFor(projectDir).start(key, () =>
+    runDeskTurn(turn, view, hub, projectDir, kind, parsed.questionId, text, parsed.assumed === true),
+  );
+  sendJson(req, res, 200, { jobId: job.id, status: "running" });
 }
 
 async function handleAttach(
@@ -1561,6 +1580,18 @@ function briefPayload(desk: BriefDeskView): {
   };
 }
 
+async function approveBriefWhenFree(projectDir: string, guideThink: GuideThink): Promise<void> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await approveSiteBrief(projectDir, guideThink);
+      return;
+    } catch (error: unknown) {
+      if (!(error instanceof LockHeld) || attempt === 7) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
+
 async function handleApproveForm(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1607,13 +1638,14 @@ async function handleApproveForm(
   }
   try {
     if (action === "approve") {
-      await approveSiteBrief(projectDir, guideThink);
+      void approveBriefWhenFree(projectDir, guideThink).catch((error: unknown) => logDeskError(error));
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
     }
     if (action === "retry") {
-      await draftSiteBrief(projectDir, guideThink);
+      const job = draftSiteBrief(projectDir, guideThink);
+      void job.catch((error: unknown) => logDeskError(error));
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
@@ -1674,14 +1706,11 @@ async function handleBriefPost(
   }
   if (pathname === "/api/brief/approve") {
     await readCapped(req, JSON_LIMIT);
-    try {
-      const desk = await approveSiteBrief(projectDir, guideThink);
-      hub.publish("session", view());
-      sendJson(req, res, 200, briefPayload(desk));
-    } catch (error: unknown) {
-      logDeskError(error);
-      sendJson(req, res, 500, { error: "The brief was not approved." });
-    }
+    const job = approveSiteBrief(projectDir, guideThink);
+    void job
+      .then(() => hub.publish("session", view()))
+      .catch((error: unknown) => logDeskError(error));
+    sendJson(req, res, 200, briefPayload(readBriefDesk(projectDir)));
     return;
   }
   const body = await readJsonBody(req, res);
@@ -1905,6 +1934,21 @@ async function handleGet(
   }
   if (pathname === "/api/session") {
     sendJson(req, res, 200, view());
+    return;
+  }
+  if (pathname.startsWith("/api/guide-job/")) {
+    const id = pathname.slice("/api/guide-job/".length);
+    const job = /^[0-9a-f-]{36}$/i.test(id) ? guideJobsFor(projectDir).read(id) : null;
+    if (job === null) {
+      sendJson(req, res, 404, { error: "That Guide job is gone." });
+      return;
+    }
+    sendJson(req, res, 200, {
+      jobId: job.id,
+      status: job.status,
+      httpStatus: job.httpStatus,
+      ...(job.body ?? {}),
+    });
     return;
   }
   if (pathname === "/api/brief") {

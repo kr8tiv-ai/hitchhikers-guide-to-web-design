@@ -11,6 +11,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { MAX_ATTACH_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "../src/client/attach.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleResponse } from "./settle-guide-job.ts";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2H0z"/></svg>');
@@ -137,7 +138,7 @@ test("a valid image is saved under the question folder and the answer lists it",
     };
     assert.equal(intake.safeName, "DP-1.1/tins.png");
 
-    const answer = await fetch(new URL("/api/answer", handle.url), {
+    const answer = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({
@@ -150,7 +151,7 @@ test("a valid image is saved under the question folder and the answer lists it",
           { kind: "file", path: ".hitchhiker/uploads/DP-1.1/../../secret.png" },
         ],
       }),
-    });
+    }));
     assert.equal(answer.status, 200);
     assert.match(stored, /A wordmark in two colors\./);
     assert.match(stored, /Attached: tins\.png\./);

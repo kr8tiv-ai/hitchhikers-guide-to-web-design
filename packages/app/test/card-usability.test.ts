@@ -39,6 +39,7 @@ import {
   questionNeedsConfirm,
 } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleRaw } from "./settle-guide-job.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "..", "..", "..", "interview", "tree.yaml");
@@ -375,7 +376,8 @@ test("skip marks the assumption on the next card and shrinks the mast", async ()
       JSON.stringify({ questionId: "DP-0.1" }),
     );
     assert.equal(skipped.status, 200);
-    const payload: unknown = JSON.parse(skipped.body);
+    const settled = await settleRaw(handle.port, skipped);
+    const payload: unknown = JSON.parse(settled.body);
     assert.ok(isRecord(payload));
     assert.ok(isRecord(payload.session));
     const session = payload.session;

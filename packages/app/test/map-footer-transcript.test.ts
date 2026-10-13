@@ -18,6 +18,7 @@ import { escapeHtml } from "../src/card.ts";
 import { mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { compactMapLabel, savedFooterLine } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleResponse } from "./settle-guide-job.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "..", "..", "..", "interview", "tree.yaml");
@@ -192,13 +193,13 @@ test("Edit reuses /api/answer and replaces the stored text", async () => {
     async (handle, dir) => {
       const page = await fetch(handle.url);
       const token = tokenFrom(await page.text());
-      const posted = await fetch(new URL("/api/answer", handle.url), {
+      const posted = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: first.id, text: "For a client." }),
-      });
+      }));
       assert.equal(posted.status, 200);
-      const body = (await posted.json()) as { session?: { question?: { id?: string } } };
+      const body = JSON.parse(posted.text) as { session?: { question?: { id?: string } } };
       assert.equal(body.session?.question?.id, second.id);
       const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
         answers: Array<{ id: string; status: string; value: string }>;
@@ -210,13 +211,13 @@ test("Edit reuses /api/answer and replaces the stored text", async () => {
       assert.equal(file.answers[0]?.value, "For a client.");
       assert.equal(file.cursor, 1);
 
-      const again = await fetch(new URL("/api/answer", handle.url), {
+      const again = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: first.id, text: "For a client." }),
-      });
+      }));
       assert.equal(again.status, 200);
-      const retry = (await again.json()) as { session?: { statusHtml?: string } };
+      const retry = JSON.parse(again.text) as { session?: { statusHtml?: string } };
       assert.match(retry.session?.statusHtml ?? "", /already saved/);
       const after = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
         answers: Array<{ id: string; value: string }>;

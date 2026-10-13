@@ -18,6 +18,7 @@ import { parseSession } from "../src/client/desk.ts";
 import { browserLaunch, openBrowser, windowsBrowserLaunch } from "../src/server/open-browser.ts";
 import { createSseHub, HEARTBEAT_MS } from "../src/server/sse.ts";
 import { startServer, checkHost, type ServerHandle, type StartServerOptions, type TurnHandler } from "../src/server/server.ts";
+import { settleRaw, settleResponse } from "./settle-guide-job.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cliEntry = path.resolve(here, "../../cli/src/main.ts");
@@ -185,10 +186,11 @@ test("POST without a token is rejected and the session advances through the engi
     }, JSON.stringify({ questionId: "DP-0.1", text: "   " }));
     assert.equal(empty.status, 400);
 
-    const answered = await raw(handle.port, `127.0.0.1:${handle.port}`, "POST", "/api/answer", {
+    const posted = await raw(handle.port, `127.0.0.1:${handle.port}`, "POST", "/api/answer", {
       "content-type": "application/json",
       "x-hh-csrf": token,
     }, JSON.stringify({ questionId: "DP-0.1", text: "For myself." }));
+    const answered = await settleRaw(handle.port, posted);
     assert.equal(answered.status, 200);
     const body = JSON.parse(answered.body) as { session?: { question?: { id?: string } } };
     assert.equal(body.session?.question?.id, "DP-0.2");
@@ -208,22 +210,22 @@ test("suggest and skip call the turn handler, and a thrown error stays off the p
   await withDesk({ turnHandler: handler }, async (handle) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
-    const suggested = await fetch(new URL("/api/suggest", handle.url), {
+    const suggested = await settleResponse(await fetch(new URL("/api/suggest", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1" }),
-    });
+    }));
     assert.equal(suggested.status, 200);
     assert.equal(seen[0]?.kind, "suggest");
     assert.equal(seen[0]?.text, undefined);
 
-    const skipped = await fetch(new URL("/api/skip", handle.url), {
+    const skipped = await settleResponse(await fetch(new URL("/api/skip", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1" }),
-    });
+    }));
     assert.equal(skipped.status, 500);
-    const text = await skipped.text();
+    const text = skipped.text;
     assert.match(text, /The Guide hit an error/);
     assert.equal(text.includes("secret"), false);
     assert.equal(text.includes("interview.json"), false);
@@ -245,13 +247,13 @@ test("a cassette miss and a timeout name the cause, and the question stays put",
     await withDesk({ turnHandler: handler }, async (handle) => {
       const page = await fetch(handle.url);
       const token = tokenFrom(await page.text());
-      const missed = await fetch(new URL("/api/answer", handle.url), {
+      const missed = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-      });
+      }));
       assert.equal(missed.status, 500);
-      const missedText = await missed.text();
+      const missedText = missed.text;
       assert.match(missedText, /replay mode/);
       assert.match(missedText, /HH_CASSETTE/);
       assert.equal(missedText.includes("desk-key"), false);
@@ -261,13 +263,13 @@ test("a cassette miss and a timeout name the cause, and the question stays put",
       const still = parseSession(await session.json());
       assert.equal(still?.question?.id, "DP-0.1");
 
-      const timed = await fetch(new URL("/api/answer", handle.url), {
+      const timed = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: "DP-0.1", text: "slow" }),
-      });
+      }));
       assert.equal(timed.status, 500);
-      const timedText = await timed.text();
+      const timedText = timed.text;
       assert.match(timedText, /took too long/);
       assert.match(timedText, /Your answer is kept/);
       const after = parseSession(await (await fetch(new URL("/api/session", handle.url))).json());
@@ -291,13 +293,13 @@ test("grok missing, signed out, and usage limit each say the answer is kept", as
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
     const post = async (text: string): Promise<string> => {
-      const response = await fetch(new URL("/api/answer", handle.url), {
+      const response = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
         method: "POST",
         headers: { "content-type": "application/json", "x-hh-csrf": token },
         body: JSON.stringify({ questionId: "DP-0.1", text }),
-      });
+      }));
       assert.equal(response.status, 500);
-      return response.text();
+      return response.text;
     };
     const missing = await post("missing");
     assert.match(missing, /not on this machine/);
@@ -321,23 +323,23 @@ test("a lock and a failed rename do not look like a Guide phrase error", async (
   await withDesk({ turnHandler: handler }, async (handle) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
-    const locked = await fetch(new URL("/api/answer", handle.url), {
+    const locked = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "locked" }),
-    });
+    }));
     assert.equal(locked.status, 409);
-    const lockedText = await locked.text();
+    const lockedText = locked.text;
     assert.match(lockedText, /Another Guide process is writing/);
     assert.equal(lockedText.includes("4242"), false);
 
-    const renamed = await fetch(new URL("/api/answer", handle.url), {
+    const renamed = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-    });
+    }));
     assert.equal(renamed.status, 500);
-    const renamedText = await renamed.text();
+    const renamedText = renamed.text;
     assert.match(renamedText, /did not save/);
     assert.equal(renamedText.includes("interview.json"), false);
   });
@@ -358,13 +360,13 @@ test("a guide failure after the answer is stored returns the next question and d
   await withDesk({ guideThink }, async (handle, dir) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
-    const answered = await fetch(new URL("/api/answer", handle.url), {
+    const answered = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-    });
+    }));
     assert.equal(answered.status, 200);
-    const body = (await answered.json()) as {
+    const body = JSON.parse(answered.text) as {
       session?: { question?: { id?: string }; statusHtml?: string };
     };
     assert.equal(body.session?.question?.id, "DP-0.2");
@@ -375,13 +377,13 @@ test("a guide failure after the answer is stored returns the next question and d
     };
     assert.equal(file.answers.filter((answer) => answer.id === "DP-0.1").length, 1);
 
-    const again = await fetch(new URL("/api/answer", handle.url), {
+    const again = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-    });
+    }));
     assert.equal(again.status, 200);
-    const retry = (await again.json()) as { session?: { question?: { id?: string }; statusHtml?: string } };
+    const retry = JSON.parse(again.text) as { session?: { question?: { id?: string }; statusHtml?: string } };
     assert.equal(retry.session?.question?.id, "DP-0.2");
     assert.match(retry.session?.statusHtml ?? "", /already saved/);
     const after = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8")) as {
@@ -407,14 +409,14 @@ test("a quiet cassette miss keeps the saved answer and the tree ask", async () =
   await withDesk({ guideThink }, async (handle, dir) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
-    const answered = await fetch(new URL("/api/answer", handle.url), {
+    const answered = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-    });
+    }));
     assert.equal(answered.status, 200);
-    const body = (await answered.json()) as {
-      session?: { question?: { id?: string }; statusHtml?: string };
+    const body = JSON.parse(answered.text) as {
+      session?: { question?: { id?: string; ask?: string }; statusHtml?: string };
     };
     assert.equal(body.session?.question?.id, "DP-0.2");
     assert.match(body.session?.question?.ask ?? "", /Have you had a website before/);
@@ -434,13 +436,13 @@ test("a busy interview is a 409 with the desk's own line", async () => {
   await withDesk({ turnHandler: handler }, async (handle) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
-    const response = await fetch(new URL("/api/answer", handle.url), {
+    const response = await settleResponse(await fetch(new URL("/api/answer", handle.url), {
       method: "POST",
       headers: { "content-type": "application/json", "x-hh-csrf": token },
       body: JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
-    });
+    }));
     assert.equal(response.status, 409);
-    assert.match(await response.text(), /saving another answer/);
+    assert.match(response.text, /saving another answer/);
   });
 });
 

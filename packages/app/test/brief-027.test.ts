@@ -164,9 +164,15 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     );
     assert.equal(yes.status, 303);
     assert.equal(yes.location, "/approve");
-    const after = await raw(handle.port, "GET", "/approve");
-    assert.match(after.body, /The build is started/);
-    assert.match(after.body, />Approve</);
+    let afterBody = "";
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const after = await raw(handle.port, "GET", "/approve");
+      afterBody = after.body;
+      if (afterBody.includes("The build is started")) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.match(afterBody, /The build is started/);
+    assert.match(afterBody, />Approve</);
     const brand = await raw(handle.port, "GET", "/brand");
     assert.match(brand.body, /Babel Fish/);
     assert.match(brand.body, /The site helps a visitor book a visit/);

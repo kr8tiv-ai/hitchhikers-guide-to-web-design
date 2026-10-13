@@ -11,6 +11,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ANSWER_PROGRESS } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { settleRaw } from "./settle-guide-job.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -133,7 +134,8 @@ test("one answer publishes Checking, Writing, then Saving, and a skip publishes 
         JSON.stringify({ questionId: "DP-0.1", text: "For myself." }),
       );
       assert.equal(answered.status, 200);
-      const body = JSON.parse(answered.body) as { session?: { question?: { id?: string } } };
+      const settled = await settleRaw(handle.port, answered);
+      const body = JSON.parse(settled.body) as { session?: { question?: { id?: string } } };
       assert.equal(body.session?.question?.id, "DP-0.2");
       await waitFor(() => watch.stages().length >= ANSWER_PROGRESS.length, 2_000);
       assert.deepEqual(watch.stages(), [...ANSWER_PROGRESS]);
@@ -146,6 +148,7 @@ test("one answer publishes Checking, Writing, then Saving, and a skip publishes 
         JSON.stringify({ questionId: "DP-0.2" }),
       );
       assert.equal(skipped.status, 200);
+      await settleRaw(handle.port, skipped);
       await waitFor(() => watch.stages().length > before, 300);
       assert.equal(watch.stages().length, before);
     } finally {
