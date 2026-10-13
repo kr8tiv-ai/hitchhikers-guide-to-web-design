@@ -1,5 +1,5 @@
 /**
- * Interview and judge calls share one model and the person's chosen effort.
+ * Interview, judge, and Site Brief calls share one model and the person's chosen effort.
  * Planning and build tasks are not rewritten here.
  */
 
@@ -13,6 +13,8 @@ export const INTERVIEW_TASKS = new Set([
   "mirror",
   "prefetch",
   "context-summary",
+  "brief-draft",
+  "brief-revise",
 ]);
 
 export type EffortName = "medium" | "high" | "xhigh";

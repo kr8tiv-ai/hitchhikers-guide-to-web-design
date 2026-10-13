@@ -13,6 +13,7 @@ import {
   type Facts,
   type SiteBrief,
 } from "./schemas.ts";
+import { INTERVIEW_MODEL } from "./interview-call.ts";
 import { loadFacts } from "./suggest.ts";
 import { guideTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -34,7 +35,7 @@ const APPROVALS = new Set([
   "nothing wrong",
 ]);
 
-const HEADINGS: Record<BriefKey, string> = {
+export const BRIEF_HEADINGS: Record<BriefKey, string> = {
   goal: "Goal",
   visitor: "Visitor",
   action: "Action",
@@ -49,7 +50,7 @@ const HEADINGS: Record<BriefKey, string> = {
   coverage: "Coverage",
 };
 
-const ANSWER_IDS: Partial<Record<BriefKey, string>> = {
+export const BRIEF_ANSWER_IDS: Partial<Record<BriefKey, string>> = {
   goal: "DP-2.1",
   visitor: "DP-2.6",
   action: "DP-2.2",
@@ -132,6 +133,7 @@ async function askDraft(
       {
         task: BRIEF_DRAFT_TASK,
         schema: BRIEF_DRAFT_SCHEMA,
+        model: INTERVIEW_MODEL,
         effort: "xhigh",
         input: [
           "Draft the Site Brief from these answers only.",
@@ -163,6 +165,7 @@ async function askRevise(
       {
         task: BRIEF_REVISE_TASK,
         schema: BRIEF_REVISE_SCHEMA,
+        model: INTERVIEW_MODEL,
         effort: "xhigh",
         input: [
           "Revise only the fields the correction changes. Omit the rest.",
@@ -248,7 +251,7 @@ export function deterministicBrief(facts: Facts, language: string): SiteBrief {
   for (const answer of facts.answers) byId.set(answer.id, answer.value);
   const brief = emptyBrief();
   for (const key of BRIEF_KEYS) {
-    const id = ANSWER_IDS[key];
+    const id = BRIEF_ANSWER_IDS[key];
     const raw = id === undefined ? "" : (byId.get(id) ?? "");
     brief[key] = safeField(raw, facts, language);
   }
@@ -284,7 +287,7 @@ function renderFacts(facts: Facts): string {
 export function renderSiteBrief(draft: SiteBrief): string {
   const lines: string[] = ["# Site Brief", ""];
   for (const key of BRIEF_KEYS) {
-    lines.push(`## ${HEADINGS[key]}`, "", draft[key], "");
+    lines.push(`## ${BRIEF_HEADINGS[key]}`, "", draft[key], "");
   }
   return lines.join("\n");
 }

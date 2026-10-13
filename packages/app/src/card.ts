@@ -104,6 +104,11 @@ export interface CardState {
   help?: string;
   /** Stage line while an answer is in flight. Absent until the server names a stage. */
   reading?: string;
+  /**
+   * Set only after the interview is finished.
+   * Omitted, the done card stays a heading with no action.
+   */
+  brief?: { status: "idle" | "drafting" | "pending" | "approved" } | null;
 }
 
 /**
@@ -313,6 +318,26 @@ function heading(title: string, why: string, done: boolean): string {
 </article>`;
 }
 
+/** Finished interview. The action is absent until the desk names a brief status. */
+function doneCard(brief: CardState["brief"]): string {
+  if (brief === undefined || brief === null) return heading(DONE_TITLE, DONE_WHY, true);
+  const status = brief.status;
+  let action = "";
+  if (status === "idle") {
+    action = `  <p class="hh-qcard__next"><button type="button" class="hh-btn hh-btn--primary" data-action="draft-brief" data-brief-auto="once">Draft the Site Brief</button></p>\n`;
+  } else if (status === "drafting") {
+    action = `  <p class="hh-qcard__reading" data-guide-reading aria-live="polite">Drafting the Site Brief · 0s</p>\n  <p class="hh-qcard__next"><button type="button" class="hh-btn hh-btn--primary" data-action="draft-brief" disabled>Draft the Site Brief</button></p>\n`;
+  } else if (status === "pending") {
+    action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Review the Site Brief</a></p>\n`;
+  } else {
+    action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard">The build is started.</a></p>\n`;
+  }
+  return `<article class="hh-qcard" data-done="true" data-brief-status="${status}" aria-labelledby="hh-card-ask">
+  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
+  <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
+${action}</article>`;
+}
+
 function kickerBlock(question: Question, counts: CardCounts | null | undefined): string {
   if (counts === undefined || counts === null) {
     return `  <p class="hh-kicker">${escapeHtml(question.id)}</p>\n`;
@@ -388,7 +413,7 @@ ${radios.join("\n")}
 
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
-  if (state.done) return heading(DONE_TITLE, DONE_WHY, true);
+  if (state.done) return doneCard(state.brief);
   const question = state.question;
   if (question === null) return heading(EMPTY_TITLE, EMPTY_WHY, false);
 

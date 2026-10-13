@@ -158,7 +158,16 @@ export type {
   IngestOptions,
   PdfExtract,
 } from "./ingest.ts";
-export { briefLoop, isApproval, renderSiteBrief } from "./guide/brief-loop.ts";
+export { briefLoop, isApproval, renderSiteBrief, BRIEF_HEADINGS, BRIEF_ANSWER_IDS } from "./guide/brief-loop.ts";
+export {
+  BRIEF_BUILD_ID,
+  BRIEF_PROGRESS_STAGE,
+  approveSiteBrief,
+  draftSiteBrief,
+  readBriefDesk,
+  reviseSiteBrief,
+} from "./guide/brief-desk.ts";
+export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
 export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTask } from "./guide/interview-call.ts";

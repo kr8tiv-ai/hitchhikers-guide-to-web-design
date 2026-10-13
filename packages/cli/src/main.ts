@@ -17,6 +17,7 @@ import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./
 import { runImprove } from "./improve/run.ts";
 import { runSupervise } from "./improve/supervisor.ts";
 import { runInstall } from "./install.ts";
+import { runBriefCommand } from "./commands/brief.ts";
 import { runContextCommand, runDoctorContext, runNextCommand } from "./commands/context.ts";
 
 const HELP = "hh doctor [--project <dir>]";
@@ -442,6 +443,8 @@ async function dispatchImplemented(
       return runContextCommand(argv.slice(1), deps.cwd ?? process.cwd());
     case "next":
       return runNextCommand(argv.slice(1), deps.cwd ?? process.cwd());
+    case "brief":
+      return runBriefCommand(argv.slice(1), deps.cwd ?? process.cwd());
   }
 }
 

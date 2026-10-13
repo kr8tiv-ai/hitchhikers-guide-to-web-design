@@ -397,6 +397,24 @@ test("done renders Guide Entry is next and no buttons", async () => {
   assert.doesNotMatch(html, /Do you have a logo you love\?/);
 });
 
+test("a finished interview offers Draft the Site Brief", () => {
+  const idle = renderCard({ ...state(), question: null, done: true, brief: { status: "idle" } });
+  assert.match(idle, /<h2[^>]*>Guide Entry is next\.<\/h2>/);
+  assert.match(idle, /data-action="draft-brief"/);
+  assert.match(idle, /data-brief-auto="once"/);
+  assert.match(idle, /Draft the Site Brief/);
+  assert.doesNotMatch(idle, /DP-\d/);
+  const drafting = renderCard({ ...state(), question: null, done: true, brief: { status: "drafting" } });
+  assert.match(drafting, /Drafting the Site Brief · 0s/);
+  assert.match(drafting, /data-guide-reading/);
+  const pending = renderCard({ ...state(), question: null, done: true, brief: { status: "pending" } });
+  assert.match(pending, /href="\/approve"/);
+  assert.match(pending, /Review the Site Brief/);
+  const approved = renderCard({ ...state(), question: null, done: true, brief: { status: "approved" } });
+  assert.match(approved, /href="\/hh-dashboard"/);
+  assert.match(approved, /The build is started\./);
+});
+
 test("a question with resources lists where to look, and one without does not", () => {
   const plain = renderCard(state());
   assert.doesNotMatch(plain, /Where to look/);

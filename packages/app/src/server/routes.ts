@@ -51,6 +51,11 @@ import {
   writeReferences,
   formatStatusLine,
   inferAssetRole,
+  approveSiteBrief,
+  draftSiteBrief,
+  readBriefDesk,
+  reviseSiteBrief,
+  type BriefDeskView,
   loadDecisions,
   promoteDiscuss,
   recordAsset,
@@ -117,6 +122,7 @@ import { renderShell } from "../shell.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
+import { approveMain, brandBriefMain, dashboardBriefNote } from "./brief-page.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
 import { blockingNotes, readGuideNotes, renderGuideNotes, upsertGuideNote, type GuideNote } from "./guide-notes.ts";
@@ -223,6 +229,8 @@ export interface DeskSession {
   lead: string;
   /** Sentences after the question that are not button instructions. */
   help: string;
+  /** Null until every asked question has an answer. */
+  briefStatus: "idle" | "drafting" | "pending" | "approved" | null;
 }
 
 export interface DeskApp {
@@ -326,11 +334,12 @@ export async function createDeskApp(opts: {
   };
   const token = issueToken();
   const hub = createSseHub();
+  const guideThink = opts.guideThink ?? selectGuideThink();
   const rawTurn =
     opts.turnHandler ??
     createLiveTurn(projectDir, depth, () => interview, (next) => {
       interview = next;
-    }, opts.guideThink ?? selectGuideThink(), {
+    }, guideThink, {
       publish: (name, data) => hub.publish(name, data),
     });
   const turn: TurnHandler = async (input) => {
@@ -418,6 +427,7 @@ export async function createDeskApp(opts: {
           reloadInterview,
           handleTools,
           resetLive,
+          guideThink,
         );
         return;
       }
@@ -794,6 +804,7 @@ async function handlePost(
   reloadInterview: () => Promise<void>,
   handleTools: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void>,
   resetLive: () => void,
+  guideThink: GuideThink,
 ): Promise<void> {
   if (pathname === "/settings") {
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
@@ -819,6 +830,10 @@ async function handlePost(
     await handleRestart(req, res, token, projectDir, enqueue, reloadInterview, resetLive);
     return;
   }
+  if (pathname === "/approve") {
+    await handleApproveForm(req, res, token, projectDir, guideThink, reloadInterview);
+    return;
+  }
   const header = req.headers["x-hh-csrf"];
   if (typeof header !== "string" || !tokensMatch(token, header)) {
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
@@ -830,6 +845,10 @@ async function handlePost(
   }
   if (pathname === "/api/revisit" || pathname === "/api/guide-note") {
     await handleGuideNotePost(req, res, pathname, projectDir, enqueue, reloadInterview, hub, view);
+    return;
+  }
+  if (pathname === "/api/brief/draft" || pathname === "/api/brief/approve" || pathname === "/api/brief/change") {
+    await handleBriefPost(req, res, pathname, projectDir, guideThink, hub, view, reloadInterview);
     return;
   }
   if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
@@ -1467,6 +1486,146 @@ async function readUploadBody(
   return capped.body;
 }
 
+function briefPayload(desk: BriefDeskView): {
+  status: BriefDeskView["status"];
+  phase: string;
+  nextAction: string;
+  buildStarted: boolean;
+  draft: BriefDeskView["draft"];
+  revisit: string | null;
+} {
+  return {
+    status: desk.status,
+    phase: desk.phase,
+    nextAction: desk.nextAction,
+    buildStarted: desk.buildStarted,
+    draft: desk.draft,
+    revisit: desk.revisit,
+  };
+}
+
+async function handleApproveForm(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+  guideThink: GuideThink,
+  reloadInterview: () => Promise<void>,
+): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const raw = capped.body.toString("utf8");
+  const type = headerOne(req.headers["content-type"]);
+  if (!settingsTokenOk(token, req.headers["x-hh-csrf"], raw, type)) {
+    sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
+    return;
+  }
+  const mime = type.split(";")[0]?.trim().toLowerCase() ?? "";
+  let action = "";
+  let correction = "";
+  if (mime === "application/json") {
+    try {
+      const body: unknown = JSON.parse(raw);
+      if (isRecord(body)) {
+        if (typeof body.action === "string") action = body.action;
+        if (typeof body.correction === "string") correction = body.correction;
+      }
+    } catch {
+      sendJson(req, res, 400, { error: "The desk could not read that request." });
+      return;
+    }
+  } else {
+    const params = new URLSearchParams(raw);
+    action = params.get("action") ?? "";
+    correction = params.get("correction") ?? "";
+  }
+  try {
+    if (action === "approve") {
+      await approveSiteBrief(projectDir, guideThink);
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "change") {
+      if (correction.trim() === "") {
+        sendJson(req, res, 400, { error: "Write the change." });
+        return;
+      }
+      const next = await reviseSiteBrief(projectDir, correction, guideThink);
+      if (next.revisit !== null) await reloadInterview();
+      res.writeHead(303, { location: next.revisit === null ? "/approve" : "/" });
+      res.end();
+      return;
+    }
+    sendJson(req, res, 400, { error: "That action is not on this plate." });
+  } catch (error: unknown) {
+    logDeskError(error);
+    const message = error instanceof Error && error.message.trim() !== "" ? error.message : "The brief did not change.";
+    sendJson(req, res, 400, { error: message });
+  }
+}
+
+async function handleBriefPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  projectDir: string,
+  guideThink: GuideThink,
+  hub: SseHub,
+  view: () => DeskSession,
+  reloadInterview: () => Promise<void>,
+): Promise<void> {
+  if (pathname === "/api/brief/draft") {
+    await readCapped(req, JSON_LIMIT);
+    const job = draftSiteBrief(projectDir, guideThink, {
+      onProgress(stage) {
+        hub.publish("brief-progress", { stage });
+      },
+    });
+    void job.then(() => hub.publish("session", view())).catch((error: unknown) => logDeskError(error));
+    sendJson(req, res, 200, briefPayload(readBriefDesk(projectDir)));
+    return;
+  }
+  if (pathname === "/api/brief/approve") {
+    await readCapped(req, JSON_LIMIT);
+    try {
+      const desk = await approveSiteBrief(projectDir, guideThink);
+      hub.publish("session", view());
+      sendJson(req, res, 200, briefPayload(desk));
+    } catch (error: unknown) {
+      logDeskError(error);
+      sendJson(req, res, 500, { error: "The brief was not approved." });
+    }
+    return;
+  }
+  const body = await readJsonBody(req, res);
+  if (body === null) return;
+  const correction = isRecord(body) && typeof body.correction === "string" ? body.correction : "";
+  if (correction.trim() === "") {
+    sendJson(req, res, 400, { error: "Write the change." });
+    return;
+  }
+  try {
+    const desk = await reviseSiteBrief(projectDir, correction, guideThink);
+    if (desk.revisit !== null) await reloadInterview();
+    hub.publish("session", view());
+    sendJson(req, res, 200, briefPayload(desk));
+  } catch (error: unknown) {
+    logDeskError(error);
+    const message = error instanceof Error && error.message.trim() !== "" ? error.message : "The brief did not change.";
+    sendJson(req, res, 400, { error: message });
+  }
+}
+
 /** Let the status line flush, then stop reading a body we will not keep. */
 function dropRequest(req: IncomingMessage): void {
   setImmediate(() => {
@@ -1578,10 +1737,14 @@ async function handleGet(
     const questionId = view().question?.id ?? null;
     const loaded = await loadBrandKit(projectDir);
     if (loaded.kind === "missing") {
+      const brief = readBriefDesk(projectDir);
       const raster = intake !== null && isRasterLogo(intake.safeName);
-      const html = raster
-        ? renderBrand(token, notice, questionId, intake, ["/src/brand-kit.css"])
-        : renderBrand(token, notice, questionId, intake);
+      const html =
+        brief.status === "approved" || brief.status === "pending"
+          ? renderBrandBrief(token, notice, brief)
+          : raster
+            ? renderBrand(token, notice, questionId, intake, ["/src/brand-kit.css"])
+            : renderBrand(token, notice, questionId, intake);
       await deliverHtml(req, res, 200, html, projectDir, token, false);
       return;
     }
@@ -1598,7 +1761,12 @@ async function handleGet(
     return;
   }
   if (pathname === "/approve") {
-    await deliverHtml(req, res, 200, renderApprove(token, notice, view().question?.id ?? null), projectDir, token, false);
+    const brief = readBriefDesk(projectDir);
+    const html =
+      brief.status === "idle" && !brief.buildStarted
+        ? renderApprove(token, notice, view().question?.id ?? null)
+        : renderApproveBrief(token, notice, brief);
+    await deliverHtml(req, res, 200, html, projectDir, token, false);
     return;
   }
   if (pathname === "/tools") {
@@ -1626,7 +1794,10 @@ async function handleGet(
   if (pathname === "/hh-dashboard") {
     const drive = await readDashboard(projectDir, token);
     if (drive.kind === "html") {
-      await deliverHtml(req, res, drive.status, withDeskMenu(drive.html, token), projectDir, token, false);
+      const note = dashboardBriefNote(readBriefDesk(projectDir));
+      const marked = '<p class="hh-kicker">Improbability Drive</p>';
+      const html = note === "" || !drive.html.includes(marked) ? drive.html : drive.html.replace(marked, `${marked}\n${note}`);
+      await deliverHtml(req, res, drive.status, withDeskMenu(html, token), projectDir, token, false);
       return;
     }
     sendDriveResult(req, res, drive);
@@ -1638,6 +1809,10 @@ async function handleGet(
   }
   if (pathname === "/api/session") {
     sendJson(req, res, 200, view());
+    return;
+  }
+  if (pathname === "/api/brief") {
+    sendJson(req, res, 200, briefPayload(readBriefDesk(projectDir)));
     return;
   }
   if (pathname === "/api/draft") {
@@ -1884,6 +2059,8 @@ function buildSession(
     pushback = null;
   }
   const done = question === null;
+  const briefDesk = done && answers.length > 0 ? readBriefDesk(projectDir) : null;
+  const briefStatus = briefDesk?.status ?? null;
   const requiredList = requiredIds();
   const questionId = question?.id ?? null;
   const index = questionId === null ? 0 : questions.findIndex((item) => item.id === questionId) + 1;
@@ -1944,6 +2121,7 @@ function buildSession(
     ...(savedFiles.length > 0 ? { attach: chipsFromSaved(savedFiles) } : {}),
     ...(lead !== "" ? { lead } : {}),
     ...(help !== "" ? { help } : {}),
+    ...(briefDesk !== null ? { brief: { status: briefDesk.status } } : {}),
   };
   const compact = depthTouched(questions, answers);
   const stepTotal = questions.length;
@@ -2015,6 +2193,7 @@ function buildSession(
     logoFile: logoFileFrom(projectDir === "" ? null : readLogoIntake(projectDir)),
     lead,
     help,
+    briefStatus,
   };
 }
 
@@ -2474,6 +2653,38 @@ function renderBrand(
     status: "The kit waits on the brief.",
     main: renderEmptyBrand(questionId, intake),
     ...(extraCss === undefined ? {} : { extraCss }),
+  });
+}
+
+function renderBrandBrief(token: string, notice: string | null, desk: BriefDeskView): string {
+  return renderPanel({
+    notice,
+    token,
+    title: "Brand kit",
+    description: "The Site Brief is on the desk.",
+    current: "/brand",
+    kicker: "Brand kit",
+    status: desk.status === "approved" ? "The build is started." : "The brief is ready for a yes.",
+    main: brandBriefMain(desk),
+  });
+}
+
+function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView): string {
+  const status =
+    desk.buildStarted
+      ? "The build is started."
+      : desk.status === "drafting"
+        ? "Drafting the Site Brief"
+        : "The Site Brief is ready for a yes.";
+  return renderPanel({
+    notice,
+    token,
+    title: "Approvals",
+    description: status,
+    current: "/approve",
+    kicker: "Approvals",
+    status,
+    main: approveMain(token, desk),
   });
 }
 

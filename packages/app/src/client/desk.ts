@@ -204,6 +204,15 @@ export function answerProgressLine(stage: string, elapsedSeconds: number): strin
   return `${stage} · ${elapsedSeconds}s`;
 }
 
+const BRIEF_PROGRESS_STAGE = "Drafting the Site Brief";
+
+/** Stage plus elapsed seconds for the Site Brief. Other stages stay off this line. */
+export function briefProgressLine(stage: string, elapsedSeconds: number): string | null {
+  if (stage !== BRIEF_PROGRESS_STAGE) return null;
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0) return null;
+  return `${stage} · ${elapsedSeconds}s`;
+}
+
 /** Matches the server cap in uploads.ts. The server still refuses a larger body. */
 const LOGO_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -470,6 +479,8 @@ export interface SessionView {
   lead: string;
   /** Extra sentences under the question. Empty when there are none. */
   help: string;
+  /** Null until the interview is finished. Then idle, drafting, pending, or approved. */
+  briefStatus?: "idle" | "drafting" | "pending" | "approved" | null;
 }
 
 interface SavedFileView {
@@ -562,7 +573,7 @@ interface DeskMessage {
 
 interface DeskSource {
   addEventListener(
-    type: "session" | "tools" | "guide-note" | "answer-progress",
+    type: "session" | "tools" | "guide-note" | "answer-progress" | "brief-progress",
     listener: (event: DeskMessage) => void,
   ): void;
   addEventListener(type: "error", listener: () => void): void;
@@ -638,7 +649,13 @@ export function parseSession(value: unknown): SessionView | null {
     logoFile: parseLogoFile(value.logoFile),
     lead: typeof value.lead === "string" ? value.lead : "",
     help: typeof value.help === "string" ? value.help : "",
+    briefStatus: parseBriefStatus(value.briefStatus),
   };
+}
+
+function parseBriefStatus(value: unknown): "idle" | "drafting" | "pending" | "approved" | null {
+  if (value === "idle" || value === "drafting" || value === "pending" || value === "approved") return value;
+  return null;
 }
 
 function parseLogoFile(value: unknown): SessionView["logoFile"] {
@@ -708,6 +725,10 @@ export function mountDesk(env: DeskEnv): () => void {
   let progressLine: string | null = null;
   let progressStarted = 0;
   let progressTimer: ReturnType<typeof setInterval> | null = null;
+  let briefTimer: ReturnType<typeof setInterval> | null = null;
+  let briefStarted = 0;
+  let briefPosted = false;
+  let briefAutoDone = false;
   let notice: string | null = null;
   let streamFailures = 0;
   let connection: string | null = null;
@@ -885,6 +906,11 @@ export function mountDesk(env: DeskEnv): () => void {
     if (attachRetryId !== null) {
       event.preventDefault();
       retryChip(attachRetryId);
+      return;
+    }
+    if (readMarked(event.target, "data-action") === "draft-brief") {
+      event.preventDefault();
+      if (!briefPosted) void postBrief();
       return;
     }
     const action = readAction(event.target);
@@ -2288,6 +2314,9 @@ export function mountDesk(env: DeskEnv): () => void {
     source.addEventListener("answer-progress", (event) => {
       applyAnswerProgress(event.data);
     });
+    source.addEventListener("brief-progress", (event) => {
+      applyBriefProgress(event.data);
+    });
   }
 
   async function postGuideNote(path: string, questionId: string, action: string): Promise<void> {
@@ -3543,6 +3572,114 @@ export function mountDesk(env: DeskEnv): () => void {
     return markedHost(start, "data-attach-zone");
   }
 
+  function stopBriefProgress(): void {
+    if (briefTimer !== null) clearInterval(briefTimer);
+    briefTimer = null;
+  }
+
+  function startBriefProgress(): void {
+    stopBriefProgress();
+    briefStarted = Date.now();
+    const tick = (): void => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - briefStarted) / 1000));
+      const line = briefProgressLine(BRIEF_PROGRESS_STAGE, elapsed);
+      if (line !== null) writeReading(line);
+    };
+    tick();
+    briefTimer = setInterval(tick, 1000);
+    const timer = briefTimer as { unref?: () => void };
+    if (typeof timer.unref === "function") timer.unref();
+  }
+
+  function applyBriefProgress(raw: string): void {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!isRecord(payload) || typeof payload.stage !== "string") return;
+    const elapsed = Math.max(0, Math.floor((Date.now() - briefStarted) / 1000));
+    const line = briefProgressLine(payload.stage, elapsed);
+    if (line === null) return;
+    if (briefTimer === null) startBriefProgress();
+    writeReading(line);
+  }
+
+  async function watchBrief(): Promise<void> {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (view?.briefStatus === "pending" || view?.briefStatus === "approved") {
+        stopBriefProgress();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      let response: Response;
+      try {
+        response = await env.fetch("/api/session", { cache: "no-store" });
+      } catch {
+        continue;
+      }
+      if (!response.ok) continue;
+      let payload: unknown;
+      try {
+        payload = (await response.json()) as unknown;
+      } catch {
+        continue;
+      }
+      const session = parseSession(payload);
+      if (session === null || view === null) continue;
+      if (signature(session) === signature(view)) continue;
+      view = session;
+      paint();
+      if (session.briefStatus === "pending" || session.briefStatus === "approved") {
+        stopBriefProgress();
+        return;
+      }
+    }
+  }
+
+  async function postBrief(): Promise<void> {
+    if (token === null || briefPosted) return;
+    briefPosted = true;
+    if (view !== null && view.done && (view.briefStatus === "idle" || view.briefStatus === null)) {
+      view = { ...view, briefStatus: "drafting" };
+    }
+    paint();
+    startBriefProgress();
+    try {
+      const response = await env.fetch("/api/brief/draft", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json", "x-hh-csrf": token },
+        body: "{}",
+      });
+      if (!response.ok) {
+        briefPosted = false;
+        if (view !== null) view = { ...view, briefStatus: "idle" };
+        stopBriefProgress();
+        paint();
+        return;
+      }
+      void watchBrief();
+    } catch {
+      briefPosted = false;
+      if (view !== null) view = { ...view, briefStatus: "idle" };
+      stopBriefProgress();
+      paint();
+    }
+  }
+
+  function maybeDraftBrief(): void {
+    if (view?.briefStatus === "pending" || view?.briefStatus === "approved") {
+      stopBriefProgress();
+      return;
+    }
+    const auto = region()?.querySelector("[data-brief-auto='once']");
+    if (auto === null || auto === undefined || token === null || briefPosted || briefAutoDone) return;
+    briefAutoDone = true;
+    void postBrief();
+  }
+
   function paint(): void {
     syncAttachQuestion();
     adoptSavedFiles();
@@ -3573,6 +3710,12 @@ export function mountDesk(env: DeskEnv): () => void {
         ...(draftNote !== null && draftNote !== "" ? { draftNote, draftFade } : {}),
         ...(view.lead !== "" ? { lead: view.lead } : {}),
         ...(view.help !== "" ? { help: view.help } : {}),
+        ...(view.briefStatus === "idle" ||
+        view.briefStatus === "drafting" ||
+        view.briefStatus === "pending" ||
+        view.briefStatus === "approved"
+          ? { brief: { status: view.briefStatus } }
+          : {}),
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(
@@ -3613,6 +3756,7 @@ export function mountDesk(env: DeskEnv): () => void {
     syncGuideLive();
     alignDraftField();
     ensureWriter();
+    maybeDraftBrief();
   }
 
   function speechReady(): boolean {
@@ -4202,7 +4346,7 @@ export function voiceMessage(code: string, started: boolean): string {
 }
 
 function signature(session: SessionView): string {
-  return `${session.question?.id ?? ""}|${session.pushback ?? ""}|${session.done ? "1" : "0"}`;
+  return `${session.question?.id ?? ""}|${session.pushback ?? ""}|${session.done ? "1" : "0"}|${session.briefStatus ?? ""}`;
 }
 
 function readToken(document: DeskDocument): string | null {
