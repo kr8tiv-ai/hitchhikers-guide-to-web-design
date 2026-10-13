@@ -1647,7 +1647,8 @@ async function handleApproveForm(
   }
   try {
     if (action === "approve") {
-      void approveBriefWhenFree(projectDir, guideThink).catch((error: unknown) => logDeskError(error));
+      // The next page reads buildStarted. Redirecting first paints the pending brief.
+      await approveBriefWhenFree(projectDir, guideThink);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
