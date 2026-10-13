@@ -487,6 +487,7 @@ test("ten Towel and Tea turns push twice, suggest four cards, and approve the br
       { kind: "suggest" },
       { kind: "answer", text: "Warm paper, steam, and a quiet counter. Never neon, never loud, never generic." },
       { kind: "answer", text: "Calm, about a three, enough to feel considered." },
+      { kind: "answer", text: "Still motion, about a three, enough to feel considered." },
     ];
     const results: GuideTurn[] = [];
     for (const input of inputs) {
@@ -512,7 +513,7 @@ test("ten Towel and Tea turns push twice, suggest four cards, and approve the br
     assert.equal(suggestTurn?.cards?.filter((card) => card.source === "godly").length, 2);
     assert.equal(suggestTurn?.cards?.filter((card) => card.source === "awwwards").length, 2);
     assert.equal(suggestTurn?.options?.length, 4);
-    const done = results[9];
+    const done = results[10];
     assert.equal(done?.status, "done");
     assert.match(done?.message ?? "", /Here is what I heard/);
     assert.match(done?.message ?? "", /What did I get wrong\?/);

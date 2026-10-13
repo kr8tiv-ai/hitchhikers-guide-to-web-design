@@ -47,6 +47,7 @@ export interface InterviewSession {
 
 export type InterviewErrorCode =
   | "empty-answer"
+  | "static-answer"
   | "corrupt-answers"
   | "finished"
   | "busy"

@@ -170,6 +170,7 @@ export {
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
+export { STATIC_ANSWER_ERROR, bannedAnswer } from "./guide/answer-guard.ts";
 export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTask } from "./guide/interview-call.ts";
 export {
   loadSessionState,

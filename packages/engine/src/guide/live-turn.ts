@@ -30,6 +30,7 @@ import {
   sessionBlock,
   topicFor,
 } from "./session-state.ts";
+import { bannedAnswer } from "./answer-guard.ts";
 import { judgePushback } from "./pushback-judge.ts";
 import {
   GUIDE_MESSAGE_SCHEMA,
@@ -220,6 +221,10 @@ async function perform(
   if (current === null) {
     return { message: CLOSE_MESSAGE, questionId: null, status: "done" };
   }
+  if (input.kind === "answer") {
+    const ban = bannedAnswer(current, input.text ?? "");
+    if (ban !== null) throw new InterviewError("static-answer", ban);
+  }
   if (input.kind === "suggest") return answerSuggest(s, current, deps);
   if (input.kind === "skip") {
     await interview.command({ type: "skip" });
@@ -321,12 +326,16 @@ async function answerSuggest(
     for (const card of cards) shown.add(card.url);
     s.shown = [...shown];
   }
-  await storeCommand(s, { type: "suggest" });
-  const turn = await advance(s, current, false, deps);
-  turn.options = offer.options;
-  turn.choices = offer.choices;
-  turn.choicesOrigin = offer.origin;
-  turn.choicesForId = current.id;
+  const turn: GuideTurn = {
+    message: "",
+    questionId: current.id,
+    status: "asked",
+    calm: true,
+    options: offer.options,
+    choices: offer.choices,
+    choicesOrigin: offer.origin,
+    choicesForId: current.id,
+  };
   if (cards !== undefined) turn.cards = cards;
   return turn;
 }

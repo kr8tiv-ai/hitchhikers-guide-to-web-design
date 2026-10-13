@@ -45,6 +45,7 @@ import {
   questionsToAsk,
   recordVerdict,
   requiredIds,
+  bannedAnswer,
   runTurn,
   seedExpressAssumptions,
   think,
@@ -75,6 +76,8 @@ import {
   type WalkState,
 } from "@hitchhiker/engine";
 import {
+  ANSWER_HINT,
+  PLACEHOLDER_FALLBACK,
   escapeHtml,
   renderCard,
   type CardAssumption,
@@ -1187,6 +1190,14 @@ async function handleTurn(
     if (text.trim() === "") {
       sendJson(req, res, 400, { error: "Write an answer or skip." });
       return;
+    }
+    const question = loadTree(treeFile(projectDir)).find((item) => item.id === parsed.questionId);
+    if (question !== undefined) {
+      const ban = bannedAnswer(question, text, [ANSWER_HINT, PLACEHOLDER_FALLBACK]);
+      if (ban !== null) {
+        sendJson(req, res, 400, { error: ban });
+        return;
+      }
     }
   }
   try {
@@ -4089,7 +4100,7 @@ function logDeskError(error: unknown): void {
 
 function turnError(error: unknown): { status: number; message: string } {
   if (error instanceof InterviewError) {
-    if (error.code === "empty-answer") return { status: 400, message: error.message };
+    if (error.code === "empty-answer" || error.code === "static-answer") return { status: 400, message: error.message };
     if (error.code === "busy") {
       return { status: 409, message: "The desk is saving another answer. Try again." };
     }

@@ -68,12 +68,12 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
 
     await page.locator('[data-action="suggest"]').click();
     await expect(page.locator("[data-question-id='DP-5.2']")).toBeVisible();
-    await expect(page.locator("[data-assumed='suggested']")).toBeVisible();
     await expect(page.locator("[data-gallery='godly']")).toHaveCount(2);
     await expect(page.locator("[data-gallery='awwwards']")).toHaveCount(2);
     await expect(page.locator("[data-suggest-option]")).toHaveCount(4);
-    await page.locator('[data-action="answer"]').click();
+    await page.locator("[data-choice-id='A']").click();
     await expect(page.locator("[data-question-id='DP-5.3']")).toBeVisible();
+    await expect(page.locator("[data-assumed='suggested']")).toBeVisible();
     await expect(page.locator("#hh-card-ask")).toContainText("three words");
 
     await say(
