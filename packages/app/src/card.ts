@@ -371,7 +371,7 @@ export function renderChoiceGroup(set: CardChoiceSet): string {
   const noun = items.length === 1 ? "choice" : "choices";
   const radios = items.map((item, index) => {
     const tab = index === 0 ? "0" : "-1";
-    const checked = index === 0 ? "true" : "false";
+    const checked = "false";
     const name = `${item.id}. ${item.label}`;
     return `    <div class="hh-choice" role="radio" aria-checked="${checked}" tabindex="${tab}" data-choice-id="${item.id}" data-choice-label="${escapeHtml(item.label)}" data-suggest-option="${escapeHtml(item.source)}" aria-label="${escapeHtml(name)}"><span class="hh-choice__key">${item.id}</span><span class="hh-choice__label">${escapeHtml(item.label)}</span></div>`;
   });

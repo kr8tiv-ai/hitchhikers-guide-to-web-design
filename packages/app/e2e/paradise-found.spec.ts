@@ -40,6 +40,7 @@ test("a logo in the slot survives reload and DP-1.1 does not offer the hero", as
     await expect(ask).not.toContainText("paradise-found-hero.jpg");
     await page.locator('[data-action="suggest"]').click();
     await expect(page.locator("[data-choices]")).toBeVisible();
+    await expect(page.locator("[data-choices] [role='radio'][aria-checked='true']")).toHaveCount(0);
     const radios = page.locator("[data-choices] [role='radio']");
     const count = await radios.count();
     for (let index = 0; index < count; index += 1) {
