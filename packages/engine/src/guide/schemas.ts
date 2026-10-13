@@ -94,21 +94,35 @@ export const MIRROR_SCHEMA: JsonSchema = {
   },
 };
 
+/** Prose brief fields. The draft prompt states this same cap. */
+export const BRIEF_PROSE_MAX = 500;
+
+/** List-like brief fields: pages, features, limits, references, cadence. */
+export const BRIEF_LIST_MAX = 1200;
+
+const BRIEF_LIST_KEYS = new Set(["pages", "features", "limits", "references", "cadence"]);
+
+function briefField(key: string): { type: "string"; maxLength: number } {
+  return { type: "string", maxLength: BRIEF_LIST_KEYS.has(key) ? BRIEF_LIST_MAX : BRIEF_PROSE_MAX };
+}
+
 const BRIEF_FIELDS = {
-  goal: { type: "string", maxLength: 500 },
-  visitor: { type: "string", maxLength: 500 },
-  action: { type: "string", maxLength: 500 },
-  offer: { type: "string", maxLength: 500 },
-  vibe: { type: "string", maxLength: 500 },
-  references: { type: "string", maxLength: 500 },
-  exists: { type: "string", maxLength: 500 },
-  protected: { type: "string", maxLength: 500 },
-  motion: { type: "string", maxLength: 500 },
-  limits: { type: "string", maxLength: 500 },
-  hosting: { type: "string", maxLength: 500 },
-  pages: { type: "string", maxLength: 500 },
-  features: { type: "string", maxLength: 500 },
-  coverage: { type: "string", maxLength: 500 },
+  goal: briefField("goal"),
+  visitor: briefField("visitor"),
+  action: briefField("action"),
+  offer: briefField("offer"),
+  vibe: briefField("vibe"),
+  references: briefField("references"),
+  exists: briefField("exists"),
+  protected: briefField("protected"),
+  motion: briefField("motion"),
+  limits: briefField("limits"),
+  hosting: briefField("hosting"),
+  maintainer: briefField("maintainer"),
+  pages: briefField("pages"),
+  features: briefField("features"),
+  cadence: briefField("cadence"),
+  coverage: briefField("coverage"),
 } as const;
 
 export const BRIEF_KEYS = [
@@ -123,8 +137,10 @@ export const BRIEF_KEYS = [
   "motion",
   "limits",
   "hosting",
+  "maintainer",
   "pages",
   "features",
+  "cadence",
   "coverage",
 ] as const;
 
@@ -192,8 +208,10 @@ export interface SiteBrief {
   motion: string;
   limits: string;
   hosting: string;
+  maintainer: string;
   pages: string;
   features: string;
+  cadence: string;
   coverage: string;
 }
 
@@ -202,7 +220,7 @@ export interface SiteBrief {
  * `source` on an option is `answer:<id>`, `upload:<file>`, `crawl:<note>`, or `industry:<name>`.
  */
 export interface Facts {
-  answers: ReadonlyArray<{ id: string; value: string }>;
+  answers: ReadonlyArray<{ id: string; value: string; status?: string }>;
   uploads: readonly string[];
   crawlNotes: readonly string[];
   industry?: string;

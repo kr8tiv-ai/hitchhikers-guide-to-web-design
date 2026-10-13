@@ -8,6 +8,8 @@ import {
   BRIEF_DRAFT_SCHEMA,
   BRIEF_DRAFT_TASK,
   BRIEF_KEYS,
+  BRIEF_LIST_MAX,
+  BRIEF_PROSE_MAX,
   BRIEF_REVISE_SCHEMA,
   BRIEF_REVISE_TASK,
   type BriefKey,
@@ -48,8 +50,10 @@ export const BRIEF_HEADINGS: Record<BriefKey, string> = {
   motion: "Motion",
   limits: "Limits",
   hosting: "Hosting",
+  maintainer: "Maintainer",
   pages: "Pages",
   features: "Features",
+  cadence: "Cadence",
   coverage: "Coverage",
 };
 
@@ -66,8 +70,10 @@ export const BRIEF_SOURCES: Record<BriefKey, readonly string[]> = {
   motion: ["DP-6.1", "DP-6.2", "DP-6.3", "DP-6.4", "DP-6.6"],
   limits: ["DP-8.4", "DP-9.1", "DP-9.5"],
   hosting: ["DP-9.2"],
+  maintainer: ["DP-9.3"],
   pages: ["DP-2.8"],
   features: ["DP-3.7"],
+  cadence: ["DP-3.5", "DP-8.3"],
   coverage: [],
 };
 
@@ -83,8 +89,10 @@ export const BRIEF_ANSWER_IDS: Partial<Record<BriefKey, string>> = {
   motion: "DP-6.2",
   limits: "DP-8.4",
   hosting: "DP-9.2",
+  maintainer: "DP-9.3",
   pages: "DP-2.8",
   features: "DP-3.7",
+  cadence: "DP-3.5",
 };
 
 /** One structured reply. Enough for the schema, not an open-ended agent loop. */
@@ -98,15 +106,36 @@ export const BRIEF_DRAFT_ERROR =
 
 const UNSTATED = "The field is not stated yet.";
 
+/** Keys a stub may omit. The recorded answer fills them. The schema still requires them. */
+const FILLED_WHEN_MISSING: ReadonlySet<BriefKey> = new Set(["maintainer", "cadence"]);
+
+const MOTION_LABELS = [
+  "",
+  "calm brochure",
+  "gentle",
+  "polished",
+  "editorial",
+  "expressive",
+  "cinematic lite",
+  "cinematic",
+  "a 3D accent",
+  "3D-led",
+  "a world",
+];
+
+const CADENCE_SKIP = "No blog cadence.";
+
+const SKIPPED_STATUS = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
+
 const BRIEF_PACKET: PacketOptions = { budgetTokens: BRIEF_DRAFT_BUDGET };
 
 export async function* briefLoop(
   s: GuideSession,
-  deps: { think: typeof think },
+  deps: { think: typeof think; priorError?: string },
 ): AsyncGenerator<{ draft: SiteBrief; approved: boolean; error: string }> {
   const facts = loadFacts(s.projectDir);
   const bound = { think: bindPacket(deps.think, s.projectDir, "brief", BRIEF_PACKET) };
-  const drafted = await draftOrFallback(s, facts, bound);
+  const drafted = await draftOrFallback(s, facts, bound, deps.priorError ?? "");
   let draft = drafted.brief;
   let note: unknown = yield { draft, approved: false, error: drafted.error };
   while (!isApproval(typeof note === "string" ? note : "")) {
@@ -139,13 +168,26 @@ async function draftOrFallback(
   s: GuideSession,
   facts: Facts,
   deps: { think: typeof think },
+  priorError: string,
 ): Promise<{ brief: SiteBrief; error: string }> {
   const recorded = deterministicBrief(facts, s.language);
-  const first = await askDraft(s, facts, recorded, deps);
-  if (first !== null) return { brief: lockRecorded(first, recorded), error: "" };
-  const second = await askDraft(s, facts, recorded, deps);
-  if (second !== null) return { brief: lockRecorded(second, recorded), error: "" };
+  const first = await askDraft(s, facts, recorded, deps, priorError);
+  if (first.brief !== null) return { brief: lockRecorded(first.brief, recorded), error: "" };
+  const second = await askDraft(s, facts, recorded, deps, joinPrior(priorError, first.reason));
+  if (second.brief !== null) return { brief: lockRecorded(second.brief, recorded), error: "" };
+  if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason) };
   return { brief: recorded, error: BRIEF_DRAFT_ERROR };
+}
+
+function joinPrior(prior: string, reason: string): string {
+  return [prior.trim(), reason.trim()].filter((part) => part !== "").join(" ");
+}
+
+function retryFailure(reason: string): string {
+  const when = new Date().toISOString();
+  const detail = stripUnsafe(reason).replace(/\s+/g, " ").trim().slice(0, 280);
+  const what = detail === "" ? "The draft did not pass." : detail;
+  return `The brief draft failed again at ${when}. ${what} Use Retry to ask again.`;
 }
 
 async function reviseOrFallback(
@@ -169,8 +211,22 @@ async function askDraft(
   facts: Facts,
   recorded: SiteBrief,
   deps: { think: typeof think },
-): Promise<SiteBrief | null> {
+  priorError: string,
+): Promise<{ brief: SiteBrief | null; reason: string }> {
   try {
+    const lines = [
+      "Draft the Site Brief from these recorded fields.",
+      "Keep a recorded answer. Write prose only around those facts.",
+      "Do not invent testimonials, awards, or numbers.",
+      "Do not replace a recorded field with an empty line.",
+      `Prose fields are at most ${BRIEF_PROSE_MAX} characters.`,
+      `The fields pages, features, limits, references, and cadence are at most ${BRIEF_LIST_MAX} characters.`,
+      `Reply language: ${s.language}`,
+    ];
+    if (priorError.trim() !== "") {
+      lines.push(`The last draft failed: ${priorError.trim()}`, "Fix that and return the full brief.");
+    }
+    lines.push(renderFacts(facts), "Recorded fields:", renderSiteBrief(recorded));
     const result = await deps.think(
       {
         task: BRIEF_DRAFT_TASK,
@@ -178,25 +234,18 @@ async function askDraft(
         model: INTERVIEW_MODEL,
         effort: "xhigh",
         maxTurns: BRIEF_DRAFT_MAX_TURNS,
-        input: [
-          "Draft the Site Brief from these recorded fields.",
-          "Keep a recorded answer. Write prose only around those facts.",
-          "Do not invent testimonials, awards, or numbers.",
-          "Do not replace a recorded field with an empty line.",
-          `Reply language: ${s.language}`,
-          renderFacts(facts),
-          "Recorded fields:",
-          renderSiteBrief(recorded),
-        ].join("\n"),
+        input: lines.join("\n"),
       },
       { projectDir: s.projectDir },
     );
     const brief = asBrief(result.value, true);
-    if (brief === null) return null;
-    if (briefIssues(brief, facts, s.language, recorded).length > 0) return null;
-    return brief;
-  } catch {
-    return null;
+    if (brief === null) return { brief: null, reason: "The draft did not match the brief." };
+    const issues = briefIssues(brief, facts, s.language, recorded);
+    if (issues.length > 0) return { brief: null, reason: issues.join("; ") };
+    return { brief, reason: "" };
+  } catch (error) {
+    const reason = error instanceof Error && error.message.trim() !== "" ? error.message : "The draft did not pass.";
+    return { brief: null, reason };
   }
 }
 
@@ -265,7 +314,13 @@ function asBrief(value: unknown, full: boolean): SiteBrief | null {
   const brief = emptyBrief();
   for (const key of BRIEF_KEYS) {
     const field = record[key];
-    if (typeof field !== "string" || field.trim() === "") return null;
+    if (typeof field !== "string" || field.trim() === "") {
+      if (FILLED_WHEN_MISSING.has(key)) {
+        brief[key] = UNSTATED;
+        continue;
+      }
+      return null;
+    }
     brief[key] = field.trim();
   }
   return brief;
@@ -292,35 +347,96 @@ function emptyBrief(): SiteBrief {
     motion: "",
     limits: "",
     hosting: "",
+    maintainer: "",
     pages: "",
     features: "",
+    cadence: "",
     coverage: "",
   };
 }
 
 export function deterministicBrief(facts: Facts, _language: string): SiteBrief {
-  const byId = new Map<string, string>();
-  for (const answer of facts.answers) byId.set(answer.id, answer.value);
   const brief = emptyBrief();
-  for (const key of BRIEF_KEYS) brief[key] = safeField(recordedText(key, byId));
-  brief.coverage = safeField("The interview file holds the coverage.");
+  for (const key of BRIEF_KEYS) brief[key] = safeField(recordedField(key, facts).text);
   return brief;
 }
 
-function recordedText(key: BriefKey, byId: ReadonlyMap<string, string>): string {
+/** Cleaned text for one field, and every answer id that contributed. */
+export function recordedField(
+  key: BriefKey,
+  facts: Facts,
+): { text: string; sourceIds: readonly string[] } {
+  if (key === "coverage") return { text: coverageLine(facts), sourceIds: [] };
+  const byId = new Map<string, string>();
+  for (const answer of facts.answers) byId.set(answer.id, answer.value);
   const ids = BRIEF_SOURCES[key];
   const primary = BRIEF_ANSWER_IDS[key];
   const ordered =
     primary !== undefined && ids.includes(primary) ? [primary, ...ids.filter((id) => id !== primary)] : [...ids];
   const parts: string[] = [];
+  const sourceIds: string[] = [];
   const seen = new Set<string>();
+  let skipped = "";
+  let skippedId = "";
   for (const id of ordered) {
-    const value = (byId.get(id) ?? "").trim();
+    const value = cleanAnswer(id, byId.get(id) ?? "");
     if (value === "" || seen.has(value)) continue;
+    if (key === "cadence" && value === CADENCE_SKIP) {
+      skipped = value;
+      skippedId = id;
+      continue;
+    }
     seen.add(value);
     parts.push(value);
+    sourceIds.push(id);
   }
-  return parts.join(" ");
+  if (parts.length === 0 && skipped !== "") {
+    parts.push(skipped);
+    sourceIds.push(skippedId);
+  }
+  return { text: parts.join(" "), sourceIds };
+}
+
+function coverageLine(facts: Facts): string {
+  const covered: string[] = [];
+  const uncovered: string[] = [];
+  const seen = new Set<string>();
+  for (const answer of facts.answers) {
+    if (seen.has(answer.id)) continue;
+    seen.add(answer.id);
+    if (SKIPPED_STATUS.has(answer.status ?? "")) uncovered.push(answer.id);
+    else if (answer.value.trim() !== "") covered.push(answer.id);
+  }
+  const parts: string[] = [];
+  if (uncovered.length > 0) parts.push(`Uncovered: ${uncovered.join(", ")}.`);
+  if (covered.length > 0) parts.push(`Covered: ${covered.join(", ")}.`);
+  const line = parts.join(" ");
+  if (line.length <= BRIEF_PROSE_MAX) return line;
+  return shortenCoverage(line, BRIEF_PROSE_MAX);
+}
+
+function shortenCoverage(text: string, max: number): string {
+  const window = text.slice(0, max);
+  const comma = window.lastIndexOf(", ");
+  const space = window.lastIndexOf(" ");
+  const cut = comma > 0 ? comma : space;
+  if (cut <= 0) return window.trim();
+  const out = window.slice(0, cut).trim();
+  return out.endsWith(".") ? out : `${out}.`;
+}
+
+function cleanAnswer(id: string, value: string): string {
+  let text = value.trim();
+  text = text.replace(/^yes, that is right\.\s*/i, "");
+  text = text.replace(/^also:\s*/i, "");
+  text = text.trim();
+  if (id !== "DP-6.2") return text;
+  const match = /^(\d{1,2})\.?$/.exec(text);
+  if (match === null) return text;
+  const score = Number(match[1]);
+  if (!Number.isInteger(score) || score < 1 || score > 10) return text;
+  const label = MOTION_LABELS[score] ?? "";
+  return label === "" ? `${score} of 10` : `${score} of 10, ${label}`;
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   BRIEF_HEADINGS,
   briefLoop,
   isApproval,
+  recordedField,
   renderSiteBrief,
 } from "./brief-loop.ts";
 import { BRIEF_DRAFT_TASK, BRIEF_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
@@ -72,7 +73,12 @@ function isBrief(value: unknown): value is SiteBrief {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   for (const key of BRIEF_KEYS) {
-    if (typeof record[key] !== "string" || record[key].trim() === "") return false;
+    const field = record[key];
+    if ((typeof field !== "string" || field.trim() === "") && (key === "maintainer" || key === "cadence")) {
+      record[key] = "The field is not stated yet.";
+      continue;
+    }
+    if (typeof record[key] !== "string" || String(record[key]).trim() === "") return false;
   }
   return true;
 }
@@ -111,15 +117,14 @@ function writePending(projectDir: string, file: PendingFile): void {
 }
 
 function sourcesFor(projectDir: string, draft: SiteBrief | null): BriefSource[] {
-  const answers = new Map<string, string>();
-  for (const answer of loadFacts(projectDir).answers) answers.set(answer.id, answer.value);
+  const facts = loadFacts(projectDir);
   return BRIEF_KEYS.map((key) => {
-    const questionId = BRIEF_ANSWER_IDS[key] ?? "";
+    const recorded = recordedField(key, facts);
     return {
       key,
       heading: BRIEF_HEADINGS[key],
-      questionId,
-      answer: questionId === "" ? "" : (answers.get(questionId) ?? ""),
+      questionId: recorded.sourceIds.join(", "),
+      answer: recorded.text,
       text: draft === null ? "" : draft[key],
     };
   });
@@ -160,9 +165,9 @@ function resumeThink(inner: typeof think, saved: SiteBrief): typeof think {
   };
 }
 
-async function runDraft(projectDir: string, thinkFn: typeof think): Promise<BriefDeskView> {
+async function runDraft(projectDir: string, thinkFn: typeof think, priorError: string): Promise<BriefDeskView> {
   try {
-    const loop = briefLoop(guideSession(projectDir), { think: thinkFn });
+    const loop = briefLoop(guideSession(projectDir), { think: thinkFn, priorError });
     const first = await loop.next();
     await loop.return(undefined);
     if (first.value === undefined) throw new Error("The brief did not draft.");
@@ -190,9 +195,10 @@ export function draftSiteBrief(
   const current = readBriefDesk(projectDir);
   if (current.buildStarted || current.status === "approved" || current.status === "revising") return Promise.resolve(current);
   if (current.status === "pending" && current.error === "") return Promise.resolve(current);
+  const priorError = current.error;
   opts?.onProgress?.(BRIEF_PROGRESS_STAGE);
   writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted, error: "" });
-  const job = runDraft(projectDir, thinkFn);
+  const job = runDraft(projectDir, thinkFn, priorError);
   jobs.set(key, job);
   void job.finally(() => {
     if (jobs.get(key) === job) jobs.delete(key);

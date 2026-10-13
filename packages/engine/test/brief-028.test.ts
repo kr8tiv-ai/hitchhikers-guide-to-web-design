@@ -35,8 +35,10 @@ const EXPECTED_SOURCES: Record<BriefKey, readonly string[]> = {
   motion: ["DP-6.1", "DP-6.2", "DP-6.3", "DP-6.4", "DP-6.6"],
   limits: ["DP-8.4", "DP-9.1", "DP-9.5"],
   hosting: ["DP-9.2"],
+  maintainer: ["DP-9.3"],
   pages: ["DP-2.8"],
   features: ["DP-3.7"],
+  cadence: ["DP-3.5", "DP-8.3"],
   coverage: [],
 };
 
@@ -59,8 +61,11 @@ const ANSWERS: Record<string, string> = {
   "DP-9.1": "Keep the copy short.",
   "DP-9.5": "Do not add a shop.",
   "DP-9.2": "A static host the client already pays for.",
+  "DP-9.3": "The owner looks after the site.",
   "DP-2.8": "Home, work, and visit.",
   "DP-3.7": "A contact form and a visit request.",
+  "DP-3.5": "One guide a month.",
+  "DP-8.3": "A short note each month.",
 };
 
 function unstatedBrief(): SiteBrief {
@@ -113,7 +118,8 @@ test("brief fields map to question ids, including Pages and Features", () => {
     assert.equal(filled[key].includes("not stated yet"), false, key);
     for (const id of EXPECTED_SOURCES[key]) assert.match(filled[key], new RegExp(ANSWERS[id].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(filled.coverage, /interview file holds the coverage/);
+  assert.match(filled.coverage, /Covered:/);
+  assert.match(filled.coverage, /DP-2\.1/);
   assert.match(filled.pages, /Home, work, and visit/);
   assert.match(filled.features, /contact form/);
 });

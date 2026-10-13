@@ -198,12 +198,16 @@ function trimPacket(packet: ContextPacket): void {
 }
 
 export function factsFromPacket(packet: ContextPacket, base?: Facts): Facts {
-  const answers = new Map<string, string>();
-  for (const answer of base?.answers ?? []) answers.set(answer.id, answer.value);
+  const answers = new Map<string, { value: string; status?: string }>();
+  for (const answer of base?.answers ?? []) {
+    const entry: { value: string; status?: string } = { value: answer.value };
+    if (answer.status !== undefined && answer.status !== "") entry.status = answer.status;
+    answers.set(answer.id, entry);
+  }
   for (const record of packet.decisions) {
     if (!ANSWER_SOURCES.has(record.source)) continue;
     if (record.questionId.trim() === "") continue;
-    answers.set(record.questionId, record.text);
+    answers.set(record.questionId, { value: record.text });
   }
   const uploads = new Set<string>(base?.uploads ?? []);
   for (const asset of packet.assets) {
@@ -213,7 +217,9 @@ export function factsFromPacket(packet: ContextPacket, base?: Facts): Facts {
     if (saved !== "") uploads.add(saved);
   }
   const facts: Facts = {
-    answers: [...answers.entries()].map(([id, value]) => ({ id, value })),
+    answers: [...answers.entries()].map(([id, entry]) =>
+      entry.status === undefined ? { id, value: entry.value } : { id, value: entry.value, status: entry.status },
+    ),
     uploads: [...uploads],
     crawlNotes: [...(base?.crawlNotes ?? [])],
   };

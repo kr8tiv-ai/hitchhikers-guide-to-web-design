@@ -35,19 +35,24 @@ export function approveMain(token: string, desk: BriefDeskView, changeError = ""
         </form>`;
   const sections = desk.sources
     .map((source) => {
+      const changeId = source.questionId.split(",")[0]?.trim() ?? "";
       const change =
-        source.questionId === ""
-          ? ""
-          : `<form method="post" action="/approve">
+        /^DP-\d+\.\d+$/.test(changeId)
+          ? `<form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           <input type="hidden" name="action" value="change" />
-          <input type="hidden" name="correction" value="${escapeHtml(source.questionId)}" />
+          <input type="hidden" name="correction" value="${escapeHtml(changeId)}" />
           <button class="hh-btn hh-btn--ghost" type="submit">Change this answer</button>
-        </form>`;
+        </form>`
+          : "";
+      const sourceLine =
+        source.questionId.trim() === ""
+          ? ""
+          : `<p>Source ${escapeHtml(source.questionId)}: ${escapeHtml(source.answer)}</p>`;
       return `<section>
         <h2>${escapeHtml(source.heading)}</h2>
         <p>${escapeHtml(source.text)}</p>
-        <p>Source ${escapeHtml(source.questionId)}: ${escapeHtml(source.answer)}</p>
+        ${sourceLine}
         ${change}
       </section>`;
     })

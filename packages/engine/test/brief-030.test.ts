@@ -32,6 +32,8 @@ function sample(goal = LINE): SiteBrief {
     hosting: LINE,
     pages: LINE,
     features: LINE,
+    maintainer: LINE,
+    cadence: LINE,
     coverage: LINE,
   };
 }

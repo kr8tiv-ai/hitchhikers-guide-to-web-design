@@ -159,16 +159,75 @@ function parseModelJson(text: string): { ok: true; value: unknown } | { ok: fals
 }
 
 function repairInput(input: string, errors: readonly string[], previous: string): string {
-  return [
+  const lengthOnly = errors.length > 0 && errors.every((error) => error.includes("over maxLength"));
+  const lines = [
     input,
     "",
     "The previous answer failed JSON schema validation.",
     "Return only one JSON value that satisfies the schema.",
-    "Errors:",
-    ...errors.map((error) => `- ${error}`),
-    "Previous output:",
-    previous,
-  ].join("\n");
+  ];
+  if (lengthOnly) {
+    lines.push(
+      "Shorten only the fields named in the errors so each one fits its maxLength.",
+      "Leave every other field unchanged.",
+      "Break at a sentence, never mid-word.",
+    );
+  }
+  lines.push("Errors:", ...errors.map((error) => `- ${error}`), "Previous output:", previous);
+  return lines.join("\n");
+}
+
+const LENGTH_ERROR = /^\$\.(\w+): length \d+ is over maxLength (\d+)$/;
+
+/**
+ * Shorten at the last sentence end inside `max`, else the last word.
+ * A single word longer than `max` is returned unchanged, never cut mid-word.
+ */
+export function shortenAtBoundary(text: string, max: number): string {
+  const clean = text.trim();
+  if (max < 1 || clean.length <= max) return clean;
+  const window = clean.slice(0, max);
+  const sentence = Math.max(window.lastIndexOf(". "), window.lastIndexOf("? "), window.lastIndexOf("; "));
+  let cut = sentence >= 0 ? sentence + 1 : -1;
+  if (cut <= 0) {
+    const end = window.trimEnd();
+    const last = end.at(-1);
+    if (last === "." || last === "?" || last === ";") cut = end.length;
+  }
+  if (cut <= 0) cut = window.lastIndexOf(" ");
+  if (cut <= 0) return clean;
+  let out = clean.slice(0, cut).trim();
+  if (out.length > max) {
+    const space = out.lastIndexOf(" ");
+    if (space <= 0) return clean;
+    out = out.slice(0, space).trim();
+  }
+  if (out.length === 0 || out.length > max) return clean;
+  return out;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** When every error is a top-level maxLength miss, shorten only those fields. */
+function shortenOverLength(value: unknown, errors: readonly string[]): unknown | null {
+  if (!isPlainRecord(value) || errors.length === 0) return null;
+  if (!errors.every((error) => LENGTH_ERROR.test(error))) return null;
+  const next: Record<string, unknown> = { ...value };
+  for (const error of errors) {
+    const match = LENGTH_ERROR.exec(error);
+    if (match === null) return null;
+    const key = match[1];
+    const max = Number(match[2]);
+    if (key === undefined || !Number.isInteger(max)) return null;
+    const current = next[key];
+    if (typeof current !== "string") return null;
+    const cut = shortenAtBoundary(current, max);
+    if (cut.length > max) return null;
+    next[key] = cut;
+  }
+  return next;
 }
 
 function callRequest(req: ThinkRequest<unknown>, input: string): ThinkRequest<unknown> {
@@ -362,11 +421,22 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
         }
 
         const decoded = parseModelJson(parsed.text);
-        const errors = decoded.ok ? validateJson(decoded.value, req.schema) : ["$: response was not JSON"];
-        if (errors.length === 0 && decoded.ok) {
+        let errors = decoded.ok ? validateJson(decoded.value, req.schema) : ["$: response was not JSON"];
+        let accepted: unknown = decoded.ok ? decoded.value : undefined;
+        if (errors.length > 0 && attempt === attempts - 1 && decoded.ok) {
+          const shortened = shortenOverLength(decoded.value, errors);
+          if (shortened !== null) {
+            const again = validateJson(shortened, req.schema);
+            if (again.length === 0) {
+              accepted = shortened;
+              errors = [];
+            }
+          }
+        }
+        if (errors.length === 0 && accepted !== undefined) {
           const durationMs = Math.max(0, now() - started);
           const result = withTokens(
-            asValue<T>(decoded.value),
+            asValue<T>(accepted),
             parsed.text,
             durationMs,
             mode === "record" ? "recorded" : "live",

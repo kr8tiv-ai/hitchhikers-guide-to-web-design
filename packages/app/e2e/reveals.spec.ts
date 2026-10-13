@@ -288,6 +288,8 @@ function brief(): SiteBrief {
     hosting: "A static host the client already pays for.",
     pages: "Home, work, and visit.",
     features: "A contact form and a visit request.",
+    maintainer: "The owner looks after the site.",
+    cadence: "One guide a month.",
     coverage: "One city, by appointment.",
   };
 }

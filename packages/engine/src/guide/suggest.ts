@@ -300,7 +300,7 @@ function renderFacts(facts: Facts): string {
   return lines.join("\n");
 }
 
-function readAnswers(projectDir: string): Array<{ id: string; value: string }> {
+function readAnswers(projectDir: string): Array<{ id: string; value: string; status?: string }> {
   const file = path.join(projectDir, ".hitchhiker", "interview.json");
   if (!existsSync(file)) return [];
   let value: unknown;
@@ -314,10 +314,15 @@ function readAnswers(projectDir: string): Array<{ id: string; value: string }> {
     : isRecord(value) && Array.isArray(value.answers)
       ? value.answers
       : [];
-  const answers: Array<{ id: string; value: string }> = [];
+  const answers: Array<{ id: string; value: string; status?: string }> = [];
   for (const item of list) {
     if (!isRecord(item) || typeof item.id !== "string" || typeof item.value !== "string") continue;
-    answers.push({ id: item.id, value: item.value });
+    const status = typeof item.status === "string" ? item.status : "";
+    if (status === "SKIPPED" || status === "NOT_APPLICABLE" || status === "UNANSWERED") {
+      answers.push({ id: item.id, value: item.value, status });
+    } else {
+      answers.push({ id: item.id, value: item.value });
+    }
   }
   return answers;
 }
