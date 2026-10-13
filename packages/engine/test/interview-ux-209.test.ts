@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { buildGrokArgv } from "../src/ai/grok-cli.ts";
 import { defaultConfig, parseConfig } from "../src/config.ts";
 import { followUpChoices } from "../src/guide/pushback-judge.ts";
+import { jargonHits, userFacingText } from "../src/guide/session-state.ts";
 import type { Facts } from "../src/guide/schemas.ts";
 import { loadTree, questionsForDepth, type Question } from "../src/tree.ts";
 
@@ -49,6 +50,7 @@ function byId(all: readonly Question[], id: string): Question {
 
 test("the tree drops the mic question and asks time once", () => {
   const all = loadTree(treeFile);
+  assert.equal(all.length, 62);
   assert.equal(all.some((question) => question.id === "DP-0.6"), false);
   assert.equal(
     all.some((question) => /mic|keyboard/i.test(question.ask)),
@@ -65,6 +67,16 @@ test("the tree drops the mic question and asks time once", () => {
   assert.equal(deep.length, all.filter((question) => question.depth.includes("deep") && question.surface !== "default").length);
   assert.ok(deep.length < 63);
   assert.equal(deep.filter((question) => question.topic === "depth-time").length, 1);
+});
+
+test("user-facing tree copy has no internal jargon", () => {
+  const all = loadTree(treeFile);
+  const hits: string[] = [];
+  for (const question of all) {
+    const found = jargonHits(userFacingText(question));
+    if (found.length > 0) hits.push(`${question.id}: ${found.join(", ")}`);
+  }
+  assert.deepEqual(hits, []);
 });
 
 test("a sharper-only judge result renders no choices", () => {
