@@ -86,6 +86,7 @@ function driveRun(run: ReturnType<typeof readBuildRun>): DriveRun | null {
     lastLines: run.lastLines,
     filesWritten: run.filesWritten,
     reason: run.reason,
+    recovery: run.recovery,
   };
 }
 

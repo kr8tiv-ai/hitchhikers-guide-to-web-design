@@ -4,7 +4,7 @@
  * The live spawn is installed only when a desk or CLI command asks for it.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
 import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
@@ -97,7 +97,23 @@ export interface BuildRunView {
   filesWritten: string[];
   reason: string;
   pid: number | null;
+  /** What restart recovery did. Empty when this run was not recovered. */
+  recovery: string;
 }
+
+export interface BuildRecoveryInput {
+  promptId: string;
+  cleanEnd: boolean;
+  outputsExist: boolean;
+  rerunAlready: boolean;
+}
+
+export type BuildRecoveryDecision =
+  | { action: "verify" }
+  | { action: "rerun"; reason: string }
+  | { action: "interrupt"; reason: string };
+
+export type BuildContinueOutcome = "started" | "live" | "idle" | "rejected";
 
 interface RunFile {
   promptId: string;
@@ -110,6 +126,9 @@ interface RunFile {
   filesWritten: string[];
   reason: string;
   pid: number | null;
+  recovery: string;
+  /** True after an automatic restart rerun has been issued for this prompt. */
+  recoveryRerun: boolean;
 }
 
 let runner: BuildSpawn | null = null;
@@ -131,6 +150,10 @@ interface LiveBuild {
 
 const liveBuilds = new Map<string, LiveBuild>();
 let watchTimer: ReturnType<typeof setInterval> | null = null;
+/** Serializes adopt and resume so two clicks share one spawn. */
+const controlChains = new Map<string, Promise<unknown>>();
+const continueJobs = new Map<string, Promise<BuildContinueOutcome>>();
+const recoveries = new Map<string, Promise<void>>();
 
 const DEFAULT_WATCH: SiteBuildWatch = {
   intervalMs: BUILD_WATCHDOG_INTERVAL_MS,
@@ -206,6 +229,56 @@ export function runBuildWatchdog(projectDir?: string): void {
     if (!dead && !idle) continue;
     job.force(watchResult());
   }
+  if (projectDir !== undefined) void recoverSiteBuild(projectDir);
+}
+
+/**
+ * Clean `end` with `stopReason: end_turn` in a run log.
+ * Split chunks are fine. Any other stop reason is not a clean end.
+ */
+export function logHasCleanEnd(log: string): boolean {
+  return readEndReason(log) === "end_turn";
+}
+
+/** Pure recovery choice. Gates and the queue stay with the caller. */
+export function decideBuildRecovery(input: BuildRecoveryInput): BuildRecoveryDecision {
+  if (input.cleanEnd && input.outputsExist) return { action: "verify" };
+  const reason = rerunReason(input.promptId);
+  if (input.rerunAlready) return { action: "interrupt", reason };
+  return { action: "rerun", reason };
+}
+
+/**
+ * Desk start and the watchdog. A running row whose child is gone is
+ * verified from its log or rerun once. A live in-process job is left alone.
+ */
+export function recoverSiteBuild(projectDir: string): Promise<void> {
+  const key = path.resolve(projectDir);
+  const existing = recoveries.get(key);
+  if (existing) return existing;
+  const job = recoverBody(projectDir);
+  recoveries.set(key, job);
+  void job.finally(() => {
+    if (recoveries.get(key) === job) recoveries.delete(key);
+  });
+  return job;
+}
+
+/**
+ * Continue from the first prompt that has not passed.
+ * Two callers share one run. A live child makes this a no-op success.
+ */
+export function continueSiteBuild(projectDir: string, promptId?: string): Promise<BuildContinueOutcome> {
+  const key = path.resolve(projectDir);
+  if (jobs.has(key)) return Promise.resolve("live");
+  const existing = continueJobs.get(key);
+  if (existing) return existing;
+  const job = continueBody(projectDir, promptId);
+  continueJobs.set(key, job);
+  void job.finally(() => {
+    if (continueJobs.get(key) === job) continueJobs.delete(key);
+  });
+  return job;
 }
 
 export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
@@ -366,9 +439,9 @@ export function siteBuildSettled(projectDir: string): Promise<void> {
 }
 
 /**
- * A running row whose process is gone becomes interrupted.
- * Other running rows, including an orchestrator queue with no build-run file, stay as they are.
- * Returns true when this call made that change.
+ * A running row whose process is gone is recovered when a runner is installed.
+ * With no runner, the row becomes interrupted and other running rows stay.
+ * Returns true when this call changed that row or started recovery.
  */
 export async function reconcileSiteBuild(projectDir: string): Promise<boolean> {
   const key = path.resolve(projectDir);
@@ -376,6 +449,10 @@ export async function reconcileSiteBuild(projectDir: string): Promise<boolean> {
   const run = readRunFile(projectDir);
   if (run === null || run.status !== "running") return false;
   if (pidAlive(run.pid)) return false;
+  if (runnerFor(projectDir) !== null) {
+    await recoverSiteBuild(projectDir);
+    return true;
+  }
   await setStatus(projectDir, run.promptId, "interrupted");
   writeRun(projectDir, {
     ...run,
@@ -393,8 +470,8 @@ export async function retrySiteBuild(projectDir: string, promptId: string): Prom
 }
 
 export async function resumeSiteBuild(projectDir: string, promptId: string): Promise<void> {
-  await requeue(projectDir, promptId, "interrupted");
-  void ensureSiteBuild(projectDir);
+  const outcome = await continueSiteBuild(projectDir, promptId);
+  if (outcome === "rejected" || outcome === "idle") throw new Error("That prompt is not waiting.");
 }
 
 export function readBuildRun(projectDir: string): BuildRunView | null {
@@ -404,10 +481,6 @@ export function readBuildRun(projectDir: string): BuildRunView | null {
 }
 
 async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
-  const before = readRunFile(projectDir);
-  const stale = before?.status === "running" && !pidAlive(before.pid);
-  await reconcileSiteBuild(projectDir);
-  if (stale) return;
   const current = readRunFile(projectDir);
   if (current?.status === "running" && pidAlive(current.pid)) return;
   try {
@@ -448,6 +521,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
     const startedAt = new Date().toISOString();
     const lines: string[] = [];
     const before = snapshot(projectDir);
+    resetBuildLog(projectDir, next.id);
     const pidBox = { pid: null as number | null };
     const buffered: string[] = [];
     let feed: ((chunk: string) => void) | null = null;
@@ -463,6 +537,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         effort: BUILD_EFFORT,
         onOutput: (chunk) => {
           if (sealed) return;
+          appendBuildLog(projectDir, next.id, chunk);
           if (feed) feed(chunk);
           else buffered.push(chunk);
           pushLines(lines, chunk);
@@ -539,6 +614,243 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
     }
     await settleItem(projectDir, next.id, "failed", failureReason(result), lines, files, startedAt);
     return;
+  }
+}
+
+async function recoverBody(projectDir: string): Promise<void> {
+  try {
+    if (runnerFor(projectDir) === null) return;
+    await enqueueControl(projectDir, async () => {
+      if (jobs.has(path.resolve(projectDir))) return;
+      const adopted = await adoptDeadRun(projectDir);
+      if (adopted === "continue") void ensureSiteBuild(projectDir);
+    });
+  } catch {
+    // The row stays on disk. Resume can try again.
+  }
+}
+
+async function continueBody(projectDir: string, promptId?: string): Promise<BuildContinueOutcome> {
+  const key = path.resolve(projectDir);
+  return enqueueControl(projectDir, async () => {
+    if (jobs.has(key)) return "live";
+    const live = readRunFile(projectDir);
+    if (live?.status === "running" && pidAlive(live.pid)) return "live";
+    if (runnerFor(projectDir) === null) return promptId === undefined ? "idle" : "rejected";
+    if (live?.status === "running") {
+      const adopted = await adoptDeadRun(projectDir);
+      if (adopted === "continue") {
+        void ensureSiteBuild(projectDir);
+        return "started";
+      }
+    }
+    const explicit = await planExplicit(projectDir, promptId);
+    if (explicit === "start") {
+      void ensureSiteBuild(projectDir);
+      return "started";
+    }
+    return explicit;
+  });
+}
+
+function enqueueControl<T>(projectDir: string, fn: () => Promise<T>): Promise<T> {
+  const key = path.resolve(projectDir);
+  const previous = controlChains.get(key) ?? Promise.resolve();
+  const run = previous.then(() => fn());
+  controlChains.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return run;
+}
+
+/**
+ * A running row with a dead child. Verify a clean end, or queue one rerun.
+ * Does not spawn. The caller starts the queue outside any nested lock.
+ */
+async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "idle"> {
+  if (jobs.has(path.resolve(projectDir))) return "idle";
+  const run = readRunFile(projectDir);
+  if (run === null || run.status !== "running") return "idle";
+  if (pidAlive(run.pid)) return "idle";
+  const log = `${readBuildLog(projectDir, run.promptId)}\n${run.lastLines.join("\n")}`;
+  const expected = expectedOutputFiles(projectDir, run.promptId);
+  const outputsExist = expected.every((file) => outputExists(projectDir, file));
+  const decision = decideBuildRecovery({
+    promptId: run.promptId,
+    cleanEnd: logHasCleanEnd(log),
+    outputsExist,
+    rerunAlready: run.recoveryRerun,
+  });
+  if (decision.action === "verify") {
+    const files = [...new Set([...run.filesWritten, ...expected])];
+    try {
+      const gate = buildGates.get(path.resolve(projectDir));
+      if (gate !== undefined) await gate({ projectDir, promptId: run.promptId, files });
+      const reason = recoveredReason(run.promptId);
+      await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt);
+      stampRecovery(projectDir, reason, false);
+      return "continue";
+    } catch (error: unknown) {
+      const text = error instanceof Error ? publicText(error.message) : "";
+      const reason = text === "" ? "The build did not finish." : text;
+      await settleItem(projectDir, run.promptId, "failed", reason, run.lastLines, files, run.startedAt);
+      return "halt";
+    }
+  }
+  if (decision.action === "interrupt") {
+    await setStatus(projectDir, run.promptId, "interrupted");
+    writeRun(projectDir, {
+      ...run,
+      status: "interrupted",
+      reason: decision.reason,
+      recovery: decision.reason,
+      recoveryRerun: true,
+      pid: null,
+      elapsedMs: elapsed(run),
+    });
+    return "halt";
+  }
+  await setStatus(projectDir, run.promptId, "queued");
+  writeRun(projectDir, {
+    ...run,
+    status: "interrupted",
+    reason: decision.reason,
+    recovery: decision.reason,
+    recoveryRerun: true,
+    pid: null,
+    elapsedMs: elapsed(run),
+  });
+  return "continue";
+}
+
+async function planExplicit(
+  projectDir: string,
+  promptId: string | undefined,
+): Promise<"start" | "idle" | "rejected"> {
+  const queue = await loadBuildQueue(projectDir);
+  if (promptId !== undefined) {
+    if (!PROMPT_ID.test(promptId)) return "rejected";
+    if (queue?.items.some((item) => item.id === promptId) !== true) return "rejected";
+  }
+  const next = queue?.items.find(
+    (item) =>
+      PROMPT_ID.test(item.id) &&
+      (item.status === "interrupted" || item.status === "failed" || item.status === "queued" || item.status === "running"),
+  );
+  if (next === undefined) return promptId === undefined ? "idle" : "rejected";
+  if (next.status === "interrupted") {
+    noteRerun(projectDir, next.id);
+    await requeue(projectDir, next.id, "interrupted");
+  } else if (next.status === "failed") {
+    await requeue(projectDir, next.id, "failed");
+  } else if (next.status === "running") {
+    noteRerun(projectDir, next.id);
+    await setStatus(projectDir, next.id, "queued");
+  }
+  return "start";
+}
+
+function noteRerun(projectDir: string, promptId: string): void {
+  const reason = rerunReason(promptId);
+  const current = readRunFile(projectDir);
+  const startedAt = current?.promptId === promptId ? current.startedAt : new Date().toISOString();
+  writeRun(projectDir, {
+    promptId,
+    status: "interrupted",
+    model: current?.model && current.model !== "" ? current.model : BUILD_MODEL,
+    effort: current?.effort && current.effort !== "" ? current.effort : BUILD_EFFORT,
+    startedAt,
+    elapsedMs: current?.promptId === promptId ? elapsed(current) : 0,
+    lastLines: current?.promptId === promptId ? current.lastLines : [],
+    filesWritten: current?.promptId === promptId ? current.filesWritten : [],
+    reason,
+    pid: null,
+    recovery: reason,
+    recoveryRerun: current?.promptId === promptId ? current.recoveryRerun : false,
+  });
+}
+
+function stampRecovery(projectDir: string, recovery: string, rerun: boolean): void {
+  const run = readRunFile(projectDir);
+  if (run === null) return;
+  writeRun(projectDir, { ...run, recovery, recoveryRerun: rerun });
+}
+
+function recoveredReason(promptId: string): string {
+  return `${promptId} recovered: output verified, passed`;
+}
+
+function rerunReason(promptId: string): string {
+  return `${promptId} rerun after restart`;
+}
+
+function buildLogPath(projectDir: string, promptId: string): string {
+  return path.join(projectDir, ".hitchhiker", "logs", `build-${promptId}.log`);
+}
+
+function readBuildLog(projectDir: string, promptId: string): string {
+  try {
+    return readFileSync(buildLogPath(projectDir, promptId), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function resetBuildLog(projectDir: string, promptId: string): void {
+  const file = buildLogPath(projectDir, promptId);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, "", "utf8");
+}
+
+function appendBuildLog(projectDir: string, promptId: string, chunk: string): void {
+  try {
+    const file = buildLogPath(projectDir, promptId);
+    mkdirSync(path.dirname(file), { recursive: true });
+    appendFileSync(file, chunk);
+  } catch {
+    // A log write must not skip settlement.
+  }
+}
+
+function expectedOutputFiles(projectDir: string, promptId: string): string[] {
+  let text = "";
+  try {
+    text = readFileSync(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`), "utf8");
+  } catch {
+    return [];
+  }
+  return parseExpectedFiles(text);
+}
+
+function parseExpectedFiles(markdown: string): string[] {
+  const match = /^Files:\s*(.+)$/m.exec(markdown);
+  if (match === null || match[1] === undefined) return [];
+  const raw = match[1].trim();
+  if (raw === "" || raw.toLowerCase() === "none") return [];
+  const files: string[] = [];
+  for (const part of raw.split(",")) {
+    const rel = safeRelative(part.trim());
+    if (rel !== null) files.push(rel);
+  }
+  return files;
+}
+
+function safeRelative(value: string): string | null {
+  const norm = value.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (norm === "" || norm.startsWith("/") || /^[a-zA-Z]:/.test(norm)) return null;
+  if (norm.split("/").some((part) => part === ".." || part === "")) return null;
+  return norm;
+}
+
+function outputExists(projectDir: string, rel: string): boolean {
+  try {
+    return statSync(path.join(projectDir, rel)).isFile();
+  } catch {
+    return false;
   }
 }
 
@@ -716,6 +1028,8 @@ async function settleItem(
         filesWritten: [...files],
         reason: text === "" ? "The build did not finish." : text,
         pid: null,
+        recovery: "",
+        recoveryRerun: false,
       });
     } catch {
       // A second disk failure leaves the watchdog to catch a still-running row.
@@ -741,6 +1055,8 @@ function liveRun(
     filesWritten: [...files],
     reason: "",
     pid,
+    recovery: "",
+    recoveryRerun: false,
   };
 }
 
@@ -767,6 +1083,8 @@ async function finishItem(
     filesWritten: [...files],
     reason: publicText(reason),
     pid: null,
+    recovery: "",
+    recoveryRerun: false,
   });
 }
 
@@ -872,7 +1190,12 @@ function readRunFile(projectDir: string): RunFile | null {
   try {
     const parsed: unknown = JSON.parse(readFileSync(runPath(projectDir), "utf8"));
     if (!isRun(parsed)) return null;
-    return parsed;
+    const record = parsed as RunFile & { recovery?: unknown; recoveryRerun?: unknown };
+    return {
+      ...record,
+      recovery: typeof record.recovery === "string" ? record.recovery : "",
+      recoveryRerun: record.recoveryRerun === true,
+    };
   } catch {
     return null;
   }
@@ -881,7 +1204,15 @@ function readRunFile(projectDir: string): RunFile | null {
 function writeRun(projectDir: string, run: RunFile): void {
   const previous = readRunFile(projectDir);
   const files = new Set([...(previous?.filesWritten ?? []), ...run.filesWritten]);
-  const next: RunFile = { ...run, filesWritten: [...files].sort().slice(0, FILE_CAP) };
+  const same = previous?.promptId === run.promptId;
+  const recovery = run.recovery !== "" ? run.recovery : (previous?.recovery ?? "");
+  const recoveryRerun = run.recoveryRerun || (same && previous?.recoveryRerun === true);
+  const next: RunFile = {
+    ...run,
+    filesWritten: [...files].sort().slice(0, FILE_CAP),
+    recovery,
+    recoveryRerun,
+  };
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(runPath(projectDir), `${JSON.stringify(next)}\n`, "utf8");

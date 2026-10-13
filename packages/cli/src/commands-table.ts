@@ -24,6 +24,7 @@ export const IMPLEMENTED_COMMANDS = [
   "context",
   "next",
   "brief",
+  "build",
 ] as const;
 
 export type ImplementedCommand = (typeof IMPLEMENTED_COMMANDS)[number];

@@ -22,6 +22,7 @@ The hh CLI can run these today:
 - `hh context` or `hh context --project <dir>` prints what the Guide knows. `--audit` prints the last call's packet sections.
 - `hh next --status` or `hh next --status --project <dir>` prints the phase, open gates, and the next step. It does not change the project.
 - `hh brief` or `hh brief --project <dir>` drafts the Site Brief when it is idle, or shows the one already on disk. `--approve` approves it and starts the next phase. Pass `--approve` only after the user says yes.
+- `hh build --resume` or `hh build --resume --project <dir>` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. `hh next --resume` does the same.
 - `hh improve` runs a bounded loop on an improve branch. A human merges. It refuses main and a dirty tree.
 - `hh improve supervise` runs the standing loop on main. It pushes a kept commit with `git push origin main` and stops if origin/main does not contain that commit. It refuses a force push.
 

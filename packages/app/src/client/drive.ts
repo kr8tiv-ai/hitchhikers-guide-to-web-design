@@ -145,6 +145,7 @@ export function mountDrive(env: DriveEnv): () => void {
     const buildAction = findBuildAction(target);
     if (buildAction !== null) {
       event.preventDefault?.();
+      if (gateLocked(buildAction)) return;
       const action = buildAction.getAttribute("data-action");
       const promptId = buildAction.getAttribute("data-prompt");
       if ((action === "retry" || action === "resume") && promptId !== null && promptId !== "") {
@@ -331,6 +332,7 @@ export function parseDriveRun(value: unknown): DriveRun | null {
   const lastLines = run.lastLines.filter((line): line is string => typeof line === "string");
   const filesWritten = run.filesWritten.filter((file): file is string => typeof file === "string");
   if (lastLines.length !== run.lastLines.length || filesWritten.length !== run.filesWritten.length) return null;
+  const recovery = typeof run.recovery === "string" ? run.recovery : "";
   return {
     promptId: run.promptId,
     status: run.status,
@@ -340,6 +342,7 @@ export function parseDriveRun(value: unknown): DriveRun | null {
     lastLines,
     filesWritten,
     reason: run.reason,
+    recovery,
   };
 }
 

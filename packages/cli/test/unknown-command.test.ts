@@ -124,7 +124,7 @@ test("implemented names are the dispatch cases in main.ts", () => {
     (match) => match[1] ?? "",
   );
   assert.deepEqual(cases, [...IMPLEMENTED_COMMANDS]);
-  assert.equal(IMPLEMENTED_COMMANDS.length, 15);
+  assert.equal(IMPLEMENTED_COMMANDS.length, 16);
   assert.equal(IMPLEMENTED_COMMANDS.includes("save"), true);
 });
 

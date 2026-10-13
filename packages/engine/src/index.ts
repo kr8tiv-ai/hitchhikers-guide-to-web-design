@@ -190,9 +190,13 @@ export {
   getBuildRunner,
   hasProjectBuildRunner,
   installLiveBuildRunner,
+  continueSiteBuild,
+  decideBuildRecovery,
+  logHasCleanEnd,
   prepareSiteBuild,
   readBuildRun,
   reconcileSiteBuild,
+  recoverSiteBuild,
   resetSiteBuildWatch,
   resumeSiteBuild,
   retrySiteBuild,
@@ -204,6 +208,9 @@ export {
   siteBuildWatchConfig,
 } from "./guide/site-build.ts";
 export type {
+  BuildContinueOutcome,
+  BuildRecoveryDecision,
+  BuildRecoveryInput,
   BuildRunView,
   BuildSpawn,
   BuildSpawnHandle,

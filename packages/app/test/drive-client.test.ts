@@ -200,6 +200,23 @@ test("a throwing theme probe still posts pause", async () => {
   assert.match(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /data-status="paused"/);
 });
 
+test("a disabled Resume control does not start a second run", async () => {
+  const view = desk({ items: [] });
+  mountDrive(view.env);
+  await flush();
+  const before = view.calls.length;
+  const button = element({
+    "data-action": "resume",
+    "data-prompt": "003",
+    disabled: "",
+    "aria-disabled": "true",
+  });
+  view.click(button);
+  await flush();
+  assert.equal(view.calls.length, before);
+  assert.equal(view.calls.some((call) => call.url === "/api/drive/resume"), false);
+});
+
 test("hostMatchMedia calls matchMedia on the window so theme detection does not throw", () => {
   const host = globalThis as { matchMedia?: (query: string) => { matches: boolean } };
   const previous = host.matchMedia;

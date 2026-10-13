@@ -5,6 +5,7 @@ import {
   clearProjectBuildRunner,
   getBuildRunner,
   installLiveBuildRunner,
+  recoverSiteBuild,
   setProjectBuildRunner,
   type BuildSpawn,
 } from "@hitchhiker/engine";
@@ -85,6 +86,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     throw new Error(`Project directory does not exist: ${projectDir}`);
   }
   bindBuildRunner(projectDir, opts);
+  void recoverSiteBuild(projectDir);
 
   const app = await createDeskApp({
     projectDir,

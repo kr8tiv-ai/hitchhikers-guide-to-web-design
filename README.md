@@ -388,6 +388,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh context` | What the Guide knows: summary, decisions, and assets. `--audit` prints the last packet sections. |
 | `hh next` | `hh next --status` prints the phase, open gates, and the next step. It does not change the project. |
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
+| `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. |
 
 ## Attachments
 

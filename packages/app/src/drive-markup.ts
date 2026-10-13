@@ -39,6 +39,8 @@ export interface DriveRun {
   lastLines: string[];
   filesWritten: string[];
   reason: string;
+  /** Restart recovery notice. Shown when the run reason has moved on. */
+  recovery?: string;
 }
 
 export interface DrivePageOptions {
@@ -139,7 +141,8 @@ export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null
             <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/approve" data-tip="Opens Approvals, where a plan waits for a yes.">Approve the prompts</a></p>
           </div>`;
   }
-  const rows = items.map((item) => row(item)).join("\n");
+  const live = items.some((item) => item.status === "running") || run?.status === "running";
+  const rows = items.map((item) => row(item, live)).join("\n");
   const tail =
     run == null
       ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
@@ -416,15 +419,16 @@ function gateLink(action: "approve" | "elevate" | "deploy", label: string, empty
   return `<a class="hh-btn hh-btn--secondary" href="/approve" data-action="${action}"${locked}>${label}</a>`;
 }
 
-function row(item: DriveItem): string {
+function row(item: DriveItem, live = false): string {
   const id = escapeHtml(item.id);
   const current = item.status === "running" ? ` class="is-current"` : "";
   const passed = item.status === "passed" ? " hh-drive__status--passed" : "";
+  const held = live ? ` disabled aria-disabled="true"` : "";
   const action =
     item.status === "failed"
       ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>`
       : item.status === "interrupted"
-        ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="resume" data-prompt="${id}">Resume</button>`
+        ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="resume" data-prompt="${id}"${held}>Resume</button>`
         : "";
   return `<tr${current} data-id="${id}" data-kind="${item.kind}" data-status="${item.status}">
               <td class="hh-drive__id" data-label="Prompt">${id}</td>
@@ -452,8 +456,13 @@ function runPanel(run: DriveRun): string {
     run.filesWritten.length === 0
       ? `<p data-files-written>No project files yet.</p>`
       : `<ul data-files-written>${run.filesWritten.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul>`;
-  const reason =
-    run.reason.trim() === "" ? "" : `<p data-build-reason>${escapeHtml(run.reason)}</p>`;
+  const recovery = (run.recovery ?? "").trim();
+  const why = run.reason.trim();
+  const recoveryLine =
+    recovery === "" ? "" : `<p data-build-reason data-recovery>${escapeHtml(recovery)}</p>`;
+  const reasonLine =
+    why === "" || why === recovery ? "" : `<p data-build-reason>${escapeHtml(why)}</p>`;
+  const reason = `${recoveryLine}${reasonLine}`;
   const log = lines === "" ? "" : `<pre data-build-log>${lines}</pre>`;
   return `<section data-region="build-run">
             <p data-build-model="${model}" data-build-effort="${effort}" data-build-elapsed="${elapsedMs}">Model ${model}, effort ${effort}, duration ${durationText(elapsedMs)}.</p>

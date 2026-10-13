@@ -18,7 +18,7 @@ import { runImprove } from "./improve/run.ts";
 import { runSupervise } from "./improve/supervisor.ts";
 import { runInstall } from "./install.ts";
 import { runBriefCommand } from "./commands/brief.ts";
-import { runContextCommand, runDoctorContext, runNextCommand } from "./commands/context.ts";
+import { runBuildCommand, runContextCommand, runDoctorContext, runNextCommand } from "./commands/context.ts";
 
 const HELP = "hh doctor [--project <dir>]";
 
@@ -445,6 +445,8 @@ async function dispatchImplemented(
       return runNextCommand(argv.slice(1), deps.cwd ?? process.cwd());
     case "brief":
       return runBriefCommand(argv.slice(1), deps.cwd ?? process.cwd());
+    case "build":
+      return runBuildCommand(argv.slice(1), deps.cwd ?? process.cwd());
   }
 }
 

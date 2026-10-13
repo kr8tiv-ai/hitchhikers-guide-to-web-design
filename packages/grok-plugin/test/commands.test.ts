@@ -252,7 +252,12 @@ test("COMMANDS matches the hh CLI subcommands", () => {
     assert.equal(command.cli.length, 1);
     assert.equal(command.sideEffect, command.name === "assets");
     if (command.skillDir === "") {
-      assert.ok(command.name === "install" || command.name === "tools" || command.name === "improve");
+      assert.ok(
+        command.name === "install" ||
+          command.name === "tools" ||
+          command.name === "improve" ||
+          command.name === "build",
+      );
     } else {
       assert.equal(SKILL_NAMES.includes(command.skillDir), true, command.name);
     }
