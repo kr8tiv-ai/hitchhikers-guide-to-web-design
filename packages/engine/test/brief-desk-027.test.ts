@@ -104,10 +104,11 @@ test("approve starts one build and a second approve does not call the model", as
     assert.equal(state?.slice, "Guide Entry");
     assert.equal(state?.promptId, "guide-entry");
     const queue = await loadQueue(dir);
-    assert.equal(queue?.items.length, 1);
-    assert.equal(queue?.items[0]?.id, "guide-entry");
+    assert.ok((queue?.items.length ?? 0) > 1);
+    assert.equal(queue?.items[0]?.id, "001");
     assert.equal(queue?.items[0]?.kind, "build");
-    assert.equal(queue?.items[0]?.status, "running");
+    assert.equal(queue?.items[0]?.status, "queued");
+    assert.equal(queue?.items.some((item) => item.id === "guide-entry"), false);
     const briefFile = path.join(dir, ".hitchhiker", "SITE-BRIEF.md");
     assert.equal(existsSync(briefFile), true);
     assert.match(readFileSync(briefFile, "utf8"), /The site helps a visitor book a visit/);
@@ -118,7 +119,7 @@ test("approve starts one build and a second approve does not call the model", as
     assert.equal(again.buildStarted, true);
     assert.equal(tasks.filter((task) => task === "brief-draft").length, 1);
     const queueAgain = await loadQueue(dir);
-    assert.equal(queueAgain?.items.length, 1);
+    assert.equal(queueAgain?.items.length, queue?.items.length);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

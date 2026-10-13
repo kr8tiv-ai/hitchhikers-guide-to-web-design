@@ -141,7 +141,7 @@ import {
   writeDraftPost,
   type SavedFile,
 } from "./draft-file.ts";
-import { pauseDrive, readDashboard, readDriveJson, type DriveResult } from "./drive.ts";
+import { pauseDrive, readDashboard, readDriveJson, readDriveProgress, resumeDrive, retryDrive, type DriveResult } from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
   applySettingsPost,
@@ -895,6 +895,16 @@ async function handlePost(
   }
   if (pathname === "/api/drive/pause") {
     sendDriveResult(req, res, await pauseDrive(projectDir));
+    return;
+  }
+  if (pathname === "/api/drive/retry" || pathname === "/api/drive/resume") {
+    const promptId = await readDrivePromptId(req);
+    if (promptId === null) {
+      sendJson(req, res, 400, { error: "Name the prompt." });
+      return;
+    }
+    const result = pathname === "/api/drive/retry" ? await retryDrive(projectDir, promptId) : await resumeDrive(projectDir, promptId);
+    sendDriveResult(req, res, result);
     return;
   }
   if (pathname === "/api/brand") {
@@ -1816,6 +1826,11 @@ async function handleGet(
   }
   if (pathname === "/api/drive") {
     sendDriveResult(req, res, await readDriveJson(projectDir));
+    return;
+  }
+  if (pathname === "/api/drive/progress") {
+    const progress = await readDriveProgress(projectDir);
+    sendJson(req, res, progress.status, progress.body);
     return;
   }
   if (pathname === "/api/session") {
@@ -4131,6 +4146,20 @@ function mustReplace(html: string, from: string, to: string, label: string): str
 function replaceBlock(html: string, pattern: RegExp, to: string, label: string): string {
   if (!pattern.test(html)) throw new Error(`Desk shell is missing ${label}.`);
   return html.replace(pattern, to);
+}
+
+async function readDrivePromptId(req: IncomingMessage): Promise<string | null> {
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) return null;
+  try {
+    const parsed: unknown = JSON.parse(capped.body.toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    const id = (parsed as { id?: unknown }).id;
+    if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) return null;
+    return id;
+  } catch {
+    return null;
+  }
 }
 
 function sendDriveResult(req: IncomingMessage, res: ServerResponse, result: DriveResult): void {

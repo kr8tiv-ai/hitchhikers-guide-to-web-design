@@ -15,7 +15,7 @@ import {
   verdictsHtml,
   watchdogHtml,
 } from "../drive-markup.ts";
-import type { DriveItem } from "../drive-markup.ts";
+import type { DriveItem, DriveRun } from "../drive-markup.ts";
 
 const POLL_MS = 3_000;
 const ID_PATTERN = /^[a-z0-9-]+$/;
@@ -62,9 +62,9 @@ export function parseDriveQueue(value: unknown): DriveItem[] | null {
   return items;
 }
 
-export function paintDrive(document: DriveDocument, items: readonly DriveItem[]): void {
+export function paintDrive(document: DriveDocument, items: readonly DriveItem[], run: DriveRun | null = null): void {
   const queue = document.querySelector("#drive-queue-body");
-  if (queue !== null) queue.innerHTML = queueBodyHtml(items);
+  if (queue !== null) queue.innerHTML = queueBodyHtml(items, run);
   const progress = document.querySelector("#drive-progress");
   if (progress !== null) progress.innerHTML = progressHtml(items);
   const cost = document.querySelector("[data-cost-line]");
@@ -125,7 +125,9 @@ export function mountDrive(env: DriveEnv): () => void {
       setNote(env.document, "The queue came back in an unknown shape.");
       return;
     }
-    paintDrive(env.document, items);
+    const run = await readRun(env);
+    if (ticket !== generation || pausePending) return;
+    paintDrive(env.document, items, run);
   };
 
   const onClick = (event: DriveEvent): void => {
@@ -140,8 +142,58 @@ export function mountDrive(env: DriveEnv): () => void {
       event.preventDefault?.();
       return;
     }
+    const buildAction = findBuildAction(target);
+    if (buildAction !== null) {
+      event.preventDefault?.();
+      const action = buildAction.getAttribute("data-action");
+      const promptId = buildAction.getAttribute("data-prompt");
+      if ((action === "retry" || action === "resume") && promptId !== null && promptId !== "") {
+        void postBuildAction(action, promptId);
+      }
+      return;
+    }
     if (findPause(target) === null) return;
     void postPause();
+  };
+
+  const postBuildAction = async (action: "retry" | "resume", promptId: string): Promise<void> => {
+    if (token === null) {
+      setNote(env.document, "Reload the page.");
+      return;
+    }
+    if (pausePending) return;
+    pausePending = true;
+    generation += 1;
+    const ticket = generation;
+    setNote(env.document, "");
+    try {
+      const response = await env.fetch(`/api/drive/${action}`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+          "x-hh-csrf": token,
+        },
+        body: JSON.stringify({ id: promptId }),
+      });
+      if (ticket !== generation) return;
+      const payload = await readPayload(response);
+      if (!response.ok) {
+        setNote(env.document, pauseFailure(response.status, payload));
+        return;
+      }
+      const items = parseDriveQueue(payload);
+      if (items === null) {
+        setNote(env.document, "The queue came back in an unknown shape.");
+        return;
+      }
+      const run = await readRun(env);
+      paintDrive(env.document, items, run);
+    } catch {
+      if (ticket === generation) setNote(env.document, "The build did not reach the desk.");
+    } finally {
+      if (ticket === generation) pausePending = false;
+    }
   };
 
   const postPause = async (): Promise<void> => {
@@ -258,6 +310,47 @@ const GATE_ACTIONS = new Set(["pause", "approve", "elevate", "deploy"]);
 
 function findPause(start: DriveElement): DriveElement | null {
   return findMarked(start, "data-action", "pause");
+}
+
+function findBuildAction(start: DriveElement): DriveElement | null {
+  const retry = findMarked(start, "data-action", "retry");
+  if (retry !== null) return retry;
+  return findMarked(start, "data-action", "resume");
+}
+
+export function parseDriveRun(value: unknown): DriveRun | null {
+  if (!isRecord(value) || !isRecord(value.run)) return null;
+  const run = value.run;
+  if (typeof run.promptId !== "string" || typeof run.model !== "string" || typeof run.effort !== "string") {
+    return null;
+  }
+  if (typeof run.status !== "string" || typeof run.reason !== "string" || typeof run.elapsedMs !== "number") {
+    return null;
+  }
+  if (!Array.isArray(run.lastLines) || !Array.isArray(run.filesWritten)) return null;
+  const lastLines = run.lastLines.filter((line): line is string => typeof line === "string");
+  const filesWritten = run.filesWritten.filter((file): file is string => typeof file === "string");
+  if (lastLines.length !== run.lastLines.length || filesWritten.length !== run.filesWritten.length) return null;
+  return {
+    promptId: run.promptId,
+    status: run.status,
+    model: run.model,
+    effort: run.effort,
+    elapsedMs: run.elapsedMs,
+    lastLines,
+    filesWritten,
+    reason: run.reason,
+  };
+}
+
+async function readRun(env: DriveEnv): Promise<DriveRun | null> {
+  try {
+    const response = await env.fetch("/api/drive/progress", { cache: "no-store" });
+    if (!response.ok) return null;
+    return parseDriveRun(await readPayload(response));
+  } catch {
+    return null;
+  }
 }
 
 function findGate(start: DriveElement): DriveElement | null {

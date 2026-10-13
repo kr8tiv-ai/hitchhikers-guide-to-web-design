@@ -147,8 +147,8 @@ test("pause posts the token and repaints the paused row", async () => {
   assert.ok(pause);
   view.click(pause);
   await flush();
-  const posted = view.calls[1];
-  assert.equal(posted?.url, "/api/drive/pause");
+  const posted = view.calls.find((call) => call.url === "/api/drive/pause");
+  assert.ok(posted);
   assert.equal(posted?.init?.method, "POST");
   const headers = new Headers(posted?.init?.headers);
   assert.equal(headers.get("x-hh-csrf"), TOKEN);
@@ -167,7 +167,8 @@ test("an empty queue does not post, and the theme control still flips", async ()
   assert.equal(pause.getAttribute("aria-disabled"), "true");
   view.click(pause);
   await flush();
-  assert.equal(view.calls.length, 1);
+  assert.equal(view.calls.filter((call) => call.url === "/api/drive/pause").length, 0);
+  assert.equal(view.calls[0]?.url, "/api/drive");
   const toggle = view.regions.get("[data-theme-toggle]");
   assert.ok(toggle);
   view.click(toggle);
@@ -195,7 +196,7 @@ test("a throwing theme probe still posts pause", async () => {
   assert.ok(pause);
   view.click(pause);
   await flush();
-  assert.equal(view.calls[1]?.url, "/api/drive/pause");
+  assert.equal(view.calls.find((call) => call.url === "/api/drive/pause")?.url, "/api/drive/pause");
   assert.match(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /data-status="paused"/);
 });
 

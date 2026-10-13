@@ -8,7 +8,6 @@ import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
 import type { think } from "../ai/think.ts";
 import { loadDecisions, syncAnswer } from "../context/index.ts";
 import { writeRevisitId } from "../interview.ts";
-import { loadQueue, saveQueue } from "../queue-file.ts";
 import { loadState, saveState, type GuideState } from "../state.ts";
 import {
   BRIEF_ANSWER_IDS,
@@ -19,6 +18,7 @@ import {
 } from "./brief-loop.ts";
 import { BRIEF_DRAFT_TASK, BRIEF_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
+import { ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
 
 export const BRIEF_BUILD_ID = "guide-entry";
@@ -195,11 +195,10 @@ async function startBuild(projectDir: string): Promise<void> {
     updatedAt: new Date().toISOString(),
   };
   await saveState(projectDir, next);
-  const queue = (await loadQueue(projectDir)) ?? { items: [] };
-  if (!queue.items.some((item) => item.id === BRIEF_BUILD_ID)) {
-    queue.items.push({ id: BRIEF_BUILD_ID, kind: "build", status: "running" });
-    await saveQueue(projectDir, queue);
-  }
+  const pending = readPending(projectDir);
+  const markdown = pending.draft === null ? "" : renderSiteBrief(pending.draft);
+  await prepareSiteBuild(projectDir, markdown);
+  void ensureSiteBuild(projectDir);
 }
 
 async function runApprove(projectDir: string, thinkFn: typeof think): Promise<BriefDeskView> {

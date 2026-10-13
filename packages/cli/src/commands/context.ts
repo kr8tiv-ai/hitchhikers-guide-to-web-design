@@ -5,11 +5,19 @@
 
 import {
   auditContext,
+  ensureSiteBuild,
   formatStatusLine,
+  getBuildRunner,
+  hasProjectBuildRunner,
+  installLiveBuildRunner,
+  loadQueue,
+  reconcileSiteBuild,
   renderContextText,
   repairAssets,
   repairCursor,
   repairDecisions,
+  resumeSiteBuild,
+  retrySiteBuild,
 } from "@hitchhiker/engine";
 
 export interface CommandResult {
@@ -38,10 +46,33 @@ export async function runContextCommand(argv: readonly string[], cwd: string): P
   return { exitCode: 0, stdout: renderContextText(project.dir, argv.includes("--audit")) };
 }
 
-export function runNextCommand(argv: readonly string[], cwd: string): CommandResult {
-  if (!argv.includes("--status")) return { exitCode: 2, stdout: "hh next --status [--project <dir>]\n" };
+const NEXT_USAGE = "hh next --status [--project <dir>]\nhh next --run [--project <dir>]\n";
+
+export async function runNextCommand(argv: readonly string[], cwd: string): Promise<CommandResult> {
+  const status = argv.includes("--status");
+  const run = argv.includes("--run");
+  if (!status && !run) return { exitCode: 2, stdout: NEXT_USAGE };
   const project = projectFrom(argv, cwd);
-  if (!project.ok) return { exitCode: 2, stdout: "hh next --status [--project <dir>]\n" };
+  if (!project.ok) return { exitCode: 2, stdout: NEXT_USAGE };
+  if (run) {
+    if (!hasProjectBuildRunner(project.dir) && getBuildRunner() === null) installLiveBuildRunner();
+    await reconcileSiteBuild(project.dir);
+    const queue = await loadQueue(project.dir);
+    const interrupted = queue?.items.find((item) => item.status === "interrupted");
+    if (interrupted !== undefined) {
+      await resumeSiteBuild(project.dir, interrupted.id);
+      return { exitCode: 0, stdout: "The build is started.\n" };
+    }
+    const failed = queue?.items.find((item) => item.status === "failed");
+    if (failed !== undefined) {
+      await retrySiteBuild(project.dir, failed.id);
+      return { exitCode: 0, stdout: "The build is started.\n" };
+    }
+    const waiting = queue?.items.some((item) => item.status === "queued" || item.status === "running");
+    if (waiting !== true) return { exitCode: 1, stdout: "No site build is queued.\n" };
+    await ensureSiteBuild(project.dir);
+    return { exitCode: 0, stdout: "The build is started.\n" };
+  }
   return { exitCode: 0, stdout: `${formatStatusLine(project.dir)}\n` };
 }
 

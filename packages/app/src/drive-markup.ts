@@ -9,7 +9,16 @@ import { documentHeadExtras } from "./design/document-head.ts";
 
 export const DRIVE_MAX_ROWS = 200;
 
-export const DRIVE_STATUSES = ["queued", "running", "passed", "fixing", "escalated", "paused"] as const;
+export const DRIVE_STATUSES = [
+  "queued",
+  "running",
+  "passed",
+  "failed",
+  "interrupted",
+  "fixing",
+  "escalated",
+  "paused",
+] as const;
 
 export type DriveStatus = (typeof DRIVE_STATUSES)[number];
 export type DriveKind = "build" | "review";
@@ -20,15 +29,30 @@ export interface DriveItem {
   status: DriveStatus;
 }
 
+/** Live site-build progress. The queue file itself stays items only. */
+export interface DriveRun {
+  promptId: string;
+  status: string;
+  model: string;
+  effort: string;
+  elapsedMs: number;
+  lastLines: string[];
+  filesWritten: string[];
+  reason: string;
+}
+
 export interface DrivePageOptions {
   token?: string;
   scriptUrl?: string;
+  run?: DriveRun | null;
 }
 
 const STATUS_LABEL: Record<DriveStatus, string> = {
   queued: "Queued",
   running: "Running",
   passed: "Passed",
+  failed: "Failed",
+  interrupted: "Interrupted",
   fixing: "Fixing",
   escalated: "Escalated",
   paused: "Paused",
@@ -92,6 +116,8 @@ export function progressHtml(items: readonly DriveItem[]): string {
   const rows: Array<[string, string]> = [["Passed", `${counts.passed} of ${items.length}`]];
   const labels: Array<[DriveStatus, string]> = [
     ["running", "Running"],
+    ["failed", "Failed"],
+    ["interrupted", "Interrupted"],
     ["fixing", "Fixing"],
     ["paused", "Paused"],
     ["escalated", "Escalated"],
@@ -105,7 +131,7 @@ export function progressHtml(items: readonly DriveItem[]): string {
   return `<dl class="hh-drive__ledger" data-region="progress">${body}</dl>`;
 }
 
-export function queueBodyHtml(items: readonly DriveItem[]): string {
+export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null): string {
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>
@@ -114,6 +140,10 @@ export function queueBodyHtml(items: readonly DriveItem[]): string {
           </div>`;
   }
   const rows = items.map((item) => row(item)).join("\n");
+  const tail =
+    run == null
+      ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
+      : runPanel(run);
   return `<div class="hh-table-wrap">
             <table class="hh-table" aria-labelledby="queue-title">
               <thead>
@@ -128,7 +158,7 @@ export function queueBodyHtml(items: readonly DriveItem[]): string {
               </tbody>
             </table>
           </div>
-          <p class="hh-small">Model, effort, and duration are not on the queue.</p>`;
+          ${tail}`;
 }
 
 export function escalationsHtml(items: readonly DriveItem[]): string {
@@ -214,7 +244,7 @@ export function renderDriveDocument(
             <p id="drive-pause-note" class="hh-approval__note" role="status" hidden></p>
           </div>
           <div id="drive-queue-body">
-            ${queueBodyHtml(items)}
+            ${queueBodyHtml(items, options?.run)}
           </div>
         </section>
 
@@ -361,6 +391,8 @@ function tally(items: readonly DriveItem[]): Record<DriveStatus, number> {
     queued: 0,
     running: 0,
     passed: 0,
+    failed: 0,
+    interrupted: 0,
     fixing: 0,
     escalated: 0,
     paused: 0,
@@ -388,11 +420,49 @@ function row(item: DriveItem): string {
   const id = escapeHtml(item.id);
   const current = item.status === "running" ? ` class="is-current"` : "";
   const passed = item.status === "passed" ? " hh-drive__status--passed" : "";
+  const action =
+    item.status === "failed"
+      ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>`
+      : item.status === "interrupted"
+        ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="resume" data-prompt="${id}">Resume</button>`
+        : "";
   return `<tr${current} data-id="${id}" data-kind="${item.kind}" data-status="${item.status}">
               <td class="hh-drive__id" data-label="Prompt">${id}</td>
               <td data-label="Kind">${KIND_LABEL[item.kind]}</td>
-              <td class="hh-drive__status${passed}" data-label="Status">${STATUS_LABEL[item.status]}</td>
+              <td class="hh-drive__status${passed}" data-label="Status">${STATUS_LABEL[item.status]}${action}</td>
             </tr>`;
+}
+
+function durationText(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minutes <= 0) return `${rest} s`;
+  return `${minutes} min ${rest} s`;
+}
+
+function runPanel(run: DriveRun): string {
+  const model = escapeHtml(run.model);
+  const effort = escapeHtml(run.effort);
+  const promptId = escapeHtml(run.promptId);
+  const status = escapeHtml(run.status);
+  const elapsedMs = Number.isFinite(run.elapsedMs) ? Math.max(0, Math.round(run.elapsedMs)) : 0;
+  const lines = run.lastLines.map((line) => escapeHtml(line)).join("\n");
+  const files =
+    run.filesWritten.length === 0
+      ? `<p data-files-written>No project files yet.</p>`
+      : `<ul data-files-written>${run.filesWritten.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul>`;
+  const reason =
+    run.reason.trim() === "" ? "" : `<p data-build-reason>${escapeHtml(run.reason)}</p>`;
+  const log = lines === "" ? "" : `<pre data-build-log>${lines}</pre>`;
+  return `<section data-region="build-run">
+            <p data-build-model="${model}" data-build-effort="${effort}" data-build-elapsed="${elapsedMs}">Model ${model}, effort ${effort}, duration ${durationText(elapsedMs)}.</p>
+            <p data-current-prompt="${promptId}">Current prompt ${promptId}.</p>
+            <p>Status ${status}.</p>
+            ${log}
+            ${files}
+            ${reason}
+          </section>`;
 }
 
 function reviewPath(id: string): string | null {

@@ -168,6 +168,25 @@ export {
   reviseSiteBrief,
 } from "./guide/brief-desk.ts";
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
+export {
+  BUILD_EFFORT,
+  BUILD_MODEL,
+  buildSpawnArgs,
+  clearProjectBuildRunner,
+  ensureSiteBuild,
+  getBuildRunner,
+  hasProjectBuildRunner,
+  installLiveBuildRunner,
+  prepareSiteBuild,
+  readBuildRun,
+  reconcileSiteBuild,
+  resumeSiteBuild,
+  retrySiteBuild,
+  setBuildRunner,
+  setProjectBuildRunner,
+  siteBuildSettled,
+} from "./guide/site-build.ts";
+export type { BuildRunView, BuildSpawn, BuildSpawnHandle, BuildSpawnRequest, BuildSpawnResult } from "./guide/site-build.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
 export { STATIC_ANSWER_ERROR, bannedAnswer } from "./guide/answer-guard.ts";

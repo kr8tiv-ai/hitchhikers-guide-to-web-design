@@ -1,6 +1,13 @@
 import { existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
+import {
+  clearProjectBuildRunner,
+  getBuildRunner,
+  installLiveBuildRunner,
+  setProjectBuildRunner,
+  type BuildSpawn,
+} from "@hitchhiker/engine";
 import { openBrowser, type BrowserSpawn } from "./open-browser.ts";
 import type { DeskPreflight } from "./card.ts";
 import { createDeskApp, type GuideThink, type TurnHandler } from "./routes.ts";
@@ -42,6 +49,8 @@ export interface StartServerOptions {
   tools?: ToolRuntime;
   /** Clock for the install confirm token. Tests move it to prove expiry. */
   toolNow?: () => number;
+  /** Stub or live site-build spawn. Tests pass a stub that writes files and never calls grok. */
+  buildSpawn?: BuildSpawn;
 }
 
 /**
@@ -75,6 +84,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     throw new Error(`Project directory does not exist: ${projectDir}`);
   }
+  bindBuildRunner(projectDir, opts);
 
   const app = await createDeskApp({
     projectDir,
@@ -121,6 +131,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   try {
     await listen(server, requestedPort);
   } catch (error: unknown) {
+    clearProjectBuildRunner(projectDir);
     app.close();
     if (errorCode(error) === "EADDRINUSE") {
       throw new Error(
@@ -132,6 +143,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
 
   const address = server.address();
   if (address === null || typeof address === "string" || address.address !== LOOPBACK) {
+    clearProjectBuildRunner(projectDir);
     app.close();
     await closeServer(server);
     throw new Error("The desk did not bind to 127.0.0.1.");
@@ -169,12 +181,28 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     opened,
     close() {
       if (closing === null) {
+        clearProjectBuildRunner(projectDir);
         app.close();
         closing = closeServer(server);
       }
       return closing;
     },
   };
+}
+
+function bindBuildRunner(projectDir: string, opts: StartServerOptions): void {
+  if (opts.buildSpawn !== undefined) {
+    setProjectBuildRunner(projectDir, opts.buildSpawn);
+    return;
+  }
+  const underTest = process.env.NODE_TEST_CONTEXT !== undefined || process.execArgv.includes("--test");
+  if (opts.guideThink !== undefined || underTest) {
+    setProjectBuildRunner(projectDir, null);
+    return;
+  }
+  if (getBuildRunner() === null) installLiveBuildRunner();
+  const live = getBuildRunner();
+  setProjectBuildRunner(projectDir, live);
 }
 
 function sendFixed(

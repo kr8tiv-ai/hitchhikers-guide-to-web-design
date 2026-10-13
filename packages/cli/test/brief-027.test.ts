@@ -57,10 +57,12 @@ test("hh brief drafts with the packet, shows without a second call, and approve 
     assert.match(approved.stdout, /phase: Babel Fish/);
     assert.equal(tasks.filter((task) => task === "brief-draft").length, 1);
     const queue = await loadQueue(dir);
-    assert.equal(queue?.items.length, 1);
+    assert.ok((queue?.items.length ?? 0) > 1);
+    assert.equal(queue?.items[0]?.id, "001");
+    assert.equal(queue?.items[0]?.status, "queued");
     const again = await runBriefCommand(["--approve", "--project", dir], process.cwd(), think as never);
     assert.equal(again.exitCode, 0);
-    assert.equal((await loadQueue(dir))?.items.length, 1);
+    assert.equal((await loadQueue(dir))?.items.length, queue?.items.length);
     assert.equal(tasks.filter((task) => task === "brief-draft").length, 1);
     const unknown = await runCli(["brief", "--nope"]);
     assert.equal(unknown.exitCode, 2);

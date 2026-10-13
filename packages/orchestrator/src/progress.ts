@@ -242,6 +242,8 @@ function isStatus(value: unknown): value is QueueStatus {
     value === "queued" ||
     value === "running" ||
     value === "passed" ||
+    value === "failed" ||
+    value === "interrupted" ||
     value === "fixing" ||
     value === "escalated" ||
     value === "paused"

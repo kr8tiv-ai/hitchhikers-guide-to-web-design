@@ -173,7 +173,8 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     const drive = await raw(handle.port, "GET", "/hh-dashboard");
     assert.match(drive.body, /Improbability Drive/);
     assert.match(drive.body, /Babel Fish/);
-    assert.match(drive.body, /data-id="guide-entry"/);
+    assert.match(drive.body, /data-id="001"/);
+    assert.doesNotMatch(drive.body, /data-id="guide-entry"/);
     assert.match(drive.body, /The site helps a visitor book a visit/);
     const again = await raw(
       handle.port,
@@ -184,7 +185,9 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     );
     assert.equal(again.status, 303);
     const queue = await loadQueue(dir);
-    assert.equal(queue?.items.length, 1);
+    assert.ok((queue?.items.length ?? 0) > 1);
+    assert.equal(queue?.items[0]?.id, "001");
+    assert.equal(queue?.items[0]?.status, "queued");
     assert.equal(seen.filter((task) => task === "brief-draft").length, 1);
   } finally {
     release();

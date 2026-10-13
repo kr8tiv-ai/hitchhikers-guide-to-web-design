@@ -67,11 +67,11 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator("body")).toContainText("Improbability Drive");
     await expect(page.locator("body")).toContainText("Babel Fish");
-    await expect(page.locator('[data-id="guide-entry"]')).toHaveCount(1);
+    await expect(page.locator('[data-id="001"]')).toHaveCount(1);
     await page.goto(`${root}/approve`);
     await page.getByRole("button", { name: "Approve", exact: true }).click();
     await page.goto(`${root}/hh-dashboard`);
-    await expect(page.locator('[data-id="guide-entry"]')).toHaveCount(1);
+    await expect(page.locator('[data-id="001"]')).toHaveCount(1);
   } finally {
     child.kill();
     await rm(projectDir, { recursive: true, force: true });

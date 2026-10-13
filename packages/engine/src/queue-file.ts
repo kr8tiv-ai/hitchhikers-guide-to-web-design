@@ -20,6 +20,8 @@ export type QueueStatus =
   | "queued"
   | "running"
   | "passed"
+  | "failed"
+  | "interrupted"
   | "fixing"
   | "escalated"
   | "paused";
@@ -74,6 +76,8 @@ function isStatus(value: unknown): value is QueueStatus {
     value === "queued" ||
     value === "running" ||
     value === "passed" ||
+    value === "failed" ||
+    value === "interrupted" ||
     value === "fixing" ||
     value === "escalated" ||
     value === "paused"
