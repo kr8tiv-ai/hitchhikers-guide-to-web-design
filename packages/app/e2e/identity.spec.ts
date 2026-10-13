@@ -28,12 +28,14 @@ interface AppManifestReport {
  * Boxes recorded from HEAD before the identity head change.
  * Tour left open, scroll reset to the top, reduced motion, animations finished.
  * A later head tag must stay inside 1px of these. Do not re-record to go green.
+ * Question height is the card after the empty "Read this in" row left questions
+ * with no translation (2026-10-12). Mast and dashboard boxes were not re-recorded.
  */
 const BASELINE: Record<"phone" | "desk", { desk: Record<string, Box>; dash: Record<string, Box> }> = {
   phone: {
     desk: {
       "header.hh-mast": { x: 23, y: 12, w: 336, h: 142.98 },
-      "[data-region='question']": { x: 23, y: 214.98, w: 336, h: 513.05 },
+      "[data-region='question']": { x: 23, y: 214.98, w: 336, h: 464.05 },
     },
     dash: {
       "header.hh-mast": { x: 23, y: 12, w: 336, h: 267.94 },
@@ -44,7 +46,7 @@ const BASELINE: Record<"phone" | "desk", { desk: Record<string, Box>; dash: Reco
   desk: {
     desk: {
       "header.hh-mast": { x: 71, y: 64, w: 1305, h: 155.52 },
-      "[data-region='question']": { x: 71, y: 287.52, w: 640, h: 826.28 },
+      "[data-region='question']": { x: 71, y: 287.52, w: 640, h: 770.88 },
     },
     dash: {
       "header.hh-mast": { x: 71, y: 64, w: 1305, h: 331.17 },

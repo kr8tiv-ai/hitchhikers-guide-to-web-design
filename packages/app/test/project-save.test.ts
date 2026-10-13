@@ -87,7 +87,7 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
       contentType: "application/x-www-form-urlencoded",
       tokensMatch: (expected, provided) => expected === provided,
     });
-    assert.deepEqual(saved, { type: "redirect" });
+    assert.deepEqual(saved, { type: "redirect", location: "/?stay=1" });
     const filePath = projectFile(home);
     const kept = path.join(home, "keep-me.hhproject");
     writeFileSync(kept, "{}\n");

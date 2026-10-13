@@ -38,7 +38,11 @@ export function planInterview(
     const effort = chosenEffort(req.effort ?? cfg.ai.effort.default);
     return { model: req.model ?? cfg.ai.model, effort, interview: false };
   }
-  return { model: INTERVIEW_MODEL, effort: chosenEffort(cfg.ai.effort.default), interview: true };
+  // Build and cassette defaults stay medium. Interview starts at Extra high.
+  // A saved High or Extra high is the person's choice and is kept.
+  const saved = chosenEffort(cfg.ai.effort.default);
+  const effort = saved === "high" || saved === "xhigh" ? saved : INTERVIEW_EFFORT_DEFAULT;
+  return { model: INTERVIEW_MODEL, effort, interview: true };
 }
 
 /** Interview calls stay inside the project. Other calls keep the scratch dir. */

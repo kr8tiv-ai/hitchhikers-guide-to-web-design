@@ -89,10 +89,11 @@ test("the desk page announces the question and keeps the mic off the action row"
     });
     const page = await raw(handle.port, "GET", "/");
     assert.equal(page.status, 200);
-    const ask = "Is this site for you, or for a client?";
+    const ask = "Is this website for your own business, or for a client?";
     const question = region(page.body, "question");
     const polite = question.match(/aria-live="polite"/g) ?? [];
-    assert.equal(polite.length, 1);
+    assert.equal(polite.length, 2);
+    assert.match(question, /data-guide-reading[^>]*aria-live="polite"/);
     assert.match(
       question,
       /data-testid="draft-saved"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,
@@ -163,7 +164,8 @@ test("submit focuses the new question heading and updates the same live region",
     assert.match(h.region.innerHTML, /tabindex="-1"/);
     assert.match(h.region.innerHTML, /data-question-id="DP-0\.2"/);
     const polite = h.region.innerHTML.match(/aria-live="polite"/g) ?? [];
-    assert.equal(polite.length, 2);
+    assert.equal(polite.length, 3);
+    assert.match(h.region.innerHTML, /data-guide-reading[^>]*aria-live="polite"/);
     assert.match(
       h.region.innerHTML,
       /data-testid="draft-saved"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,

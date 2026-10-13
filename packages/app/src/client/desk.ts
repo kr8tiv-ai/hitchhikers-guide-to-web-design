@@ -495,7 +495,7 @@ interface DeskMessage {
 }
 
 interface DeskSource {
-  addEventListener(type: "session" | "tools", listener: (event: DeskMessage) => void): void;
+  addEventListener(type: "session" | "tools" | "guide-note", listener: (event: DeskMessage) => void): void;
   addEventListener(type: "error", listener: () => void): void;
   close(): void;
 }
@@ -746,10 +746,10 @@ export function mountDesk(env: DeskEnv): () => void {
       void postGuideNote("/api/guide-note", keepId, "keep");
       return;
     }
-    const retryId = readMarked(event.target, "data-guide-retry");
-    if (retryId !== null) {
+    const guideRetryId = readMarked(event.target, "data-guide-retry");
+    if (guideRetryId !== null) {
       event.preventDefault();
-      void postGuideNote("/api/guide-note", retryId, "retry");
+      void postGuideNote("/api/guide-note", guideRetryId, "retry");
       return;
     }
     const skipCheckId = readMarked(event.target, "data-guide-skip");
@@ -796,10 +796,10 @@ export function mountDesk(env: DeskEnv): () => void {
       removeChip(removeId);
       return;
     }
-    const retryId = readMarked(event.target, "data-attach-retry");
-    if (retryId !== null) {
+    const attachRetryId = readMarked(event.target, "data-attach-retry");
+    if (attachRetryId !== null) {
       event.preventDefault();
-      retryChip(retryId);
+      retryChip(attachRetryId);
       return;
     }
     const action = readAction(event.target);

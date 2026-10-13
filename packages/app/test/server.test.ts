@@ -125,7 +125,7 @@ test("the server binds to 127.0.0.1 and refuses any other host", async () => {
     const html = await page.text();
     assert.equal(page.status, 200);
     assert.match(html, /name="hh-csrf" content="[0-9a-f]{64}"/);
-    assert.match(html, /Is this site for you, or for a client\?/);
+    assert.match(html, /Is this website for your own business, or for a client\?/);
     assert.match(html, /src="\/client\/desk\.js"/);
     assert.equal(html.replace("<!DOCTYPE html>", "").includes("!"), false);
     // Suggest and Skip use a colon. The whole page, labels included, stays clear of an em dash.

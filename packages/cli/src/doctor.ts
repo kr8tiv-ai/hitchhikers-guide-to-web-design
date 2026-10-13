@@ -205,8 +205,19 @@ async function persistSessionMode(
 ): Promise<void> {
   if (mode !== "uuid" && mode !== "alias") return;
   const file = path.join(projectDir, ".hitchhiker", "config.json");
-  const base: GuideConfig = existsSync(file) ? loadConfig(projectDir) : defaultConfig();
-  await saveConfig(projectDir, { ...base, sessionIdMode: mode });
+  const fresh = !existsSync(file);
+  const base: GuideConfig = fresh ? defaultConfig() : loadConfig(projectDir);
+  // A new project starts at extra high. The factory default stays medium so
+  // recorded cassettes and non-interview calls keep their build effort.
+  const next: GuideConfig = fresh
+    ? {
+        ...base,
+        sessionIdMode: mode,
+        effort: "xhigh",
+        ai: { ...base.ai, effort: { ...base.ai.effort, default: "xhigh" } },
+      }
+    : { ...base, sessionIdMode: mode };
+  await saveConfig(projectDir, next);
 }
 
 function isToolLine(warning: string): boolean {

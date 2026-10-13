@@ -114,8 +114,9 @@ export function choiceSetFrom(
   facts: Facts,
   language: string,
   fallback: { label: string; why?: string; source?: string },
+  empty: "standing" | "none" = "standing",
 ): ChoiceSet {
-  const standing = fallbackSet(fallback);
+  const standing = empty === "none" ? { origin: "fallback" as const, choices: [] } : fallbackSet(fallback);
   if (!isRecord(value)) return standing;
   if (Object.hasOwn(value, "choices")) {
     if (validateJson({ choices: value.choices }, CHOICES_SCHEMA).length > 0) return standing;

@@ -263,7 +263,23 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
     assert.match(suggestedDepth?.value ?? "", /About an hour/);
     const saved = readAnswers(dir);
     assert.deepEqual(missingRequired(saved), []);
-    assert.equal(saved.length, walked);
+    const hiddenDefaults = express.filter((question) => question.surface === "default");
+    assert.deepEqual(
+      hiddenDefaults.map((question) => question.id),
+      ["DP-6.5", "DP-9.4"],
+    );
+    for (const question of hiddenDefaults) {
+      const row = saved.find((answer) => answer.id === question.id);
+      assert.ok(row, question.id);
+      assert.equal(row.status, "SKIPPED");
+      assert.equal(row.value, question.skipDefault);
+    }
+    assert.equal(saved.some((answer) => answer.id === "DP-0.2a"), false);
+    assert.deepEqual(
+      saved.map((answer) => answer.id),
+      express.map((question) => question.id).filter((id) => id !== "DP-0.2a"),
+    );
+    assert.equal(saved.length, walked + hiddenDefaults.length);
     assert.equal(session.next(), null);
     assert.equal(loadState(dir)?.promptId, "interview:done");
     const before = readFileSync(answersPath(dir), "utf8");
@@ -276,7 +292,7 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
     assert.equal(session.coverage().suggested, 1);
     assert.equal(
       session.coverage().skipped,
-      walked - REQUIRED_BESIDES_MOTION.length - 1,
+      walked - REQUIRED_BESIDES_MOTION.length - 1 + hiddenDefaults.length,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -164,7 +164,7 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeProject(projectDir);
   }
 });
 
@@ -281,7 +281,7 @@ async function stopChild(child: ChildProcess): Promise<void> {
   child.kill("SIGTERM");
   await new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
-      if (child.exitCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       resolve();
     }, 2_000);
     child.once("exit", () => {
@@ -289,4 +289,21 @@ async function stopChild(child: ChildProcess): Promise<void> {
       resolve();
     });
   });
+}
+
+/** Windows can keep the project directory locked for a moment after the desk exits. */
+async function removeProject(dir: string): Promise<void> {
+  let last: unknown = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      last = error;
+      const code = typeof error === "object" && error !== null && "code" in error ? error.code : "";
+      if (code !== "EBUSY" && code !== "EPERM" && code !== "ENOTEMPTY") throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw last;
 }

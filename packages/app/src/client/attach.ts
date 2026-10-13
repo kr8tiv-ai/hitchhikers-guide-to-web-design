@@ -26,7 +26,6 @@ export const QUESTION_ATTACH: Readonly<Record<string, readonly AttachKind[]>> = 
   "DP-1.9": ["images", "files"],
   "DP-4.1": ["links"],
   "DP-5.1": ["links"],
-  "DP-5.4b": ["links"],
   "DP-6.4": ["files"],
   "DP-8.2": ["files"],
 };

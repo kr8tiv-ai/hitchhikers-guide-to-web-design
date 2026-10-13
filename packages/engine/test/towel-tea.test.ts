@@ -138,7 +138,7 @@ test("replay through the brief and why compilers matches the fixture", () => {
     assert.equal(typeof value, "string");
     assert.ok(rendered.includes(value ?? ""));
   }
-  assert.match(rendered, /ASSUMED/);
+  assert.doesNotMatch(rendered, /ASSUMED/);
   assert.match(
     rendered,
     /Coverage: 5 answered, 0 suggested, 1 skipped, 0 soft, 0 imported\./,

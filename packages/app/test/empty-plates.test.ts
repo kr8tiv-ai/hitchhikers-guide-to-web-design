@@ -118,7 +118,7 @@ test("a fresh desk leads with the open question, not a start link", async () => 
     const html = await (await fetch(handle.url)).text();
     assert.equal(html.includes(`>${START_INTERVIEW_LABEL}</a>`), false);
     assert.equal(html.includes("No question yet"), false);
-    assert.match(html, /Is this site for you, or for a client\?/);
+    assert.match(html, /Is this website for your own business, or for a client\?/);
     assert.match(html, /Question 1 of /);
     assert.match(html, /Restart the interview/);
     const interview = html.indexOf("data-interview");

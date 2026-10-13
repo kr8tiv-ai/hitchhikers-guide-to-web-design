@@ -412,6 +412,10 @@ export function renderCard(state: CardState): string {
     visibleItems.length > 0
       ? `${renderChoiceGroup({ ...choiceSet, items: visibleItems })}\n`
       : "";
+  const tipLine =
+    question.tip !== undefined && state.counts?.index === 1
+      ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(question.tip)}</p>\n`
+      : "";
   const attachHtml = renderAttach(question.id, state.attach);
   const attachReady = (state.attach?.chips ?? []).some((chip) => chip.ready && chip.error === undefined);
   const uploading = (state.attach?.uploading ?? null) !== null;
@@ -420,8 +424,7 @@ export function renderCard(state: CardState): string {
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(question.ask)}</h2>
   <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
-${question.tip !== undefined && state.counts?.index === 1 ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(question.tip)}</p>\n` : ""}
-${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
+${tipLine}${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>

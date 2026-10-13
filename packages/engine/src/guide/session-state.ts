@@ -237,8 +237,8 @@ function conditionHolds(question: Question, state: SessionState, all: readonly Q
   const text = (id: string): string =>
     state.answers.find((answer) => answer.id === id)?.text.toLowerCase() ?? "";
   if (question.id === "DP-0.2a") {
-    const prior = text("DP-0.2");
-    if (prior.trim() === "" || /no prior site/.test(prior)) return false;
+    const prior = state.answers.find((answer) => answer.id === "DP-0.2");
+    if (prior !== undefined && /no prior site/.test(prior.text.toLowerCase())) return false;
   }
   if (question.id === "DP-5.2" && all.some((item) => item.id === "DP-5.1")) {
     const loved = text("DP-5.1").trim();

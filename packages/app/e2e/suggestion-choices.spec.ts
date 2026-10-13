@@ -78,7 +78,10 @@ for (const viewport of VIEWPORTS) {
       await page.locator('[data-action="answer"]').click();
 
       await expect(card).toBeVisible();
-      await expect(page.locator("#hh-card-ask, .hh-turn")).toContainText("one concrete detail the shop site should keep");
+      // The standing transcript turn shares .hh-turn with the Guide pushback, so the union is not one element.
+      await expect(
+        page.locator("#hh-card-ask, .hh-turn").filter({ hasText: "one concrete detail the shop site should keep" }).first(),
+      ).toContainText("one concrete detail the shop site should keep");
       await expect(card.getByRole("radio", { name: /one concrete detail the shop site should keep/ })).toHaveCount(0);
       await expect(page.getByText("Options ready: 1 choices")).toHaveCount(0);
       await expectChoices(card, [

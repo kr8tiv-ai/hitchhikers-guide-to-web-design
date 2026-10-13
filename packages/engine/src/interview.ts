@@ -5,7 +5,6 @@ import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
 import { loadState, type GuideState } from "./state.ts";
-import { loadSessionState, questionsToShow } from "./guide/session-state.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 /**
@@ -97,14 +96,15 @@ export async function openInterview(
 ): Promise<InterviewSession> {
   const dir = path.join(projectDir, ".hitchhiker");
   await mkdir(dir, { recursive: true });
-  const depthQuestions = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
+  const all = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
   const saved = loadInterview(path.join(dir, "interview.json"));
-  const questions = questionsToShow(depthQuestions, loadSessionState(projectDir, depthQuestions));
   const state = loadState(projectDir);
-  const cursor = placeCursor(questions, saved.answers, state?.promptId ?? null, readRevisitId(projectDir));
+  const shown = offeredQuestions(all, saved.answers);
+  const cursor = placeCursor(shown, saved.answers, state?.promptId ?? null, readRevisitId(projectDir));
   const run = new InterviewRun(
     projectDir,
-    questions,
+    all,
+    shown,
     saved.answers,
     saved.pushedIds,
     cursor,
@@ -122,6 +122,7 @@ export async function openInterview(
 
 class InterviewRun {
   #projectDir: string;
+  #all: readonly Question[];
   #questions: readonly Question[];
   #answers: AnswerRecord[];
   #pushed: readonly PushedCount[];
@@ -133,14 +134,16 @@ class InterviewRun {
 
   constructor(
     projectDir: string,
-    questions: readonly Question[],
+    all: readonly Question[],
+    shown: readonly Question[],
     answers: AnswerRecord[],
     pushedIds: readonly PushedCount[],
     cursor: number,
     clock: () => Date,
   ) {
     this.#projectDir = projectDir;
-    this.#questions = questions;
+    this.#all = all;
+    this.#questions = shown;
     this.#answers = answers;
     this.#pushed = pushedIds;
     this.#cursor = cursor;
@@ -220,9 +223,12 @@ class InterviewRun {
 
   async #commit(record: AnswerRecord): Promise<void> {
     const answers = [...this.#answers, record];
-    const cursor = this.#cursor + 1;
-    await this.#save(answers, cursor, this.#pushed);
-    this.#answers = answers;
+    const stored = materializePassedDefaults(this.#all, answers);
+    const shown = offeredQuestions(this.#all, stored);
+    const cursor = firstUnansweredIndex(shown, stored);
+    await this.#save(stored, cursor, this.#pushed, shown);
+    this.#answers = stored;
+    this.#questions = shown;
     this.#cursor = cursor;
     this.#pendingId = null;
     this.#lastPushback = null;
@@ -233,8 +239,9 @@ class InterviewRun {
     answers: readonly AnswerRecord[],
     cursor: number,
     pushedIds: readonly PushedCount[],
+    shown: readonly Question[] = this.#questions,
   ): Promise<void> {
-    const nextQuestion = this.#questions[cursor] ?? null;
+    const nextQuestion = shown[cursor] ?? null;
     const promptId =
       nextQuestion === null ? "interview:done" : `${INTERVIEW_PREFIX}${nextQuestion.id}`;
     await persistPair(
@@ -330,6 +337,61 @@ async function clearRevisit(projectDir: string): Promise<void> {
   const file = path.join(projectDir, ".hitchhiker", REVISIT_FILE);
   if (!existsSync(file)) return;
   await unlink(file).catch(() => undefined);
+}
+
+/**
+ * Questions the person still sees. Stored defaults stay in the file and are
+ * not offered. A prior-site answer of "no prior site" drops the taste follow-up.
+ * An unanswered controller does not drop it.
+ */
+function offeredQuestions(all: readonly Question[], answers: readonly AnswerRecord[]): Question[] {
+  const prior = answers.find((answer) => answer.id === "DP-0.2");
+  const dropTaste = prior !== undefined && /no prior site/i.test(prior.value);
+  return all.filter((question) => {
+    if (question.surface === "default") return false;
+    if (question.id === "DP-0.2a" && dropTaste) return false;
+    return true;
+  });
+}
+
+/**
+ * A default the walk has passed is stored as SKIPPED with its skip text, in
+ * tree order, so the brief still receives that write. It is not offered.
+ */
+function materializePassedDefaults(
+  all: readonly Question[],
+  answers: readonly AnswerRecord[],
+): AnswerRecord[] {
+  const shown = offeredQuestions(all, answers);
+  const byId = new Map(answers.map((answer) => [answer.id, answer]));
+  const next = shown.find((question) => !byId.has(question.id));
+  const limit = next === undefined ? all.length : all.findIndex((question) => question.id === next.id);
+  const extras: AnswerRecord[] = [];
+  for (let index = 0; index < limit; index += 1) {
+    const question = all[index];
+    if (question === undefined || byId.has(question.id) || question.surface !== "default") continue;
+    const row: AnswerRecord = { id: question.id, status: "SKIPPED", value: question.skipDefault };
+    byId.set(question.id, row);
+    extras.push(row);
+  }
+  if (extras.length === 0) return [...answers];
+  const rank = new Map(all.map((question, index) => [question.id, index]));
+  const merged = [...answers];
+  for (const extra of extras) {
+    const extraRank = rank.get(extra.id) ?? all.length;
+    let insertAt = merged.length;
+    for (let index = 0; index < merged.length; index += 1) {
+      const item = merged[index];
+      if (item === undefined) continue;
+      const itemRank = rank.get(item.id);
+      if (itemRank !== undefined && itemRank > extraRank) {
+        insertAt = index;
+        break;
+      }
+    }
+    merged.splice(insertAt, 0, extra);
+  }
+  return merged;
 }
 
 function placeCursor(

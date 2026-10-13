@@ -270,7 +270,7 @@ test("express saves, resumes at the next id, and finishes with no missing requir
     assert.ok(motionQuestion);
     assert.equal(motion.status, "SKIPPED");
     assert.equal(motion.value, motionQuestion.skipDefault);
-    assert.match(motion.value, /ASSUMED/);
+    assert.doesNotMatch(motion.value, /ASSUMED/);
     assert.equal(saved.some((answer) => answer.status === "SOFT"), false);
     assert.deepEqual(missingRequired(saved), []);
     assert.equal(finished.coverage().answered, OPENING.length + REQUIRED_TEXT.size);

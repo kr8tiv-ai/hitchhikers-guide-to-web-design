@@ -71,7 +71,7 @@ questions:
     topic: brand-assets
     module: towel-check
     depth: [express, standard, deep]
-    ask: "Do you already have a logo, colors, fonts, or photos? Drop whatever you have: files, screenshots, or links."
+    ask: "Do you already have a logo, colors, fonts, or photos? Drop whatever you have. PDFs, screenshots, and links all work."
     why: "Existing assets open a fast path. Each field still gets a check for whether you are happy with it."
     input: [upload, text, voice]
     skip_default: "No brand assets yet."
@@ -172,7 +172,7 @@ questions:
     topic: mood
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Show up to 5 pictures whose look you like, and say in a few words why."
+    ask: "Show up to 5 pictures whose look you like, or a board link, and say in a few words why."
     why: "Mood is evidence. Five images, each with a why, beat a folder of unlabeled pictures."
     input: [upload, text, voice]
     skip_default: "No mood images yet."
@@ -223,7 +223,7 @@ questions:
     topic: origin
     module: ford-field-notes
     depth: [express, standard, deep]
-    ask: "Why did you start this business? Tell the story in a sentence or two."
+    ask: "Why did you build this, and what is the origin story?"
     why: "This is the brand why, the reason the work exists. Deep runs the Why Finder here, along the Golden Circle. A shorter visit keeps a one-sentence stub and may defer the long finder to Babel Fish. The site why is a later question."
     input: [text, voice]
     skip_default: "Brand why not stated. One sentence still owed."
@@ -306,7 +306,7 @@ questions:
     topic: site-kind
     module: the-question
     depth: [express, standard, deep]
-    ask: "What kind of site is it? Pick any: selling online, bookings, a shop near you, showing your work, an event, a personal site, a nonprofit, or hiring."
+    ask: "What kind of site is it? Pick any: sales, funnel, calls, reservations, sign-ups, portfolio, content, local, event, personal, nonprofit, recruiting, investor, or app."
     why: "Multiple types are allowed. Each type has one primary KPI, in words, and one knowledge pack. The packs named for these types include sales-psychology, seo, or ux-conversion. No fake numbers live on the type."
     input: [choice, text]
     skip_default: "No site type chosen."
@@ -696,7 +696,7 @@ questions:
     topic: imagery
     module: point-of-view-gun
     depth: [express, standard, deep]
-    ask: "Should the site use photos, drawings, 3D, or mostly text?"
+    ask: "Should the site use photography, drawings, 3D, or mostly text?"
     why: "The picture system is one of these four. Mixing comes later, and only if this answer cannot carry the page."
     input: [choice, text, voice]
     skip_default: "Photography."
@@ -758,7 +758,7 @@ questions:
     topic: 3d
     module: pan-galactic
     depth: [express, standard, deep]
-    ask: "Do you have 3D models, or should we make or find some? None is fine. Other paths are pre-rendered, CC0, Tripo, Meshy, an upload, or a person."
+    ask: "Do you have 3D models, or should we make or find some? none is fine. Other paths are pre-rendered, CC0, Tripo, Meshy, an upload, or a human."
     why: "None stays flat. Pre-rendered keeps the picture and drops the runtime. CC0 models are license-checked and credited. Tripo or Meshy means generated geometry plus cleanup. An upload is your file. A human brief is the slow careful path."
     input: [choice, upload, text, voice]
     skip_default: "None."
@@ -799,7 +799,7 @@ questions:
     topic: image-budget
     module: bistromathics
     depth: [express, standard, deep]
-    ask: "How much are you OK spending on AI-made pictures and videos? $0, a little, a fair amount, or you name it."
+    ask: "How much are you OK spending on AI-made stills and videos? $0, a little, a fair amount, or you name it."
     why: "Show the model and the resolution on every line. Do not promise 1080p inside a small cap. Prices live on the cost meter, not in this question. Stop at the cap."
     input: [choice, text, voice]
     skip_default: "$0 DIY. Prompts only."
@@ -826,7 +826,7 @@ questions:
     topic: photos
     module: bistromathics
     depth: [express, standard, deep]
-    ask: "Where should photos come from: your own, stock photos, AI-made, or a mix?"
+    ask: "Where should the photography come from: your own, stock, AI-made, or a mix?"
     why: "Stock, pictures you own, or AI. A real person, product, or place is never swapped for a generated stand-in."
     input: [choice, text, voice]
     skip_default: "Own and AI. No stock."
@@ -903,7 +903,7 @@ questions:
     topic: hosting
     module: limits
     depth: [express, standard, deep]
-    ask: "Do you own a web address (like yourbakery.com)? Do you know where you'd like the site hosted? No idea is fine."
+    ask: "Do you own a web address (like yourbakery.com)? Hostinger is recommended. Vercel, Netlify, and Cloudflare are equal choices. No idea is fine."
     why: "Hostinger is the recommended word, not a forced value. Vercel, Netlify, and Cloudflare are equal choices. No idea is a complete answer."
     input: [choice, text, voice]
     skip_default: "no idea"

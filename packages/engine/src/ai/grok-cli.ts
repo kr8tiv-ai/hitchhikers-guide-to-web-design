@@ -263,7 +263,10 @@ export function planGrokCall(
     files.push({ path: file, body: prompt });
     argv.push("--prompt-file", file);
   } else if (flags.has("-p")) {
-    argv.push(`-p=${prompt}`);
+    // A value that starts with "-" must stay on the same argv token.
+    // A plain prompt stays a separate argument so flag checks can see "-p".
+    if (prompt.startsWith("-")) argv.push(`-p=${prompt}`);
+    else argv.push("-p", prompt);
   } else if (flags.has("--single")) {
     argv.push("--single", prompt);
   } else if (flags.has("--prompt-file")) {

@@ -418,9 +418,8 @@ export async function createDeskApp(opts: {
 
 function shouldAdvanceFirst(input: { kind: string; assumed?: boolean }): boolean {
   if (input.kind !== "answer" || input.assumed === true) return false;
-  if (process.env.HH_OPTIMISTIC === "0") return false;
-  if (process.env.HH_GUIDE_REPLAY === "1" && process.env.HH_OPTIMISTIC !== "1") return false;
-  return true;
+  // Off until a failed guide check still returns the failure line in this response.
+  return process.env.HH_OPTIMISTIC === "1";
 }
 
 function shortAsk(ask: string): string {
@@ -1377,7 +1376,7 @@ async function handleGet(
     }
     let stay = false;
     try {
-      stay = new URL(rawUrl, "http://127.0.0.1").searchParams.get("stay") === "1";
+      stay = new URL(rawUrl, "http://localhost").searchParams.get("stay") === "1";
     } catch {
       stay = false;
     }
@@ -1730,7 +1729,8 @@ function buildSession(
     }
     const clean = stored.replace(/^ASSUMED:\s*/i, "").trim();
     if (clean !== "") answerDraft = clean;
-    const thought = notes.find((note) => note.questionId === question.id && note.status === "open");
+    const revisitQuestionId = question.id;
+    const thought = notes.find((note) => note.questionId === revisitQuestionId && note.status === "open");
     if (thought !== undefined && (pushback === null || pushback === "")) pushback = thought.message;
   }
   const message = overlay.message;

@@ -126,9 +126,10 @@ export function followUpChoices(
 ): { choices: SuggestChoice[]; origin: ChoiceOrigin } {
   const standing = { label: "", why: SHARPER_WHY, source: "question:suggest" };
   const present = isRecord(value) && Object.hasOwn(value, "choices");
+  // A rejected model list is no choices block, not a lone standing line.
   const set = present
-    ? choiceSetFrom(value, facts, language, standing)
-    : choiceSetFrom(undefined, facts, language, standing);
+    ? choiceSetFrom(value, facts, language, standing, "none")
+    : { origin: "fallback" as const, choices: [] };
   return dropEchoes(set, message, ask);
 }
 
