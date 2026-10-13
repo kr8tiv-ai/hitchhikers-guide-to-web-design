@@ -410,6 +410,8 @@ export interface SessionView {
   /** Set when a restart cleared drafts. Local rows older than this are dropped. */
   draftsClearedAt: string | null;
   answerDraft: string | null;
+  /** Logo file slot. Null when the session has no saved logo. */
+  logoFile: { originalName: string; safeName: string; bytes: number | null } | null;
 }
 
 interface SavedFileView {
@@ -566,7 +568,15 @@ export function parseSession(value: unknown): SessionView | null {
       ? value.draftsClearedAt
       : null,
     answerDraft: typeof value.answerDraft === "string" && value.answerDraft.trim() !== "" ? value.answerDraft : null,
+    logoFile: parseLogoFile(value.logoFile),
   };
+}
+
+function parseLogoFile(value: unknown): SessionView["logoFile"] {
+  if (!isRecord(value) || typeof value.safeName !== "string" || typeof value.originalName !== "string") return null;
+  if (value.safeName.trim() === "" || value.originalName.trim() === "") return null;
+  const bytes = typeof value.bytes === "number" && Number.isFinite(value.bytes) && value.bytes >= 0 ? value.bytes : null;
+  return { originalName: value.originalName, safeName: value.safeName, bytes };
 }
 
 export async function postTurn(
@@ -2914,14 +2924,26 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     const safeName = isRecord(payload) && typeof payload.safeName === "string" ? payload.safeName : "";
-    if (safeName === "" || !/^[A-Za-z0-9._-]{1,80}$/.test(safeName)) {
+    if (safeName === "" || !/^[A-Za-z0-9._/-]{1,120}$/.test(safeName)) {
       logoSaved = { id: question.id, text: "The logo did not save. Try again." };
       paint();
       return;
     }
-    const line = `Logo file: ${safeName}`;
+    const originalName = isRecord(payload) && typeof payload.originalName === "string" ? payload.originalName : "";
+    const shown = originalName !== "" ? originalName : safeName;
+    const line = `Logo file: ${shown}`;
     if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
-    logoSaved = { id: question.id, text: `Saved as ${safeName}.` };
+    logoSaved = { id: question.id, text: `Saved as ${shown}.` };
+    if (view !== null) {
+      view = {
+        ...view,
+        logoFile: {
+          originalName: shown,
+          safeName,
+          bytes: isRecord(payload) && typeof payload.bytes === "number" ? payload.bytes : null,
+        },
+      };
+    }
     paint();
     rememberDraft(true);
   }
@@ -3408,8 +3430,10 @@ export function mountDesk(env: DeskEnv): () => void {
         speechReady() && engine === "web-speech",
         voiceChromeFor(engine),
       );
+      const fromSlot =
+        view.logoFile === null ? undefined : `Saved as ${view.logoFile.originalName}.`;
       const saved =
-        logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : undefined;
+        logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : fromSlot;
       const html =
         saved === undefined
           ? withInterviewExtras(card, view.question)

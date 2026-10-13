@@ -20,7 +20,15 @@ import {
   selectReferenceCards,
   styleWorldForFamily,
 } from "./gallery-model.ts";
-import { choiceAllowed, loadSessionState, projectMentionsQuotes, projectTree, sessionBlock } from "./session-state.ts";
+import {
+  assetDisplayName,
+  choiceAllowed,
+  reletterChoices,
+  loadSessionState,
+  projectMentionsQuotes,
+  projectTree,
+  sessionBlock,
+} from "./session-state.ts";
 import { guideTextIssues } from "./validators.ts";
 
 /**
@@ -101,7 +109,9 @@ export async function suggestOffer(
   const set = choiceSetFrom(value, facts, language, fallback);
   const about = session === null ? false : projectMentionsQuotes(session);
   const choices =
-    session === null ? set.choices : set.choices.filter((item) => choiceAllowed(item.label, session, questions, about));
+    session === null
+      ? set.choices
+      : reletterChoices(set.choices.filter((item) => choiceAllowed(item.label, session, questions, about)));
   return {
     options: groundedOptions(value, facts, language).slice(0, 4),
     choices,
@@ -311,15 +321,30 @@ function readAnswers(projectDir: string): Array<{ id: string; value: string }> {
 }
 
 function readUploads(projectDir: string): string[] {
+  const names = new Set<string>();
   const dir = path.join(projectDir, ".hitchhiker", "uploads");
-  if (!existsSync(dir)) return [];
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name);
-  } catch {
-    return [];
+  if (existsSync(dir)) {
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isFile()) names.add(entry.name);
+      }
+    } catch {
+      // A missing uploads folder contributes no flat files.
+    }
   }
+  try {
+    for (const file of loadSessionState(projectDir).uploads) {
+      const safe = path.basename(file.safeName.replace(/\\/g, "/"));
+      if (safe !== "") names.add(safe);
+      const original = path.basename(file.originalName.replace(/\\/g, "/"));
+      if (original !== "") names.add(original);
+      const display = assetDisplayName(file.safeName, file.originalName);
+      if (display !== "") names.add(display);
+    }
+  } catch {
+    // Session state is optional context. Facts still list the flat files.
+  }
+  return [...names];
 }
 
 function readFactFiles(projectDir: string): { industry?: string; crawlNotes: string[] } {

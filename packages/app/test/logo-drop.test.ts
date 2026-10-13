@@ -301,6 +301,8 @@ test("a logo file stays in the project and the brand plate reads it", async () =
     assert.deepEqual(parseLogoIntake(readFileSync(intakePath, "utf8")), {
       safeName,
       questionId: "DP-1.1",
+      originalName: "mark.png",
+      bytes: PNG.length,
     });
 
     const empty = await (await fetch(new URL("/brand", handle.url))).text();

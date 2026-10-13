@@ -2,7 +2,14 @@ import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
 import type { think } from "../ai/think.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
-import { choiceAllowed, normalizeChoiceLabel, projectMentionsQuotes, sessionBlock, type SessionState } from "./session-state.ts";
+import {
+  choiceAllowed,
+  normalizeChoiceLabel,
+  projectMentionsQuotes,
+  reletterChoices,
+  sessionBlock,
+  type SessionState,
+} from "./session-state.ts";
 import { choiceSetFrom } from "./suggest.ts";
 import { validateGuideMessage } from "./validators.ts";
 
@@ -98,8 +105,8 @@ export async function judgePushback(
   if (deps.session !== undefined) {
     const about = projectMentionsQuotes(deps.session);
     const questions = deps.questions ?? [question];
-    follow.choices = follow.choices.filter((item) =>
-      choiceAllowed(item.label, deps.session as SessionState, questions, about),
+    follow.choices = reletterChoices(
+      follow.choices.filter((item) => choiceAllowed(item.label, deps.session as SessionState, questions, about)),
     );
   }
   return {

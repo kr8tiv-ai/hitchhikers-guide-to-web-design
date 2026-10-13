@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CassetteError, CassetteMissError } from "../ai/cassette.ts";
 import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
@@ -13,12 +13,21 @@ import {
 } from "../ai/think.ts";
 import { validateJson } from "../ai/schema-validate.ts";
 import { InterviewError, openInterview } from "../interview.ts";
-import { withStateLock } from "../lock.ts";
+import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
-import { filterGuideText, loadSessionState, projectMentionsQuotes } from "./session-state.ts";
+import {
+  assetDisplayName,
+  assetNamedIn,
+  filterGuideText,
+  guardLogoText,
+  loadSessionState,
+  projectMentionsQuotes,
+  sessionBlock,
+  topicFor,
+} from "./session-state.ts";
 import { judgePushback } from "./pushback-judge.ts";
 import {
   GUIDE_MESSAGE_SCHEMA,
@@ -205,18 +214,24 @@ async function answerText(
   text: string,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
-  const facts = loadFacts(s.projectDir);
   const prior = s.pushes[current.id] ?? 0;
   const questions = loadTree(resolveTreePath(s.projectDir));
   const sessionState = loadSessionState(s.projectDir, questions);
+  const bound = await bindNamedLogo(s.projectDir, current, text, sessionState);
+  const judgedState = bound ? loadSessionState(s.projectDir, questions) : sessionState;
+  const facts = loadFacts(s.projectDir);
   const judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
     language: s.language,
     facts,
-    session: sessionState,
+    session: judgedState,
     questions,
   });
+  if (judgement.action === "push" && bound && !judgement.floor) {
+    await storePlain(s, text);
+    return advance(s, current, false, deps);
+  }
   if (judgement.action === "push") {
     if (judgement.floor) await storeFloorHold(s, text);
     s.pushes[current.id] = judgement.count;
@@ -336,10 +351,12 @@ async function askGuide(
       if (isQuiet(error)) return fallback(next);
       throw error;
     }
-    const sessionState = loadSessionState(s.projectDir, loadTree(resolveTreePath(s.projectDir)));
+    const questions = loadTree(resolveTreePath(s.projectDir));
+    const sessionState = loadSessionState(s.projectDir, questions);
     const kept = filterGuideText(text, sessionState, projectMentionsQuotes(sessionState));
-    if (kept !== null && validateGuideMessage(kept, { language: s.language, facts }).length === 0) {
-      return { message: kept, calm: false };
+    const guarded = kept === null ? null : guardLogoText(kept, sessionState, next ?? current, questions);
+    if (guarded !== null && validateGuideMessage(guarded, { language: s.language, facts }).length === 0) {
+      return { message: guarded, calm: false };
     }
   }
   return fallback(next);
@@ -402,10 +419,45 @@ function buildPrompt(s: GuideSession, question: Question, facts: Facts, closing:
     `Reply language: ${s.language}`,
     "Known facts:",
     factLines.join("\n"),
+    promptContext(s, question),
     closing
       ? "The question list is finished. Ask only what you got wrong. One question. Do not ask the tree question again."
       : "Ask the question in the block. One question. Do not invent a different id.",
   ].join("\n");
+}
+
+function promptContext(s: GuideSession, question: Question): string {
+  try {
+    const questions = loadTree(resolveTreePath(s.projectDir));
+    const state = loadSessionState(s.projectDir, questions);
+    const ask = guardLogoText(question.ask, state, question, questions);
+    return `${sessionBlock(state)}\nQuestion to ask: ${safePromptLine(ask)}`;
+  } catch {
+    return "";
+  }
+}
+
+/** An answer that names one file already on file makes that file the logo. */
+async function bindNamedLogo(
+  projectDir: string,
+  question: Question,
+  text: string,
+  state: ReturnType<typeof loadSessionState>,
+): Promise<boolean> {
+  if (topicFor(question) !== "logo") return false;
+  const named = assetNamedIn(text, state);
+  if (named === null) return false;
+  const display = assetDisplayName(named.safeName, named.originalName);
+  if (!/\.(?:png|jpe?g|gif|webp|svg|pdf)$/i.test(display)) return false;
+  const dir = path.join(projectDir, ".hitchhiker", "brand");
+  await mkdir(dir, { recursive: true });
+  const body = {
+    safeName: named.safeName,
+    questionId: named.questionId === "" ? question.id : named.questionId,
+    originalName: display,
+  };
+  await replaceViaTemp(path.join(dir, "logo-intake.json"), `${JSON.stringify(body)}\n`);
+  return true;
 }
 
 /** The persona check refuses the whole prompt, so user text cannot carry those marks into it. */

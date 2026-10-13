@@ -139,6 +139,9 @@ export function renderPreflight(preflight: DeskPreflight): string {
 export interface LogoIntake {
   safeName: string;
   questionId: string;
+  /** The name the person chose. Absent on intakes written before that was stored. */
+  originalName?: string;
+  bytes?: number;
 }
 
 const LOGO_FILE =
@@ -171,11 +174,27 @@ export function parseLogoIntake(raw: string): LogoIntake | null {
   if (typeof record.safeName !== "string" || typeof record.questionId !== "string") return null;
   if (!isLogoAssetName(record.safeName)) return null;
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(record.questionId)) return null;
-  return { safeName: record.safeName, questionId: record.questionId };
+  const intake: LogoIntake = { safeName: record.safeName, questionId: record.questionId };
+  if (typeof record.originalName === "string") {
+    const leaf = record.originalName.replace(/\\/g, "/").split("/").pop()?.replace(/[\u0000-\u001F\u007F]/g, "").trim() ?? "";
+    if (leaf !== "" && leaf !== "." && leaf !== ".." && !leaf.includes("..") && leaf.length <= 120) {
+      intake.originalName = leaf;
+    }
+  }
+  if (typeof record.bytes === "number" && Number.isFinite(record.bytes) && record.bytes >= 0) {
+    intake.bytes = Math.floor(record.bytes);
+  }
+  return intake;
 }
 
 export function serializeLogoIntake(intake: LogoIntake): string {
-  return `${JSON.stringify({ safeName: intake.safeName, questionId: intake.questionId })}\n`;
+  const body: { safeName: string; questionId: string; originalName?: string; bytes?: number } = {
+    safeName: intake.safeName,
+    questionId: intake.questionId,
+  };
+  if (intake.originalName !== undefined && intake.originalName !== "") body.originalName = intake.originalName;
+  if (intake.bytes !== undefined) body.bytes = intake.bytes;
+  return `${JSON.stringify(body)}\n`;
 }
 
 /**

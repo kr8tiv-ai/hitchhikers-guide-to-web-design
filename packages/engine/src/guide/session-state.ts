@@ -77,6 +77,73 @@ const WRITE_TOPIC: Record<string, string> = {
 
 const FILE_EXT = /\b[\w.-]+\.(?:png|jpe?g|gif|webp|svg|pdf|docx?|zip|mp4|mov|glb|gltf)\b/gi;
 const JOB_WORD = /\b(?:quotes?|estimates?|invoices?)\b/i;
+const HASHED_LEAF = /^hh-[0-9a-f]{8}-(.+)$/i;
+
+/** The name a person used, even when the slot stored a hashed copy. */
+export function assetDisplayName(safeName: string, originalName?: string): string {
+  const baseSafe = path.basename(safeName.replace(/\\/g, "/"));
+  const given = (originalName ?? "").trim();
+  const leaf = given === "" ? baseSafe : path.basename(given.replace(/\\/g, "/"));
+  const peeled = HASHED_LEAF.exec(leaf);
+  if (peeled?.[1] !== undefined && peeled[1].includes(".")) return peeled[1];
+  return leaf;
+}
+
+export function uploadNames(file: SessionUpload): Set<string> {
+  const names = [file.safeName, file.originalName, assetDisplayName(file.safeName, file.originalName)];
+  return new Set(
+    names
+      .map((name) => path.basename(name.replace(/\\/g, "/")).toLowerCase())
+      .filter((name) => name !== ""),
+  );
+}
+
+/** True when a choice treats some other image as the logo or the favicon. */
+export function offersForeignImageAsLogo(label: string, state: SessionState): boolean {
+  const logo = state.uploads.find((file) => file.role === "logo");
+  if (logo === undefined) return false;
+  if (!/\b(?:logo|favicon|wordmark)\b/i.test(label)) return false;
+  const names = uploadNames(logo);
+  const named = label.match(FILE_EXT) ?? [];
+  for (const raw of named) {
+    const leaf = path.basename(raw).toLowerCase();
+    if (/\.(?:png|jpe?g|gif|webp|svg)$/i.test(leaf) && !names.has(leaf)) return true;
+  }
+  return false;
+}
+
+/** The one file this answer names, by original name, saved name, or hash suffix. */
+export function assetNamedIn(text: string, state: SessionState): SessionUpload | null {
+  const named = text.match(FILE_EXT) ?? [];
+  const hits: SessionUpload[] = [];
+  for (const raw of named) {
+    const leaf = path.basename(raw).toLowerCase();
+    const found = state.uploads.find((file) => uploadNames(file).has(leaf));
+    if (found !== undefined && !hits.includes(found)) hits.push(found);
+  }
+  if (hits.length !== 1) return null;
+  return hits[0] ?? null;
+}
+
+/**
+ * A later logo question names the logo on file.
+ * A model line that offers a different image, or that forgets the filename, is replaced.
+ */
+export function guardLogoText(
+  text: string,
+  state: SessionState,
+  question: Question,
+  all: readonly Question[],
+): string {
+  if (topicFor(question) !== "logo") return text;
+  const logo = state.uploads.find((file) => file.role === "logo");
+  if (logo === undefined) return text;
+  const gate = gateQuestion(question, state, all);
+  if (gate.action !== "confirm") return text;
+  const display = assetDisplayName(logo.safeName, logo.originalName).toLowerCase();
+  if (offersForeignImageAsLogo(text, state) || !text.toLowerCase().includes(display)) return gate.ask;
+  return text;
+}
 
 export function topicFor(question: Question): string | undefined {
   if (question.topic !== undefined && question.topic !== "") return question.topic;
@@ -167,7 +234,8 @@ export function gateQuestion(
   // The question that recorded the decision stays in the list. The cursor skips a filled id.
   if (decision.sourceId === question.id) return { action: "ask", ask: question.ask };
   if (ASSET_TOPICS.has(topic)) {
-    return { action: "confirm", ask: confirmAsk(topic, decision.value) };
+    const value = topic === "logo" ? logoDecisionValue(state, decision.value) : decision.value;
+    return { action: "confirm", ask: confirmAsk(topic, value) };
   }
   return { action: "skip", ask: question.ask };
 }
@@ -217,14 +285,32 @@ export function filterGuideText(
   if (!aboutQuotes && JOB_WORD.test(text)) return null;
   const allowed = new Set<string>();
   for (const file of state.uploads) {
-    allowed.add(path.basename(file.safeName).toLowerCase());
-    allowed.add(path.basename(file.originalName).toLowerCase());
+    for (const name of uploadNames(file)) allowed.add(name);
   }
   const named = text.match(FILE_EXT) ?? [];
   for (const raw of named) {
     if (!allowed.has(path.basename(raw).toLowerCase())) return null;
   }
   return text;
+}
+
+const CHOICE_LETTERS = ["A", "B", "C", "D"] as const;
+
+/**
+ * Letter the remaining picks A, B, C, D in order.
+ * Dropping one pick must not leave a hole. The desk rejects a set whose first id is not A.
+ */
+export function reletterChoices<T extends { id: string }>(
+  items: readonly T[],
+): Array<Omit<T, "id"> & { id: (typeof CHOICE_LETTERS)[number] }> {
+  const out: Array<Omit<T, "id"> & { id: (typeof CHOICE_LETTERS)[number] }> = [];
+  for (let index = 0; index < items.length && index < CHOICE_LETTERS.length; index += 1) {
+    const item = items[index];
+    const id = CHOICE_LETTERS[index];
+    if (item === undefined || id === undefined) continue;
+    out.push({ ...item, id });
+  }
+  return out;
 }
 
 /** A choice may not name a missing file, a job word, or a question whose topic is already decided. */
@@ -235,6 +321,7 @@ export function choiceAllowed(
   aboutQuotes: boolean,
 ): boolean {
   if (filterGuideText(label, state, aboutQuotes) === null) return false;
+  if (offersForeignImageAsLogo(label, state)) return false;
   const norm = normalizeChoiceLabel(label);
   for (const question of questions) {
     const topic = topicFor(question);
@@ -321,7 +408,10 @@ function decideTopics(
     if (answer !== undefined) add(topic, question.id, answer.text);
   }
   const logo = uploads.find((file) => file.role === "logo");
-  if (logo !== undefined) add("logo", logo.questionId, path.basename(logo.safeName));
+  if (logo !== undefined) {
+    const source = logo.questionId === "" ? "logo-file" : logo.questionId;
+    add("logo", source, assetDisplayName(logo.safeName, logo.originalName));
+  }
   if (uploads.some((file) => file.questionId === "DP-0.4")) {
     add("brand-assets", "DP-0.4", uploads.find((file) => file.questionId === "DP-0.4")?.originalName ?? "brand files");
   }
@@ -386,6 +476,22 @@ function readUploads(projectDir: string): SessionUpload[] {
         });
       }
     }
+    let rootEntries: string[] = [];
+    try {
+      rootEntries = readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name);
+    } catch {
+      rootEntries = [];
+    }
+    for (const name of rootEntries) {
+      files.push({
+        safeName: name,
+        originalName: assetDisplayName(name),
+        questionId: "",
+        role: "other",
+      });
+    }
   }
   const intakePath = path.join(projectDir, ".hitchhiker", "brand", "logo-intake.json");
   if (existsSync(intakePath)) {
@@ -394,12 +500,17 @@ function readUploads(projectDir: string): SessionUpload[] {
       if (isRecord(intake) && typeof intake.safeName === "string") {
         const safe = intake.safeName.replace(/\\/g, "/");
         const questionId = typeof intake.questionId === "string" ? intake.questionId : safe.split("/")[0] ?? "";
+        const intakeOriginal = typeof intake.originalName === "string" ? intake.originalName : undefined;
         const known = files.find((file) => file.safeName === safe || file.safeName.endsWith(`/${path.basename(safe)}`));
-        if (known !== undefined) known.role = "logo";
-        else {
+        const display = assetDisplayName(safe, intakeOriginal ?? known?.originalName);
+        if (known !== undefined) {
+          known.role = "logo";
+          known.originalName = display;
+          if (known.questionId === "" && questionId !== "") known.questionId = questionId;
+        } else {
           files.push({
             safeName: safe,
-            originalName: path.basename(safe),
+            originalName: display,
             questionId,
             role: "logo",
           });
@@ -414,6 +525,12 @@ function readUploads(projectDir: string): SessionUpload[] {
     file.role = roleFromQuestion(file.questionId, file.originalName);
   }
   return files;
+}
+
+function logoDecisionValue(state: SessionState, fallback: string): string {
+  const logo = state.uploads.find((file) => file.role === "logo");
+  if (logo === undefined) return fallback;
+  return assetDisplayName(logo.safeName, logo.originalName);
 }
 
 function roleFromQuestion(questionId: string, name: string): UploadRole {

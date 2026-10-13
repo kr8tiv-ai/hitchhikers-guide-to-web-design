@@ -126,6 +126,11 @@ export {
   prefetchStillValid,
   jargonHits,
   userFacingText,
+  assetDisplayName,
+  assetNamedIn,
+  offersForeignImageAsLogo,
+  guardLogoText,
+  reletterChoices,
 } from "./guide/session-state.ts";
 export { usualRange, usualRangeLine, READING_LINE, GUIDE_FAIL_LINE } from "./guide/guide-progress.ts";
 export { mirrorCue, requestMirror } from "./guide/mirror.ts";

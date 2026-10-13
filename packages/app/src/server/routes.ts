@@ -27,6 +27,10 @@ import {
   loadFacts,
   loadSessionState,
   gateQuestion,
+  assetDisplayName,
+  guardLogoText,
+  offersForeignImageAsLogo,
+  reletterChoices,
   saveConfig,
   loadGallery,
   loadState,
@@ -203,6 +207,8 @@ export interface DeskSession {
   draftsClearedAt: string | null;
   /** Stored answer when Revisit lands on a question that already has one. */
   answerDraft: string | null;
+  /** Logo file slot. Null when no logo has been saved. */
+  logoFile: { originalName: string; safeName: string; bytes: number | null } | null;
 }
 
 export interface DeskApp {
@@ -1201,7 +1207,7 @@ async function handleAttach(
     const relative = `${questionId}/${file.storedName}`;
     if (!isLogoAssetName(relative)) continue;
     try {
-      await rememberLogo(projectDir, relative, questionId);
+      await rememberLogo(projectDir, relative, questionId, file.originalName, file.size, true);
     } catch {
       // The file is already in the question folder. The plate can catch up later.
     }
@@ -1232,12 +1238,24 @@ async function handleUpload(
     return;
   }
   await storeUpload(projectDir, decision.safeName, part.data);
+  const originalName = originalLeaf(part.filename);
   try {
-    await rememberLogo(projectDir, decision.safeName, headerOne(req.headers["x-hh-question"]));
+    await rememberLogo(
+      projectDir,
+      decision.safeName,
+      headerOne(req.headers["x-hh-question"]),
+      originalName,
+      part.data.length,
+    );
   } catch {
     // The bytes are already in .hitchhiker/uploads. A brand-folder problem must not hide that.
   }
-  sendJson(req, res, 201, { ok: true, safeName: decision.safeName, bytes: part.data.length });
+  sendJson(req, res, 201, {
+    ok: true,
+    safeName: decision.safeName,
+    bytes: part.data.length,
+    ...(originalName === "" ? {} : { originalName }),
+  });
 }
 
 /**
@@ -1245,16 +1263,50 @@ async function handleUpload(
  * The bytes stay in uploads. SVG and PDF are named, not served.
  * Other upload questions keep the file and do not write this pointer.
  */
-async function rememberLogo(projectDir: string, safeName: string, rawQuestionId: string): Promise<void> {
+async function rememberLogo(
+  projectDir: string,
+  safeName: string,
+  rawQuestionId: string,
+  originalName?: string,
+  bytes?: number,
+  onlyIfEmpty = false,
+): Promise<void> {
   const questionId = rawQuestionId.trim();
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(questionId)) return;
   if (!isLogoAssetName(safeName)) return;
   const questions = loadTree(treeFile(projectDir));
   const question = questions.find((item) => item.id === questionId);
   if (question === undefined || !isLogoQuestion(question)) return;
+  if (onlyIfEmpty && readLogoIntake(projectDir) !== null) return;
+  const intake: LogoIntake = { safeName, questionId };
+  const leaf = originalLeaf(originalName);
+  if (leaf !== "") intake.originalName = leaf;
+  if (bytes !== undefined && Number.isFinite(bytes) && bytes >= 0) intake.bytes = Math.floor(bytes);
   const dir = path.join(projectDir, ".hitchhiker", "brand");
   await mkdir(dir, { recursive: true });
-  await replaceViaTemp(path.join(dir, "logo-intake.json"), serializeLogoIntake({ safeName, questionId }));
+  await replaceViaTemp(path.join(dir, "logo-intake.json"), serializeLogoIntake(intake));
+}
+
+function originalLeaf(filename: string | undefined): string {
+  if (filename === undefined) return "";
+  const leaf = path.basename(filename.replace(/\\/g, "/")).replace(/[\u0000-\u001F\u007F]/g, "").trim();
+  if (leaf === "" || leaf === "." || leaf === ".." || leaf.includes("..")) return "";
+  return leaf.slice(0, 120);
+}
+
+function logoFileFrom(intake: LogoIntake | null): DeskSession["logoFile"] {
+  if (intake === null) return null;
+  const originalName =
+    intake.originalName !== undefined && intake.originalName !== ""
+      ? intake.originalName
+      : assetDisplayName(intake.safeName);
+  return { originalName, safeName: intake.safeName, bytes: intake.bytes ?? null };
+}
+
+function logoStatusNote(projectDir: string): string | undefined {
+  const file = logoFileFrom(readLogoIntake(projectDir));
+  if (file === null) return undefined;
+  return `Saved as ${file.originalName}.`;
 }
 
 function readLogoIntake(projectDir: string): LogoIntake | null {
@@ -1758,7 +1810,8 @@ function buildSession(
   }
   const done = question === null;
   const requiredList = requiredIds();
-  const index = question === null ? 0 : questions.findIndex((item) => item.id === question.id) + 1;
+  const questionId = question?.id ?? null;
+  const index = questionId === null ? 0 : questions.findIndex((item) => item.id === questionId) + 1;
   const counts: CardCounts | null =
     question === null || index < 1
       ? null
@@ -1788,6 +1841,9 @@ function buildSession(
   }
   const savedFiles = readSavedFiles(projectDir, question?.id ?? null);
   const stored = question === null ? null : (drafts.entries[question.id] ?? null);
+  const guarded = applyLogoGuard(projectDir, question, questions, choices);
+  question = guarded.question;
+  choices = guarded.choices;
   const card: CardState = {
     question,
     draft: "",
@@ -1863,13 +1919,44 @@ function buildSession(
     // The held card can still be the question that was just suggested, after the
     // cursor has moved. Send that choice set. The rendered card only shows a set
     // whose forId is the question on screen.
-    choices: overlay.choices ?? choices,
+    choices: filterLogoChoices(overlay.choices ?? choices, projectDir, questions),
     projectKey: projectKeyFor(projectDir),
     draft: stored,
     savedFiles,
     draftsClearedAt: drafts.clearedAt,
     answerDraft,
+    logoFile: logoFileFrom(projectDir === "" ? null : readLogoIntake(projectDir)),
   };
+}
+
+function filterLogoChoices(
+  set: CardChoiceSet | null,
+  projectDir: string,
+  questions: readonly Question[],
+): CardChoiceSet | null {
+  if (set === null || projectDir === "") return set;
+  const state = loadSessionState(projectDir, questions);
+  const kept = set.items.filter((item) => !offersForeignImageAsLogo(item.label, state));
+  if (kept.length === 0) return null;
+  if (kept.length === set.items.length) return set;
+  const items = reletterChoices(kept);
+  return { ...set, items };
+}
+
+function applyLogoGuard(
+  projectDir: string,
+  question: Question | null,
+  questions: readonly Question[],
+  choices: CardChoiceSet | null,
+): { question: Question | null; choices: CardChoiceSet | null } {
+  if (question === null || projectDir === "") return { question, choices };
+  const state = loadSessionState(projectDir, questions);
+  const ask = guardLogoText(question.ask, state, question, questions);
+  const next = ask === question.ask ? question : { ...question, ask };
+  if (choices === null) return { question: next, choices };
+  const kept = choices.items.filter((item) => !offersForeignImageAsLogo(item.label, state));
+  const items = reletterChoices(kept);
+  return { question: next, choices: items.length === 0 ? null : { ...choices, items } };
 }
 
 function chipsFromSaved(files: readonly SavedFile[]): NonNullable<CardState["attach"]> {
@@ -2123,7 +2210,7 @@ function renderDesk(
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question, logoStatusNote(projectDir))}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
     "question",
   );
   html = mustReplace(
