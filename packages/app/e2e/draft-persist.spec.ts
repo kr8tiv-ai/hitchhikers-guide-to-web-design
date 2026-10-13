@@ -276,6 +276,8 @@ test("a picked choice is saved without writing the helper into the draft", async
     expect((await draftKeys(page)).includes(HELPER)).toBe(false);
     await page.locator("#hh-card-draft").fill("");
     await card.getByRole("radio", { name: /^B\./ }).click();
+    // BUG-012: a choice fills the draft. Answer sends it.
+    await page.locator('[data-action="answer"]').click();
     await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
     await expect(page.locator("[data-assumed='suggested']")).toContainText(`Assumed: ${CHOICE_B}`);
     await expect(page.locator("#hh-card-draft")).toHaveValue("");

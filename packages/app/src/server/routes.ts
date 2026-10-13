@@ -1216,33 +1216,41 @@ async function runDeskTurn(
   text: string | undefined,
   assumed: boolean,
 ): Promise<{ httpStatus: number; body: Record<string, unknown> }> {
-  try {
-    const output = asTurnResult(
-      await turn({
-        kind,
-        questionId,
-        ...(text === undefined ? {} : { text }),
-        ...(assumed ? { assumed: true } : {}),
-      }),
-    );
-    const after = view().question;
-    const moved = after === null || after.id !== questionId;
-    if ((kind === "answer" || kind === "skip") && moved) {
-      try {
-        await clearQuestionDraft(projectDir, questionId);
-      } catch (error: unknown) {
-        logDeskError(error);
+  // A draft save holds the same lock for a file write. Wait it out, then answer.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const output = asTurnResult(
+        await turn({
+          kind,
+          questionId,
+          ...(text === undefined ? {} : { text }),
+          ...(assumed ? { assumed: true } : {}),
+        }),
+      );
+      const after = view().question;
+      const moved = after === null || after.id !== questionId;
+      if ((kind === "answer" || kind === "skip") && moved) {
+        try {
+          await clearQuestionDraft(projectDir, questionId);
+        } catch (error: unknown) {
+          logDeskError(error);
+        }
       }
+      const session = view();
+      hub.publish("session", session);
+      for (const event of output.events) hub.publish("update", event);
+      return { httpStatus: 200, body: { next: output.next, events: output.events, session } };
+    } catch (error: unknown) {
+      if (error instanceof LockHeld && attempt < 7) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        continue;
+      }
+      const mapped = turnError(error);
+      if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
+      return { httpStatus: mapped.status, body: { error: mapped.message } };
     }
-    const session = view();
-    hub.publish("session", session);
-    for (const event of output.events) hub.publish("update", event);
-    return { httpStatus: 200, body: { next: output.next, events: output.events, session } };
-  } catch (error: unknown) {
-    const mapped = turnError(error);
-    if (mapped.status >= 500 || error instanceof LockHeld) logDeskError(error);
-    return { httpStatus: mapped.status, body: { error: mapped.message } };
   }
+  return { httpStatus: 409, body: { error: LOCK_MESSAGE } };
 }
 
 async function handleTurn(
