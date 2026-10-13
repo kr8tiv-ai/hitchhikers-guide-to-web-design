@@ -14,6 +14,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { runGate } from "@hitchhiker/engine";
 import { effortForTier } from "./effort.ts";
 import { evaluateCommand } from "./policy.ts";
 import { preflight } from "./preflight.ts";
@@ -183,6 +184,10 @@ async function runBuild(
       if (action.type !== "stop") {
         throw new FixtureRunError("A green run did not stop.");
       }
+      await runGate(dir, FIXTURE_COMMIT, async () => ({
+        passed: true,
+        summary: `Finished ${id}.`,
+      }));
       await advance({
         projectDir: dir,
         finishedId: id,

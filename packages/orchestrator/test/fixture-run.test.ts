@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadState, saveState } from "@hitchhiker/engine";
+import { buildContextPacket, loadState, readLedger, saveState } from "@hitchhiker/engine";
 import { FixtureRunError, runFixture } from "../src/fixture-run.ts";
 import { evaluateCommand } from "../src/policy.ts";
 import { loadQueue } from "../src/queue-file.ts";
@@ -126,6 +126,16 @@ test("a flaky first failure retries, passes, and leaves no running item", async 
     assert.notEqual(state.lastGoodCommit, "");
     assert.equal(state.nextAction, "Drive idle");
 
+    const summary = readFileSync(path.join(dir, ".hitchhiker", "SUMMARY.md"), "utf8");
+    const verification = readFileSync(path.join(dir, ".hitchhiker", "VERIFICATION.md"), "utf8");
+    assert.match(summary, /Finished 001\./);
+    assert.match(verification, /^# Verification/m);
+    assert.match(verification, /pass/);
+    assert.match(verification, new RegExp(state.lastGoodCommit));
+    const passed = readLedger(dir).filter((entry) => entry.sha === state.lastGoodCommit && entry.passed);
+    assert.equal(passed.length, 1);
+    assert.match(buildContextPacket(dir, "build").buildSummary, /Finished 001\./);
+
     const pushArgv = ["git", "-C", dir, "push", "origin", "main"];
     const decision = evaluateCommand({ argv: pushArgv, projectRoot: dir });
     assert.equal(decision.decision, "deny");
@@ -203,6 +213,7 @@ test("fixture-run wires the drive seams and does not import a network client", (
   assert.match(source, /classifyRun\(/);
   assert.match(source, /preflight\(/);
   assert.match(source, /advance\(/);
+  assert.match(source, /runGate\(/);
   assert.match(source, /evaluateCommand\(/);
   assert.match(source, /export async function runFixture\(/);
   assert.doesNotMatch(source, /["']node:https?["']/);
