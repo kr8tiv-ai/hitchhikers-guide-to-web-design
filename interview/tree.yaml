@@ -929,7 +929,6 @@ questions:
 
   - id: DP-9.4
     topic: accessibility
-    surface: default
     module: limits
     depth: [express, standard, deep]
     ask: "Anything beyond WCAG 2.2 AA?"

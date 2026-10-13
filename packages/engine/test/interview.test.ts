@@ -241,7 +241,6 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
       assert.notEqual(question.id, "DP-0.6");
       assert.notEqual(question.id, "DP-6.5");
       assert.notEqual(question.id, "DP-7.2");
-      assert.notEqual(question.id, "DP-9.4");
       if (question.id === "DP-6.2") {
         skippedMotion = await session.command({ type: "skip" });
         continue;
@@ -266,7 +265,7 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
     const hiddenDefaults = express.filter((question) => question.surface === "default");
     assert.deepEqual(
       hiddenDefaults.map((question) => question.id),
-      ["DP-6.5", "DP-9.4"],
+      ["DP-6.5"],
     );
     for (const question of hiddenDefaults) {
       const row = saved.find((answer) => answer.id === question.id);
