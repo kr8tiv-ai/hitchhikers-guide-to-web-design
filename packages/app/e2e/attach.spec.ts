@@ -47,8 +47,8 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
     await expect(page.locator("[data-attach-zone]")).toBeVisible();
     await expect(page.locator("[data-attach-button]")).toBeVisible();
-    await expect(page.locator(".hh-attach__fine")).toHaveText("Paste a link, or drop one here.");
-    await expect(page.locator(".hh-attach__coarse")).toHaveText("Paste a link");
+    await expect(page.locator("[data-attach-zone] .hh-attach__fine")).toHaveText("Paste a link, or drop one here.");
+    await expect(page.locator("[data-attach-zone] .hh-attach__coarse")).toHaveText("Paste a link");
     await expect(page.locator("[data-attach-file]")).toHaveAttribute("multiple", "");
     await expect(page.locator("[data-attach-file]")).not.toHaveAttribute("capture", /.+/);
 
@@ -67,17 +67,17 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     await page.locator("[data-attach-url]").fill("example.com/old");
     await page.locator("[data-attach-url]").press("Enter");
     await expect(page.locator("[data-attach-live]")).toContainText("Added link example.com/old");
-    await expect(page.locator(".hh-attach__name", { hasText: "example.com/old" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "example.com/old" })).toBeVisible();
 
     await dropText(page, "text/uri-list", "https://example.com/work");
-    await expect(page.locator(".hh-attach__name", { hasText: "example.com/work" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "example.com/work" })).toBeVisible();
 
     await dropFile(page, {
       name: "site.url",
       type: "text/plain",
       bytes: Array.from(Buffer.from("[InternetShortcut]\r\nURL=https://example.com/shortcut\r\n")),
     });
-    await expect(page.locator(".hh-attach__name", { hasText: "example.com/shortcut" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "example.com/shortcut" })).toBeVisible();
 
     const shortcut = page.locator("[data-attach-chip]", { hasText: "example.com/shortcut" });
     await shortcut.locator("[data-attach-remove]").click();
@@ -87,16 +87,16 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     const draft = "I built one site before, with a page builder, and the old address is attached.";
     await page.locator("#hh-card-draft").fill(draft);
     await dropFile(page, { name: "logo.exe", type: "application/octet-stream", bytes: [0x4d, 0x5a] });
-    await expect(page.locator(".hh-attach__error")).toContainText("logo.exe is not a type the Guide takes");
+    await expect(page.locator("[data-attach-zone] .hh-attach__error")).toContainText("logo.exe is not a type the Guide takes");
     await expect(page.locator("#hh-card-draft")).toHaveValue(draft);
-    await expect(page.locator(".hh-attach__name", { hasText: "example.com/old" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "example.com/old" })).toBeVisible();
 
     await page.locator('[data-action="answer"]').click();
     await expect(page.locator("[data-question-id='DP-0.2']")).toHaveCount(0);
 
     await skipUntil(page, "DP-1.1");
-    await expect(page.locator(".hh-attach__fine")).toHaveText("Drop images here, or use Attach.");
-    await expect(page.locator(".hh-attach__coarse")).toHaveText("Attach images");
+    await expect(page.locator("[data-attach-zone] .hh-attach__fine")).toHaveText("Drop images here, or use Attach.");
+    await expect(page.locator("[data-attach-zone] .hh-attach__coarse")).toHaveText("Attach images");
 
     let releaseUpload: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
@@ -110,7 +110,7 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     await expect(page.locator("[data-attach-live]")).toContainText("Uploading 1 of 1");
     await expect(page.locator('[data-action="answer"]')).toBeDisabled();
     releaseUpload();
-    await expect(page.locator(".hh-attach__name", { hasText: "tins.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "tins.png" })).toBeVisible();
     await expect(page.locator("[data-attach-live]")).toContainText("Added 1 file");
     await page.unroute("**/api/attach/**");
 
@@ -118,12 +118,12 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
       { name: "side.png", mimeType: "image/png", buffer: PNG },
       { name: "logo.svg", mimeType: "image/svg+xml", buffer: SVG },
     ]);
-    await expect(page.locator(".hh-attach__name", { hasText: "side.png" })).toBeVisible();
-    await expect(page.locator(".hh-attach__name", { hasText: "logo.svg" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "side.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "logo.svg" })).toBeVisible();
 
     await pasteImage(page);
-    await expect(page.locator(".hh-attach__name", { hasText: /^pasted-image-/ })).toBeVisible();
-    await expect(page.locator(".hh-attach__thumb").first()).toHaveAttribute("src", /^blob:/);
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: /^pasted-image-/ })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__thumb").first()).toHaveAttribute("src", /^blob:/);
 
     const names = await savedFiles(projectDir, "DP-1.1");
     expect(names.some((name) => name.endsWith(".png"))).toBe(true);
@@ -135,9 +135,9 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
       route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"no"}' }),
     );
     await dropFile(page, { name: "again.png", type: "image/png", bytes: Array.from(PNG) });
-    await expect(page.locator(".hh-attach__error")).toContainText("again.png did not save. Try again.");
+    await expect(page.locator("[data-attach-zone] .hh-attach__error")).toContainText("again.png did not save. Try again.");
     await expect(page.locator("#hh-card-draft")).toHaveValue(logoDraft);
-    await expect(page.locator(".hh-attach__name", { hasText: "tins.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "tins.png" })).toBeVisible();
     await expect(page.locator('[data-action="answer"]')).toBeEnabled();
     await page.unroute("**/api/attach/**");
 

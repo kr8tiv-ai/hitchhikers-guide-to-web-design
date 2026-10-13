@@ -253,16 +253,16 @@ test("an attached file stays, and clearing the draft leaves the file", async ({ 
       mimeType: "image/png",
       buffer: PNG,
     });
-    await expect(page.locator(".hh-attach__name", { hasText: "mark.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "mark.png" })).toBeVisible();
     await page.locator("#hh-card-draft").fill("Keep this sentence.");
     await page.goto(new URL("/drive", url).href);
     await page.goto(new URL("/", url).href);
     await ready(page);
     await expect(page.locator("[data-question-id='DP-1.1']")).toBeVisible();
     await expect(page.locator("#hh-card-draft")).toHaveValue("Keep this sentence.");
-    await expect(page.locator(".hh-attach__name", { hasText: "mark.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "mark.png" })).toBeVisible();
     await page.locator("#hh-card-draft").fill("");
-    await expect(page.locator(".hh-attach__name", { hasText: "mark.png" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "mark.png" })).toBeVisible();
     const folder = path.join(projectDir, ".hitchhiker", "uploads", "DP-1.1");
     const names = (await readdir(folder)).filter((name) => name !== "manifest.json");
     expect(names.some((name) => name.endsWith(".png"))).toBe(true);

@@ -29,7 +29,7 @@ test("a logo in the slot survives reload and DP-1.1 does not offer the hero", as
     await page.locator("#hh-logo-file").setInputFiles(logoPath);
     await expect(page.locator("[data-logo-status]")).toContainText("paradise-found-logo.png");
     await page.locator("[data-attach-file]").setInputFiles(heroPath);
-    await expect(page.locator(".hh-attach__name", { hasText: "paradise-found-hero.jpg" })).toBeVisible();
+    await expect(page.locator("[data-attach-zone] .hh-attach__name", { hasText: "paradise-found-hero.jpg" })).toBeVisible();
     await page.reload();
     await page.locator('[data-region="question"][data-live="true"]').waitFor();
     await expect(page.locator("[data-question-id='DP-0.4']")).toBeVisible();

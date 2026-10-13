@@ -484,7 +484,8 @@ interface DeskElement {
   remove?(): void;
   outerHTML?: string;
   focus?(options?: { preventScroll?: boolean }): void;
-  scrollIntoView?(options?: { block?: "start" | "center" | "end" | "nearest" }): void;
+  scrollIntoView?(options?: { block?: "start" | "center" | "end" | "nearest"; inline?: "start" | "center" | "end" | "nearest" }): void;
+  getBoundingClientRect?(): { top: number };
   /** Set on real elements. The desk harness omits it. */
   tagName?: string;
   /** Present on `<dialog>`. The desk harness omits both. */
@@ -525,6 +526,10 @@ interface DeskParent {
 interface DeskWindow {
   addEventListener(type: string, listener: (event?: DeskEvent) => void): void;
   removeEventListener(type: string, listener: (event?: DeskEvent) => void): void;
+  /** Absent on harness windows that only stub storage. */
+  innerWidth?: number;
+  innerHeight?: number;
+  scrollBy?(x: number, y: number): void;
 }
 
 interface DeskDocument {
@@ -3625,25 +3630,35 @@ export function mountDesk(env: DeskEnv): () => void {
     if (typeof heading.focus === "function") heading.focus({ preventScroll: true });
   }
 
-  /** Scroll the question into view. The tour stays where it is and does not take focus. */
+  /**
+   * Bring the question into view without pinning it to the top of the page.
+   * A browser document focuses the answer box, or the heading when that box
+   * would open a keyboard. Harnesses omit defaultView, so they keep focus.
+   * The tour is not a focus target.
+   */
   function placeQuestion(): void {
     const question = region();
     if (question === null) return;
     const heading = question.querySelector("#hh-card-ask");
     if (heading === null) return;
-    if (typeof heading.scrollIntoView === "function") heading.scrollIntoView({ block: "start" });
-    const size = viewportSize();
+    const view = env.document.defaultView ?? null;
+    revealHeading(heading, view);
+    if (view === null || typeof view.innerWidth !== "number" || typeof view.innerHeight !== "number") return;
     const draft = question.querySelector("#hh-card-draft");
-    const useDraft = questionFocusTarget(size.width, size.height) === "draft" && draft !== null;
+    const useDraft = questionFocusTarget(view.innerWidth, view.innerHeight) === "draft" && draft !== null;
     const target = useDraft && draft !== null ? draft : heading;
     if (!useDraft && heading.getAttribute("tabindex") !== "-1") heading.setAttribute("tabindex", "-1");
     if (typeof target.focus === "function") target.focus({ preventScroll: true });
+    revealHeading(heading, view);
   }
 
-  function viewportSize(): { width: number; height: number } {
-    const view = globalThis.window;
-    if (view === undefined || view === null) return { width: 0, height: 0 };
-    return { width: view.innerWidth, height: view.innerHeight };
+  function revealHeading(heading: DeskElement, view: DeskWindow | null): void {
+    if (typeof heading.scrollIntoView === "function") {
+      heading.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    if (view === null || typeof heading.getBoundingClientRect !== "function") return;
+    const top = heading.getBoundingClientRect().top;
+    if (top < 0 && typeof view.scrollBy === "function") view.scrollBy(0, Math.floor(top));
   }
 
   function toggleEdit(id: string): void {
