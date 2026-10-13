@@ -501,9 +501,17 @@ test("route slots, static files, and the browser modules are served", async () =
     const card = await fetch(new URL("/client/card.js", handle.url));
     const cardJs = await card.text();
     assert.match(cardJs, /hh-qcard/);
+    assert.match(cardJs, /from "\/client\/question-parts\.js"/);
+    assert.equal(cardJs.includes("question-parts.ts"), false);
     assert.equal(cardJs.includes("@hitchhiker"), false);
+    const parts = await fetch(new URL("/client/question-parts.js", handle.url));
+    const partsJs = await parts.text();
+    assert.equal(parts.status, 200);
+    assert.match(partsJs, /function stripQuestionIds/);
+    assert.equal(partsJs.includes(".ts"), false);
     assertSyntax(deskJs, "hh-desk-check.js");
     assertSyntax(cardJs, "hh-card-check.js");
+    assertSyntax(partsJs, "hh-question-parts-check.js");
   });
 });
 

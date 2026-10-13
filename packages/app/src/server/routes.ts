@@ -246,6 +246,7 @@ const JSON_LIMIT = 1024 * 1024;
 const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
+const QUESTION_PARTS_SOURCE = path.resolve(SRC_ROOT, "question-parts.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
@@ -1996,6 +1997,10 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(CARD_SOURCE)));
     return;
   }
+  if (pathname === "/client/question-parts.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(QUESTION_PARTS_SOURCE)));
+    return;
+  }
   if (pathname === "/client/attach.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(ATTACH_SOURCE)));
     return;
@@ -3194,6 +3199,8 @@ function browserModule(filePath: string): string {
   const js = stripped
     .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
+    .replace(/from\s+["']\.\/question-parts\.ts["']/g, 'from "/client/question-parts.js"')
+    .replace(/from\s+["']\.\.\/question-parts\.ts["']/g, 'from "/client/question-parts.js"')
     .replace(/from\s+["']\.\/client\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
