@@ -40,6 +40,53 @@ test("the card renders the radiogroup inside the article and not as a transcript
   assert.ok(otherAt > html.indexOf('data-choice-id="D"'));
 });
 
+test("one model choice is singular and an echo of the ask is not a choice", () => {
+  const one = renderCard(
+    card({
+      choices: {
+        forId: "DP-0.1",
+        origin: "model",
+        items: [{ id: "A", label: "Show the tin on the page.", why: "A photo.", source: "upload:tins.jpg" }],
+      },
+    }),
+  );
+  assert.match(one, /Options ready: 1 choice/);
+  assert.equal(one.includes("1 choices"), false);
+  assert.match(one, /data-choice-id="other"/);
+
+  const echo = renderCard(
+    card({
+      pushback: "What is the one concrete detail?",
+      choices: {
+        forId: "DP-0.1",
+        origin: "model",
+        items: [
+          { id: "A", label: "Is this site for you, or for a client.", why: "Same question.", source: "question:suggest" },
+          { id: "B", label: "What is the one concrete detail?", why: "The pushback.", source: "question:suggest" },
+        ],
+      },
+    }),
+  );
+  assert.equal(echo.includes('role="radiogroup"'), false);
+  assert.equal(echo.includes("Options ready"), false);
+  assert.equal(echo.includes("data-choice-id"), false);
+});
+
+test("a pending card says the Guide is reading, and a draft enables Answer", () => {
+  const pending = renderCard(card({ pending: true, draft: "A towel shop." }));
+  assert.match(pending, /aria-busy="true"/);
+  assert.match(pending, /Guide is reading your answer…/);
+  assert.match(pending, /data-action="answer"[^>]*disabled/);
+
+  const ready = renderCard(card({ draft: "A towel shop." }));
+  assert.equal(ready.includes('aria-busy="true"'), false);
+  assert.match(ready, /data-guide-reading[^>]*>\s*</);
+  assert.doesNotMatch(ready, /data-action="answer"[^>]*disabled/);
+
+  const blank = renderCard(card({ draft: "   " }));
+  assert.match(blank, /data-action="answer"[^>]*disabled/);
+});
+
 test("a choice set for another question is not rendered", () => {
   const html = renderCard(
     card({
