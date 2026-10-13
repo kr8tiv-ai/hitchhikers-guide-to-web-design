@@ -69,6 +69,20 @@ test("the app index exports the card functions", () => {
   assert.equal(reduceExported, reduceCard);
 });
 
+test("a guide timeout offers Retry and leaves the draft in the field", () => {
+  const html = renderCard(
+    state({
+      draft: "For myself.",
+      error: "The Guide took too long to answer. Your answer is kept. Try again.",
+    }),
+  );
+  assert.match(html, /data-retry="answer"/);
+  assert.match(html, />Retry</);
+  assert.match(html, /For myself\./);
+  const other = renderCard(state({ draft: "For myself.", error: "Write an answer or skip." }));
+  assert.equal(other.includes('data-retry="answer"'), false);
+});
+
 test("an ask and a why that contain markup are escaped", () => {
   const html = renderCard(
     state({

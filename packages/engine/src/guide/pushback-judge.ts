@@ -1,6 +1,6 @@
 import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
-import type { think } from "../ai/think.ts";
+import { ThinkTimeoutError, type think } from "../ai/think.ts";
 import { buildContextPacket, factsFromPacket, withContextPacket, type ContextPacket } from "../context/index.ts";
 import { classifyAnswer } from "./answer-shape.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
@@ -14,7 +14,7 @@ import {
 } from "./session-state.ts";
 import { choiceSetFrom } from "./suggest.ts";
 import { validateGuideMessage } from "./validators.ts";
-import { GUIDE_FAIL_LINE } from "./guide-progress.ts";
+import { GUIDE_FAIL_LINE, GUIDE_TIMEOUT_LINE } from "./guide-progress.ts";
 
 /**
  * Model verdict OR the 019 phrase floor. Vague answers still push twice (D-004).
@@ -83,6 +83,7 @@ export async function judgePushback(
   let sharper = "";
   let raw: unknown = null;
   let failed: unknown = null;
+  let timedOut = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const request = await withContextPacket(
@@ -122,12 +123,20 @@ export async function judgePushback(
       break;
     } catch (error) {
       failed = error;
+      if (error instanceof ThinkTimeoutError) timedOut = true;
     }
   }
   if (failed !== null) {
     if (deps.surfaceErrors === true) throw failed;
     if (!floor) {
-      return { action: "accept", count: prior, quote: "", message: GUIDE_FAIL_LINE, floor: false, unchecked: true };
+      return {
+        action: "accept",
+        count: prior,
+        quote: "",
+        message: timedOut ? GUIDE_TIMEOUT_LINE : GUIDE_FAIL_LINE,
+        floor: false,
+        unchecked: true,
+      };
     }
     modelVague = false;
     raw = null;

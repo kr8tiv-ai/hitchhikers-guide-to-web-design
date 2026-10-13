@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Effort, GuideConfig } from "../config.ts";
 import { loadConfig } from "../config.ts";
 import { callCwd, isInterviewTask, planInterview } from "../guide/interview-call.ts";
-import { GUIDE_INTERVIEW_TIMEOUT_MS } from "../guide/guide-progress.ts";
+import { guideCallTimeoutMs } from "../guide/guide-progress.ts";
 import {
   CassetteError,
   CassetteMissError,
@@ -369,9 +369,7 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
     const scratch = path.join(projectDir, ".hitchhiker", "tmp", `think-${randomUUID()}`);
     await mkdir(scratch, { recursive: true });
     const cwd = callCwd(req.task, projectDir, scratch);
-    const timeoutMs = isInterviewTask(req.task)
-      ? Math.min(cfg.ai.timeoutMs, GUIDE_INTERVIEW_TIMEOUT_MS)
-      : cfg.ai.timeoutMs;
+    const timeoutMs = isInterviewTask(req.task) ? guideCallTimeoutMs(cfg.ai.timeoutMs) : cfg.ai.timeoutMs;
     try {
       let firstRaw = "";
       let firstErrors: string[] = [];

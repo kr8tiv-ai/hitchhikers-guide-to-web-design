@@ -236,6 +236,9 @@ export {
   usualRangeLine,
   READING_LINE,
   GUIDE_FAIL_LINE,
+  GUIDE_TIMEOUT_LINE,
+  GUIDE_CALL_TIMEOUT_MS,
+  guideCallTimeoutMs,
   ANSWER_PROGRESS,
   isAnswerProgressStage,
 } from "./guide/guide-progress.ts";

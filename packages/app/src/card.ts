@@ -461,6 +461,12 @@ ${radios.join("\n")}
   <p class="hh-choices__live" data-choices-live aria-live="polite">Options ready: ${items.length} ${noun}</p>`;
 }
 
+/** Shown only when the Guide call itself timed out. The draft stays in the field. */
+function timeoutRetry(error: string | null): string {
+  if (error === null || !/took too long/i.test(error)) return "";
+  return `  <p class="hh-qcard__retry"><button type="button" class="hh-btn hh-btn--secondary" data-retry="answer">Retry</button></p>\n`;
+}
+
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
   if (state.done) return doneCard(state.brief);
@@ -510,6 +516,7 @@ ${choicesHtml}  <label class="hh-qcard__field">
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
 ${draftStatus(state.draftNote, state.draftFade)}  </label>
 ${attachHtml}${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
+${timeoutRetry(state.error)}
 ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard__actions">
     ${talkButton(false, state.listening === true)}
     ${button("answer", "Answer", "primary", answerOff)}

@@ -296,7 +296,18 @@ export async function withContextPacket<T>(
   const resolved = packet ?? (projectDir.trim() !== "" ? buildContextPacket(projectDir, purpose, options ?? {}) : undefined);
   if (resolved === undefined) throw new Error("A context packet is required.");
   const input = withPacketText(req.input, redact(renderContextPacket(resolved)));
-  if (projectDir.trim() !== "") writeAudit(projectDir, purpose, resolved);
+  if (projectDir.trim() !== "") {
+    const dir = projectDir;
+    const why = purpose;
+    const body = resolved;
+    setTimeout(() => {
+      try {
+        writeAudit(dir, why, body);
+      } catch {
+        // The audit file must not sit in front of the model call.
+      }
+    }, 0);
+  }
   return { ...req, input };
 }
 

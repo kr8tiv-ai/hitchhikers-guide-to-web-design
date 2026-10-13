@@ -3,7 +3,20 @@
  */
 
 export const GUIDE_STALL_MS = 120_000;
-export const GUIDE_INTERVIEW_TIMEOUT_MS = 110_000;
+/**
+ * Floor for an interview, judge, suggest, or brief call.
+ * Extra-high replies on this desk run past two minutes. The old 110s cap
+ * killed the child before the model finished. A saved timeout may be longer.
+ */
+export const GUIDE_CALL_TIMEOUT_MS = 600_000;
+
+/** The longer of the saved timeout and the guide floor. */
+export function guideCallTimeoutMs(configuredMs: number): number {
+  const configured = Number.isFinite(configuredMs) ? configuredMs : GUIDE_CALL_TIMEOUT_MS;
+  return Math.max(GUIDE_CALL_TIMEOUT_MS, configured);
+}
+
+export const GUIDE_TIMEOUT_LINE = "The Guide took too long to answer. Your answer is kept.";
 
 export const GUIDE_STAGES = [
   "Sending to Grok",

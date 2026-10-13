@@ -40,6 +40,7 @@ import {
   readRevisitId,
   writeRevisitId,
   GUIDE_FAIL_LINE,
+  GUIDE_TIMEOUT_LINE,
   READING_LINE,
   parseWalkState,
   questionsToAsk,
@@ -4080,7 +4081,7 @@ function asTurnResult(value: unknown): { next: unknown; events: unknown[] } {
 
 const REPLAY_MESSAGE =
   "The Guide is in replay mode and has no recorded answer for this. Restart hh app without HH_CASSETTE.";
-const TIMEOUT_MESSAGE = "The Guide took too long to answer. Your answer is kept. Try again.";
+const TIMEOUT_MESSAGE = `${GUIDE_TIMEOUT_LINE} Try again.`;
 const MISSING_MESSAGE = "Grok is not on this machine. Your answer is kept. Run hh doctor, then try again.";
 const SIGNED_OUT_MESSAGE = "Grok is not signed in. Your answer is kept. Run grok login, then try again.";
 const LIMITED_MESSAGE = "Grok's usage limit was reached. Your answer is kept. Try again later.";

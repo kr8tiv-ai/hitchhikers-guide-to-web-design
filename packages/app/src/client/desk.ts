@@ -959,6 +959,11 @@ export function mountDesk(env: DeskEnv): () => void {
       if (id !== null) void requestSuggestion(id);
       return;
     }
+    if (readMarked(event.target, "data-retry") === "answer") {
+      event.preventDefault();
+      void submit("answer");
+      return;
+    }
     if (hasMark(event.target, "data-attach-button")) {
       event.preventDefault();
       openFilePicker("[data-attach-file]");
