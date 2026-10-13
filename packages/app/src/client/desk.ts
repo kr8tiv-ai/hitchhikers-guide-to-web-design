@@ -181,6 +181,16 @@ export function languagePanel(questionId: string): string {
 const LOGO_HINT =
   "Drop a logo file here, or choose one. PNG, JPG, WEBP, GIF, SVG, or PDF. Up to 25 MB. It stays on this machine.";
 
+/**
+ * A short or narrow viewport would open a keyboard if the answer box took focus.
+ * 1024x640 is short. A phone width is narrow. Otherwise the answer box is safe.
+ */
+export function questionFocusTarget(width: number, height: number): "draft" | "heading" {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return "heading";
+  if (width < 720 || height < 700) return "heading";
+  return "draft";
+}
+
 /** Matches the server cap in uploads.ts. The server still refuses a larger body. */
 const LOGO_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -473,7 +483,8 @@ interface DeskElement {
   insertAdjacentHTML?(position: "beforebegin" | "afterbegin" | "beforeend" | "afterend", html: string): void;
   remove?(): void;
   outerHTML?: string;
-  focus?(): void;
+  focus?(options?: { preventScroll?: boolean }): void;
+  scrollIntoView?(options?: { block?: "start" | "center" | "end" | "nearest" }): void;
   /** Set on real elements. The desk harness omits it. */
   tagName?: string;
   /** Present on `<dialog>`. The desk harness omits both. */
@@ -2221,6 +2232,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     error = null;
     paint();
+    placeQuestion();
     if (draftNote === DRAFT_RESTORED) announceDraftNote(DRAFT_RESTORED);
     if (keepField && draft.trim() !== "") rememberDraft(false);
     question.setAttribute("data-live", "true");
@@ -3610,7 +3622,28 @@ export function mountDesk(env: DeskEnv): () => void {
     const heading = region()?.querySelector("#hh-card-ask");
     if (heading === null || heading === undefined) return;
     if (heading.getAttribute("tabindex") !== "-1") heading.setAttribute("tabindex", "-1");
-    if (typeof heading.focus === "function") heading.focus();
+    if (typeof heading.focus === "function") heading.focus({ preventScroll: true });
+  }
+
+  /** Scroll the question into view. The tour stays where it is and does not take focus. */
+  function placeQuestion(): void {
+    const question = region();
+    if (question === null) return;
+    const heading = question.querySelector("#hh-card-ask");
+    if (heading === null) return;
+    if (typeof heading.scrollIntoView === "function") heading.scrollIntoView({ block: "start" });
+    const size = viewportSize();
+    const draft = question.querySelector("#hh-card-draft");
+    const useDraft = questionFocusTarget(size.width, size.height) === "draft" && draft !== null;
+    const target = useDraft && draft !== null ? draft : heading;
+    if (!useDraft && heading.getAttribute("tabindex") !== "-1") heading.setAttribute("tabindex", "-1");
+    if (typeof target.focus === "function") target.focus({ preventScroll: true });
+  }
+
+  function viewportSize(): { width: number; height: number } {
+    const view = globalThis.window;
+    if (view === undefined || view === null) return { width: 0, height: 0 };
+    return { width: view.innerWidth, height: view.innerHeight };
   }
 
   function toggleEdit(id: string): void {

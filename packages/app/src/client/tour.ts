@@ -51,8 +51,6 @@ export function mountTour(doc: TourDocument): () => void {
     if (marked(node, "data-tour-back")) moveTour(tour, -1);
   };
   tour.addEventListener?.("click", onClick);
-  if (tour.focus !== undefined && !reducedMotion()) tour.focus();
-  else tour.focus?.();
   return () => {
     tour.removeEventListener?.("click", onClick);
   };
@@ -62,11 +60,6 @@ function marked(node: TourNode, name: string): boolean {
   if (node.getAttribute?.(name) !== undefined && node.getAttribute?.(name) !== null) return true;
   const found = node.closest?.(`[${name}]`);
   return found !== null && found !== undefined;
-}
-
-function reducedMotion(): boolean {
-  if (typeof matchMedia !== "function") return false;
-  return matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** True when the key was handled. Call before other desk shortcuts. */
