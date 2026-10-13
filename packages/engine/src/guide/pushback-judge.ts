@@ -2,6 +2,7 @@ import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
 import type { think } from "../ai/think.ts";
 import { buildContextPacket, factsFromPacket, withContextPacket, type ContextPacket } from "../context/index.ts";
+import { classifyAnswer } from "./answer-shape.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
 import {
   choiceAllowed,
@@ -16,13 +17,15 @@ import { validateGuideMessage } from "./validators.ts";
 import { GUIDE_FAIL_LINE } from "./guide-progress.ts";
 
 /**
- * Model verdict OR the 019 phrase floor. At most two pushes, then SOFT.
- * A model failure counts as not vague, so the phrase floor still applies.
- * The engine stores SOFT only when the phrase floor matches. The caller marks
- * a model-only third accept as SOFT after that store.
+ * Model verdict OR the 019 phrase floor. Vague answers still push twice (D-004).
+ * A concrete-likely answer pushes at most once, and only when the judge names
+ * the missing part. A model failure is not a soft verdict.
  */
 
 export const PUSH_CAP = 2;
+/** Concrete-likely answers. Vague answers keep PUSH_CAP unless followUpCap is set. */
+export const CONCRETE_FOLLOW_UP_CAP = 1;
+export const ACCEPTED_AFTER_FOLLOW_UP = "accepted after one follow-up";
 
 const FLOOR_FALLBACK = "That answer is still soft. What is one concrete detail the site should use?";
 const ES_FALLBACK = "Eso sigue blando. Que detalle concreto debe usar el sitio?";
@@ -41,6 +44,8 @@ export interface PushJudgement {
   unchecked?: boolean;
   /** True when the push text is the floor fallback line. */
   fallback?: boolean;
+  /** Set when a follow-up cap keeps the answer as given. */
+  note?: string;
 }
 
 export async function judgePushback(
@@ -58,13 +63,17 @@ export async function judgePushback(
     questions?: readonly Question[];
     /** When set, a model timeout or crash is thrown instead of treated as a clear answer. */
     surfaceErrors?: boolean;
-    /** Previous push text for this question, so the floor line cannot repeat. */
+    /** Previous push text for this question, so the same line cannot repeat. */
     priorMessage?: string | undefined;
+    /** Total follow-ups for this question. Unset keeps D-004 (two) for vague answers. */
+    followUpCap?: number;
   },
 ): Promise<PushJudgement> {
   const floor = pushbackFor(question, text) !== null;
   const prior = pushes < 0 ? 0 : pushes;
   const language = deps.language ?? "en";
+  const followUp = deps.priorMessage?.trim() ?? "";
+  const classification = classifyAnswer(question, text, followUp);
   const packet =
     deps.packet ?? (deps.projectDir !== undefined && deps.projectDir.trim() !== "" ? buildContextPacket(deps.projectDir, "judge") : undefined);
   if (packet === undefined) throw new Error("A context packet is required.");
@@ -85,10 +94,15 @@ export async function judgePushback(
           input: [
             `Question id: ${question.id}`,
             `Ask: ${question.ask}`,
+            `Expected shape: ${classification.shape}`,
+            `Follow-up being judged: ${followUp === "" ? "This is the base question." : followUp}`,
+            `Pre-classifier: ${classification.concreteLikely ? "concrete-likely" : "not concrete"}`,
+            `Evidence: ${classification.evidence}`,
             `Pushes already used: ${prior}`,
             "User answer:",
             text,
             "Say whether the answer is vague. Quote their words. Offer one sharper question in sharperChoice.",
+            "If the answer is concrete-likely and you still mark vague true, sharperChoice must say what is missing.",
             "Return 2 to 4 choices with ids A, B, C, D. Do not put the sharper question into choices.",
             "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts.",
             deps.session === undefined ? "" : sessionBlock(deps.session),
@@ -118,18 +132,32 @@ export async function judgePushback(
     modelVague = false;
     raw = null;
   }
-  const concrete = concreteColourAnswer(question, text);
-  const vague = floor || (modelVague && !concrete);
+  const concreteLikely = classification.concreteLikely;
+  const cited = concreteLikely && modelVague && citesMissing(sharper);
+  const vague = floor || cited || (modelVague && !concreteLikely);
   const safeQuote = cleanQuote(quote, text);
   if (!vague) {
     return { action: "accept", count: prior, quote: "", message: "", floor };
   }
-  if (prior >= PUSH_CAP) {
+  const concreteCap = deps.followUpCap ?? CONCRETE_FOLLOW_UP_CAP;
+  const vagueCap = deps.followUpCap ?? PUSH_CAP;
+  const cap = concreteLikely && !floor ? concreteCap : vagueCap;
+  if (prior >= cap) {
+    if ((concreteLikely && !floor) || cap < PUSH_CAP) {
+      return { action: "accept", count: prior, quote: "", message: "", floor: false, note: ACCEPTED_AFTER_FOLLOW_UP };
+    }
     return { action: "soft", count: prior, quote: safeQuote, message: "", floor };
   }
   const message = sharperLine(sharper, question, text, language, facts);
-  if (message === FLOOR_FALLBACK && deps.priorMessage === FLOOR_FALLBACK) {
-    return { action: "accept", count: prior, quote: "", message: "", floor: false };
+  if (sameFollowUp(message, deps.priorMessage)) {
+    return {
+      action: "accept",
+      count: prior,
+      quote: "",
+      message: "",
+      floor: false,
+      ...(prior >= 1 ? { note: ACCEPTED_AFTER_FOLLOW_UP } : {}),
+    };
   }
   const follow = followUpChoices(raw, message, facts, language, question.ask);
   if (deps.session !== undefined) {
@@ -151,45 +179,39 @@ export async function judgePushback(
   };
 }
 
-const COLOUR_WORDS = [
-  "jungle",
-  "green",
-  "gold",
-  "sunset",
-  "ocean",
-  "blue",
-  "sand",
-  "black",
-  "ember",
-  "white",
-  "red",
-  "yellow",
-  "orange",
-  "purple",
-  "pink",
-  "brown",
-  "grey",
-  "gray",
-  "teal",
-  "navy",
-  "cream",
-] as const;
+const SHARPER_WHY = "A sharper question for this answer.";
 
-/** Named colours or a hex value on a colour question. The judge still runs. A phrase floor still wins. */
-function concreteColourAnswer(question: Question, text: string): boolean {
-  const ask = question.ask.toLowerCase();
-  const topic = (question.topic ?? "").toLowerCase();
-  if (topic !== "palette" && !ask.includes("color") && !ask.includes("colour")) return false;
-  if (/#[0-9a-f]{3,8}\b/i.test(text)) return true;
-  const padded = ` ${text.toLowerCase()} `;
-  let count = 0;
-  for (const word of COLOUR_WORDS) {
-    if (padded.includes(` ${word} `)) count += 1;
-  }
-  return count >= 3;
+/** A soft verdict on a concrete-likely answer has to name the missing part. */
+function citesMissing(sharper: string): boolean {
+  const line = sharper.trim().toLowerCase();
+  if (line === "") return false;
+  if (line.indexOf("one concrete detail the site should use") !== -1) return false;
+  if (line.startsWith("that answer is still soft")) return false;
+  return hasWord(line, "missing");
 }
 
-const SHARPER_WHY = "A sharper question for this answer.";
+function sameFollowUp(message: string, prior: string | undefined): boolean {
+  if (prior === undefined) return false;
+  return normalizeFollowUp(message) !== "" && normalizeFollowUp(message) === normalizeFollowUp(prior);
+}
+
+function normalizeFollowUp(text: string): string {
+  return text.trim().toLowerCase().replaceAll("\u2019", "'");
+}
+
+function hasWord(hay: string, word: string): boolean {
+  let from = 0;
+  while (from < hay.length) {
+    const at = hay.indexOf(word, from);
+    if (at < 0) return false;
+    const before = at === 0 ? " " : (hay[at - 1] ?? " ");
+    const after = hay[at + word.length] ?? " ";
+    const wordChar = (ch: string) => (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "'";
+    if (!wordChar(before) && !wordChar(after)) return true;
+    from = at + 1;
+  }
+  return false;
+}
 
 /**
  * Model choices only. The sharper line is a Guide message, never a choice.

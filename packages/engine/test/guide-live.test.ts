@@ -137,12 +137,18 @@ test("a model-only vague answer is stored as SOFT after two pushes", async () =>
   try {
     writePair(projectDir);
     assert.equal(pushbackFor(question, text), null);
+    let judgeCalls = 0;
     const model = asThink(async (req) => {
       if (req.task === "pushback-judge") {
+        judgeCalls += 1;
+        const sharper =
+          judgeCalls === 1
+            ? "What is the one page this shop site should publish first?"
+            : "What is the one offer this shop site should name first?";
         return hit({
           vague: true,
           quote: "The pages can wait",
-          sharperChoice: "What is the one page this shop site should publish first?",
+          sharperChoice: sharper,
         });
       }
       if (req.task === "guide-message") {

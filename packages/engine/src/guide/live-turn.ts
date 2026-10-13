@@ -66,7 +66,7 @@ export interface GuideSession {
   language: string;
   pushes: Record<string, number>;
   shown?: string[];
-  /** Last floor-fallback push, so the same question does not hear it twice in a row. */
+  /** Last follow-up on this question, so the same line is not shown twice. */
   lastFallback?: { id: string; message: string } | undefined;
 }
 
@@ -102,6 +102,8 @@ export interface GuideTurn {
   choicesForId?: string;
   quote?: string;
   calm?: boolean;
+  /** Set when a follow-up cap keeps the answer as given. */
+  note?: string;
 }
 
 export const CALM_MESSAGE =
@@ -249,9 +251,9 @@ async function answerText(
     questions,
     priorMessage: s.lastFallback?.id === current.id ? s.lastFallback.message : undefined,
   });
-  if (judgement.action === "push" && judgement.fallback === true) {
+  if (judgement.action === "push") {
     s.lastFallback = { id: current.id, message: judgement.message };
-  } else if (judgement.action === "push") {
+  } else if (s.lastFallback?.id === current.id) {
     s.lastFallback = undefined;
   }
   if (judgement.unchecked === true) {
@@ -285,7 +287,9 @@ async function answerText(
   else await storePlain(s, text);
   if (judgement.action === "soft" && !judgement.floor) await markLatestSoft(s.projectDir, current.id);
   if (judgement.action === "soft") s.pushes[current.id] = judgement.count;
-  return advanceAnswer(s, current, judgement.action === "soft", deps);
+  const turn = await advanceAnswer(s, current, judgement.action === "soft", deps);
+  if (judgement.note !== undefined && judgement.note !== "") turn.note = judgement.note;
+  return turn;
 }
 
 async function advanceAnswer(
