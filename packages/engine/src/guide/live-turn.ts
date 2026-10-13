@@ -64,6 +64,8 @@ export interface GuideSession {
   language: string;
   pushes: Record<string, number>;
   shown?: string[];
+  /** Last floor-fallback push, so the same question does not hear it twice in a row. */
+  lastFallback?: { id: string; message: string } | undefined;
 }
 
 export interface GuideAcp {
@@ -228,7 +230,20 @@ async function answerText(
     facts,
     session: judgedState,
     questions,
+    priorMessage: s.lastFallback?.id === current.id ? s.lastFallback.message : undefined,
   });
+  if (judgement.action === "push" && judgement.fallback === true) {
+    s.lastFallback = { id: current.id, message: judgement.message };
+  } else if (judgement.action === "push") {
+    s.lastFallback = undefined;
+  }
+  if (judgement.unchecked === true) {
+    await storePlain(s, text);
+    const turn = await advance(s, current, false, deps);
+    turn.calm = true;
+    turn.message = judgement.message;
+    return turn;
+  }
   if (judgement.action === "push" && bound && !judgement.floor) {
     await storePlain(s, text);
     return advance(s, current, false, deps);
@@ -630,6 +645,7 @@ async function hydrate(s: GuideSession): Promise<void> {
   s.pushes = pushes;
   const shown = new Set([...(s.shown ?? []), ...saved.shown]);
   if (shown.size > 0) s.shown = [...shown];
+  if (saved.lastFallback !== undefined) s.lastFallback = saved.lastFallback;
 }
 
 async function persistSession(s: GuideSession): Promise<void> {
@@ -638,6 +654,7 @@ async function persistSession(s: GuideSession): Promise<void> {
     language: s.language,
     pushes: s.pushes,
     shown: s.shown ?? [],
+    ...(s.lastFallback === undefined ? {} : { lastFallback: s.lastFallback }),
   };
   await withStateLock(s.projectDir, async () => {
     await writeFile(
@@ -648,7 +665,12 @@ async function persistSession(s: GuideSession): Promise<void> {
   });
 }
 
-function readGuideFile(projectDir: string): { language: string; pushes: Record<string, number>; shown: string[] } {
+function readGuideFile(projectDir: string): {
+  language: string;
+  pushes: Record<string, number>;
+  shown: string[];
+  lastFallback?: { id: string; message: string };
+} {
   const empty = { language: "", pushes: {} as Record<string, number>, shown: [] as string[] };
   const file = path.join(projectDir, ".hitchhiker", SESSION_FILE);
   if (!existsSync(file)) return empty;
@@ -668,7 +690,12 @@ function readGuideFile(projectDir: string): { language: string; pushes: Record<s
         if (typeof url === "string" && url.trim() !== "") shown.push(url);
       }
     }
-    return { language, pushes, shown };
+    const last = isRecord(value.lastFallback) ? value.lastFallback : null;
+    const lastFallback =
+      last !== null && typeof last.id === "string" && typeof last.message === "string" && last.id !== ""
+        ? { id: last.id, message: last.message }
+        : undefined;
+    return lastFallback === undefined ? { language, pushes, shown } : { language, pushes, shown, lastFallback };
   } catch {
     return empty;
   }

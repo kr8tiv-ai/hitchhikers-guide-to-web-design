@@ -12,6 +12,7 @@ import {
 } from "./session-state.ts";
 import { choiceSetFrom } from "./suggest.ts";
 import { validateGuideMessage } from "./validators.ts";
+import { GUIDE_FAIL_LINE } from "./guide-progress.ts";
 
 /**
  * Model verdict OR the 019 phrase floor. At most two pushes, then SOFT.
@@ -35,6 +36,10 @@ export interface PushJudgement {
   /** Present on a push. Model choices, or one fallback. Never on accept or soft. */
   choices?: SuggestChoice[];
   choicesOrigin?: ChoiceOrigin;
+  /** The check could not run. The answer is kept. The message is a notice, not a soft verdict. */
+  unchecked?: boolean;
+  /** True when the push text is the floor fallback line. */
+  fallback?: boolean;
 }
 
 export async function judgePushback(
@@ -51,6 +56,8 @@ export async function judgePushback(
     questions?: readonly Question[];
     /** When set, a model timeout or crash is thrown instead of treated as a clear answer. */
     surfaceErrors?: boolean;
+    /** Previous push text for this question, so the floor line cannot repeat. */
+    priorMessage?: string | undefined;
   },
 ): Promise<PushJudgement> {
   const floor = pushbackFor(question, text) !== null;
@@ -61,38 +68,50 @@ export async function judgePushback(
   let quote = "";
   let sharper = "";
   let raw: unknown = null;
-  try {
-    const result = await deps.think(
-      {
-        task: PUSHBACK_TASK,
-        schema: PUSHBACK_SCHEMA,
-        input: [
-          `Question id: ${question.id}`,
-          `Ask: ${question.ask}`,
-          `Pushes already used: ${prior}`,
-          "User answer:",
-          text,
-          "Say whether the answer is vague. Quote their words. Offer one sharper question in sharperChoice.",
-          "Return 2 to 4 choices with ids A, B, C, D. Do not put the sharper question into choices.",
-          "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts.",
-          deps.session === undefined ? "" : sessionBlock(deps.session),
-        ].join("\n"),
-      },
-      deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
-    );
-    raw = result.value;
-    const value = asVerdict(result.value);
-    if (value !== null) {
-      modelVague = value.vague;
-      quote = value.quote;
-      sharper = value.sharperChoice;
+  let failed: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await deps.think(
+        {
+          task: PUSHBACK_TASK,
+          schema: PUSHBACK_SCHEMA,
+          input: [
+            `Question id: ${question.id}`,
+            `Ask: ${question.ask}`,
+            `Pushes already used: ${prior}`,
+            "User answer:",
+            text,
+            "Say whether the answer is vague. Quote their words. Offer one sharper question in sharperChoice.",
+            "Return 2 to 4 choices with ids A, B, C, D. Do not put the sharper question into choices.",
+            "Each source must be upload:<file>, answer:<id>, crawl:<note>, or industry:<name> from the facts.",
+            deps.session === undefined ? "" : sessionBlock(deps.session),
+          ].join("\n"),
+        },
+        deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
+      );
+      failed = null;
+      raw = result.value;
+      const value = asVerdict(result.value);
+      if (value !== null) {
+        modelVague = value.vague;
+        quote = value.quote;
+        sharper = value.sharperChoice;
+      }
+      break;
+    } catch (error) {
+      failed = error;
     }
-  } catch (error) {
-    if (deps.surfaceErrors === true) throw error;
+  }
+  if (failed !== null) {
+    if (deps.surfaceErrors === true) throw failed;
+    if (!floor) {
+      return { action: "accept", count: prior, quote: "", message: GUIDE_FAIL_LINE, floor: false, unchecked: true };
+    }
     modelVague = false;
     raw = null;
   }
-  const vague = modelVague || floor;
+  const concrete = concreteColourAnswer(question, text);
+  const vague = floor || (modelVague && !concrete);
   const safeQuote = cleanQuote(quote, text);
   if (!vague) {
     return { action: "accept", count: prior, quote: "", message: "", floor };
@@ -101,6 +120,9 @@ export async function judgePushback(
     return { action: "soft", count: prior, quote: safeQuote, message: "", floor };
   }
   const message = sharperLine(sharper, question, text, language, facts);
+  if (message === FLOOR_FALLBACK && deps.priorMessage === FLOOR_FALLBACK) {
+    return { action: "accept", count: prior, quote: "", message: "", floor: false };
+  }
   const follow = followUpChoices(raw, message, facts, language, question.ask);
   if (deps.session !== undefined) {
     const about = projectMentionsQuotes(deps.session);
@@ -117,7 +139,46 @@ export async function judgePushback(
     floor,
     choices: follow.choices,
     choicesOrigin: follow.origin,
+    ...(message === FLOOR_FALLBACK ? { fallback: true } : {}),
   };
+}
+
+const COLOUR_WORDS = [
+  "jungle",
+  "green",
+  "gold",
+  "sunset",
+  "ocean",
+  "blue",
+  "sand",
+  "black",
+  "ember",
+  "white",
+  "red",
+  "yellow",
+  "orange",
+  "purple",
+  "pink",
+  "brown",
+  "grey",
+  "gray",
+  "teal",
+  "navy",
+  "cream",
+] as const;
+
+/** Named colours or a hex value on a colour question. The judge still runs. A phrase floor still wins. */
+function concreteColourAnswer(question: Question, text: string): boolean {
+  const ask = question.ask.toLowerCase();
+  const topic = (question.topic ?? "").toLowerCase();
+  if (topic !== "palette" && !ask.includes("color") && !ask.includes("colour")) return false;
+  if (/#[0-9a-f]{3,8}\b/i.test(text)) return true;
+  const padded = ` ${text.toLowerCase()} `;
+  let count = 0;
+  for (const word of COLOUR_WORDS) {
+    if (padded.includes(` ${word} `)) count += 1;
+  }
+  return count >= 3;
 }
 
 const SHARPER_WHY = "A sharper question for this answer.";
