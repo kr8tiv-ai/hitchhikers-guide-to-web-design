@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,6 +12,11 @@ import { expect, test, type Page } from "@playwright/test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUSH_LINE = "Name one concrete detail.";
+const HELPER = "Yourself, or one named client.";
+const TYPED = "The site is for my own tea shop.";
+const CHOICE_B = "Show the tin photo large on the page.";
+const STATIC_ANSWER = "That line is the question's helper, not an answer. Write your own.";
+const CHOICE_CASSETTE = path.join(here, "fixtures", "suggestion-choices", "good.json");
 const BLOCKED = "This browser would not save the draft. Your words are still here, and stay until you press Answer.";
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -170,22 +175,123 @@ test("Other after a pushback stays empty instead of offering the saved draft", a
   }
 });
 
-test("a placed suggestion is saved and does not land on the next question", async ({ page }) => {
+test("a typed draft survives Suggest and does not come back as the helper", async ({ page }) => {
   const errors = trackErrors(page);
   const projectDir = await mkdtemp(path.join(tmpdir(), "hh-draft-suggest-"));
   const child = startDesk(projectDir);
   try {
     const url = await readUrl(child);
     await openDesk(page, url);
+    await page.locator("#hh-card-draft").fill(TYPED);
+    await expect.poll(async () => draftKeys(page)).toContain(TYPED);
     await page.locator('[data-action="suggest"]').click();
-    const suggestion = "Yourself, or one named client.";
-    await expect(page.locator("#hh-card-draft")).toHaveValue(suggestion);
-    await expect.poll(async () => draftKeys(page)).toContain(suggestion);
-    await expect.poll(async () => draftKeys(page)).toContain("DP-0.1");
+    await expect(page.locator("[data-question-id='DP-0.1']").getByRole("radiogroup")).toBeVisible();
+    await expect(page.locator("#hh-card-draft")).toHaveValue(TYPED);
+    await expect(page.locator("[data-assumed='suggested']")).toHaveCount(0);
+    expect(await questionId(page)).toBe("DP-0.1");
+    const parked = await draftKeys(page);
+    expect(parked.includes(TYPED)).toBe(true);
+    expect(parked.includes(HELPER)).toBe(false);
     await page.reload();
     await ready(page);
-    expect(await questionId(page)).not.toBe("DP-0.1");
-    await expect(page.locator("#hh-card-draft")).not.toHaveValue(suggestion);
+    expect(await questionId(page)).toBe("DP-0.1");
+    await expect(page.locator("#hh-card-draft")).toHaveValue(TYPED);
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    expect((await interviewFile(projectDir)).includes(HELPER)).toBe(false);
+    await page.locator('[data-action="answer"]').click();
+    await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
+    await expect(page.locator("#hh-card-draft")).toHaveValue("");
+    await expect(page.locator("#hh-card-draft")).not.toHaveValue(HELPER);
+    const cleared = await draftKeys(page);
+    expect(cleared.includes(TYPED)).toBe(false);
+    expect(cleared.includes(HELPER)).toBe(false);
+    expect(cleared.includes("DP-0.1")).toBe(false);
+    await page.reload();
+    await ready(page);
+    expect(await questionId(page)).toBe("DP-0.2");
+    await expect(page.locator("#hh-card-draft")).toHaveValue("");
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    expect((await draftFile(projectDir)).includes(HELPER)).toBe(false);
+    expect(errors).toEqual([]);
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("Suggest does not store the helper, and posting it is rejected", async ({ page }) => {
+  const errors = trackErrors(page);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-draft-helper-"));
+  const child = startDesk(projectDir);
+  try {
+    const url = await readUrl(child);
+    await openDesk(page, url);
+    await page.locator('[data-action="suggest"]').click();
+    await expect(page.locator("[data-assumed='suggested']")).toContainText(`Assumed: ${HELPER}`);
+    await expect(page.locator("#hh-card-draft")).toHaveValue(HELPER);
+    expect(await questionId(page)).toBe("DP-0.1");
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    expect((await draftFile(projectDir)).includes(HELPER)).toBe(false);
+    expect((await interviewFile(projectDir)).includes(HELPER)).toBe(false);
+    await page.locator('[data-action="answer"]').click();
+    await expect(page.locator("[data-card-error]")).toHaveText(STATIC_ANSWER);
+    expect(await questionId(page)).toBe("DP-0.1");
+    await expect(page.locator("#hh-card-draft")).toHaveValue(HELPER);
+    const lines = await staticLines(page);
+    for (const line of lines) {
+      const status = await postAnswer(page, line);
+      expect(status).toBe(400);
+    }
+    expect(await questionId(page)).toBe("DP-0.1");
+    expect((await interviewFile(projectDir)).includes(HELPER)).toBe(false);
+    await page.reload();
+    await ready(page);
+    expect(await questionId(page)).toBe("DP-0.1");
+    await expect(page.locator("#hh-card-draft")).toHaveValue("");
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    expect((await draftFile(projectDir)).includes(HELPER)).toBe(false);
+    expect(errors).toEqual([]);
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("a picked choice is saved without writing the helper into the draft", async ({ page }) => {
+  const errors = trackErrors(page);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-draft-choice-suggest-"));
+  await seedChoiceFacts(projectDir);
+  const child = startDesk(projectDir, CHOICE_CASSETTE);
+  try {
+    const url = await readUrl(child);
+    await openDesk(page, url);
+    await page.locator("#hh-card-draft").fill(TYPED);
+    await expect.poll(async () => draftKeys(page)).toContain(TYPED);
+    await page.locator('[data-action="suggest"]').click();
+    const card = page.locator("[data-question-id='DP-0.1']");
+    await expect(card.getByRole("radio", { name: /^B\./ })).toContainText(CHOICE_B);
+    await expect(page.locator("#hh-card-draft")).toHaveValue(TYPED);
+    await expect(page.locator("[data-assumed='suggested']")).toHaveCount(0);
+    expect(await questionId(page)).toBe("DP-0.1");
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    await page.locator("#hh-card-draft").fill("");
+    await card.getByRole("radio", { name: /^B\./ }).click();
+    await expect(page.locator("[data-question-id='DP-0.2']")).toBeVisible();
+    await expect(page.locator("[data-assumed='suggested']")).toContainText(`Assumed: ${CHOICE_B}`);
+    await expect(page.locator("#hh-card-draft")).toHaveValue("");
+    await expect(page.locator("#hh-card-draft")).not.toHaveValue(HELPER);
+    const saved = await interviewFile(projectDir);
+    expect(saved.includes(CHOICE_B)).toBe(true);
+    expect(saved.includes(HELPER)).toBe(false);
+    const keys = await draftKeys(page);
+    expect(keys.includes(HELPER)).toBe(false);
+    expect(keys.includes(TYPED)).toBe(false);
+    await page.reload();
+    await ready(page);
+    expect(await questionId(page)).toBe("DP-0.2");
+    await expect(page.locator("#hh-card-draft")).toHaveValue("");
+    expect((await draftKeys(page)).includes(HELPER)).toBe(false);
+    expect((await draftFile(projectDir)).includes(HELPER)).toBe(false);
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
@@ -483,6 +589,56 @@ async function draftFile(projectDir: string): Promise<string> {
   }
 }
 
+async function interviewFile(projectDir: string): Promise<string> {
+  try {
+    return await readFile(path.join(projectDir, ".hitchhiker", "interview.json"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+async function staticLines(page: Page): Promise<string[]> {
+  const lines = await page.evaluate(async () => {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    const session = (await response.json()) as { question?: { suggest?: string; why?: string; tip?: string } | null };
+    const question = session.question;
+    return [question?.suggest ?? "", question?.why ?? "", question?.tip ?? ""];
+  });
+  const kept: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed !== "" && !kept.includes(trimmed)) kept.push(trimmed);
+  }
+  expect(kept.includes(HELPER)).toBe(true);
+  return kept;
+}
+
+async function postAnswer(page: Page, text: string): Promise<number> {
+  const token = await page.locator('meta[name="hh-csrf"]').getAttribute("content");
+  expect(token).not.toBeNull();
+  return page.evaluate(
+    async ({ csrf, text: line }) => {
+      const response = await fetch("/api/answer", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hh-csrf": csrf },
+        body: JSON.stringify({ questionId: "DP-0.1", text: line }),
+      });
+      return response.status;
+    },
+    { csrf: token ?? "", text },
+  );
+}
+
+async function seedChoiceFacts(projectDir: string): Promise<void> {
+  const hitch = path.join(projectDir, ".hitchhiker", "uploads");
+  await mkdir(hitch, { recursive: true });
+  await writeFile(path.join(hitch, "tins.jpg"), "");
+  await writeFile(
+    path.join(projectDir, ".hitchhiker", "facts.json"),
+    JSON.stringify({ industry: "tea", crawlNotes: ["menu"] }),
+  );
+}
+
 async function skipUntil(page: Page, target: string): Promise<void> {
   for (let step = 0; step < 12; step += 1) {
     const id = await page.locator("[data-question-id]").getAttribute("data-question-id");
@@ -612,14 +768,19 @@ function countWrites(): void {
   };
 }
 
-function startDesk(projectDir: string): ChildProcess {
+function startDesk(projectDir: string, cassette?: string): ChildProcess {
   const serverFile = path.resolve(here, "../src/server/server.ts");
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    HH_E2E_PROJECT: projectDir,
+    HH_E2E_SERVER: pathToFileURL(serverFile).href,
+  };
+  if (cassette !== undefined) {
+    env.HH_GUIDE_REPLAY = "1";
+    env.HH_GUIDE_CASSETTE = cassette;
+  }
   return spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", childSource()], {
-    env: {
-      ...process.env,
-      HH_E2E_PROJECT: projectDir,
-      HH_E2E_SERVER: pathToFileURL(serverFile).href,
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });

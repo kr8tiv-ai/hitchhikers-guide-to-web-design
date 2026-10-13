@@ -1,6 +1,14 @@
 import type { Question } from "@hitchhiker/engine";
 import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
-import { escapeHtml, renderCard, renderChipItems, renderChoiceGroup, VOICE_SERVICE_NOTE } from "../card.ts";
+import {
+  ANSWER_HINT,
+  PLACEHOLDER_FALLBACK,
+  escapeHtml,
+  renderCard,
+  renderChipItems,
+  renderChoiceGroup,
+  VOICE_SERVICE_NOTE,
+} from "../card.ts";
 import {
   MAX_ATTACH_FILES,
   type AnswerAttachment,
@@ -1313,10 +1321,46 @@ export function mountDesk(env: DeskEnv): () => void {
     return set;
   }
 
+  function collapseLine(text: string): string {
+    let out = "";
+    let space = false;
+    for (const ch of text.trim()) {
+      if (ch === " " || ch === "\n" || ch === "\r" || ch === "\t") {
+        space = out !== "";
+        continue;
+      }
+      if (space) out += " ";
+      space = false;
+      out += ch;
+    }
+    return out;
+  }
+
+  function isHelperDraft(text: string): boolean {
+    const line = collapseLine(text);
+    if (line === "") return false;
+    const question = view?.question ?? null;
+    const fields = [question?.suggest, question?.why, question?.tip, view?.help, ANSWER_HINT, PLACEHOLDER_FALLBACK];
+    for (const field of fields) {
+      const banned = collapseLine(field ?? "");
+      if (banned !== "" && banned === line) return true;
+    }
+    return false;
+  }
+
+  function suggestionMoved(session: SessionView, questionId: string): boolean {
+    return session.done || (session.question?.id ?? null) !== questionId;
+  }
+
   function rememberDraft(immediate: boolean): void {
     try {
       ensureWriter();
       if (writer === null) return;
+      // Helper, placeholder, hint, and why text are proposals. They are not a draft.
+      if (isHelperDraft(draft)) {
+        writer.clear();
+        return;
+      }
       writer.push(draft);
       if (immediate) writer.flush();
     } catch {
@@ -2564,7 +2608,7 @@ export function mountDesk(env: DeskEnv): () => void {
       return;
     }
     const held = suggestHold;
-    if (!ownWords && draft.trim() === held.suggestion.trim()) {
+    if (!ownWords && draft.trim() === held.suggestion.trim() && suggestionMoved(held.session, held.questionId)) {
       releaseDraft(held.questionId);
       suggestHold = null;
       cardHold = false;
@@ -2626,15 +2670,22 @@ export function mountDesk(env: DeskEnv): () => void {
   function placeSuggestion(session: SessionView, questionId: string): void {
     const incoming = suggestionText(session, questionId);
     const previous = suggestHold;
-    const edited = previous !== null && draft.trim() !== previous.suggestion.trim();
     const suggestion = incoming !== "" ? incoming : (previous?.suggestion ?? "");
+    const keptOwn =
+      draft.trim() !== "" &&
+      (previous === null || draft.trim() !== previous.suggestion.trim());
+    const offered =
+      session.choices !== null &&
+      session.choices.forId === questionId &&
+      session.choices.items.length >= 2;
     suggestHold = {
       questionId,
-      suggestion: edited && previous !== null ? previous.suggestion : suggestion,
+      suggestion: keptOwn && previous !== null ? previous.suggestion : suggestion,
       session,
     };
     cardHold = true;
-    if (!edited) {
+    // A typed draft stays. Two or more choices are the proposal, so the helper is not written in.
+    if (!keptOwn && !offered) {
       draft = suggestion;
       const field = region()?.querySelector("#hh-card-draft");
       if (field !== null && field !== undefined) field.value = suggestion;
@@ -2642,6 +2693,8 @@ export function mountDesk(env: DeskEnv): () => void {
       else hideAssumed();
       clearFieldError();
       if (suggestion.trim() !== "") rememberDraft(true);
+    } else if (keptOwn) {
+      hideAssumed();
     }
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null) transcript.innerHTML = session.transcriptHtml;
@@ -2765,7 +2818,7 @@ export function mountDesk(env: DeskEnv): () => void {
     announceChoices(`Assumed: ${label}`);
     rememberDraft(true);
     if (suggestHold !== null) {
-      if (label.trim() === suggestHold.suggestion.trim()) {
+      if (label.trim() === suggestHold.suggestion.trim() && suggestionMoved(suggestHold.session, suggestHold.questionId)) {
         const held = suggestHold;
         releaseDraft(held.questionId);
         suggestHold = null;

@@ -192,6 +192,67 @@ test("an edited suggestion posts the original question and still leaves the card
   }
 });
 
+test("suggest keeps a typed draft and does not mark the helper assumed", async () => {
+  const typed = "The site is for my own tea shop.";
+  const h = harness(async (input) => {
+    const url = requestUrl(input);
+    if (url === "/api/session") return Response.json(opening);
+    if (url === "/api/suggest") return Response.json({ session: opening });
+    throw new Error(`unexpected ${url}`);
+  });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    const field = h.region.querySelector("#hh-card-draft");
+    assert.ok(field);
+    field.value = typed;
+    h.fire("input", { target: field });
+    h.fire("click", { target: h.region.querySelector('[data-action="suggest"]') });
+    await settle();
+    assert.equal(field.value, typed);
+    assert.equal(h.region.querySelector("[data-assumed='suggested']"), null);
+    assert.equal(h.region.querySelector("[data-question-id]")?.getAttribute("data-question-id"), "DP-0.1");
+    assert.equal(field.isConnected, true);
+  } finally {
+    stop();
+  }
+});
+
+test("two choices stay a proposal and leave an empty draft empty", async () => {
+  const offered = {
+    ...opening,
+    choices: {
+      forId: "DP-0.1",
+      origin: "model" as const,
+      items: [
+        { id: "A" as const, label: "A quiet order page for the shop.", why: "Tea.", source: "industry:tea" },
+        { id: "B" as const, label: "Show the tin photo large on the page.", why: "Tins.", source: "upload:tins.jpg" },
+      ],
+    },
+  };
+  const h = harness(async (input) => {
+    const url = requestUrl(input);
+    if (url === "/api/session") return Response.json(opening);
+    if (url === "/api/suggest") return Response.json({ session: offered });
+    throw new Error(`unexpected ${url}`);
+  });
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    const field = h.region.querySelector("#hh-card-draft");
+    assert.ok(field);
+    h.fire("click", { target: h.region.querySelector('[data-action="suggest"]') });
+    await settle();
+    assert.equal(field.value, "");
+    assert.equal(h.region.querySelector("[data-assumed='suggested']"), null);
+    assert.equal(h.region.querySelector("[data-question-id]")?.getAttribute("data-question-id"), "DP-0.1");
+    assert.ok(h.region.querySelector("[role='radiogroup']"));
+    assert.equal(field.isConnected, true);
+  } finally {
+    stop();
+  }
+});
+
 test("a failed suggest keeps the draft and shows a retryable notice under the field", async () => {
   const h = harness(async (input) => {
     const url = requestUrl(input);
