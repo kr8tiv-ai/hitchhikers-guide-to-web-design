@@ -1609,6 +1609,7 @@ function briefPayload(desk: BriefDeskView): {
   draft: BriefDeskView["draft"];
   error: string;
   note: string;
+  fallback: boolean;
   revisit: string | null;
 } {
   return {
@@ -1619,14 +1620,19 @@ function briefPayload(desk: BriefDeskView): {
     draft: desk.draft,
     error: desk.error,
     note: desk.note,
+    fallback: desk.fallback,
     revisit: desk.revisit,
   };
 }
 
-async function approveBriefWhenFree(projectDir: string, guideThink: GuideThink): Promise<void> {
+async function approveBriefWhenFree(
+  projectDir: string,
+  guideThink: GuideThink,
+  confirmFallback = false,
+): Promise<void> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      await approveSiteBrief(projectDir, guideThink);
+      await approveSiteBrief(projectDir, guideThink, { confirmFallback });
       return;
     } catch (error: unknown) {
       if (!(error instanceof LockHeld) || attempt === 7) throw error;
@@ -1663,12 +1669,14 @@ async function handleApproveForm(
   const mime = type.split(";")[0]?.trim().toLowerCase() ?? "";
   let action = "";
   let correction = "";
+  let confirmFallback = false;
   if (mime === "application/json") {
     try {
       const body: unknown = JSON.parse(raw);
       if (isRecord(body)) {
         if (typeof body.action === "string") action = body.action;
         if (typeof body.correction === "string") correction = body.correction;
+        confirmFallback = body.confirmFallback === true || body.confirmFallback === "yes";
       }
     } catch {
       sendJson(req, res, 400, { error: "The desk could not read that request." });
@@ -1678,17 +1686,27 @@ async function handleApproveForm(
     const params = new URLSearchParams(raw);
     action = params.get("action") ?? "";
     correction = params.get("correction") ?? "";
+    confirmFallback = params.get("confirmFallback") === "yes";
   }
   try {
     if (action === "approve") {
       const desk = readBriefDesk(projectDir);
+      if (desk.fallback && !confirmFallback) {
+        const message = "Confirm the interview fallback before approving.";
+        if (mime === "application/json") {
+          sendJson(req, res, 409, { error: message });
+          return;
+        }
+        await deliverHtml(req, res, 409, renderApproveBrief(token, null, desk, "", projectDir, message), projectDir, token, false);
+        return;
+      }
       const markdown = desk.draft !== null ? renderSiteBrief(desk.draft) : (readSiteBrief(projectDir) ?? "");
       if (markdown.trim() !== "") {
         const coverage = projectPlanCoverage(projectDir, markdown);
         if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
       }
       // The next page reads buildStarted. Redirecting first paints the pending brief.
-      await approveBriefWhenFree(projectDir, guideThink);
+      await approveBriefWhenFree(projectDir, guideThink, confirmFallback);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
@@ -1808,8 +1826,28 @@ async function handleBriefPost(
     return;
   }
   if (pathname === "/api/brief/approve") {
-    await readCapped(req, JSON_LIMIT);
-    const job = approveSiteBrief(projectDir, guideThink);
+    const capped = await readCapped(req, JSON_LIMIT);
+    if (!capped.ok) {
+      sendJson(req, res, 413, { error: "That request is too large." });
+      return;
+    }
+    let confirmFallback = false;
+    const bodyText = capped.body.toString("utf8").trim();
+    if (bodyText !== "") {
+      try {
+        const body: unknown = JSON.parse(bodyText);
+        if (isRecord(body)) confirmFallback = body.confirmFallback === true || body.confirmFallback === "yes";
+      } catch {
+        sendJson(req, res, 400, { error: "The desk could not read that request." });
+        return;
+      }
+    }
+    const waiting = readBriefDesk(projectDir);
+    if (waiting.fallback && !confirmFallback) {
+      sendJson(req, res, 409, { error: "Confirm the interview fallback before approving." });
+      return;
+    }
+    const job = approveSiteBrief(projectDir, guideThink, { confirmFallback });
     void job
       .then(() => hub.publish("session", view()))
       .catch((error: unknown) => logDeskError(error));
@@ -2960,7 +2998,14 @@ function planGapNote(projectDir: string, desk: BriefDeskView): string {
   }
 }
 
-function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView, changeError = "", projectDir = ""): string {
+function renderApproveBrief(
+  token: string,
+  notice: string | null,
+  desk: BriefDeskView,
+  changeError = "",
+  projectDir = "",
+  confirmError = "",
+): string {
   const status =
     desk.buildStarted
       ? "The build is started."
@@ -2986,7 +3031,7 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk, changeError, coverage),
+    main: approveMain(token, desk, changeError, coverage, confirmError),
     script: "/client/brief-change.js",
   });
 }

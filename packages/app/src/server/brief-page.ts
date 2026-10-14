@@ -37,11 +37,20 @@ function coverageTable(coverage: ApproveCoverage | undefined): string {
     ${note}`;
 }
 
+function retryForm(token: string): string {
+  return `<form method="post" action="/approve">
+          <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+          <input type="hidden" name="action" value="retry" />
+          <button class="hh-btn hh-btn--secondary" type="submit">Retry</button>
+        </form>`;
+}
+
 export function approveMain(
   token: string,
   desk: BriefDeskView,
   changeError = "",
   coverage?: ApproveCoverage,
+  confirmError = "",
 ): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
@@ -66,11 +75,22 @@ export function approveMain(
     desk.error === ""
       ? ""
       : `<p data-brief-error${coverageError ? " data-plan-coverage" : ""} role="alert">${escapeHtml(desk.error)}</p>
-        <form method="post" action="/approve">
-          <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
-          <input type="hidden" name="action" value="retry" />
-          <button class="hh-btn hh-btn--secondary" type="submit">Retry</button>
-        </form>`;
+        ${retryForm(token)}`;
+  const fallback =
+    desk.fallback
+      ? `<p data-brief-fallback role="status">This brief is filled from the interview. A model draft has not replaced it.</p>
+        ${desk.error === "" ? retryForm(token) : ""}`
+      : "";
+  const confirmAlert =
+    confirmError === ""
+      ? ""
+      : `<p data-fallback-confirm role="alert">${escapeHtml(confirmError)}</p>`;
+  const confirm =
+    desk.fallback
+      ? `<label>I am approving the interview fallback, not a model draft.
+          <input type="checkbox" name="confirmFallback" value="yes" />
+        </label>`
+      : "";
   const sections = desk.sources
     .map((source) => {
       const changeId = source.questionId.split(",")[0]?.trim() ?? "";
@@ -98,13 +118,16 @@ export function approveMain(
   return `<div class="hh-rise hh-rise--2" data-brief-status="${escapeHtml(desk.status)}">
         <h1 class="hh-title">Site Brief</h1>
         ${started}
+        ${fallback}
         ${failure}
+        ${confirmAlert}
         ${progress}
         ${same}
         ${sections}
         ${coverageTable(coverage)}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+          ${confirm}
           <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve"${coverage !== undefined && coverage.rows.some((row) => !row.covered) ? " disabled" : ""}>Approve</button>
         </form>
         <form method="post" action="/approve">

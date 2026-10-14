@@ -97,6 +97,19 @@ export function lintClaims(text: string, facts: Facts): string[] {
 
 /** Banned words, punctuation, invented proof, and language. No question-count rule. */
 export function guideTextIssues(text: string, ctx: { language: string; facts: Facts }): string[] {
+  return textIssues(text, ctx, false);
+}
+
+/**
+ * Brief fields are factual lines, not guide questions.
+ * A short English field with no function word is still English.
+ * A field is rejected only when it is clearly another language, or not Latin in an English session.
+ */
+export function briefTextIssues(text: string, ctx: { language: string; facts: Facts }): string[] {
+  return textIssues(text, ctx, true);
+}
+
+function textIssues(text: string, ctx: { language: string; facts: Facts }, brief: boolean): string[] {
   const issues: string[] = [];
   if (text.indexOf("!") !== -1) issues.push("exclamation");
   if (text.indexOf("\u2014") !== -1) issues.push("em-dash");
@@ -109,7 +122,7 @@ export function guideTextIssues(text: string, ctx: { language: string; facts: Fa
     if (normalized.indexOf(phrase) !== -1) issues.push(`banned:${phrase}`);
   }
   issues.push(...lintClaims(text, ctx.facts));
-  issues.push(...languageIssues(text, ctx.language));
+  issues.push(...(brief ? briefLanguageIssues(text, ctx.language) : languageIssues(text, ctx.language)));
   return issues;
 }
 
@@ -148,6 +161,15 @@ function languageIssues(text: string, language: string): string[] {
   }
   const detected = detectLanguage(text);
   if (detected !== null && detected !== language) return ["language"];
+  return [];
+}
+
+function briefLanguageIssues(text: string, language: string): string[] {
+  if ((language === "en" || language === "es") && majorityNonLatin(text)) return ["language"];
+  const detected = detectLanguage(text);
+  if (detected === null) return [];
+  if (language === "en" || language === "es") return detected === language ? [] : ["language"];
+  if (detected !== language) return ["language"];
   return [];
 }
 

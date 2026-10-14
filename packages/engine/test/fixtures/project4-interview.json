@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "answers": [
+    {
+      "id": "DP-0.1",
+      "status": "ANSWERED",
+      "value": "My own business."
+    },
+    {
+      "id": "DP-0.2",
+      "status": "ANSWERED",
+      "value": "No. This is the first site."
+    },
+    {
+      "id": "DP-0.2a",
+      "status": "ANSWERED",
+      "value": "Love: Aesop and Kinfolk, lots of space and calm type. Wince: listing sites that look like spreadsheets and shout investment."
+    },
+    {
+      "id": "DP-0.3",
+      "status": "ANSWERED",
+      "value": "(d) I'm brand new to all of this."
+    },
+    {
+      "id": "DP-0.4",
+      "status": "ANSWERED",
+      "value": "Logo file: paradise-found-logo.png. Yes: logo, mark and hero photo attached. No fonts yet. Colors from the hero photo: jungle green, sunset gold, ocean blue, plus soft sand and a near-black green.\nAttached: paradise-found-mark.png, paradise-found-hero.jpg."
+    },
+    {
+      "id": "DP-0.5",
+      "status": "ANSWERED",
+      "value": "No X account, skip voice learning."
+    },
+    {
+      "id": "DP-0.7",
+      "status": "ANSWERED",
+      "value": "About an hour."
+    },
+    {
+      "id": "DP-1.1",
+      "status": "ANSWERED",
+      "value": "Yes, attached: paradise-found-logo.png, a thin crescent arc over a horizon line, PARADISE FOUND in wide caps, 'Find your calm.' under it. I'm happy with it. Maybe a white version for dark backgrounds."
+    },
+    {
+      "id": "DP-1.2",
+      "status": "ANSWERED",
+      "value": "Jungle green, sunset gold, ocean blue, from the hero photo. Plus soft sand and a near-black green. Sunset gold is the accent; soft sand is the page."
+    },
+    {
+      "id": "DP-1.3",
+      "status": "ANSWERED",
+      "value": "Yes: Paradise Found. Find your calm. No suggestions needed."
+    },
+    {
+      "id": "DP-1.4",
+      "status": "ANSWERED",
+      "value": "The hero photo (paradise-found-hero.jpg, attached): golden hour, horses, farmhouse, ocean. Surreal, calm, jungle."
+    },
+    {
+      "id": "DP-1.5",
+      "status": "ANSWERED",
+      "value": "No fonts yet. Light, wide, airy sans for headings like the logo; easy-reading body. Show me pairings."
+    },
+    {
+      "id": "DP-1.6",
+      "status": "ANSWERED",
+      "value": "A calm friend who already moved here. A heron at sunrise. Brands whose voice I like: Patagonia, Aesop, Airbnb Luxe, Kinfolk."
+    },
+    {
+      "id": "DP-1.7",
+      "status": "ANSWERED",
+      "value": "In 2021 a broker added a 15 percent fee and pushed us to close before our lawyer checked the title. We are a couple from Colorado."
+    },
+    {
+      "id": "DP-1.8",
+      "status": "ANSWERED",
+      "value": "Similar: Lands of America, Land.com, Encuentra24, Costa Rica real-estate sites. Loved: Patagonia, Aesop, Kinfolk."
+    },
+    {
+      "id": "DP-1.9",
+      "status": "ANSWERED",
+      "value": "Yes: the mark is the crescent, the wide caps are only the wordmark, and headings, palette, hero and a white logo version may change."
+    },
+    {
+      "id": "DP-2.1",
+      "status": "ANSWERED",
+      "value": "Connect expats with ocean-view Costa Rican farms and walk them to an honest, lawyer-led direct purchase."
+    },
+    {
+      "id": "DP-2.2",
+      "status": "ANSWERED",
+      "value": "Send an inquiry about one farm they can see; the form is prefilled with that farm ID."
+    },
+    {
+      "id": "DP-2.3",
+      "status": "ANSWERED",
+      "value": "Sales, local, content. Sales leads: show the farms first."
+    },
+    {
+      "id": "DP-2.4",
+      "status": "ANSWERED",
+      "value": "30 qualified inquiries a month."
+    },
+    {
+      "id": "DP-2.5",
+      "status": "ANSWERED",
+      "value": "Both: the dream first, then the farms. A few calm lines on land and locals, then the first farm."
+    },
+    {
+      "id": "DP-2.6",
+      "status": "ANSWERED",
+      "value": "Dana, 52, Colorado: wants sea view, horses and a garden; fears losing money on bad title; browses on an iPad."
+    },
+    {
+      "id": "DP-2.7",
+      "status": "ANSWERED",
+      "value": "Ocean-view farms sold direct, with free caretakers and independent lawyers. No middlemen, no surprises. Buyers pay the seller and their own lawyer; the caretaker match is free."
+    },
+    {
+      "id": "DP-2.8",
+      "status": "ANSWERED",
+      "value": "Pages: Home; Farms (grid plus map, filters, a detail page per farm with gallery, specs, map and prefilled inquiry); Live on the Land (caretaker program with sign-up form); How Buying Works (steps with independent lawyers, glossary: folio real, plano catastrado, escritura, ZMT); Eco-Building and Food; About; Contact. Footer: legal disclaimer, privacy, EN/ES switch, newsletter."
+    },
+    {
+      "id": "DP-3.1",
+      "status": "ANSWERED",
+      "value": "Yes. A general contact form plus the farm inquiry form. Messages go to hello@paradisefound.example for now. Also a WhatsApp link on Contact and in the footer."
+    },
+    {
+      "id": "DP-3.2",
+      "status": "ANSWERED",
+      "value": "No checkout. We list farms (5 to start, PF-001 to PF-005) and take inquiries; sales close offline with a lawyer and notary."
+    },
+    {
+      "id": "DP-3.3",
+      "status": "ANSWERED",
+      "value": "No booking widget. Visits are arranged by reply to an inquiry; Plan a visit goes to the inquiry form."
+    },
+    {
+      "id": "DP-3.4",
+      "status": "ANSWERED",
+      "value": "Yes, a footer newsletter: email field and a success message. No tool yet."
+    },
+    {
+      "id": "DP-3.5",
+      "status": "ANSWERED",
+      "value": "Yes, a small blog, written for me, one guide a month: buying with a lawyer, living off the land, caretaker farms. I will edit listings myself later."
+    },
+    {
+      "id": "DP-3.6",
+      "status": "ANSWERED",
+      "value": "No video at launch. Photo gallery per farm only, no empty video slot. A farm without photos shows the hero crop labelled Photos coming soon."
+    },
+    {
+      "id": "DP-3.7",
+      "status": "ANSWERED",
+      "value": "Listing filters (price range, acres, region, ocean view, water source, caretaker available, road access) with a results count, clear filters, empty state, and filters kept in the URL. Sort by price low/high, acres, newest. A map on Farms and on each farm page. Favorites shortlist in local storage. EN/ES toggle that keeps the page. Caretaker sign-up form. No members area, no calculator."
+    },
+    {
+      "id": "DP-3.8",
+      "status": "ANSWERED",
+      "value": "No change. Private counting is fine."
+    },
+    {
+      "id": "DP-3.9",
+      "status": "ANSWERED",
+      "value": "English first, Spanish second. Whole site in both. The caretaker sign-up opens in Spanish by default."
+    },
+    {
+      "id": "DP-4.1",
+      "status": "ANSWERED",
+      "value": "Encuentra24 (encuentra24.com), LandWatch (landwatch.com), and Costa Rica real-estate listing sites. Envy: LandWatch filters by acres and price. Boring: they look like spreadsheets and shout investment."
+    },
+    {
+      "id": "DP-4.2",
+      "status": "ANSWERED",
+      "value": "Drop all three: no dense rows, no tiny photos, no gray tables. Never say ROI, yield, act now, or investment."
+    },
+    {
+      "id": "DP-4.3",
+      "status": "ANSWERED",
+      "value": "Yes. Seed keywords: Costa Rica farm for sale ocean view, live off the land Costa Rica, Costa Rica caretaker farm."
+    },
+    {
+      "id": "DP-4.4",
+      "status": "ANSWERED",
+      "value": "Worldwide, led by the US and Canada; inquiries from any country are welcome. The farms are in Costa Rica."
+    },
+    {
+      "id": "DP-4.5",
+      "status": "ANSWERED",
+      "value": "Yes: write so AI assistants can recommend us, with an llms.txt and FAQ structured data."
+    },
+    {
+      "id": "DP-5.1",
+      "status": "ANSWERED",
+      "value": "Patagonia: big quiet photography and plain type. Aesop: restraint, lots of empty space, small calm type. Kinfolk: slow editorial scroll and soft color. Airbnb Luxe: clean listing cards and gallery."
+    },
+    {
+      "id": "DP-5.2",
+      "status": "ANSWERED",
+      "value": "Aesop: love. Kinfolk: love. Patagonia: love. Cereal: meh, too cold."
+    },
+    {
+      "id": "DP-5.3",
+      "status": "ANSWERED",
+      "value": "Feel: calm, warm, honest. Never: salesy, cluttered, loud."
+    },
+    {
+      "id": "DP-5.4",
+      "status": "ANSWERED",
+      "value": "The golden-hour hero with horses, farmhouse and ocean, and Paradise Found. Find your calm. over it, with a gentle parallax."
+    },
+    {
+      "id": "DP-5.5",
+      "status": "ANSWERED",
+      "value": "Bright and airy, on soft sand."
+    },
+    {
+      "id": "DP-5.6",
+      "status": "ANSWERED",
+      "value": "Photography."
+    },
+    {
+      "id": "DP-6.1",
+      "status": "ANSWERED",
+      "value": "Medium appetite: gentle parallax on the hero only, farm cards fade in one after another at about 400 ms, everything still when reduced motion is on."
+    },
+    {
+      "id": "DP-6.2",
+      "status": "ANSWERED",
+      "value": "4."
+    },
+    {
+      "id": "DP-6.3",
+      "status": "ANSWERED",
+      "value": "A branching story: the home page is a short calm film, then visitors pick Farms, Live on the Land, or How Buying Works."
+    },
+    {
+      "id": "DP-6.4",
+      "status": "ANSWERED",
+      "value": "No 3D models. None."
+    },
+    {
+      "id": "DP-6.5",
+      "status": "SKIPPED",
+      "value": "Calm."
+    },
+    {
+      "id": "DP-7.2",
+      "status": "SKIPPED",
+      "value": "Not applicable: 3D is none, so the custom generation budget is not asked."
+    },
+    {
+      "id": "DP-6.6",
+      "status": "ANSWERED",
+      "value": "Yes, some older buyers may be motion-sensitive. Follow the device reduced-motion setting everywhere."
+    },
+    {
+      "id": "DP-7.1",
+      "status": "ANSWERED",
+      "value": "A little: up to 50 dollars total for AI stills; no video."
+    },
+    {
+      "id": "DP-7.3",
+      "status": "ANSWERED",
+      "value": "Stock on Live on the Land, How Buying Works, Eco-Building and About. AI stills only for the Eco-Building planting calendar if no stock fits. Contact has no photo."
+    },
+    {
+      "id": "DP-8.1",
+      "status": "ANSWERED",
+      "value": "The Guide writes the words for me to approve, from what I already gave."
+    },
+    {
+      "id": "DP-8.2",
+      "status": "ANSWERED",
+      "value": "None yet, and the site should say so honestly. Our own story of buying our farm is the only proof for now."
+    },
+    {
+      "id": "DP-8.3",
+      "status": "ANSWERED",
+      "value": "Monthly guide topics: buying with a lawyer, living off the land, caretaker farms."
+    },
+    {
+      "id": "DP-8.4",
+      "status": "ANSWERED",
+      "value": "Yes, privacy and terms pages. Never give legal advice, never promise title, price, residency or returns, never call a farm an investment. Show asking prices labelled Asking price, set by the seller. Disclaimer: Paradise Found does not give legal advice. Work with a licensed Costa Rican lawyer on every purchase."
+    },
+    {
+      "id": "DP-9.1",
+      "status": "ANSWERED",
+      "value": "In 4 weeks: by November 10, 2026."
+    },
+    {
+      "id": "DP-9.2",
+      "status": "ANSWERED",
+      "value": "No web address yet. Use paradisefound.farm, hosted on Cloudflare Pages (free tier)."
+    },
+    {
+      "id": "DP-9.3",
+      "status": "ANSWERED",
+      "value": "Me, with the Guide fixing anything that breaks; I approve changes."
+    },
+    {
+      "id": "DP-9.4",
+      "status": "ANSWERED",
+      "value": "Launch checklist: inquiry form reaches hello@paradisefound.example, Spanish caretaker sign-up works on Android, all five farms PF-001 to PF-005 listed, disclaimer on every page."
+    },
+    {
+      "id": "DP-9.5",
+      "status": "ANSWERED",
+      "value": "Yes, that is right. Also: the caretaker program and a Spanish-first caretaker sign-up matter (Esteban, 61, Android). Office hours Monday to Friday 8:00-17:00 Costa Rica time. Never say investment."
+    }
+  ],
+  "cursor": 61,
+  "pushedIds": []
+}

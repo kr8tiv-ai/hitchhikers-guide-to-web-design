@@ -23,7 +23,7 @@ import {
 import { INTERVIEW_MODEL } from "./interview-call.ts";
 import { budgetCardCopy } from "./session-state.ts";
 import { loadFacts } from "./suggest.ts";
-import { guideTextIssues } from "./validators.ts";
+import { briefTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
 
 /**
@@ -152,19 +152,38 @@ const SKIPPED_STATUS = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
 
 const BRIEF_PACKET: PacketOptions = { budgetTokens: BRIEF_DRAFT_BUDGET };
 
+export interface BriefStep {
+  draft: SiteBrief;
+  approved: boolean;
+  error: string;
+  /** True while the fields are the interview fallback, not a model draft. */
+  fallback: boolean;
+}
+
 export async function* briefLoop(
   s: GuideSession,
-  deps: { think: typeof think; priorError?: string },
-): AsyncGenerator<{ draft: SiteBrief; approved: boolean; error: string }> {
+  deps: { think: typeof think; priorError?: string; held?: BriefStep },
+): AsyncGenerator<BriefStep> {
   const facts = loadFacts(s.projectDir);
   const bound = { think: bindPacket(deps.think, s.projectDir, "brief", BRIEF_PACKET) };
-  const drafted = await draftOrFallback(s, facts, bound, deps.priorError ?? "");
-  let draft = drafted.brief;
-  let note: unknown = yield { draft, approved: false, error: drafted.error };
+  let draft: SiteBrief;
+  let error: string;
+  let fallback: boolean;
+  if (deps.held !== undefined) {
+    draft = deps.held.draft;
+    error = deps.held.error;
+    fallback = deps.held.fallback;
+  } else {
+    const drafted = await draftOrFallback(s, facts, bound, deps.priorError ?? "");
+    draft = drafted.brief;
+    error = drafted.error;
+    fallback = drafted.fallback;
+  }
+  let note: unknown = yield { draft, approved: false, error, fallback };
   while (!isApproval(typeof note === "string" ? note : "")) {
     const correction = typeof note === "string" ? note : "";
     draft = await reviseOrFallback(s, facts, draft, correction, bound);
-    note = yield { draft, approved: false, error: "" };
+    note = yield { draft, approved: false, error, fallback };
   }
   await writeSiteBrief(s.projectDir, draft);
   const { recordApprovalYes } = await import("../project-file/yes.ts");
@@ -178,7 +197,7 @@ export async function* briefLoop(
     think: deps.think,
   });
   await writePhaseAdvisories(s.projectDir);
-  yield { draft, approved: true, error: "" };
+  yield { draft, approved: true, error: "", fallback: false };
 }
 
 export function isApproval(text: string): boolean {
@@ -192,15 +211,25 @@ async function draftOrFallback(
   facts: Facts,
   deps: { think: typeof think },
   priorError: string,
-): Promise<{ brief: SiteBrief; error: string }> {
+): Promise<{ brief: SiteBrief; error: string; fallback: boolean }> {
   const recorded = deterministicBrief(facts, s.language);
   const first = await askDraft(s, facts, recorded, deps, priorError);
-  if (first.brief !== null) return { brief: shapeBrief(lockRecorded(first.brief, recorded), facts, recorded), error: "" };
-  if (first.reason === BILLING_TOP_UP) return { brief: recorded, error: BILLING_TOP_UP };
+  if (first.brief !== null) {
+    return { brief: shapeBrief(lockRecorded(first.brief, recorded), facts, recorded), error: "", fallback: false };
+  }
+  if (first.reason === BILLING_TOP_UP) return { brief: recorded, error: BILLING_TOP_UP, fallback: true };
   const second = await askDraft(s, facts, recorded, deps, joinPrior(priorError, first.reason));
-  if (second.brief !== null) return { brief: shapeBrief(lockRecorded(second.brief, recorded), facts, recorded), error: "" };
-  if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason) };
-  return { brief: recorded, error: BRIEF_DRAFT_ERROR };
+  if (second.brief !== null) {
+    return { brief: shapeBrief(lockRecorded(second.brief, recorded), facts, recorded), error: "", fallback: false };
+  }
+  if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason), fallback: true };
+  if (first.rejected || second.rejected) return { brief: recorded, error: rejectedDraftCopy(second.reason), fallback: true };
+  return { brief: recorded, error: BRIEF_DRAFT_ERROR, fallback: true };
+}
+
+function rejectedDraftCopy(reason: string): string {
+  const detail = reason.trim() === "" ? "The draft did not pass." : reason.trim();
+  return `The brief draft was not used. ${detail} These fields stay filled from the interview. Use Retry to ask again.`;
 }
 
 function joinPrior(prior: string, reason: string): string {
@@ -223,11 +252,65 @@ async function reviseOrFallback(
 ): Promise<SiteBrief> {
   const recorded = deterministicBrief(facts, s.language);
   const first = await askRevise(s, facts, draft, correction, recorded, deps);
-  if (first !== null) return first;
+  if (first !== null) return applyNamedEdits(first, correction);
   const second = await askRevise(s, facts, draft, correction, recorded, deps);
-  if (second !== null) return second;
+  if (second !== null) return applyNamedEdits(second, correction);
   // A failed revise keeps the brief under correction. The recorded answers must not replace it.
-  return draft;
+  return applyNamedEdits(draft, correction);
+}
+
+/** "Budget: ..." writes that field. Other prose stays with the model. */
+function applyNamedEdits(draft: SiteBrief, correction: string): SiteBrief {
+  const edits = namedBriefEdits(correction);
+  const next = { ...draft };
+  for (const key of BRIEF_KEYS) {
+    const value = edits[key];
+    if (value === undefined) continue;
+    const capped = shortenAtBoundary(value, briefFieldTarget(key));
+    if (capped.trim() !== "") next[key] = capped.trim();
+  }
+  return next;
+}
+
+function namedBriefEdits(correction: string): Partial<SiteBrief> {
+  const text = correction.trim();
+  if (text === "") return {};
+  const labels = BRIEF_KEYS.map((key) => ({ key, label: BRIEF_HEADINGS[key] })).sort(
+    (left, right) => right.label.length - left.label.length,
+  );
+  const hits: { key: BriefKey; at: number; len: number }[] = [];
+  const lower = text.toLowerCase();
+  for (const item of labels) {
+    const needle = `${item.label.toLowerCase()}:`;
+    let from = 0;
+    while (from < lower.length) {
+      const at = lower.indexOf(needle, from);
+      if (at < 0) break;
+      const before = at === 0 ? "" : (lower[at - 1] ?? "");
+      if (at === 0 || before === " " || before === "\n" || before === "\t") {
+        hits.push({ key: item.key, at, len: needle.length });
+      }
+      from = at + needle.length;
+    }
+  }
+  hits.sort((left, right) => left.at - right.at);
+  const edits: Partial<SiteBrief> = {};
+  for (let index = 0; index < hits.length; index += 1) {
+    const hit = hits[index];
+    if (hit === undefined || edits[hit.key] !== undefined) continue;
+    const next = hits.slice(index + 1).find((item) => item.at > hit.at);
+    const end = next === undefined ? text.length : next.at;
+    const value = stripUnsafe(text.slice(hit.at + hit.len, end)).replace(/[;,]\s*$/, "").trim();
+    if (value !== "") edits[hit.key] = value;
+  }
+  return edits;
+}
+
+interface DraftAttempt {
+  brief: SiteBrief | null;
+  reason: string;
+  /** True when the call returned a draft and the brief checks refused it. */
+  rejected: boolean;
 }
 
 async function askDraft(
@@ -236,7 +319,7 @@ async function askDraft(
   recorded: SiteBrief,
   deps: { think: typeof think },
   priorError: string,
-): Promise<{ brief: SiteBrief | null; reason: string }> {
+): Promise<DraftAttempt> {
   try {
     const lines = [
       "Draft the Site Brief from these recorded fields.",
@@ -264,14 +347,20 @@ async function askDraft(
       { projectDir: s.projectDir },
     );
     const brief = asBrief(result.value, true);
-    if (brief === null) return { brief: null, reason: "The draft did not match the brief." };
+    if (brief === null) {
+      await logRejection(s, "brief-draft", "schema: The draft did not match the brief.");
+      return { brief: null, reason: "The draft did not match the brief.", rejected: true };
+    }
     const issues = briefIssues(brief, facts, s.language, recorded);
-    if (issues.length > 0) return { brief: null, reason: issues.join("; ") };
-    return { brief, reason: "" };
+    if (issues.length > 0) {
+      await logRejection(s, "brief-draft", formatIssueLog(issues));
+      return { brief: null, reason: formatIssueCopy(issues), rejected: true };
+    }
+    return { brief, reason: "", rejected: false };
   } catch (error) {
-    if (isBillingFailure(error)) return { brief: null, reason: BILLING_TOP_UP };
+    if (isBillingFailure(error)) return { brief: null, reason: BILLING_TOP_UP, rejected: false };
     const reason = error instanceof Error && error.message.trim() !== "" ? error.message : "The draft did not pass.";
-    return { brief: null, reason };
+    return { brief: null, reason, rejected: false };
   }
 }
 
@@ -306,9 +395,16 @@ async function askRevise(
       { projectDir: s.projectDir },
     );
     const partial = asBrief(result.value, false);
-    if (partial === null) return null;
+    if (partial === null) {
+      await logRejection(s, "brief-revise", "merge: The revision did not match the brief.");
+      return null;
+    }
     const merged = mergeBrief(draft, partial);
-    if (briefIssues(merged, facts, s.language, recorded).length > 0) return null;
+    const issues = briefIssues(merged, facts, s.language, recorded);
+    if (issues.length > 0) {
+      await logRejection(s, "brief-revise", formatIssueLog(issues));
+      return null;
+    }
     return shapeBrief(merged, facts, recorded);
   } catch (error) {
     if (isBillingFailure(error)) throw error;
@@ -316,14 +412,67 @@ async function askRevise(
   }
 }
 
-function briefIssues(brief: SiteBrief, facts: Facts, language: string, recorded?: SiteBrief): string[] {
-  const issues: string[] = [];
+interface FieldIssue {
+  key: BriefKey;
+  rule: string;
+}
+
+function briefIssues(brief: SiteBrief, facts: Facts, language: string, recorded?: SiteBrief): FieldIssue[] {
+  const issues: FieldIssue[] = [];
   for (const key of BRIEF_KEYS) {
     // A recorded answer is the person's words. It must not veto a correction to another field.
     if (recorded !== undefined && brief[key] === recorded[key]) continue;
-    issues.push(...guideTextIssues(brief[key], { language, facts }));
+    for (const rule of briefTextIssues(brief[key], { language, facts })) issues.push({ key, rule });
   }
   return issues;
+}
+
+function formatIssueLog(issues: readonly FieldIssue[]): string {
+  return issues.map((issue) => `${issue.key}: ${issue.rule}`).join("; ");
+}
+
+function formatIssueCopy(issues: readonly FieldIssue[]): string {
+  const groups = new Map<string, BriefKey[]>();
+  for (const issue of issues) {
+    const list = groups.get(issue.rule) ?? [];
+    if (!list.includes(issue.key)) list.push(issue.key);
+    groups.set(issue.rule, list);
+  }
+  const sentences: string[] = [];
+  for (const [rule, keys] of groups) sentences.push(ruleSentence(rule, keys));
+  return sentences.join(" ");
+}
+
+function joinHeadings(keys: readonly BriefKey[]): string {
+  const names = keys.map((key) => BRIEF_HEADINGS[key]);
+  if (names.length <= 1) return names[0] ?? "A field";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function ruleSentence(rule: string, keys: readonly BriefKey[]): string {
+  const names = joinHeadings(keys);
+  const plural = keys.length !== 1;
+  if (rule === "language") return `${names} ${plural ? "are" : "is"} not in the reply language.`;
+  if (rule === "exclamation") return `${names} ${plural ? "have" : "has"} an exclamation mark.`;
+  if (rule === "em-dash") return `${names} ${plural ? "have" : "has"} an em dash.`;
+  if (rule.startsWith("banned:")) return `${names} ${plural ? "use" : "uses"} "${rule.slice("banned:".length)}".`;
+  if (rule.startsWith("claim:number:")) {
+    return `${names} ${plural ? "cite" : "cites"} ${rule.slice("claim:number:".length)}, which is not in the interview.`;
+  }
+  if (rule.startsWith("claim:")) return `${names} ${plural ? "add" : "adds"} a claim that is not in the interview.`;
+  return `${names} did not pass the ${rule} check.`;
+}
+
+async function logRejection(s: GuideSession, task: string, error: string): Promise<void> {
+  const { appendAiOutcome } = await import("../ai/think.ts");
+  await appendAiOutcome(s.projectDir, {
+    task,
+    outcome: "rejected",
+    error,
+    model: INTERVIEW_MODEL,
+    effort: "xhigh",
+  });
 }
 
 function asBrief(value: unknown, full: boolean): SiteBrief | null {
@@ -459,18 +608,20 @@ function coverageLine(facts: Facts): string {
   if (uncovered.length > 0) parts.push(`Uncovered: ${uncovered.join(", ")}.`);
   if (covered.length > 0) parts.push(`Covered: ${covered.join(", ")}.`);
   const line = parts.join(" ");
-  if (line.length <= briefFieldTarget("coverage")) return line;
-  return shortenCoverage(line, briefFieldTarget("coverage"));
+  const max = briefFieldTarget("coverage");
+  if (line.length <= max) return line;
+  return summarizeCoverage(covered, uncovered, max);
 }
 
-function shortenCoverage(text: string, max: number): string {
-  const window = text.slice(0, max);
-  const comma = window.lastIndexOf(", ");
-  const space = window.lastIndexOf(" ");
-  const cut = comma > 0 ? comma : space;
-  if (cut <= 0) return window.trim();
-  const out = window.slice(0, cut).trim();
-  return out.endsWith(".") ? out : `${out}.`;
+/** A complete count. Never a list that stops in the middle of an id. */
+function summarizeCoverage(covered: readonly string[], uncovered: readonly string[], max: number): string {
+  const total = covered.length + uncovered.length;
+  const head = `Covered ${covered.length} of ${total}.`;
+  const listed = uncovered.length === 0 ? head : `${head} Uncovered: ${uncovered.join(", ")}.`;
+  if (listed.length <= max) return listed;
+  const counts = uncovered.length === 0 ? head : `${head} Uncovered ${uncovered.length} of ${total}.`;
+  if (counts.length <= max) return counts;
+  return head;
 }
 
 function cleanAnswer(id: string, value: string): string {

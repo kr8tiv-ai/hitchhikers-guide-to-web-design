@@ -5,7 +5,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
-import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
 import type { think } from "../ai/think.ts";
 import { loadDecisions, syncAnswer } from "../context/index.ts";
 import { writeRevisitId } from "../interview.ts";
@@ -17,8 +16,9 @@ import {
   isApproval,
   recordedField,
   renderSiteBrief,
+  type BriefStep,
 } from "./brief-loop.ts";
-import { BRIEF_DRAFT_TASK, BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
+import { BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
 import { PlanCoverageError } from "../spec/plan-coverage.ts";
@@ -53,6 +53,8 @@ export interface BriefDeskView {
   error: string;
   /** Set when a revision comes back identical to the pending draft. */
   note: string;
+  /** True while the brief is the interview fallback, not a model draft. */
+  fallback: boolean;
   revisit: string | null;
 }
 
@@ -62,6 +64,7 @@ interface PendingFile {
   buildStarted: boolean;
   error?: string;
   note?: string;
+  fallback?: boolean;
 }
 
 const jobs = new Map<string, Promise<BriefDeskView>>();
@@ -90,7 +93,7 @@ function readPending(projectDir: string): PendingFile {
   try {
     const parsed: unknown = JSON.parse(readFileSync(pendingPath(projectDir), "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return { status: "idle", draft: null, buildStarted: false, error: "", note: "" };
+      return { status: "idle", draft: null, buildStarted: false, error: "", note: "", fallback: false };
     }
     const record = parsed as Record<string, unknown>;
     const status = record.status;
@@ -101,16 +104,29 @@ function readPending(projectDir: string): PendingFile {
       status === "pending" ||
       status === "approved";
     const draft = isBrief(record.draft) ? record.draft : null;
+    const error = typeof record.error === "string" ? record.error : "";
     return {
       status: known ? status : "idle",
       draft,
       buildStarted: record.buildStarted === true,
-      error: typeof record.error === "string" ? record.error : "",
+      error,
       note: typeof record.note === "string" ? record.note : "",
+      fallback: fallbackFrom(record, error),
     };
   } catch {
-    return { status: "idle", draft: null, buildStarted: false, error: "", note: "" };
+    return { status: "idle", draft: null, buildStarted: false, error: "", note: "", fallback: false };
   }
+}
+
+function fallbackFrom(record: Record<string, unknown>, error: string): boolean {
+  if (record.fallback === true) return true;
+  if (record.fallback === false) return false;
+  return (
+    error.includes("stopped early") ||
+    error.includes("failed again") ||
+    error.includes("filled from the interview") ||
+    error.includes("was not used")
+  );
 }
 
 function writePending(projectDir: string, file: PendingFile): void {
@@ -157,21 +173,13 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
     nextAction: state?.nextAction ?? "",
     error: pending.error ?? "",
     note: pending.note ?? "",
+    fallback: pending.fallback === true,
     revisit: null,
   };
 }
 
 function guideSession(projectDir: string): GuideSession {
   return { projectDir, depth: "deep", language: "en", pushes: {} };
-}
-
-function resumeThink(inner: typeof think, saved: SiteBrief): typeof think {
-  return async function resumed<T>(req: ThinkRequest<T>, deps?: Parameters<typeof think>[1]): Promise<ThinkResult<T>> {
-    if (req.task === BRIEF_DRAFT_TASK) {
-      return { value: saved as T, raw: JSON.stringify(saved), durationMs: 0, cassette: "live" };
-    }
-    return inner(req, deps ?? {});
-  };
 }
 
 async function runDraft(projectDir: string, thinkFn: typeof think, priorError: string): Promise<BriefDeskView> {
@@ -185,10 +193,11 @@ async function runDraft(projectDir: string, thinkFn: typeof think, priorError: s
       draft: first.value.draft,
       buildStarted: false,
       error: first.value.error,
+      fallback: first.value.fallback,
     });
     return readBriefDesk(projectDir);
   } catch (error) {
-    writePending(projectDir, { status: "idle", draft: null, buildStarted: false, error: "" });
+    writePending(projectDir, { status: "idle", draft: null, buildStarted: false, error: "", fallback: false });
     throw error;
   }
 }
@@ -203,18 +212,24 @@ export function draftSiteBrief(
   if (existing) return existing;
   const current = readBriefDesk(projectDir);
   if (current.buildStarted || current.status === "approved" || current.status === "revising") return Promise.resolve(current);
-  if (current.status === "pending" && current.error === "") return Promise.resolve(current);
+  if (current.status === "pending" && current.error === "" && current.fallback !== true) return Promise.resolve(current);
   const priorError = current.error;
   opts?.onProgress?.(BRIEF_PROGRESS_STAGE);
-  writePending(projectDir, { status: "drafting", draft: current.draft, buildStarted: current.buildStarted, error: "" });
+  writePending(projectDir, {
+    status: "drafting",
+    draft: current.draft,
+    buildStarted: current.buildStarted,
+    error: "",
+    fallback: current.fallback,
+  });
   const job = runDraft(projectDir, thinkFn, priorError);
   jobs.set(key, job);
   dropJob(jobs, key, job);
   return job;
 }
 
-async function runLoopApprove(projectDir: string, thinkFn: typeof think, saved: SiteBrief): Promise<void> {
-  const loop = briefLoop(guideSession(projectDir), { think: resumeThink(thinkFn, saved) });
+async function runLoopApprove(projectDir: string, thinkFn: typeof think, saved: SiteBrief, held: BriefStep): Promise<void> {
+  const loop = briefLoop(guideSession(projectDir), { think: thinkFn, held });
   const opened = await loop.next();
   if (opened.done || opened.value === undefined) throw new Error("The brief did not resume.");
   const closed = await loop.next("approve");
@@ -239,18 +254,26 @@ async function startBuild(projectDir: string): Promise<void> {
   void ensureSiteBuild(projectDir);
 }
 
-async function runApprove(projectDir: string, thinkFn: typeof think): Promise<BriefDeskView> {
+async function runApprove(projectDir: string, thinkFn: typeof think, confirmFallback: boolean): Promise<BriefDeskView> {
   const current = readBriefDesk(projectDir);
   if (current.buildStarted) return current;
+  if (current.fallback && !confirmFallback && current.status !== "approved") {
+    throw new Error("Confirm the interview fallback before approving.");
+  }
   if (current.status !== "approved") {
     let draft = current.draft;
+    let fallback = current.fallback;
+    let error = current.error;
     if (draft === null || current.status === "idle" || current.status === "drafting") {
       const drafted = await draftSiteBrief(projectDir, thinkFn);
       draft = drafted.draft;
+      fallback = drafted.fallback;
+      error = drafted.error;
+      if (fallback && !confirmFallback) throw new Error("Confirm the interview fallback before approving.");
     }
     if (draft === null) throw new Error("The brief is not ready to approve.");
-    await runLoopApprove(projectDir, thinkFn, draft);
-    writePending(projectDir, { status: "approved", draft, buildStarted: false, error: "" });
+    await runLoopApprove(projectDir, thinkFn, draft, { draft, approved: false, error, fallback });
+    writePending(projectDir, { status: "approved", draft, buildStarted: false, error: "", fallback });
   }
   const file = readPending(projectDir);
   if (!file.buildStarted) {
@@ -263,20 +286,31 @@ async function runApprove(projectDir: string, thinkFn: typeof think): Promise<Br
           draft: file.draft,
           buildStarted: false,
           error: error.message,
+          fallback: file.fallback === true,
         });
       }
       throw error;
     }
-    writePending(projectDir, { status: "approved", draft: file.draft, buildStarted: true, error: "" });
+    writePending(projectDir, {
+      status: "approved",
+      draft: file.draft,
+      buildStarted: true,
+      error: "",
+      fallback: file.fallback === true,
+    });
   }
   return readBriefDesk(projectDir);
 }
 
-export function approveSiteBrief(projectDir: string, thinkFn: typeof think): Promise<BriefDeskView> {
+export function approveSiteBrief(
+  projectDir: string,
+  thinkFn: typeof think,
+  opts?: { confirmFallback?: boolean },
+): Promise<BriefDeskView> {
   const key = path.resolve(projectDir);
   const existing = approving.get(key);
   if (existing) return existing;
-  const job = runApprove(projectDir, thinkFn);
+  const job = runApprove(projectDir, thinkFn, opts?.confirmFallback === true);
   approving.set(key, job);
   dropJob(approving, key, job);
   return job;
@@ -302,10 +336,11 @@ export function reviseSiteBrief(
     status: "revising",
     draft: current.draft,
     buildStarted: current.buildStarted,
-    error: "",
+    error: current.error,
     note: "",
+    fallback: current.fallback,
   });
-  const job = runRevise(projectDir, text, current.draft, thinkFn, opts?.onProgress);
+  const job = runRevise(projectDir, text, current, thinkFn, opts?.onProgress);
   revisions.set(key, job);
   dropJob(revisions, key, job);
   return job;
@@ -319,27 +354,44 @@ async function reviseQuestion(projectDir: string, text: string): Promise<BriefDe
 async function runRevise(
   projectDir: string,
   text: string,
-  before: SiteBrief,
+  before: BriefDeskView,
   thinkFn: typeof think,
   onProgress?: (stage: string) => void,
 ): Promise<BriefDeskView> {
+  const saved = before.draft;
+  if (saved === null) throw new Error("The brief is not ready to change.");
   try {
     onProgress?.(BRIEF_REVISE_STAGES[1]);
-    const loop = briefLoop(guideSession(projectDir), { think: resumeThink(thinkFn, before) });
+    const held: BriefStep = { draft: saved, approved: false, error: before.error, fallback: before.fallback };
+    const loop = briefLoop(guideSession(projectDir), { think: thinkFn, held });
     const opened = await loop.next();
     if (opened.done || opened.value === undefined) throw new Error("The brief did not resume.");
     const revised = await loop.next(text);
     await loop.return(undefined);
     const draft = revised.value?.draft;
     if (draft === undefined) throw new Error("The brief did not change.");
-    const note = sameBrief(before, draft) ? BRIEF_SAME_NOTE : "";
+    const note = sameBrief(saved, draft) ? BRIEF_SAME_NOTE : "";
     onProgress?.(BRIEF_REVISE_STAGES[2]);
-    writePending(projectDir, { status: "pending", draft, buildStarted: false, error: "", note });
-    await recordRevision(projectDir, text, before, draft, thinkFn);
+    writePending(projectDir, {
+      status: "pending",
+      draft,
+      buildStarted: false,
+      error: revised.value?.error ?? before.error,
+      note,
+      fallback: revised.value?.fallback ?? before.fallback,
+    });
+    await recordRevision(projectDir, text, saved, draft, thinkFn);
     return readBriefDesk(projectDir);
   } catch (error) {
-    const message = isBillingFailure(error) ? BILLING_TOP_UP : "";
-    writePending(projectDir, { status: "pending", draft: before, buildStarted: false, error: message, note: "" });
+    const message = isBillingFailure(error) ? BILLING_TOP_UP : before.error;
+    writePending(projectDir, {
+      status: "pending",
+      draft: saved,
+      buildStarted: false,
+      error: message,
+      note: "",
+      fallback: before.fallback,
+    });
     throw error;
   }
 }

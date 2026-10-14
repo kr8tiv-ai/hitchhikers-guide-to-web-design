@@ -264,6 +264,25 @@ function runFailure(output: SpawnOutput, parsed: ParsedModel, timeoutMs: number)
   return undefined;
 }
 
+/** A guide check that refused a draft the model call itself accepted. */
+export async function appendAiOutcome(
+  projectDir: string,
+  entry: { task: string; outcome: string; error?: string; model: string; effort: string },
+): Promise<void> {
+  const line: LogLine = {
+    at: new Date().toISOString(),
+    task: entry.task,
+    model: entry.model,
+    effort: entry.effort,
+    durationMs: 0,
+    cassette: "live",
+    outcome: entry.outcome,
+    policyFlags: [],
+  };
+  if (entry.error !== undefined && entry.error.trim() !== "") line.error = entry.error.slice(0, 500);
+  await appendLog(projectDir, line);
+}
+
 async function appendLog(projectDir: string, line: LogLine): Promise<void> {
   const dir = path.join(projectDir, ".hitchhiker", "logs");
   await mkdir(dir, { recursive: true });
