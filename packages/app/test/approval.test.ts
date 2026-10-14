@@ -137,6 +137,33 @@ test("a negative token estimate throws and an unknown gate throws", () => {
   );
 });
 
+test("uncovered requirements block the drive and name each gap", () => {
+  let state = initialApprovalState();
+  state = reduceApproval(state, { type: "record", gate: "prd" });
+  state = reduceApproval(state, { type: "record", gate: "context" });
+  state = reduceApproval(state, { type: "record", gate: "promptPackage" });
+  state = reduceApproval(state, { type: "allow" });
+  assert.equal(state.drive, "yes");
+  const html = renderApproval({
+    titles: THREE,
+    tokens: 8,
+    tiers: TIERS,
+    prdTitle: "Northwind",
+    state,
+    uncovered: [
+      { id: "REQ-PAGE-farms", label: "Farms at /farms" },
+      { id: "REQ-FEAT-map", label: "map" },
+    ],
+  });
+  assert.match(driveButton(html), /data-approve-drive="no"/);
+  assert.equal(html.includes('data-approve-drive="yes"'), false);
+  assert.match(html, /data-plan-coverage/);
+  assert.match(html, /role="alert"/);
+  assert.match(html, /These requirements have no build task: Farms at \/farms \(REQ-PAGE-farms\), map \(REQ-FEAT-map\)\./);
+  assert.equal(copyWithoutDoctype(html).includes("!"), false);
+  assert.equal(html.includes("\u2014"), false);
+});
+
 test("the approval screen does not spawn a process or call a model", () => {
   const source = readFileSync(new URL("../src/approval.ts", import.meta.url), "utf8");
   assert.equal(source.includes("child_process"), false);

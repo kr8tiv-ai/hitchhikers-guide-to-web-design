@@ -24,10 +24,11 @@ export function approveMain(token: string, desk: BriefDeskView, changeError = ""
       ? `<p data-brief-progress>Reading the change · 0s</p>`
       : `<p data-brief-progress hidden></p>`;
   const same = desk.note === "" ? "" : `<p data-brief-note>${escapeHtml(desk.note)}</p>`;
+  const coverage = desk.error.startsWith("These requirements have no build task");
   const failure =
     desk.error === ""
       ? ""
-      : `<p data-brief-error role="alert">${escapeHtml(desk.error)}</p>
+      : `<p data-brief-error${coverage ? " data-plan-coverage" : ""} role="alert">${escapeHtml(desk.error)}</p>
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           <input type="hidden" name="action" value="retry" />

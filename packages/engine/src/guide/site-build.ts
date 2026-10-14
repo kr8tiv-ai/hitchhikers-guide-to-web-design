@@ -18,6 +18,7 @@ import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
 import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../queue-file.ts";
 import { generateBriefPlan } from "../spec/brief-plan.ts";
+import { PlanCoverageError, checkPlanCoverage } from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
 
 export const BUILD_MODEL = "grok-4.7-build-fast";
@@ -402,7 +403,9 @@ function runnerFor(projectDir: string): BuildSpawn | null {
 }
 
 export async function prepareSiteBuild(projectDir: string, briefMarkdown: string): Promise<string[]> {
-  const { prompts } = generateBriefPlan(briefMarkdown);
+  const { prompts, planned } = generateBriefPlan(briefMarkdown);
+  const coverage = checkPlanCoverage(planned.requirements, prompts);
+  if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });

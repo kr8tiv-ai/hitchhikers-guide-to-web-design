@@ -5,6 +5,7 @@
  * Nothing here starts the build, calls a model, or writes the approval file.
  */
 
+import { planCoverageMessage, type CoverageGap } from "@hitchhiker/engine";
 import { escapeHtml } from "./card.ts";
 
 export class ApprovalError extends Error {
@@ -31,6 +32,8 @@ export interface ApprovalInput {
   prdTitle?: string;
   tiers?: readonly string[];
   state?: ApprovalState;
+  /** Requirements with no build task. A non-empty list keeps the drive off. */
+  uncovered?: readonly CoverageGap[];
 }
 
 const GATES: readonly ApprovalGate[] = ["prd", "context", "promptPackage"];
@@ -68,7 +71,10 @@ export function renderApproval(input: ApprovalInput): string {
   const tokens = assertTokens(input.tokens);
   const tiers = assertTiers(titles, input.tiers);
   const state = readState(input.state);
+  const uncovered = readUncovered(input.uncovered);
+  const coverage = planCoverageMessage(uncovered);
   const allowed =
+    uncovered.length === 0 &&
     titles.length > 0 &&
     state.prd === true &&
     state.context === true &&
@@ -114,6 +120,7 @@ export function renderApproval(input: ApprovalInput): string {
         ${gateRow("promptPackage", "Prompt package", "Record yes for the prompt package", state.promptPackage)}
         <div class="hh-approval">
           <p class="hh-approval__note">This page records the yes. The build does not start here.</p>
+          ${coverage === "" ? "" : `<p data-plan-coverage role="alert">${escapeHtml(coverage)}</p>`}
           <button class="hh-btn hh-btn--primary" type="button" data-approve-drive="${drive}" aria-pressed="${allowed ? "true" : "false"}">Approve and allow the drive</button>
         </div>
       </section>
@@ -230,4 +237,19 @@ function readState(state: ApprovalState | undefined): ApprovalState {
 
 function isGate(value: string): value is ApprovalGate {
   return (GATES as readonly string[]).includes(value);
+}
+
+function readUncovered(value: readonly CoverageGap[] | undefined): CoverageGap[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new ApprovalError("Uncovered requirements must be a list.");
+  const gaps: CoverageGap[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) throw new ApprovalError("An uncovered requirement must be an object.");
+    if (typeof item.id !== "string" || item.id.trim() === "") throw new ApprovalError("An uncovered requirement needs an id.");
+    if (typeof item.label !== "string" || item.label.trim() === "") {
+      throw new ApprovalError("An uncovered requirement needs a label.");
+    }
+    gaps.push({ id: item.id, label: item.label });
+  }
+  return gaps;
 }

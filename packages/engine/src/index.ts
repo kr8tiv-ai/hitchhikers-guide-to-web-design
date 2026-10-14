@@ -186,6 +186,8 @@ export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
 export type { BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
 export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
+export { PlanCoverageError, checkPlanCoverage, planCoverageMessage } from "./spec/plan-coverage.ts";
+export type { CoverageGap, CoverageRequirement, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,

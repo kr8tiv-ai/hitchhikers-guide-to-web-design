@@ -61,6 +61,11 @@ import {
   draftSiteBrief,
   readBriefDesk,
   reviseSiteBrief,
+  PlanCoverageError,
+  checkPlanCoverage,
+  planCoverageMessage,
+  type CoverageRequirement,
+  type CoverageTask,
   type BriefDeskView,
   loadDecisions,
   promoteDiscuss,
@@ -882,6 +887,10 @@ async function handlePost(
   }
   if (pathname === "/api/brief/draft" || pathname === "/api/brief/approve" || pathname === "/api/brief/change") {
     await handleBriefPost(req, res, pathname, projectDir, guideThink, hub, view, reloadInterview);
+    return;
+  }
+  if (pathname === "/api/plan/approve") {
+    await handlePlanApprove(req, res);
     return;
   }
   if (pathname === "/api/answer" || pathname === "/api/suggest" || pathname === "/api/skip") {
@@ -1709,10 +1718,63 @@ async function handleApproveForm(
     }
     sendJson(req, res, 400, { error: "That action is not on this plate." });
   } catch (error: unknown) {
+    if (error instanceof PlanCoverageError) {
+      if (mime === "application/json") {
+        sendJson(req, res, 422, { ok: false, error: error.message, uncovered: error.uncovered });
+        return;
+      }
+      const brief = readBriefDesk(projectDir);
+      await deliverHtml(req, res, 422, renderApproveBrief(token, null, brief), projectDir, token, false);
+      return;
+    }
     logDeskError(error);
     const message = error instanceof Error && error.message.trim() !== "" ? error.message : "The brief did not change.";
     sendJson(req, res, 400, { error: message });
   }
+}
+
+async function handlePlanApprove(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req, res);
+  if (body === null) return;
+  const parsed = parsePlanApproval(body);
+  if (parsed === null) {
+    sendJson(req, res, 400, { error: "Name each requirement and the tasks that cover it." });
+    return;
+  }
+  const coverage = checkPlanCoverage(parsed.requirements, parsed.tasks);
+  if (!coverage.ok) {
+    sendJson(req, res, 422, {
+      ok: false,
+      error: planCoverageMessage(coverage.uncovered),
+      uncovered: coverage.uncovered,
+    });
+    return;
+  }
+  sendJson(req, res, 200, { ok: true });
+}
+
+function parsePlanApproval(
+  body: unknown,
+): { requirements: CoverageRequirement[]; tasks: CoverageTask[] } | null {
+  if (!isRecord(body) || !Array.isArray(body.requirements) || !Array.isArray(body.tasks)) return null;
+  const requirements: CoverageRequirement[] = [];
+  for (const item of body.requirements) {
+    if (!isRecord(item)) return null;
+    if (typeof item.id !== "string" || item.id.trim() === "") return null;
+    if (typeof item.label !== "string" || item.label.trim() === "") return null;
+    requirements.push({ id: item.id, label: item.label });
+  }
+  const tasks: CoverageTask[] = [];
+  for (const item of body.tasks) {
+    if (!isRecord(item) || !Array.isArray(item.requirements)) return null;
+    const ids: string[] = [];
+    for (const id of item.requirements) {
+      if (typeof id !== "string" || id.trim() === "") return null;
+      ids.push(id);
+    }
+    tasks.push({ requirements: ids });
+  }
+  return { requirements, tasks };
 }
 
 async function handleBriefPost(

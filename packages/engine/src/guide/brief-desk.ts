@@ -21,6 +21,7 @@ import {
 import { BRIEF_DRAFT_TASK, BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
+import { PlanCoverageError } from "../spec/plan-coverage.ts";
 import { ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
 
@@ -253,7 +254,19 @@ async function runApprove(projectDir: string, thinkFn: typeof think): Promise<Br
   }
   const file = readPending(projectDir);
   if (!file.buildStarted) {
-    await startBuild(projectDir);
+    try {
+      await startBuild(projectDir);
+    } catch (error) {
+      if (error instanceof PlanCoverageError) {
+        writePending(projectDir, {
+          status: "pending",
+          draft: file.draft,
+          buildStarted: false,
+          error: error.message,
+        });
+      }
+      throw error;
+    }
     writePending(projectDir, { status: "approved", draft: file.draft, buildStarted: true, error: "" });
   }
   return readBriefDesk(projectDir);
