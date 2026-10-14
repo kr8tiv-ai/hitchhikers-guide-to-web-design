@@ -28,10 +28,9 @@ import {
 } from "@hitchhiker/engine";
 import { evaluateCommand } from "./policy.ts";
 import { loadQueue, pauseQueue, saveQueue, type QueueFile } from "./queue-file.ts";
-import { buildArgv, MAX_TURNS, type RunRequest } from "./runner.ts";
+import { buildArgv, type RunRequest } from "./runner.ts";
 import { classifyRun, type SensorEvent } from "./sensors.ts";
 
-const LIVE_TIMEOUT_MS = 30 * 60 * 1000;
 const USAGE_LIMIT = /usage limit|rate limit|too many requests|\b429\b|quota exceeded|\bquota\b/i;
 const ID_PATTERN = /^[a-z0-9-]+$/;
 
@@ -95,13 +94,12 @@ function tokensFrom(stdout: string): { input: number; output: number } | undefin
   return found;
 }
 
-function readFrontMatter(text: string): { effort?: string; maxTurns?: number } {
+function readFrontMatter(text: string): { effort?: string } {
   if (!text.startsWith("---")) return {};
   const end = text.indexOf("\n---");
   if (end < 0) return {};
   const block = text.slice(3, end);
   let effort: string | undefined;
-  let maxTurns: number | undefined;
   for (const raw of block.split(/\r?\n/)) {
     const line = raw.trim();
     const split = line.indexOf(":");
@@ -109,14 +107,9 @@ function readFrontMatter(text: string): { effort?: string; maxTurns?: number } {
     const key = line.slice(0, split).trim().toLowerCase().replaceAll("_", "");
     const value = line.slice(split + 1).trim();
     if (key === "effort" && value.length > 0) effort = value;
-    if (key === "maxturns") {
-      const parsed = Number(value);
-      if (Number.isInteger(parsed)) maxTurns = parsed;
-    }
   }
-  const found: { effort?: string; maxTurns?: number } = {};
+  const found: { effort?: string } = {};
   if (effort !== undefined) found.effort = effort;
-  if (maxTurns !== undefined) found.maxTurns = maxTurns;
   return found;
 }
 
@@ -124,11 +117,6 @@ function asEffort(value: string | undefined, fallback: GuideConfig["effort"]): R
   if (value === undefined) return fallback;
   if (value === "medium" || value === "high" || value === "xhigh") return value;
   throw new Error("Effort must be medium, high, or xhigh.");
-}
-
-function asTurns(value: number | undefined): number {
-  if (value === undefined) return MAX_TURNS;
-  return value;
 }
 
 async function promptFile(file: string, projectDir: string): Promise<string> {
@@ -229,7 +217,7 @@ export async function runLivePrompt(
     bin: command,
     promptPath: resolved,
     effort: asEffort(matter.effort, deps.config.effort),
-    maxTurns: asTurns(matter.maxTurns),
+    maxTurns: null,
     sessionMode: deps.config.sessionIdMode,
     approved: true,
   });
@@ -241,7 +229,7 @@ export async function runLivePrompt(
     args,
     cwd: deps.projectDir,
     env: process.env,
-    timeoutMs: LIVE_TIMEOUT_MS,
+    timeoutMs: 0,
   });
   const exitCode = output.status === null ? 1 : output.status;
   const id = path.basename(resolved, path.extname(resolved)).toLowerCase();

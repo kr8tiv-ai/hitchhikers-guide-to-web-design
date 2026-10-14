@@ -57,9 +57,14 @@ describe("live runner", () => {
     const dir = project();
     try {
       const file = await writePrompt(dir, "001-home.md", PROMPT);
-      let seen: { command: string; args: readonly string[]; cwd: string } | undefined;
+      let seen: { command: string; args: readonly string[]; cwd: string; timeoutMs: number } | undefined;
       const spawnImpl: SpawnLike = async (request) => {
-        seen = { command: request.command, args: request.args, cwd: request.cwd };
+        seen = {
+          command: request.command,
+          args: request.args,
+          cwd: request.cwd,
+          timeoutMs: request.timeoutMs,
+        };
         return {
           status: 0,
           stdout: [
@@ -83,11 +88,13 @@ describe("live runner", () => {
         bin: "grok",
         promptPath: file,
         effort: "high",
-        maxTurns: 4,
+        maxTurns: null,
         sessionMode: "alias",
         approved: true,
       });
       assert.deepEqual(seen.args, expected);
+      assert.equal(seen.args.includes("--max-turns"), false);
+      assert.equal(seen.timeoutMs, 0);
       assert.equal(seen.args.includes("--always-approve"), false);
       assert.equal(seen.args.includes("--sandbox"), false);
       assert.equal(seen.args.includes("--session-id"), false);

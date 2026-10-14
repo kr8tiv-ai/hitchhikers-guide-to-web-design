@@ -11,6 +11,7 @@ import { MOTION_LIBS, type MotionLib } from "./motion.ts";
 import { SITE_RULES } from "./site-rules.ts";
 import {
   MOTION_BIND_SENTENCE,
+  SITE_BUILD_MAX_TURNS,
   SITE_PHASES,
   SLICES_BY_PHASE,
   type SitePhase,
@@ -208,8 +209,13 @@ function frontmatterErrors(prompt: unknown, id: string): ValidationReport["error
   const protectedPaths = stringList(prompt.protected, "protected", true);
   if (protectedPaths !== null) fail(protectedPaths);
   if (typeof prompt.reviewAfter !== "boolean") fail("review_after must be a boolean.");
-  if (typeof prompt.maxTurns !== "number" || !Number.isInteger(prompt.maxTurns) || prompt.maxTurns < 1 || prompt.maxTurns > 100) {
-    fail("max_turns must be an integer from 1 to 100.");
+  if (
+    typeof prompt.maxTurns !== "number" ||
+    !Number.isInteger(prompt.maxTurns) ||
+    prompt.maxTurns < 1 ||
+    prompt.maxTurns > SITE_BUILD_MAX_TURNS
+  ) {
+    fail(`max_turns must be an integer from 1 to ${SITE_BUILD_MAX_TURNS}.`);
   }
   if (prompt.kind !== "build" && prompt.kind !== "once-over") {
     fail("kind must be build or once-over.");

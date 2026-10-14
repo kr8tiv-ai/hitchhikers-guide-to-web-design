@@ -12,7 +12,8 @@
  * - Next.js paths follow packages/templates/next-app (src/app). Vite paths
  *   follow vite-react-world. SvelteKit has no template: src/routes and src/lib.
  * - depends_on is a chain. Each entry depends on the previous id.
- * - medium is 40 turns, high is 60, xhigh is 80. The CLI cap is 100.
+ * - Generated prompts share one turn count above 100. The desk spawn omits
+ *   --max-turns, so that field is not a run cap.
  * - A 3D effect (three, ogl, theatre) is one Magrathea entry, not a second
  *   motion entry. A desktop 3D gate is added only for those effects.
  */
@@ -91,11 +92,11 @@ export const MOTION_BIND_SENTENCE = "Do not also bind this element with another 
 
 export const SITE_MODEL = "grok-4.7";
 
-const MAX_TURNS: Record<SiteEffort, number> = {
-  medium: 40,
-  high: 60,
-  xhigh: 80,
-};
+/**
+ * Stored on a generated prompt. The site-build spawn does not pass it to grok.
+ * grok --help lists --max-turns with no default, so a missing flag is unlimited.
+ */
+export const SITE_BUILD_MAX_TURNS = 100_000;
 
 const COUNT_MAX = 150;
 const COUNT_MIN = 50;
@@ -1206,7 +1207,7 @@ function finalize(drafts: readonly Draft[], protectedPaths: readonly string[]): 
       requirements: [...draft.requirements],
       protected: [...protectedPaths],
       reviewAfter,
-      maxTurns: MAX_TURNS[draft.effort],
+      maxTurns: SITE_BUILD_MAX_TURNS,
       kind: draft.kind,
     };
     if (draft.library !== undefined) prompt.library = draft.library;

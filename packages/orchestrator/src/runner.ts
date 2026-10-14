@@ -25,7 +25,10 @@ import path from "node:path";
 
 export const DEFAULT_MODEL = "grok-4.7";
 
-/** Site prompts cap turns here. think() uses a different ceiling. */
+/**
+ * Ceiling for a caller that passes a turn count. A site build passes null
+ * so --max-turns is omitted. grok --help lists that flag with no default.
+ */
 export const MAX_TURNS = 80;
 
 /** Captured stderr on a failed run, after trim. */
@@ -62,7 +65,8 @@ export interface RunRequest {
   bin: string;
   promptPath: string;
   effort: "medium" | "high" | "xhigh";
-  maxTurns: number;
+  /** Null omits --max-turns. A site build uses null. */
+  maxTurns: number | null;
   sessionMode: "unknown" | "uuid" | "alias";
   sessionId?: string;
   /**
@@ -112,7 +116,8 @@ function assertEffort(effort: string): void {
   }
 }
 
-function assertMaxTurns(maxTurns: number): void {
+function assertMaxTurns(maxTurns: number | null): void {
+  if (maxTurns === null) return;
   if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > MAX_TURNS) {
     throw new RunConfigError(`maxTurns must be an integer from 1 to ${MAX_TURNS}.`);
   }
@@ -198,9 +203,10 @@ function flagArgs(req: RunRequest, delivery: "inline" | "file"): string[] {
     "streaming-json",
     "--effort",
     req.effort,
-    "--max-turns",
-    String(req.maxTurns),
   ];
+  if (req.maxTurns !== null) {
+    args.push("--max-turns", String(req.maxTurns));
+  }
   if (req.sessionMode === "uuid") {
     const id = req.sessionId;
     if (id === undefined || id === "") {

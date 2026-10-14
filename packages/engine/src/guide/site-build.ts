@@ -30,6 +30,9 @@ export const BUILD_IDLE_MS = 30 * 60 * 1000;
 /** After a stream `end` event, wait this long for the child to exit. */
 export const BUILD_EXIT_GRACE_MS = 5_000;
 
+const TURN_LIMIT_REASON =
+  "The build stopped because it hit a turn limit. Press Retry to run this prompt again.";
+
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".hitchhiker"]);
@@ -285,6 +288,10 @@ export function continueSiteBuild(projectDir: string, promptId?: string): Promis
   return job;
 }
 
+/**
+ * grok --help lists --max-turns with no default, so omitting it leaves the
+ * run uncapped. A site build stops on a real blocker, not a turn count.
+ */
 export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
   return [
     "--no-auto-update",
@@ -299,8 +306,6 @@ export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
     "streaming-json",
     "--effort",
     BUILD_EFFORT,
-    "--max-turns",
-    "80",
   ];
 }
 
@@ -612,6 +617,19 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
       if (liveBuilds.get(key)?.promptId === next.id) unregisterLive(key);
     }
     const files = diffSnapshots(before, snapshot(projectDir));
+    const evidence = `${result.stdout}\n${result.stderr}\n${rawTail}\n${readBuildLog(projectDir, next.id)}`;
+    if (logHitTurnLimit(evidence)) {
+      const kind = classifyGrokFailure({
+        stdout: result.stdout,
+        stderr: result.stderr,
+        stream: evidence,
+        code: result.code,
+      }).kind;
+      if (kind !== "billing") {
+        await settleItem(projectDir, next.id, "failed", TURN_LIMIT_REASON, lines, files, startedAt);
+        return;
+      }
+    }
     if (result.code === 0 && result.errorCode === null) {
       try {
         const gate = buildGates.get(key);
@@ -703,6 +721,10 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     await settleItem(projectDir, run.promptId, "failed", BILLING_TOP_UP, run.lastLines, run.filesWritten, run.startedAt);
     await pauseQueuedPrompts(projectDir);
     stampBilling(projectDir);
+    return "halt";
+  }
+  if (logHitTurnLimit(log)) {
+    await settleItem(projectDir, run.promptId, "failed", TURN_LIMIT_REASON, run.lastLines, run.filesWritten, run.startedAt);
     return "halt";
   }
   const expected = expectedOutputFiles(projectDir, run.promptId);
@@ -1006,6 +1028,10 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
       if (!finished) armGrace();
     },
   };
+}
+
+function logHitTurnLimit(text: string): boolean {
+  return /"type"\s*:\s*"max_turns_reached"/.test(text) || /\bmax turns reached\b/i.test(text);
 }
 
 function readEndReason(buffer: string): string | null {

@@ -567,7 +567,11 @@ function errorCodeOf(error: unknown): string | null {
   return null;
 }
 
-/** Spawn with a timeout. On timeout the child process tree is killed. */
+/**
+ * Spawn grok. A positive timeoutMs kills the child tree.
+ * Zero or less does not arm a wall clock. Site builds use that so a long
+ * prompt is not stopped for taking time. Think calls keep their own timeout.
+ */
 export function spawnGrok(request: SpawnRequest): Promise<SpawnOutput> {
   return new Promise((resolve) => {
     let stdout = "";
@@ -592,11 +596,14 @@ export function spawnGrok(request: SpawnRequest): Promise<SpawnOutput> {
       });
     };
 
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree(child);
-      force = setTimeout(() => finish(null), 2_000);
-    }, request.timeoutMs);
+    const timer =
+      Number.isFinite(request.timeoutMs) && request.timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            killTree(child);
+            force = setTimeout(() => finish(null), 2_000);
+          }, request.timeoutMs)
+        : undefined;
 
     const take = (into: "stdout" | "stderr", chunk: string): void => {
       if (into === "stdout") stdout += chunk;

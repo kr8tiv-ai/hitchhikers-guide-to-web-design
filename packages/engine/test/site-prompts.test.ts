@@ -15,8 +15,6 @@ import {
   type SiteStack,
 } from "../src/spec/site-prompts.ts";
 
-const TURNS = { medium: 40, high: 60, xhigh: 80 } as const;
-
 function calmInput(stack: SiteStack = "astro"): SiteSkeletonInput {
   return {
     pages: [
@@ -102,7 +100,9 @@ test("a 3-page calm fixture yields 50 to 150 real entries", () => {
     lastRank = rank;
     assert.ok(SLICES_BY_PHASE[prompt.phase].includes(prompt.slice));
     assert.equal(prompt.model, SITE_MODEL);
-    assert.equal(prompt.maxTurns, TURNS[prompt.effort]);
+    assert.ok(prompt.maxTurns > 100);
+    assert.equal(prompt.maxTurns, prompts[0]?.maxTurns);
+    assert.equal(prompt.maxTurns === 40 || prompt.maxTurns === 60 || prompt.maxTurns === 80, false);
     assert.equal(prompt.title.includes("!"), false);
     assert.equal(/\blorem\b/i.test(prompt.title), false);
     assert.equal(/as before|see above|same as previous/i.test(prompt.title), false);
