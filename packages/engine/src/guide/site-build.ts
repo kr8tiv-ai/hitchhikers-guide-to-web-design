@@ -17,7 +17,8 @@ import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
 import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../queue-file.ts";
-import { generateSkeleton, SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
+import { generateBriefPlan } from "../spec/brief-plan.ts";
+import { SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
 
 export const BUILD_MODEL = "grok-4.7-build-fast";
 export const BUILD_EFFORT = "xhigh";
@@ -34,16 +35,6 @@ const SKIP_DIRS = new Set(["node_modules", ".git", ".hitchhiker"]);
 const LINE_CAP = 6;
 const LINE_CHARS = 180;
 const FILE_CAP = 40;
-
-const SKELETON_INPUT = {
-  pages: [{ id: "home", title: "Home", sections: ["hero"] }],
-  effects: [],
-  features: ["contact form"],
-  integrations: [],
-  seoItems: [],
-  stack: "astro" as const,
-  protectedPaths: [],
-};
 
 export interface BuildSpawnRequest {
   command: string;
@@ -411,7 +402,7 @@ function runnerFor(projectDir: string): BuildSpawn | null {
 }
 
 export async function prepareSiteBuild(projectDir: string, briefMarkdown: string): Promise<string[]> {
-  const { prompts } = generateSkeleton(SKELETON_INPUT);
+  const { prompts } = generateBriefPlan(briefMarkdown);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });
@@ -1193,6 +1184,14 @@ function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet:
     "",
     `Prompt ${prompt.id}. ${prompt.title}`,
     `Files: ${files}`,
+    ...(prompt.route === undefined ? [] : [`Route: ${prompt.route}`]),
+    ...(prompt.contentSources === undefined || prompt.contentSources.length === 0
+      ? []
+      : [`Content sources: ${prompt.contentSources.join(", ")}`]),
+    ...(prompt.acceptance === undefined || prompt.acceptance.length === 0
+      ? []
+      : [`Acceptance: ${prompt.acceptance.join(" ")}`]),
+    ...(prompt.requirements.length === 0 ? [] : [`Requirements: ${prompt.requirements.join(", ")}`]),
     "",
   ].join("\n");
 }

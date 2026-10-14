@@ -104,6 +104,9 @@ function copyEntry(entry: SitePromptSkeleton, filesModified: string[]): SiteProm
     kind: entry.kind,
   };
   if (entry.library !== undefined) next.library = entry.library;
+  if (entry.route !== undefined) next.route = entry.route;
+  if (entry.contentSources !== undefined) next.contentSources = [...entry.contentSources];
+  if (entry.acceptance !== undefined) next.acceptance = [...entry.acceptance];
   return next;
 }
 

@@ -77,6 +77,7 @@ const SPECIFIC_PATHS: Record<SiteStack, readonly RegExp[]> = {
   astro: [
     /^astro\.config\.ts$/,
     /^src\/pages\/[a-z0-9]+(?:-[a-z0-9]+)*\.astro$/,
+    /^src\/pages\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*\[[a-z0-9]+\]\.astro$/,
     /^src\/layouts\/[A-Za-z][A-Za-z0-9]*\.astro$/,
     /^src\/components\/[A-Za-z][A-Za-z0-9]*\.astro$/,
   ],
@@ -85,6 +86,7 @@ const SPECIFIC_PATHS: Record<SiteStack, readonly RegExp[]> = {
     /^src\/app\/page\.tsx$/,
     /^src\/app\/layout\.tsx$/,
     /^src\/app\/[a-z0-9]+(?:-[a-z0-9]+)*\/page\.tsx$/,
+    /^src\/app\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*\[[a-z0-9]+\]\/page\.tsx$/,
     /^src\/components\/[A-Za-z][A-Za-z0-9]*\.tsx$/,
   ],
   "vite-react": [
@@ -97,6 +99,7 @@ const SPECIFIC_PATHS: Record<SiteStack, readonly RegExp[]> = {
     /^src\/routes\/\+page\.svelte$/,
     /^src\/routes\/\+layout\.svelte$/,
     /^src\/routes\/[a-z0-9]+(?:-[a-z0-9]+)*\/\+page\.svelte$/,
+    /^src\/routes\/(?:[a-z0-9]+(?:-[a-z0-9]+)*\/)*\[[a-z0-9]+\]\/\+page\.svelte$/,
     /^src\/lib\/components\/[A-Za-z][A-Za-z0-9]*\.svelte$/,
   ],
 };

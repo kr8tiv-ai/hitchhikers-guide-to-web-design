@@ -183,6 +183,9 @@ export {
   reviseSiteBrief,
 } from "./guide/brief-desk.ts";
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
+export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
+export type { BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
+export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,

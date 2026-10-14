@@ -125,6 +125,10 @@ export interface SitePromptSkeleton {
   maxTurns: number;
   library?: string;
   kind: "build" | "once-over";
+  /** URL path for a page prompt, such as /farms or /farms/[id]. */
+  route?: string;
+  contentSources?: string[];
+  acceptance?: string[];
 }
 
 export interface SitePrompt extends SitePromptSkeleton {
@@ -133,7 +137,7 @@ export interface SitePrompt extends SitePromptSkeleton {
 }
 
 export interface SiteSkeletonInput {
-  pages: Array<{ id: string; title: string; sections: string[] }>;
+  pages: Array<{ id: string; title: string; sections: string[]; route?: string; contentSources?: string[] }>;
   effects: Array<{ id: string; library: string; sectionId: string; page: string }>;
   features: string[];
   integrations: string[];
@@ -145,7 +149,9 @@ export interface SiteSkeletonInput {
 interface CleanPage {
   id: string;
   title: string;
+  route: string;
   sections: string[];
+  contentSources: string[];
 }
 
 interface CleanEffect {
@@ -165,6 +171,9 @@ interface Draft {
   requirements: string[];
   kind: "build" | "once-over";
   library?: MotionLib;
+  route?: string;
+  contentSources?: string[];
+  acceptance?: string[];
 }
 
 interface CleanInput {
@@ -234,6 +243,53 @@ function slugId(value: string): string {
     throw new SitePromptError(`Cannot build a path from "${value}".`);
   }
   return slug;
+}
+
+export function pageRequirementId(pageId: string): string {
+  return `REQ-PAGE-${slugId(pageId)}`;
+}
+
+export function featureRequirementId(feature: string): string {
+  return `REQ-FEAT-${slugId(feature)}`;
+}
+
+const ROUTE_RE =
+  /^\/$|^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*|\[[a-z0-9]+\])(?:\/(?:[a-z0-9]+(?:-[a-z0-9]+)*|\[[a-z0-9]+\]))*$/;
+
+function cleanRoute(value: unknown, pageId: string, pageIndex: number): string {
+  if (value === undefined) return pageIndex === 0 ? "/" : `/${slugId(pageId)}`;
+  if (typeof value !== "string" || !ROUTE_RE.test(value)) {
+    throw new SitePromptError(`Page "${pageId}" route is not a path.`);
+  }
+  return value;
+}
+
+function cleanContentSources(raw: unknown, pageId: string): string[] {
+  const fallback = ["src/data/routes.ts", "src/data/copy.ts"];
+  if (raw === undefined) return fallback;
+  if (!Array.isArray(raw)) {
+    throw new SitePromptError(`Page "${pageId}" content sources must be an array.`);
+  }
+  const sources: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") {
+      throw new SitePromptError(`Page "${pageId}" content source must be a string.`);
+    }
+    const text = item.replace(/\r\n|[\r\n]/g, " ").replace(/ {2,}/g, " ").trim();
+    if (text === "") continue;
+    if (
+      text.includes("!") ||
+      text.includes("\uFF01") ||
+      text.includes("\u2014") ||
+      text.includes("..") ||
+      text.includes("\\") ||
+      text.includes("\0")
+    ) {
+      throw new SitePromptError(`Page "${pageId}" content source contains a banned character.`);
+    }
+    sources.push(text);
+  }
+  return sources.length === 0 ? fallback : sources;
 }
 
 function pascal(slug: string): string {
@@ -321,7 +377,9 @@ function cleanPages(raw: unknown): CleanPage[] {
     pages.push({
       id,
       title: assertToken(item.title, `Page "${id}" title`),
+      route: cleanRoute(item.route, id, pages.length),
       sections,
+      contentSources: cleanContentSources(item.contentSources, id),
     });
   }
   return pages;
@@ -450,8 +508,8 @@ function componentFile(stack: SiteStack, name: string): string {
   }
 }
 
-function pageFile(stack: SiteStack, pageIndex: number, pageId: string): string {
-  if (pageIndex === 0) {
+function pageFile(stack: SiteStack, page: CleanPage): string {
+  if (page.route === "/") {
     switch (stack) {
       case "astro":
         return "src/pages/index.astro";
@@ -465,16 +523,16 @@ function pageFile(stack: SiteStack, pageIndex: number, pageId: string): string {
         return assertNever(stack);
     }
   }
-  const slug = slugId(pageId);
+  const joined = page.route.split("/").filter((part) => part.length > 0).join("/");
   switch (stack) {
     case "astro":
-      return `src/pages/${slug}.astro`;
+      return `src/pages/${joined}.astro`;
     case "next":
-      return `src/app/${slug}/page.tsx`;
+      return `src/app/${joined}/page.tsx`;
     case "vite-react":
-      return `src/world/Page${pascal(slug)}.tsx`;
+      return `src/world/Page${pascal(slugId(page.id))}.tsx`;
     case "sveltekit":
-      return `src/routes/${slug}/+page.svelte`;
+      return `src/routes/${joined}/+page.svelte`;
     default:
       return assertNever(stack);
   }
@@ -577,6 +635,9 @@ function job(
     requirement: string;
     library?: MotionLib;
     kind?: "build" | "once-over";
+    route?: string;
+    contentSources?: string[];
+    acceptance?: string[];
   },
 ): Draft {
   const allowed = SLICES_BY_PHASE[init.phase];
@@ -594,13 +655,16 @@ function job(
     kind: init.kind ?? "build",
   };
   if (init.library !== undefined) row.library = init.library;
+  if (init.route !== undefined) row.route = init.route;
+  if (init.contentSources !== undefined) row.contentSources = [...init.contentSources];
+  if (init.acceptance !== undefined) row.acceptance = [...init.acceptance];
   return row;
 }
 
 function assertUniquePageFiles(stack: SiteStack, pages: readonly CleanPage[]): void {
   const seen = new Set<string>();
-  pages.forEach((page, index) => {
-    const file = pageFile(stack, index, page.id);
+  pages.forEach((page) => {
+    const file = pageFile(stack, page);
     if (seen.has(file)) {
       throw new SitePromptError(`Duplicate page path "${file}".`);
     }
@@ -716,6 +780,9 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
   );
 
   pages.forEach((page, pageIndex) => {
+    const pageReq = pageRequirementId(page.id);
+    const pagePath = pageFile(stack, page);
+    const sources = page.contentSources.join(", ");
     drafts.push(
       job(claim, {
         phase: "improbability-drive",
@@ -723,14 +790,20 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         title: `Add the ${page.title} route.`,
         tier: "Cup of Tea",
         effort: "medium",
-        files: [pageFile(stack, pageIndex, page.id)],
-        requirement: `REQ-PAGE-${slugId(page.id)}`,
+        files: [pagePath],
+        requirement: pageReq,
+        route: page.route,
+        contentSources: page.contentSources,
+        acceptance: [
+          `Route ${page.route} renders and the nav links to it.`,
+          `Content comes from ${sources}.`,
+          `${pageReq} passes.`,
+        ],
       }),
     );
     page.sections.forEach((sectionId, sectionIndex) => {
       const slice = sectionSlice(pageIndex, sectionIndex);
       const file = componentFile(stack, `Section${pascal(slugId(sectionId))}`);
-      const pagePath = pageFile(stack, pageIndex, page.id);
       drafts.push(
         job(claim, {
           phase: "improbability-drive",
@@ -792,6 +865,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
   for (const feature of input.features) {
     const slug = slugId(feature);
     const tier = featureTier(feature);
+    const featureReq = featureRequirementId(feature);
     drafts.push(
       job(claim, {
         phase: "improbability-drive",
@@ -800,7 +874,8 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         tier: tier.tier,
         effort: tier.effort,
         files: [componentFile(stack, `Feature${pascal(slug)}`)],
-        requirement: `REQ-FEAT-${slug}`,
+        requirement: featureReq,
+        acceptance: [`Build ${feature}.`, `The requirement ${featureReq} is satisfied.`],
       }),
     );
   }
@@ -1126,6 +1201,9 @@ function finalize(drafts: readonly Draft[], protectedPaths: readonly string[]): 
       kind: draft.kind,
     };
     if (draft.library !== undefined) prompt.library = draft.library;
+    if (draft.route !== undefined) prompt.route = draft.route;
+    if (draft.contentSources !== undefined) prompt.contentSources = [...draft.contentSources];
+    if (draft.acceptance !== undefined) prompt.acceptance = [...draft.acceptance];
     return prompt;
   });
 }
