@@ -103,6 +103,27 @@ const YES_NO = new Set(["yes", "no", "yeah", "nope", "yep"]);
 
 const SOFT_PHRASES = ["it's fine", "whatever", "you decide", "idk", "something modern", "make it pop"] as const;
 
+const OVERRIDE_MARKS = [
+  "direct yes or no",
+  "named colours",
+  "url or domain",
+  "named brands",
+  "named fonts",
+  "named places",
+] as const;
+
+/**
+ * True when the answer is concrete enough that a cited gap must not push.
+ * A number with a unit does not override. The judge still runs.
+ */
+export function modelOverride(classification: AnswerClassification): boolean {
+  if (!classification.concreteLikely) return false;
+  for (const mark of OVERRIDE_MARKS) {
+    if (classification.evidence.indexOf(mark) !== -1) return true;
+  }
+  return false;
+}
+
 /** Shape, plus whether the answer already looks concrete. The judge still runs. */
 export function classifyAnswer(question: Question, text: string, followUp?: string): AnswerClassification {
   const shape = expectedShape(question, followUp);

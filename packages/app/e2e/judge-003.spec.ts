@@ -53,6 +53,40 @@ test("a concrete answer advances and a cited gap asks only once", async ({ page 
   }
 });
 
+test("named colours and Yes advance with no pushback", async ({ page }) => {
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-judge-003-colours-"));
+  await mkdir(path.join(projectDir, "interview"), { recursive: true });
+  await writeFile(path.join(projectDir, "interview", "tree.yaml"), COLOUR_TREE);
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", overrideChildSource()], {
+    env: {
+      ...process.env,
+      HH_E2E_PROJECT: projectDir,
+      HH_E2E_SERVER: pathToFileURL(serverFile).href,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  try {
+    const url = await readUrl(child);
+    await page.goto(url);
+    await page.locator('[data-region="question"][data-live="true"]').waitFor();
+    const skip = page.getByRole("button", { name: "Skip tour" });
+    if (await skip.count()) await skip.click();
+
+    await answer(page, "jungle green, sunset gold, ocean blue, soft sand, and near-black green.");
+    await expect(page.locator("[data-question-id='DP-4.5']")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("still soft");
+
+    await answer(page, "Yes.");
+    await expect(page.locator("[data-question-id='DP-2.1']")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("still soft");
+  } finally {
+    child.kill();
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 async function answer(page: import("@playwright/test").Page, text: string): Promise<void> {
   await page.locator("#hh-card-draft").fill(text);
   await page.locator('[data-action="answer"]').click();
@@ -114,6 +148,61 @@ function childSource(): string {
           return hit({ vague: true, quote: "30", sharperChoice: cited });
         }
         return hit({ vague: true, quote: "answer", sharperChoice: "" });
+      }
+      if (req.task === "guide-message") {
+        return hit({ message: "What should the next page keep?", explanationLevel: "beginner", joke: false });
+      }
+      throw new Error(req.task);
+    };
+    const handle = await loaded.startServer({ projectDir, open: false, guideThink: think });
+    process.stdout.write(handle.url + "\\n");
+    await new Promise(() => {});
+  `;
+}
+
+const COLOUR_TREE = `questions:
+  - id: DP-1.2
+    topic: palette
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Which colors feel like your business?"
+    why: "Name the colours."
+    input: [text]
+    skip_default: "No palette yet."
+    pushback_if:
+      - "blue"
+    writes:
+      - "BRAND.md"
+  - id: DP-4.5
+    topic: answer-engines
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Do you want AI assistants to recommend the business?"
+    why: "Yes or no is a full answer."
+    input: [choice, text]
+    skip_default: "No answer-engine goal."
+    writes:
+      - "SITE-BRIEF.md"
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What should the site do?"
+    why: "The job of the site."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md"
+`;
+
+function overrideChildSource(): string {
+  return `
+    const specifier = process.env.HH_E2E_SERVER;
+    const projectDir = process.env.HH_E2E_PROJECT;
+    const loaded = await import(specifier);
+    const hit = (value) => ({ value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" });
+    const think = async (req) => {
+      if (req.task === "pushback-judge") {
+        return hit({ vague: true, quote: "answer", sharperChoice: "Which part is missing from that answer?" });
       }
       if (req.task === "guide-message") {
         return hit({ message: "What should the next page keep?", explanationLevel: "beginner", joke: false });

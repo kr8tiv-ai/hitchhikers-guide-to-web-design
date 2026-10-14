@@ -675,7 +675,9 @@ async function markLatestSoft(projectDir: string, id: string): Promise<void> {
 
 async function storePlain(s: GuideSession, text: string): Promise<void> {
   const interview = await openInterview(s.projectDir, s.depth);
-  await interview.command({ type: "answer", text });
+  // keep stores the accepted line. answer would hold it again when a colour
+  // name is also on that question's phrase list.
+  await interview.command({ type: "keep", text });
 }
 
 async function storeFloorHold(s: GuideSession, text: string): Promise<void> {

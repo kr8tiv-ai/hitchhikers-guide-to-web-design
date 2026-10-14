@@ -252,3 +252,96 @@ test("after one cited follow-up the desk keeps the answer and moves on", async (
     rmSync(projectDir, { recursive: true, force: true });
   }
 });
+
+test("named colours, yes, urls, and names override a cited soft gap", async () => {
+  const rows = [
+    {
+      id: "DP-1.2",
+      text: "jungle green, sunset gold, ocean blue, soft sand, and near-black green.",
+      sharper: "Which colour is missing from that list?",
+    },
+    { id: "DP-4.5", text: "Yes.", sharper: "Which part is missing from that yes?" },
+    {
+      id: "DP-4.1",
+      text: "Encuentra24 (encuentra24.com) and LandWatch (landwatch.com).",
+      sharper: "Which domain is missing from that list?",
+    },
+    {
+      id: "DP-1.8",
+      text: "Similar: Lands of America, Land.com, Encuentra24. Loved: Patagonia, Aesop, Kinfolk.",
+      sharper: "Which name is missing from that list?",
+    },
+  ];
+  for (const row of rows) {
+    const model = vagueModel(row.sharper);
+    const judgement = await judgePushback(byId(row.id), row.text, 0, {
+      think: model.think,
+      packet: emptyContextPacket(),
+    });
+    assert.equal(model.calls(), 1, row.id);
+    assert.equal(judgement.action, "accept", row.id);
+    assert.equal(judgement.message.includes("still soft"), false, row.id);
+  }
+});
+
+test("a colour list and Yes advance with no pushback", async () => {
+  const projectDir = mkdtempSync(path.join(tmpdir(), "hh-judge-003-colours-"));
+  const tree = `questions:
+  - id: DP-1.2
+    topic: palette
+    module: ford-field-notes
+    depth: [express, standard, deep]
+    ask: "Which colors feel like your business?"
+    why: "Name the colours."
+    input: [text]
+    skip_default: "No palette yet."
+    pushback_if:
+      - "blue"
+    writes:
+      - "BRAND.md"
+  - id: DP-4.5
+    topic: answer-engines
+    module: vogon-neighbors
+    depth: [express, standard, deep]
+    ask: "Do you want AI assistants to recommend the business?"
+    why: "Yes or no is a full answer."
+    input: [choice, text]
+    skip_default: "No answer-engine goal."
+    writes:
+      - "SITE-BRIEF.md"
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What should the site do?"
+    why: "The job of the site."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md"
+`;
+  const colours = "jungle green, sunset gold, ocean blue, soft sand, and near-black green.";
+  try {
+    mkdirSync(path.join(projectDir, "interview"), { recursive: true });
+    writeFileSync(path.join(projectDir, "interview", "tree.yaml"), tree);
+    const session: GuideSession = { projectDir, depth: "deep", language: "en", pushes: {} };
+    const model = asThink(async (req) => {
+      if (req.task === "pushback-judge") {
+        return hit({ vague: true, quote: "answer", sharperChoice: "Which part is missing from that answer?" });
+      }
+      if (req.task === "guide-message") {
+        return hit({ message: "What should the next page keep?", explanationLevel: "beginner", joke: false });
+      }
+      throw new Error(String(req.task));
+    });
+    const first = await runTurn(session, { kind: "answer", text: colours }, { think: model });
+    assert.equal(first.status, "asked");
+    assert.equal(first.questionId, "DP-4.5");
+    assert.equal(first.message.includes("still soft"), false);
+    const second = await runTurn(session, { kind: "answer", text: "Yes." }, { think: model });
+    assert.equal(second.status, "asked");
+    assert.equal(second.questionId, "DP-2.1");
+    assert.equal(second.message.includes("still soft"), false);
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});

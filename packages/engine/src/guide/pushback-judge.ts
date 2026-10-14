@@ -3,7 +3,7 @@ import { pushbackFor } from "../pushback.ts";
 import { isBillingFailure } from "../ai/grok-failure.ts";
 import { ThinkTimeoutError, type think } from "../ai/think.ts";
 import { buildContextPacket, factsFromPacket, withContextPacket, type ContextPacket } from "../context/index.ts";
-import { classifyAnswer } from "./answer-shape.ts";
+import { classifyAnswer, modelOverride } from "./answer-shape.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
 import {
   choiceAllowed,
@@ -22,7 +22,8 @@ import { GUIDE_FAIL_LINE, GUIDE_TIMEOUT_LINE } from "./guide-progress.ts";
 /**
  * Model verdict OR the 019 phrase floor. Vague answers still push twice (D-004).
  * A concrete-likely answer pushes at most once, and only when the judge names
- * the missing part. A model failure is not a soft verdict.
+ * the missing part. Named colours, a direct yes or no, a url, or a named list
+ * override that gap. A global soft phrase still pushes. A model failure is not a soft verdict.
  */
 
 export const PUSH_CAP = 2;
@@ -149,8 +150,10 @@ export async function judgePushback(
     raw = null;
   }
   const concreteLikely = classification.concreteLikely;
-  const cited = concreteLikely && modelVague && citesMissing(sharper);
-  const vague = floor || cited || (modelVague && !concreteLikely);
+  const override = modelOverride(classification);
+  const effectiveFloor = floor && (globalSoft(text) || !concreteLikely);
+  const cited = concreteLikely && !override && modelVague && citesMissing(sharper);
+  const vague = effectiveFloor || cited || (modelVague && !concreteLikely);
   const safeQuote = cleanQuote(quote, text);
   if (!vague) {
     return { action: "accept", count: prior, quote: "", message: "", floor };
@@ -214,6 +217,16 @@ function citesMissing(sharper: string): boolean {
   if (line.indexOf("one concrete detail the site should use") !== -1) return false;
   if (line.startsWith("that answer is still soft")) return false;
   return hasWord(line, "missing");
+}
+
+const GLOBAL_SOFT = ["it's fine", "whatever", "you decide", "idk", "something modern", "make it pop"] as const;
+
+function globalSoft(text: string): boolean {
+  const lower = text.toLowerCase();
+  for (const phrase of GLOBAL_SOFT) {
+    if (lower.indexOf(phrase) !== -1) return true;
+  }
+  return false;
 }
 
 function historyLines(history: readonly FollowHistory[] | undefined): string[] {
