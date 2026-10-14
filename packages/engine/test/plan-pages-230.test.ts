@@ -155,3 +155,34 @@ test("prepareSiteBuild writes a prompt file for every Paradise Found page", asyn
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("scaffold prompt lists package.json, the lockfile, and an install command", () => {
+  const stacks = ["astro", "next", "vite-react", "sveltekit"] as const;
+  for (const stack of stacks) {
+    const { prompts } = generateSkeleton({
+      pages: [{ id: "home", title: "Home", sections: ["hero"] }],
+      effects: [],
+      features: [],
+      integrations: [],
+      seoItems: [],
+      stack,
+      protectedPaths: [],
+    });
+    const scaffold = prompts.find((prompt) => prompt.title === "Scaffold the strict TypeScript project.");
+    assert.ok(scaffold, stack);
+    assert.ok(scaffold.filesModified.includes("package.json"), stack);
+    assert.ok(scaffold.filesModified.includes("pnpm-lock.yaml"), stack);
+    const acceptance = (scaffold.acceptance ?? []).join(" ");
+    assert.match(acceptance, /package\.json/);
+    assert.match(acceptance, /private/);
+    assert.match(acceptance, /type module/);
+    assert.match(acceptance, /\bdev\b/);
+    assert.match(acceptance, /\bbuild\b/);
+    assert.match(acceptance, /\bpreview\b/);
+    assert.match(acceptance, /\bcheck\b/);
+    assert.match(acceptance, /\btest\b/);
+    assert.match(acceptance, /pnpm install/);
+    assert.match(acceptance, /pnpm-lock\.yaml/);
+    assert.match(acceptance, /committed/);
+  }
+});

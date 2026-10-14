@@ -260,7 +260,16 @@ function retargetFiles(files: readonly string[], from: StackPick, to: StackPick)
     roles.every((role) => allowed.includes(role.kind));
   if (only(["layout", "layout-extra"]) && kinds.has("layout")) return layoutFiles(to);
   if (only(["config", "html", "shared"]) && kinds.has("config")) {
-    const scaffoldShared = roles.every((role) => role.kind !== "shared" || role.file === "tsconfig.json");
+    const scaffoldSharedFiles = new Set([
+      "tsconfig.json",
+      "package.json",
+      "pnpm-lock.yaml",
+      "package-lock.json",
+      "yarn.lock",
+    ]);
+    const scaffoldShared = roles.every(
+      (role) => role.kind !== "shared" || scaffoldSharedFiles.has(role.file),
+    );
     if (scaffoldShared) return scaffoldFiles(to);
   }
   const out: string[] = [];
@@ -408,15 +417,16 @@ function layoutFiles(stack: SiteStack): string[] {
 }
 
 function scaffoldFiles(stack: SiteStack): string[] {
+  const manifest = ["package.json", "pnpm-lock.yaml"];
   switch (stack) {
     case "astro":
-      return ["astro.config.ts", "tsconfig.json"];
+      return [...manifest, "astro.config.ts", "tsconfig.json"];
     case "next":
-      return ["next.config.ts", "tsconfig.json"];
+      return [...manifest, "next.config.ts", "tsconfig.json"];
     case "vite-react":
-      return ["vite.config.ts", "tsconfig.json", "index.html"];
+      return [...manifest, "vite.config.ts", "tsconfig.json", "index.html"];
     case "sveltekit":
-      return ["svelte.config.js", "tsconfig.json"];
+      return [...manifest, "svelte.config.js", "tsconfig.json"];
     default: {
       const neverStack: never = stack;
       throw new StackError(`Unknown stack "${String(neverStack)}".`);

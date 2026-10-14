@@ -60,6 +60,8 @@ const BANS: ReadonlyArray<{ phrase: string; rule: SiteValidateRule }> = [
 ];
 
 const SHARED_PATHS: readonly RegExp[] = [
+  /^package\.json$/,
+  /^pnpm-lock\.yaml$/,
   /^tsconfig\.json$/,
   /^src\/styles\/[a-z0-9]+(?:-[a-z0-9]+)*\.css$/,
   /^src\/scripts\/[a-z0-9]+(?:-[a-z0-9]+)*\.ts$/,

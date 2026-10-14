@@ -554,18 +554,26 @@ function layoutFiles(stack: SiteStack): string[] {
 }
 
 function scaffoldFiles(stack: SiteStack): string[] {
+  const manifest = ["package.json", "pnpm-lock.yaml"];
   switch (stack) {
     case "astro":
-      return ["astro.config.ts", "tsconfig.json"];
+      return [...manifest, "astro.config.ts", "tsconfig.json"];
     case "next":
-      return ["next.config.ts", "tsconfig.json"];
+      return [...manifest, "next.config.ts", "tsconfig.json"];
     case "vite-react":
-      return ["vite.config.ts", "tsconfig.json", "index.html"];
+      return [...manifest, "vite.config.ts", "tsconfig.json", "index.html"];
     case "sveltekit":
-      return ["svelte.config.js", "tsconfig.json"];
+      return [...manifest, "svelte.config.js", "tsconfig.json"];
     default:
       return assertNever(stack);
   }
+}
+
+function scaffoldAcceptance(): string[] {
+  return [
+    "package.json sets name, private true, and type module, pins dependencies, and defines scripts dev, build, preview, check, and test as appropriate for the stack.",
+    "Run pnpm install. The install succeeds, and package.json and pnpm-lock.yaml are committed.",
+  ];
 }
 
 function configFile(stack: SiteStack): string {
@@ -740,6 +748,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: scaffoldFiles(stack),
       requirement: "REQ-SCAFFOLD",
+      acceptance: scaffoldAcceptance(),
     }),
     job(claim, {
       phase: "improbability-drive",
