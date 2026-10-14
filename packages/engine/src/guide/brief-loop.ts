@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
-import type { think } from "../ai/think.ts";
+import { shortenAtBoundary, type think } from "../ai/think.ts";
 import { bindPacket, syncAnswer, writePhaseAdvisories } from "../context/index.ts";
 import type { PacketOptions } from "../context/packet.ts";
 import {
@@ -10,9 +10,12 @@ import {
   BRIEF_DRAFT_TASK,
   BRIEF_KEYS,
   BRIEF_LIST_MAX,
+  BRIEF_OPTIONAL_KEYS,
   BRIEF_PROSE_MAX,
   BRIEF_REVISE_SCHEMA,
   BRIEF_REVISE_TASK,
+  briefFieldDescription,
+  briefFieldTarget,
   type BriefKey,
   type Facts,
   type SiteBrief,
@@ -55,6 +58,12 @@ export const BRIEF_HEADINGS: Record<BriefKey, string> = {
   pages: "Pages",
   features: "Features",
   cadence: "Cadence",
+  languages: "Languages",
+  imagery: "Imagery",
+  budget: "Budget",
+  session: "Session",
+  logo: "Logo",
+  palette: "Colours",
   coverage: "Coverage",
 };
 
@@ -75,6 +84,12 @@ export const BRIEF_SOURCES: Record<BriefKey, readonly string[]> = {
   pages: ["DP-2.8"],
   features: ["DP-3.7"],
   cadence: ["DP-3.5", "DP-8.3"],
+  languages: ["DP-3.9"],
+  imagery: ["DP-7.3", "DP-7.1", "DP-5.6", "DP-3.6"],
+  budget: ["DP-7.2"],
+  session: ["DP-0.5", "DP-0.7", "DP-0.1"],
+  logo: ["DP-1.1", "DP-0.4"],
+  palette: ["DP-1.2"],
   coverage: [],
 };
 
@@ -94,6 +109,12 @@ export const BRIEF_ANSWER_IDS: Partial<Record<BriefKey, string>> = {
   pages: "DP-2.8",
   features: "DP-3.7",
   cadence: "DP-3.5",
+  languages: "DP-3.9",
+  imagery: "DP-7.3",
+  budget: "DP-7.2",
+  session: "DP-0.5",
+  logo: "DP-1.1",
+  palette: "DP-1.2",
 };
 
 /** One structured reply. Enough for the schema, not an open-ended agent loop. */
@@ -108,7 +129,7 @@ export const BRIEF_DRAFT_ERROR =
 const UNSTATED = "The field is not stated yet.";
 
 /** Keys a stub may omit. The recorded answer fills them. The schema still requires them. */
-const FILLED_WHEN_MISSING: ReadonlySet<BriefKey> = new Set(["maintainer", "cadence"]);
+const FILLED_WHEN_MISSING: ReadonlySet<BriefKey> = BRIEF_OPTIONAL_KEYS;
 
 const MOTION_LABELS = [
   "",
@@ -173,10 +194,10 @@ async function draftOrFallback(
 ): Promise<{ brief: SiteBrief; error: string }> {
   const recorded = deterministicBrief(facts, s.language);
   const first = await askDraft(s, facts, recorded, deps, priorError);
-  if (first.brief !== null) return { brief: lockRecorded(first.brief, recorded), error: "" };
+  if (first.brief !== null) return { brief: shapeBrief(lockRecorded(first.brief, recorded), facts, recorded), error: "" };
   if (first.reason === BILLING_TOP_UP) return { brief: recorded, error: BILLING_TOP_UP };
   const second = await askDraft(s, facts, recorded, deps, joinPrior(priorError, first.reason));
-  if (second.brief !== null) return { brief: lockRecorded(second.brief, recorded), error: "" };
+  if (second.brief !== null) return { brief: shapeBrief(lockRecorded(second.brief, recorded), facts, recorded), error: "" };
   if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason) };
   return { brief: recorded, error: BRIEF_DRAFT_ERROR };
 }
@@ -221,8 +242,9 @@ async function askDraft(
       "Keep a recorded answer. Write prose only around those facts.",
       "Do not invent testimonials, awards, or numbers.",
       "Do not replace a recorded field with an empty line.",
-      `Prose fields are at most ${BRIEF_PROSE_MAX} characters.`,
-      `The fields pages, features, limits, references, and cadence are at most ${BRIEF_LIST_MAX} characters.`,
+      `Prose fields are at most ${BRIEF_PROSE_MAX} characters. ${briefFieldDescription("goal")}`,
+      `The fields pages, features, limits, references, and cadence are at most ${BRIEF_LIST_MAX} characters. ${briefFieldDescription("pages")}`,
+      renderAnswerMap(),
       `Reply language: ${s.language}`,
     ];
     if (priorError.trim() !== "") {
@@ -270,6 +292,9 @@ async function askRevise(
         input: [
           "Revise only the fields the correction changes. Omit the rest.",
           "Do not invent testimonials, awards, or numbers.",
+          `Prose fields are at most ${BRIEF_PROSE_MAX} characters. ${briefFieldDescription("goal")}`,
+          `The fields pages, features, limits, references, and cadence are at most ${BRIEF_LIST_MAX} characters. ${briefFieldDescription("pages")}`,
+          renderAnswerMap(),
           `Reply language: ${s.language}`,
           "Current brief:",
           JSON.stringify(draft),
@@ -283,7 +308,7 @@ async function askRevise(
     if (partial === null) return null;
     const merged = mergeBrief(draft, partial);
     if (briefIssues(merged, facts, s.language, recorded).length > 0) return null;
-    return merged;
+    return shapeBrief(merged, facts, recorded);
   } catch (error) {
     if (isBillingFailure(error)) throw error;
     return null;
@@ -355,14 +380,30 @@ function emptyBrief(): SiteBrief {
     pages: "",
     features: "",
     cadence: "",
+    languages: "",
+    imagery: "",
+    budget: "",
+    session: "",
+    logo: "",
+    palette: "",
     coverage: "",
   };
 }
 
 export function deterministicBrief(facts: Facts, _language: string): SiteBrief {
-  const brief = emptyBrief();
-  for (const key of BRIEF_KEYS) brief[key] = safeField(recordedField(key, facts).text);
-  return brief;
+  const recorded = emptyBrief();
+  for (const key of BRIEF_KEYS) recorded[key] = safeField(recordedField(key, facts).text);
+  return shapeBrief(recorded, facts, recorded);
+}
+
+/** One DP id, one field. The draft prompt and the fallback both read this table. */
+export function renderAnswerMap(): string {
+  const lines = ["Each answer feeds one field. Do not copy an answer into a second field."];
+  for (const key of BRIEF_KEYS) {
+    for (const id of BRIEF_SOURCES[key]) lines.push(`${id}: ${key}`);
+  }
+  lines.push("Coverage lists covered and uncovered question ids. It does not copy answer text.");
+  return lines.join("\n");
 }
 
 /** Cleaned text for one field, and every answer id that contributed. */
@@ -415,8 +456,8 @@ function coverageLine(facts: Facts): string {
   if (uncovered.length > 0) parts.push(`Uncovered: ${uncovered.join(", ")}.`);
   if (covered.length > 0) parts.push(`Covered: ${covered.join(", ")}.`);
   const line = parts.join(" ");
-  if (line.length <= BRIEF_PROSE_MAX) return line;
-  return shortenCoverage(line, BRIEF_PROSE_MAX);
+  if (line.length <= briefFieldTarget("coverage")) return line;
+  return shortenCoverage(line, briefFieldTarget("coverage"));
 }
 
 function shortenCoverage(text: string, max: number): string {
@@ -441,6 +482,163 @@ function cleanAnswer(id: string, value: string): string {
   if (!Number.isInteger(score) || score < 1 || score > 10) return text;
   const label = MOTION_LABELS[score] ?? "";
   return label === "" ? `${score} of 10` : `${score} of 10, ${label}`;
+}
+
+/**
+ * Drop a repeated phrase inside one field, then a sentence copied from another field's answer.
+ * Shorten to the field target. An empty result falls back to the recorded line.
+ */
+function shapeBrief(brief: SiteBrief, facts: Facts, recorded: SiteBrief): SiteBrief {
+  const next = { ...brief };
+  for (const key of BRIEF_KEYS) {
+    let text = dedupePhrases(next[key]);
+    text = stripForeignSentences(text, key, facts);
+    if (text.trim() === "") text = recorded[key];
+    text = shortenAtBoundary(text, briefFieldTarget(key));
+    next[key] = text.trim() === "" ? UNSTATED : text.trim();
+  }
+  return dedupeAcross(next);
+}
+
+function dedupeAcross(brief: SiteBrief): SiteBrief {
+  const seen = new Set<string>();
+  const next = { ...brief };
+  for (const key of BRIEF_KEYS) {
+    const parts = splitSentences(next[key]);
+    const fresh = parts.filter((part) => {
+      const norm = normalizeSentence(part);
+      return norm.split(" ").length < 4 || !seen.has(norm);
+    });
+    const kept = fresh.length === 0 ? parts : fresh;
+    for (const part of kept) {
+      const norm = normalizeSentence(part);
+      if (norm.split(" ").length >= 4) seen.add(norm);
+    }
+    const text = tidy(kept.join(" "));
+    if (text !== "") next[key] = text;
+  }
+  return next;
+}
+
+function stripForeignSentences(text: string, key: BriefKey, facts: Facts): string {
+  const foreign = foreignSentences(key, facts);
+  if (foreign.length === 0) return text;
+  const kept: string[] = [];
+  for (const sentence of splitSentences(text)) {
+    const norm = normalizeSentence(sentence);
+    let blocked = false;
+    for (const phrase of foreign) {
+      if (norm === phrase || norm.includes(phrase)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) kept.push(sentence);
+  }
+  if (kept.length === 0) return "";
+  return tidy(kept.join(" "));
+}
+
+function foreignSentences(key: BriefKey, facts: Facts): string[] {
+  const owned = new Set<string>(BRIEF_SOURCES[key]);
+  const phrases: string[] = [];
+  for (const answer of facts.answers) {
+    if (owned.has(answer.id)) continue;
+    const cleaned = cleanAnswer(answer.id, answer.value);
+    for (const sentence of splitSentences(cleaned)) {
+      const norm = normalizeSentence(sentence);
+      if (norm.split(" ").length >= 4) phrases.push(norm);
+    }
+  }
+  return phrases;
+}
+
+function dedupePhrases(text: string): string {
+  let words = wordParts(text);
+  for (let guard = 0; guard < 24; guard += 1) {
+    const found = findRepeat(words);
+    if (found === null) break;
+    words = words.slice(0, found.at).concat(words.slice(found.at + found.len));
+  }
+  return tidy(words.join(" "));
+}
+
+function findRepeat(words: readonly string[]): { at: number; len: number } | null {
+  const max = Math.min(18, words.length);
+  for (let len = max; len >= 4; len -= 1) {
+    for (let start = 0; start + len <= words.length; start += 1) {
+      const window = words.slice(start, start + len);
+      for (let at = start + len; at + len <= words.length; at += 1) {
+        if (sameWords(window, words.slice(at, at + len))) return { at, len };
+      }
+    }
+  }
+  return null;
+}
+
+function sameWords(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (normalizeWord(left[index] ?? "") !== normalizeWord(right[index] ?? "")) return false;
+  }
+  return true;
+}
+
+function splitSentences(text: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const ch = text[index] ?? "";
+    current += ch;
+    const next = text[index + 1];
+    if ((ch === "." || ch === "?" || ch === ";") && (next === undefined || next === " ")) {
+      const trimmed = current.trim();
+      if (trimmed !== "") parts.push(trimmed);
+      current = "";
+    }
+  }
+  const tail = current.trim();
+  if (tail !== "") parts.push(tail);
+  return parts;
+}
+
+function normalizeSentence(text: string): string {
+  return wordParts(text)
+    .map((word) => normalizeWord(word))
+    .filter((word) => word !== "")
+    .join(" ");
+}
+
+function normalizeWord(word: string): string {
+  let out = "";
+  for (const ch of word.toLowerCase()) {
+    const code = ch.codePointAt(0) ?? 0;
+    const keep =
+      (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === "'" || ch === "-";
+    if (keep) out += ch;
+  }
+  return out;
+}
+
+function wordParts(text: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  for (const ch of text) {
+    if (ch === " " || ch === "\n" || ch === "\t") {
+      if (current !== "") parts.push(current);
+      current = "";
+    } else current += ch;
+  }
+  if (current !== "") parts.push(current);
+  return parts;
+}
+
+function tidy(text: string): string {
+  let out = text.replace(/\s+/g, " ").trim();
+  out = out.replace(/\s+([,.;:?])/g, "$1");
+  out = out.replace(/:\s*\./g, ".");
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
 }
 
 /**

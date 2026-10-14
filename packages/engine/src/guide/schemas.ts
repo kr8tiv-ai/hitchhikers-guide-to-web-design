@@ -94,16 +94,41 @@ export const MIRROR_SCHEMA: JsonSchema = {
   },
 };
 
-/** Prose brief fields. The draft prompt states this same cap. */
+/** Prose brief fields. The draft prompt states this same hard cap. */
 export const BRIEF_PROSE_MAX = 500;
 
 /** List-like brief fields: pages, features, limits, references, cadence. */
 export const BRIEF_LIST_MAX = 1200;
 
+/** Prose target. The schema description and the draft prompt both state it. */
+export const BRIEF_PROSE_TARGET = 300;
+
+/** List-field target. Items stay short. The hard cap above still applies. */
+export const BRIEF_LIST_TARGET = 300;
+
 const BRIEF_LIST_KEYS = new Set(["pages", "features", "limits", "references", "cadence"]);
 
-function briefField(key: string): { type: "string"; maxLength: number } {
-  return { type: "string", maxLength: BRIEF_LIST_KEYS.has(key) ? BRIEF_LIST_MAX : BRIEF_PROSE_MAX };
+/** Length the draft should land on. The schema maxLength stays the hard cap. */
+export function briefFieldTarget(key: string): number {
+  return BRIEF_LIST_KEYS.has(key) ? BRIEF_LIST_TARGET : BRIEF_PROSE_TARGET;
+}
+
+/** Same sentence the draft prompt quotes, so the schema and the prompt cannot drift. */
+export function briefFieldDescription(key: string): string {
+  const list = BRIEF_LIST_KEYS.has(key);
+  const target = briefFieldTarget(key);
+  const cap = list ? BRIEF_LIST_MAX : BRIEF_PROSE_MAX;
+  const kind = list ? "Short items." : "Prose.";
+  return `${kind} Target ${target} characters. Hard cap ${cap}.`;
+}
+
+function briefField(key: string): JsonSchema {
+  const list = BRIEF_LIST_KEYS.has(key);
+  return {
+    type: "string",
+    maxLength: list ? BRIEF_LIST_MAX : BRIEF_PROSE_MAX,
+    description: briefFieldDescription(key),
+  };
 }
 
 const BRIEF_FIELDS = {
@@ -122,6 +147,12 @@ const BRIEF_FIELDS = {
   pages: briefField("pages"),
   features: briefField("features"),
   cadence: briefField("cadence"),
+  languages: briefField("languages"),
+  imagery: briefField("imagery"),
+  budget: briefField("budget"),
+  session: briefField("session"),
+  logo: briefField("logo"),
+  palette: briefField("palette"),
   coverage: briefField("coverage"),
 } as const;
 
@@ -141,10 +172,31 @@ export const BRIEF_KEYS = [
   "pages",
   "features",
   "cadence",
+  "languages",
+  "imagery",
+  "budget",
+  "session",
+  "logo",
+  "palette",
   "coverage",
 ] as const;
 
 export type BriefKey = (typeof BRIEF_KEYS)[number];
+
+/**
+ * Keys an older pending file, or a stub, may omit.
+ * Load fills them. The draft schema still requires them from the model.
+ */
+export const BRIEF_OPTIONAL_KEYS: ReadonlySet<BriefKey> = new Set([
+  "maintainer",
+  "cadence",
+  "languages",
+  "imagery",
+  "budget",
+  "session",
+  "logo",
+  "palette",
+]);
 
 export const BRIEF_DRAFT_SCHEMA: JsonSchema = {
   type: "object",
@@ -212,6 +264,12 @@ export interface SiteBrief {
   pages: string;
   features: string;
   cadence: string;
+  languages: string;
+  imagery: string;
+  budget: string;
+  session: string;
+  logo: string;
+  palette: string;
   coverage: string;
 }
 

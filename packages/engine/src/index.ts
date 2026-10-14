@@ -281,6 +281,15 @@ export type {
   SuggestOption,
 } from "./guide/schemas.ts";
 export {
+  BRIEF_LIST_MAX,
+  BRIEF_LIST_TARGET,
+  BRIEF_OPTIONAL_KEYS,
+  BRIEF_PROSE_MAX,
+  BRIEF_PROSE_TARGET,
+  briefFieldDescription,
+  briefFieldTarget,
+} from "./guide/schemas.ts";
+export {
   LOVE_TARGET,
   MISSING_PROMPT,
   ROUND_CAP,

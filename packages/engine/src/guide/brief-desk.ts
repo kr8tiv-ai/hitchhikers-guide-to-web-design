@@ -18,7 +18,7 @@ import {
   recordedField,
   renderSiteBrief,
 } from "./brief-loop.ts";
-import { BRIEF_DRAFT_TASK, BRIEF_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
+import { BRIEF_DRAFT_TASK, BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
 import { ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
@@ -76,7 +76,7 @@ function isBrief(value: unknown): value is SiteBrief {
   const record = value as Record<string, unknown>;
   for (const key of BRIEF_KEYS) {
     const field = record[key];
-    if ((typeof field !== "string" || field.trim() === "") && (key === "maintainer" || key === "cadence")) {
+    if ((typeof field !== "string" || field.trim() === "") && BRIEF_OPTIONAL_KEYS.has(key)) {
       record[key] = "The field is not stated yet.";
       continue;
     }

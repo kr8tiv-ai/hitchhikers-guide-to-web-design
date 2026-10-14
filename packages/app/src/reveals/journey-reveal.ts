@@ -36,6 +36,12 @@ const BRIEF_FIELDS: ReadonlyArray<{ key: keyof SiteBrief; label: string }> = [
   { key: "pages", label: "Pages" },
   { key: "features", label: "Features" },
   { key: "cadence", label: "Cadence" },
+  { key: "languages", label: "Languages" },
+  { key: "imagery", label: "Imagery" },
+  { key: "budget", label: "Budget" },
+  { key: "session", label: "Session" },
+  { key: "logo", label: "Logo" },
+  { key: "palette", label: "Colours" },
   { key: "coverage", label: "Coverage" },
 ];
 

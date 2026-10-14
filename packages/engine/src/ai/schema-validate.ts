@@ -23,6 +23,8 @@ export interface JsonSchema {
   maxItems?: number;
   maxLength?: number;
   pattern?: string;
+  /** Sent to the model with the schema. The local validator ignores it. */
+  description?: string;
 }
 
 const TYPES = new Set<JsonType>([

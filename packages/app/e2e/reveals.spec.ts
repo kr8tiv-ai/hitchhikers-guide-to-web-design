@@ -290,6 +290,12 @@ function brief(): SiteBrief {
     features: "A contact form and a visit request.",
     maintainer: "The owner looks after the site.",
     cadence: "One guide a month.",
+    languages: "English.",
+    imagery: "The client's own photos.",
+    budget: "No paid media.",
+    session: "One sitting.",
+    logo: "The family mark.",
+    palette: "Warm paper and ink.",
     coverage: "One city, by appointment.",
   };
 }

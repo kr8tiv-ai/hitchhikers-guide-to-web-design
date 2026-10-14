@@ -34,6 +34,12 @@ function sample(goal = LINE): SiteBrief {
     features: LINE,
     maintainer: LINE,
     cadence: LINE,
+    languages: LINE,
+    imagery: LINE,
+    budget: LINE,
+    session: LINE,
+    logo: LINE,
+    palette: LINE,
     coverage: LINE,
   };
 }

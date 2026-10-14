@@ -39,6 +39,12 @@ const EXPECTED_SOURCES: Record<BriefKey, readonly string[]> = {
   pages: ["DP-2.8"],
   features: ["DP-3.7"],
   cadence: ["DP-3.5", "DP-8.3"],
+  languages: ["DP-3.9"],
+  imagery: ["DP-7.3", "DP-7.1", "DP-5.6", "DP-3.6"],
+  budget: ["DP-7.2"],
+  session: ["DP-0.5", "DP-0.7", "DP-0.1"],
+  logo: ["DP-1.1", "DP-0.4"],
+  palette: ["DP-1.2"],
   coverage: [],
 };
 
@@ -66,6 +72,18 @@ const ANSWERS: Record<string, string> = {
   "DP-3.7": "A contact form and a visit request.",
   "DP-3.5": "One guide a month.",
   "DP-8.3": "A short note each month.",
+  "DP-3.9": "English first, Spanish second.",
+  "DP-7.3": "Use stock photos on the about page.",
+  "DP-7.1": "Up to 50 dollars for stills.",
+  "DP-5.6": "Photography leads the pages.",
+  "DP-3.6": "No video at launch.",
+  "DP-7.2": "Zero dollars for 3D.",
+  "DP-0.5": "No X account, skip voice learning.",
+  "DP-0.7": "About an hour.",
+  "DP-0.1": "My own business.",
+  "DP-1.1": "The logo file is the crescent mark.",
+  "DP-0.4": "Logo file paradise-found-logo.png is attached.",
+  "DP-1.2": "Soft sand and jungle green.",
 };
 
 function unstatedBrief(): SiteBrief {
