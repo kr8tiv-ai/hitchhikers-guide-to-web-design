@@ -3,9 +3,46 @@
  * The shell stays in the desk routes. This file is the panel body only.
  */
 import { escapeHtml } from "../card.ts";
-import type { BriefDeskView } from "@hitchhiker/engine";
+import type { BriefDeskView, CoverageRow } from "@hitchhiker/engine";
 
-export function approveMain(token: string, desk: BriefDeskView, changeError = ""): string {
+export interface ApproveCoverage {
+  rows: readonly CoverageRow[];
+  message: string;
+}
+
+function coverageTable(coverage: ApproveCoverage | undefined): string {
+  if (coverage === undefined || coverage.rows.length === 0) return "";
+  const rows = coverage.rows
+    .map((row) => {
+      const prompts = row.promptIds.length > 0 ? row.promptIds.join(", ") : row.covered ? "Listed" : "None";
+      const status = row.covered ? "Covered" : "Uncovered";
+      return `<tr data-coverage-id="${escapeHtml(row.id)}" data-covered="${row.covered ? "yes" : "no"}">
+        <td>${escapeHtml(row.label)}</td>
+        <td>${escapeHtml(prompts)}</td>
+        <td>${status}</td>
+      </tr>`;
+    })
+    .join("\n");
+  const blocked = coverage.rows.some((row) => !row.covered);
+  const note = blocked
+    ? `<p>Approve stays off until every row is covered.</p>${coverage.message === "" ? "" : `<p data-plan-coverage-note>${escapeHtml(coverage.message)}</p>`}`
+    : "";
+  return `<table class="hh-table" data-plan-coverage>
+      <caption>Plan coverage</caption>
+      <thead><tr><th>Item</th><th>Prompts</th><th>Status</th></tr></thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+    ${note}`;
+}
+
+export function approveMain(
+  token: string,
+  desk: BriefDeskView,
+  changeError = "",
+  coverage?: ApproveCoverage,
+): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
         <h1 class="hh-empty__title">Drafting the Site Brief</h1>
@@ -24,11 +61,11 @@ export function approveMain(token: string, desk: BriefDeskView, changeError = ""
       ? `<p data-brief-progress>Reading the change · 0s</p>`
       : `<p data-brief-progress hidden></p>`;
   const same = desk.note === "" ? "" : `<p data-brief-note>${escapeHtml(desk.note)}</p>`;
-  const coverage = desk.error.startsWith("These requirements have no build task");
+  const coverageError = desk.error.startsWith("These requirements have no build task");
   const failure =
     desk.error === ""
       ? ""
-      : `<p data-brief-error${coverage ? " data-plan-coverage" : ""} role="alert">${escapeHtml(desk.error)}</p>
+      : `<p data-brief-error${coverageError ? " data-plan-coverage" : ""} role="alert">${escapeHtml(desk.error)}</p>
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           <input type="hidden" name="action" value="retry" />
@@ -65,9 +102,10 @@ export function approveMain(token: string, desk: BriefDeskView, changeError = ""
         ${progress}
         ${same}
         ${sections}
+        ${coverageTable(coverage)}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
-          <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve">Approve</button>
+          <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve"${coverage !== undefined && coverage.rows.some((row) => !row.covered) ? " disabled" : ""}>Approve</button>
         </form>
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />

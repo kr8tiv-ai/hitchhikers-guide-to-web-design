@@ -167,6 +167,7 @@ export type {
 export {
   briefLoop,
   isApproval,
+  readSiteBrief,
   renderSiteBrief,
   BRIEF_ANSWER_IDS,
   BRIEF_DRAFT_ERROR,
@@ -184,10 +185,10 @@ export {
 } from "./guide/brief-desk.ts";
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
-export type { BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
+export type { BriefAnswer, BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
 export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
-export { PlanCoverageError, checkPlanCoverage, planCoverageMessage } from "./spec/plan-coverage.ts";
-export type { CoverageGap, CoverageRequirement, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
+export { PlanCoverageError, checkPlanCoverage, planCoverageMessage, planCoverageRows } from "./spec/plan-coverage.ts";
+export type { CoverageGap, CoverageRequirement, CoverageRow, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,
@@ -205,7 +206,9 @@ export {
   decideBuildRecovery,
   logHasCleanEnd,
   prepareSiteBuild,
+  projectPlanCoverage,
   readBuildRun,
+  readPromptTasks,
   reconcileSiteBuild,
   recoverSiteBuild,
   resetSiteBuildWatch,
@@ -227,6 +230,7 @@ export type {
   BuildSpawnHandle,
   BuildSpawnRequest,
   BuildSpawnResult,
+  ProjectPlanCoverage,
   SiteBuildGate,
   SiteBuildWatch,
 } from "./guide/site-build.ts";

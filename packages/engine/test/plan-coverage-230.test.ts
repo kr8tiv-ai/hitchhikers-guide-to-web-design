@@ -8,6 +8,7 @@ import {
   PlanCoverageError,
   checkPlanCoverage,
   planCoverageMessage,
+  planCoverageRows,
 } from "../src/spec/plan-coverage.ts";
 
 const REQUIREMENTS = [
@@ -48,6 +49,18 @@ test("a plan that misses a page or a feature names each gap", () => {
       return true;
     },
   );
+});
+
+test("coverage rows name the prompt that covers each item", () => {
+  const rows = planCoverageRows(REQUIREMENTS, [
+    { requirements: ["REQ-PAGE-home"], promptId: "012" },
+    { requirements: ["REQ-FEAT-map"] },
+  ]);
+  assert.deepEqual(rows, [
+    { id: "REQ-PAGE-home", label: "Home at /", promptIds: ["012"], covered: true },
+    { id: "REQ-PAGE-farms", label: "Farms at /farms", promptIds: [], covered: false },
+    { id: "REQ-FEAT-map", label: "map", promptIds: [], covered: true },
+  ]);
 });
 
 test("the Paradise Found plan covers its own pages and features", () => {

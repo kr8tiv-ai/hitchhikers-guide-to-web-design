@@ -63,7 +63,14 @@ function watch(started: number, seenRevising: boolean): void {
   }, 300);
 }
 
+function holdApprove(): void {
+  if (document.querySelector('[data-plan-coverage] [data-covered="no"]') === null) return;
+  const button = document.querySelector('button[name="action"][value="approve"]');
+  if (button instanceof HTMLButtonElement) button.disabled = true;
+}
+
 function bind(): void {
+  holdApprove();
   const form = document.querySelector("textarea[name='correction']")?.closest("form");
   if (!(form instanceof HTMLFormElement)) return;
   const field = form.querySelector("textarea[name='correction']");

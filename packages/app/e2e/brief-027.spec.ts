@@ -52,7 +52,8 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await page.goto(`${root}/approve`);
     await expect(page.getByRole("heading", { name: "Goal" })).toBeVisible();
     await expect(page.locator("body")).toContainText("The site helps a visitor book a visit.");
-    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await expect(page.locator("[data-plan-coverage]")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Change something" })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Nothing is waiting for a yes");
     await page.reload();
@@ -72,6 +73,76 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await page.getByRole("button", { name: "Approve", exact: true }).click();
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator('[data-id="001"]')).toHaveCount(1);
+  } finally {
+    child.kill();
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("an incomplete plan shows the coverage table and keeps Approve off", async ({ page }) => {
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-brief-e2e-gap-"));
+  await mkdir(path.join(projectDir, "interview"), { recursive: true });
+  await mkdir(path.join(projectDir, ".hitchhiker", "prompts"), { recursive: true });
+  await writeFile(
+    path.join(projectDir, "interview", "tree.yaml"),
+    `questions:
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What should the site do?"
+    why: "The job of the site."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md"
+`,
+  );
+  const line = "The site helps a visitor book a visit.";
+  const draft = {
+    goal: line,
+    visitor: line,
+    action: line,
+    offer: line,
+    vibe: line,
+    references: line,
+    exists: line,
+    protected: line,
+    motion: line,
+    limits: line,
+    hosting: line,
+    pages: "Pages: Home; Eco-Building and Food; About.",
+    features: line,
+    coverage: line,
+  };
+  await writeFile(
+    path.join(projectDir, ".hitchhiker", "brief-pending.json"),
+    `${JSON.stringify({ status: "pending", draft, buildStarted: false, error: "" })}\n`,
+  );
+  await writeFile(
+    path.join(projectDir, ".hitchhiker", "interview.json"),
+    JSON.stringify([{ id: "DP-2.1", status: "ANSWERED", value: line }]),
+  );
+  await writeFile(
+    path.join(projectDir, ".hitchhiker", "prompts", "001.md"),
+    "---\nid: 001\ntitle: Add the Home route.\n---\n\nRequirements: REQ-PAGE-home\n",
+  );
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  const child = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", childSource()], {
+    env: {
+      ...process.env,
+      HH_E2E_PROJECT: projectDir,
+      HH_E2E_SERVER: pathToFileURL(serverFile).href,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  try {
+    const url = await readUrl(child);
+    await page.goto(`${url.replace(/\/$/, "")}/approve`);
+    await expect(page.locator("[data-plan-coverage]")).toBeVisible();
+    await expect(page.locator('[data-coverage-id="REQ-PAGE-eco-building-and-food"][data-covered="no"]')).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    await expect(page.locator("body")).toContainText("Approve stays off until every row is covered.");
   } finally {
     child.kill();
     await rm(projectDir, { recursive: true, force: true });

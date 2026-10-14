@@ -11,6 +11,15 @@ export interface CoverageRequirement {
 
 export interface CoverageTask {
   requirements: readonly string[];
+  /** Prompt file id, such as 012, when the task came from a plan. */
+  promptId?: string;
+}
+
+export interface CoverageRow {
+  id: string;
+  label: string;
+  promptIds: string[];
+  covered: boolean;
 }
 
 export interface CoverageGap {
@@ -38,6 +47,24 @@ export function planCoverageMessage(uncovered: readonly CoverageGap[]): string {
   if (uncovered.length === 0) return "";
   const parts = uncovered.map((item) => `${item.label} (${item.id})`);
   return `These requirements have no build task: ${parts.join(", ")}.`;
+}
+
+/** One row per requirement. Covered when any task lists the id. Prompt numbers are shown when the task has them. */
+export function planCoverageRows(
+  requirements: readonly CoverageRequirement[],
+  tasks: readonly CoverageTask[],
+): CoverageRow[] {
+  return requirements.map((requirement) => {
+    const promptIds: string[] = [];
+    let covered = false;
+    for (const task of tasks) {
+      if (!task.requirements.includes(requirement.id)) continue;
+      covered = true;
+      const promptId = task.promptId?.trim() ?? "";
+      if (promptId !== "" && !promptIds.includes(promptId)) promptIds.push(promptId);
+    }
+    return { id: requirement.id, label: requirement.label, promptIds, covered };
+  });
 }
 
 export function checkPlanCoverage(

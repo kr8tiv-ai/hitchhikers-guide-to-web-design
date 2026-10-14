@@ -144,6 +144,10 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     assert.match(approve.body, /<h2>Goal<\/h2>/);
     assert.match(approve.body, /The site helps a visitor book a visit/);
     assert.match(approve.body, />Approve</);
+    assert.match(approve.body, /data-plan-coverage/);
+    assert.match(approve.body, /Plan coverage/);
+    assert.doesNotMatch(approve.body, /data-covered="no"/);
+    assert.match(approve.body, /value="approve">Approve</);
     assert.match(approve.body, />Change something</);
     assert.doesNotMatch(approve.body, /Nothing is waiting for a yes/);
     const back = await raw(

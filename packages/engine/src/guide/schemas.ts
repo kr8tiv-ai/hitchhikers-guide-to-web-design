@@ -103,8 +103,11 @@ export const BRIEF_LIST_MAX = 1200;
 /** Prose target. The schema description and the draft prompt both state it. */
 export const BRIEF_PROSE_TARGET = 300;
 
-/** List-field target. Items stay short. The hard cap above still applies. */
-export const BRIEF_LIST_TARGET = 300;
+/**
+ * List-field target. It matches the hard cap so a page or feature list is kept whole.
+ * A shorter target cut the approved pages at a semicolon.
+ */
+export const BRIEF_LIST_TARGET = BRIEF_LIST_MAX;
 
 const BRIEF_LIST_KEYS = new Set(["pages", "features", "limits", "references", "cadence"]);
 

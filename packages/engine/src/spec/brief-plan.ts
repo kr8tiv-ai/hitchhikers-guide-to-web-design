@@ -56,6 +56,15 @@ const FEATURES: ReadonlyArray<{ name: string; when: (text: string) => boolean }>
     when: (text) => /llms\.txt/i.test(text) && /faq/i.test(text),
   },
   { name: "contact form", when: (text) => /contact form/i.test(text) },
+  { name: "general contact form", when: (text) => /contact form/i.test(text) },
+  { name: "footer newsletter signup", when: (text) => /newsletter/i.test(text) },
+  { name: "blog and monthly guide", when: (text) => wantsBlog(text) },
+  { name: "footer legal disclaimer", when: (text) => /disclaimer/i.test(text) },
+  {
+    name: "FAQ structured data",
+    when: (text) => /faq/i.test(text) && /structured data|json-ld/i.test(text),
+  },
+  { name: "llms.txt", when: (text) => /llms\.txt/i.test(text) && !/faq/i.test(text) },
 ];
 
 const HOME_PAGE: PlannedPage = {
@@ -128,7 +137,11 @@ function looksLikeTitle(text: string): boolean {
 }
 
 function canonicalTitle(raw: string): string | null {
-  const stripped = raw.replace(/^Pages:\s*/i, "").replace(/^(and|or)\s+/i, "").trim();
+  const stripped = raw
+    .replace(/^Pages:\s*/i, "")
+    .replace(/^(and|or)\s+/i, "")
+    .trim()
+    .replace(/\.+$/, "");
   const lower = stripped.toLowerCase();
   if (lower === "a small blog" || lower === "small blog" || lower === "blog") return "Blog";
   if (lower === "privacy" || lower === "privacy policy") return "Privacy";
@@ -239,17 +252,76 @@ function featureNames(blob: string, featuresBody: string): string[] {
   return names;
 }
 
-export function planFromBrief(briefMarkdown: string): BriefPlan {
-  const pagesBody = sectionBody(briefMarkdown, "Pages");
+export interface BriefAnswer {
+  id: string;
+  value: string;
+  status?: string;
+}
+
+const SKIPPED_ANSWER = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
+
+function wantsBlog(text: string): boolean {
+  if (/\bno blog\b/i.test(text)) return false;
+  return /\bblog\b/i.test(text);
+}
+
+function pushPage(pages: PlannedPage[], title: string): void {
+  const id = title === "Home" ? "home" : slug(title);
+  if (id === "" || pages.some((page) => page.id === id)) return;
+  pages.push({
+    id,
+    title,
+    route: title === "Home" ? "/" : `/${id}`,
+    sections: [],
+    contentSources: ["src/data/routes.ts", "src/data/copy.ts"],
+  });
+}
+
+function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage[]; parsed: boolean } {
+  const lines = [...corpus.matchAll(/Pages:\s*[^\n]+/gi)].map((match) => match[0] ?? "");
+  const sources = lines.length > 0 ? lines : [sectionBody(markdown, "Pages")];
+  const found: PlannedPage[] = [];
+  for (const source of sources) {
+    if (source.trim() === "") continue;
+    for (const page of parsePages(source)) {
+      if (found.some((item) => item.id === page.id)) continue;
+      found.push(page);
+    }
+  }
+  const parsed = found.length > 0;
+  if (/\bprivacy and terms\b/i.test(corpus)) {
+    pushPage(found, "Privacy");
+    pushPage(found, "Terms");
+  }
+  if (wantsBlog(corpus)) pushPage(found, "Blog");
+  const pages = found.length === 0 ? [HOME_PAGE] : found;
+  return {
+    parsed: parsed || found.length > 0,
+    pages: pages.map((page, index) => ({
+      ...page,
+      sections: page.sections.length > 0 ? page.sections : index === 0 ? ["hero"] : [`${page.id}-main`],
+    })),
+  };
+}
+
+function answerCorpus(answers: readonly BriefAnswer[]): string {
+  const parts: string[] = [];
+  for (const answer of answers) {
+    if (SKIPPED_ANSWER.has(answer.status ?? "")) continue;
+    const value = answer.value.trim();
+    if (value === "") continue;
+    parts.push(value);
+  }
+  return parts.join("\n");
+}
+
+export function planFromBrief(briefMarkdown: string, answers: readonly BriefAnswer[] = []): BriefPlan {
   const featuresBody = sectionBody(briefMarkdown, "Features");
-  const actionBody = sectionBody(briefMarkdown, "Action");
-  const languagesBody = sectionBody(briefMarkdown, "Languages");
-  const referencesBody = sectionBody(briefMarkdown, "References");
-  const parsedPages = parsePages(pagesBody);
-  const pages = parsedPages.length === 0 ? [HOME_PAGE] : parsedPages;
-  const blob = [pagesBody, featuresBody, actionBody, languagesBody, referencesBody].join("\n");
-  let features = featureNames(blob, featuresBody);
-  if (features.length === 0 && parsedPages.length === 0) features = ["contact form"];
+  const corpus = [briefMarkdown, answerCorpus(answers)].filter((part) => part.trim() !== "").join("\n");
+  const collected = pagesFromCorpus(briefMarkdown, corpus);
+  const pages = collected.pages;
+  let features = featureNames(corpus, featuresBody);
+  if (features.length === 0 && !collected.parsed) features = ["contact form"];
   const requirements: PlanRequirement[] = [
     ...pages.map((page) => ({
       id: pageRequirementId(page.id),
@@ -266,8 +338,9 @@ export function planFromBrief(briefMarkdown: string): BriefPlan {
 export function generateBriefPlan(
   briefMarkdown: string,
   stack: SiteStack = "astro",
+  answers: readonly BriefAnswer[] = [],
 ): { prompts: SitePromptSkeleton[]; warnings: string[]; planned: BriefPlan } {
-  const planned = planFromBrief(briefMarkdown);
+  const planned = planFromBrief(briefMarkdown, answers);
   const input: SiteSkeletonInput = {
     pages: planned.pages,
     effects: [],

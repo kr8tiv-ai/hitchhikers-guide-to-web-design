@@ -64,6 +64,9 @@ import {
   PlanCoverageError,
   checkPlanCoverage,
   planCoverageMessage,
+  projectPlanCoverage,
+  readSiteBrief,
+  renderSiteBrief,
   type CoverageRequirement,
   type CoverageTask,
   type BriefDeskView,
@@ -1678,6 +1681,12 @@ async function handleApproveForm(
   }
   try {
     if (action === "approve") {
+      const desk = readBriefDesk(projectDir);
+      const markdown = desk.draft !== null ? renderSiteBrief(desk.draft) : (readSiteBrief(projectDir) ?? "");
+      if (markdown.trim() !== "") {
+        const coverage = projectPlanCoverage(projectDir, markdown);
+        if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+      }
       // The next page reads buildStarted. Redirecting first paints the pending brief.
       await approveBriefWhenFree(projectDir, guideThink);
       res.writeHead(303, { location: "/approve" });
@@ -1698,7 +1707,7 @@ async function handleApproveForm(
           return;
         }
         const brief = readBriefDesk(projectDir);
-        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, "Write the change."), projectDir, token, false);
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, "Write the change.", projectDir), projectDir, token, false);
         return;
       }
       const jump = /^DP-\d+\.\d+$/.test(correction.trim());
@@ -1724,7 +1733,7 @@ async function handleApproveForm(
         return;
       }
       const brief = readBriefDesk(projectDir);
-      await deliverHtml(req, res, 422, renderApproveBrief(token, null, brief), projectDir, token, false);
+      await deliverHtml(req, res, 422, renderApproveBrief(token, null, brief, "", projectDir), projectDir, token, false);
       return;
     }
     logDeskError(error);
@@ -1979,7 +1988,7 @@ async function handleGet(
     const html =
       brief.status === "idle" && !brief.buildStarted
         ? renderApprove(token, notice, view().question?.id ?? null)
-        : renderApproveBrief(token, notice, brief);
+        : renderApproveBrief(token, notice, brief, "", projectDir);
     await deliverHtml(req, res, 200, html, projectDir, token, false);
     return;
   }
@@ -2008,9 +2017,11 @@ async function handleGet(
   if (pathname === "/hh-dashboard") {
     const drive = await readDashboard(projectDir, token);
     if (drive.kind === "html") {
-      const note = dashboardBriefNote(readBriefDesk(projectDir));
+      const brief = readBriefDesk(projectDir);
+      const gap = planGapNote(projectDir, brief);
+      const note = `${dashboardBriefNote(brief)}${gap}`;
       const marked = '<p class="hh-kicker">Improbability Drive</p>';
-      const html = note === "" || !drive.html.includes(marked) ? drive.html : drive.html.replace(marked, `${marked}\n${note}`);
+      const html = note.trim() === "" || !drive.html.includes(marked) ? drive.html : drive.html.replace(marked, `${marked}\n${note}`);
       await deliverHtml(req, res, drive.status, withDeskMenu(html, token), projectDir, token, false);
       return;
     }
@@ -2932,7 +2943,24 @@ function renderBrandBrief(token: string, notice: string | null, desk: BriefDeskV
   });
 }
 
-function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView, changeError = ""): string {
+function briefMarkdown(projectDir: string, desk: BriefDeskView): string {
+  if (desk.draft !== null) return renderSiteBrief(desk.draft);
+  return readSiteBrief(projectDir) ?? "";
+}
+
+function planGapNote(projectDir: string, desk: BriefDeskView): string {
+  const markdown = briefMarkdown(projectDir, desk);
+  if (markdown.trim() === "") return "";
+  try {
+    const coverage = projectPlanCoverage(projectDir, markdown);
+    if (coverage.ok || coverage.message === "") return "";
+    return `<p data-plan-gap>${escapeHtml(coverage.message)}</p>`;
+  } catch {
+    return "";
+  }
+}
+
+function renderApproveBrief(token: string, notice: string | null, desk: BriefDeskView, changeError = "", projectDir = ""): string {
   const status =
     desk.buildStarted
       ? "The build is started."
@@ -2941,6 +2969,15 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
         : desk.status === "revising"
           ? "Revising the Site Brief"
           : "The Site Brief is ready for a yes.";
+  let coverage: { rows: readonly { id: string; label: string; promptIds: string[]; covered: boolean }[]; message: string } | undefined;
+  if (desk.draft !== null && projectDir !== "") {
+    try {
+      const report = projectPlanCoverage(projectDir, renderSiteBrief(desk.draft));
+      coverage = { rows: report.rows, message: report.message };
+    } catch {
+      coverage = undefined;
+    }
+  }
   return renderPanel({
     notice,
     token,
@@ -2949,7 +2986,7 @@ function renderApproveBrief(token: string, notice: string | null, desk: BriefDes
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk, changeError),
+    main: approveMain(token, desk, changeError, coverage),
     script: "/client/brief-change.js",
   });
 }

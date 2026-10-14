@@ -17,9 +17,18 @@ import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
 import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../queue-file.ts";
-import { generateBriefPlan } from "../spec/brief-plan.ts";
-import { PlanCoverageError, checkPlanCoverage } from "../spec/plan-coverage.ts";
+import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
+import {
+  PlanCoverageError,
+  checkPlanCoverage,
+  planCoverageMessage,
+  planCoverageRows,
+  type CoverageGap,
+  type CoverageRow,
+  type CoverageTask,
+} from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
+import { loadFacts } from "./suggest.ts";
 
 export const BUILD_MODEL = "grok-4.7-build-fast";
 export const BUILD_EFFORT = "xhigh";
@@ -407,8 +416,106 @@ function runnerFor(projectDir: string): BuildSpawn | null {
   return runner;
 }
 
+export interface ProjectPlanCoverage {
+  rows: CoverageRow[];
+  ok: boolean;
+  uncovered: CoverageGap[];
+  message: string;
+}
+
+function briefAnswers(projectDir: string): BriefAnswer[] {
+  try {
+    return loadFacts(projectDir).answers.map((answer) =>
+      answer.status === undefined ? { id: answer.id, value: answer.value } : { id: answer.id, value: answer.value, status: answer.status },
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Numbered prompt files already on disk. Empty when the plan has not been written. */
+export function readPromptTasks(projectDir: string): CoverageTask[] {
+  const dir = path.join(projectDir, ".hitchhiker", "prompts");
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  names.sort();
+  const tasks: CoverageTask[] = [];
+  for (const name of names) {
+    const match = /^(\d{3})\.md$/.exec(name);
+    const promptId = match?.[1];
+    if (match === null || promptId === undefined) continue;
+    let text = "";
+    try {
+      text = readFileSync(path.join(dir, name), "utf8");
+    } catch {
+      continue;
+    }
+    const requirements: string[] = [];
+    for (const line of text.split("\n")) {
+      const req = /^Requirements:\s*(.+)$/.exec(line.trim());
+      if (req === null || req[1] === undefined) continue;
+      for (const id of req[1].split(",")) {
+        const trimmed = id.trim();
+        if (trimmed !== "") requirements.push(trimmed);
+      }
+    }
+    tasks.push({ requirements, promptId });
+  }
+  return tasks;
+}
+
+/**
+ * The same check the approve page and the approve handler use.
+ * Existing prompt files are read as they stand. A missing plan is checked in memory and not written.
+ */
+export function projectPlanCoverage(projectDir: string, briefMarkdown: string): ProjectPlanCoverage {
+  const answers = briefAnswers(projectDir);
+  const planned = planFromBrief(briefMarkdown, answers);
+  const existing = readPromptTasks(projectDir);
+  let tasks: CoverageTask[] = existing;
+  if (existing.length === 0) {
+    try {
+      const generated = generateBriefPlan(briefMarkdown, "astro", answers);
+      tasks = generated.prompts.map((prompt) => ({ requirements: prompt.requirements, promptId: prompt.id }));
+    } catch {
+      tasks = [];
+    }
+  }
+  const rows = planCoverageRows(planned.requirements, tasks);
+  const uncovered = rows.filter((row) => !row.covered).map((row) => ({ id: row.id, label: row.label }));
+  return { rows, ok: uncovered.length === 0, uncovered, message: planCoverageMessage(uncovered) };
+}
+
+async function mergeBuildQueue(projectDir: string, ids: readonly string[]): Promise<void> {
+  const queue = (await loadBuildQueue(projectDir)) ?? { items: [] };
+  const kept = queue.items.filter((item) => item.id !== GUIDE_ENTRY_ID);
+  const seen = new Set(kept.map((item) => item.id));
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    kept.push({ id, kind: "build", status: "queued" });
+    seen.add(id);
+  }
+  await saveBuildQueue(projectDir, { items: kept });
+}
+
 export async function prepareSiteBuild(projectDir: string, briefMarkdown: string): Promise<string[]> {
-  const { prompts, planned } = generateBriefPlan(briefMarkdown);
+  const answers = briefAnswers(projectDir);
+  const planned = planFromBrief(briefMarkdown, answers);
+  const existing = readPromptTasks(projectDir);
+  if (existing.length > 0) {
+    const coverage = checkPlanCoverage(planned.requirements, existing);
+    if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+    const ids = existing
+      .map((task) => task.promptId)
+      .filter((id): id is string => typeof id === "string" && id !== "");
+    await mergeBuildQueue(projectDir, ids);
+    return ids;
+  }
+  const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
@@ -419,15 +526,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     writeFileSync(path.join(dir, `${prompt.id}.md`), renderPrompt(prompt, briefMarkdown, packet), "utf8");
     ids.push(prompt.id);
   }
-  const queue = (await loadBuildQueue(projectDir)) ?? { items: [] };
-  const kept = queue.items.filter((item) => item.id !== GUIDE_ENTRY_ID);
-  const seen = new Set(kept.map((item) => item.id));
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-    kept.push({ id, kind: "build", status: "queued" });
-    seen.add(id);
-  }
-  await saveBuildQueue(projectDir, { items: kept });
+  await mergeBuildQueue(projectDir, ids);
   return ids;
 }
 

@@ -498,9 +498,28 @@ function shapeBrief(brief: SiteBrief, facts: Facts, recorded: SiteBrief): SiteBr
     text = stripForeignSentences(text, key, facts);
     if (text.trim() === "") text = recorded[key];
     text = shortenAtBoundary(text, briefFieldTarget(key));
+    text = restoreListed(key, text, recorded[key]);
     next[key] = text.trim() === "" ? UNSTATED : text.trim();
   }
   return dedupeAcross(next);
+}
+
+const LIST_RESTORE = new Set<BriefKey>(["pages", "features", "limits", "references", "cadence"]);
+
+/**
+ * A boundary cut that is only a prefix of the recorded list is put back, when the list fits the cap.
+ * A repeated phrase that dedupe already dropped stays dropped.
+ */
+function restoreListed(key: BriefKey, text: string, recorded: string): string {
+  if (!LIST_RESTORE.has(key)) return text;
+  const fact = recorded.trim();
+  const prose = text.trim();
+  if (fact === "" || fact === UNSTATED) return text;
+  const cleaned = dedupePhrases(fact).trim();
+  const goal = cleaned === "" ? fact : cleaned;
+  if (goal.length > briefFieldTarget(key)) return text;
+  if (prose.length < goal.length && goal.startsWith(prose)) return goal;
+  return text;
 }
 
 function dedupeAcross(brief: SiteBrief): SiteBrief {
