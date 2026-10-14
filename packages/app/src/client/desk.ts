@@ -1,4 +1,19 @@
 import type { Question } from "@hitchhiker/engine";
+
+/** Same sentence as the engine billing error. The browser bundle cannot import the engine. */
+export const BILLING_CARD =
+  "Your Grok Build usage balance is used up. Top up your balance, then press Retry.";
+
+/** The card shows the top-up sentence when a calm turn carried it and the box has no other error. */
+export function billingCardError(
+  session: { transcriptHtml?: string; statusHtml?: string } | null,
+  current: string | null,
+): string | null {
+  if (current !== null && current.trim() !== "") return current;
+  if (session === null) return null;
+  const blob = `${session.transcriptHtml ?? ""}\n${session.statusHtml ?? ""}`;
+  return blob.includes(BILLING_CARD) ? BILLING_CARD : null;
+}
 import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
 import {
   ANSWER_HINT,
@@ -3979,7 +3994,7 @@ export function mountDesk(env: DeskEnv): () => void {
         question: view.question,
         draft,
         pushback: view.pushback,
-        error,
+        error: billingCardError(view, error),
         done: view.done,
         pending,
         listening,

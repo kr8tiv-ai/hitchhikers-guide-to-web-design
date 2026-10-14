@@ -1,5 +1,6 @@
 import type { Question } from "../tree.ts";
 import { pushbackFor } from "../pushback.ts";
+import { isBillingFailure } from "../ai/grok-failure.ts";
 import { ThinkTimeoutError, type think } from "../ai/think.ts";
 import { buildContextPacket, factsFromPacket, withContextPacket, type ContextPacket } from "../context/index.ts";
 import { classifyAnswer } from "./answer-shape.ts";
@@ -122,6 +123,7 @@ export async function judgePushback(
       }
       break;
     } catch (error) {
+      if (isBillingFailure(error)) throw error;
       failed = error;
       if (error instanceof ThinkTimeoutError) timedOut = true;
     }

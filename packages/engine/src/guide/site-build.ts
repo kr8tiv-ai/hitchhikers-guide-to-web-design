@@ -7,6 +7,12 @@ import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
+import {
+  BILLING_TOP_UP,
+  classifyGrokFailure,
+  isRawJsonLine,
+  sanitizeFailureReason,
+} from "../ai/grok-failure.ts";
 import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
@@ -99,6 +105,10 @@ export interface BuildRunView {
   pid: number | null;
   /** What restart recovery did. Empty when this run was not recovered. */
   recovery: string;
+  /** True after a billing failure. The queue does not start the next prompt. */
+  paused?: boolean;
+  /** Plain escalation for the drive. Empty when there is none. */
+  escalation?: string;
 }
 
 export interface BuildRecoveryInput {
@@ -129,6 +139,8 @@ interface RunFile {
   recovery: string;
   /** True after an automatic restart rerun has been issued for this prompt. */
   recoveryRerun: boolean;
+  paused?: boolean;
+  escalation?: string;
 }
 
 let runner: BuildSpawn | null = null;
@@ -465,7 +477,10 @@ export async function reconcileSiteBuild(projectDir: string): Promise<boolean> {
 }
 
 export async function retrySiteBuild(projectDir: string, promptId: string): Promise<void> {
+  const billing = readRunFile(projectDir)?.paused === true;
   await requeue(projectDir, promptId, "failed");
+  if (billing) await unpausePrompts(projectDir);
+  if (billing) clearBillingPause(projectDir);
   void ensureSiteBuild(projectDir);
 }
 
@@ -504,6 +519,7 @@ async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
 async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
   const key = path.resolve(projectDir);
   for (;;) {
+    if (readRunFile(projectDir)?.paused === true) return;
     const queue = await loadBuildQueue(projectDir);
     const next = queue?.items.find((item) => item.status === "queued" && PROMPT_ID.test(item.id));
     if (next === undefined) return;
@@ -524,6 +540,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
     resetBuildLog(projectDir, next.id);
     const pidBox = { pid: null as number | null };
     const buffered: string[] = [];
+    let rawTail = "";
     let feed: ((chunk: string) => void) | null = null;
     let sealed = false;
     let handle: BuildSpawnHandle;
@@ -538,6 +555,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         onOutput: (chunk) => {
           if (sealed) return;
           appendBuildLog(projectDir, next.id, chunk);
+          rawTail = tailText(rawTail, chunk);
           if (feed) feed(chunk);
           else buffered.push(chunk);
           pushLines(lines, chunk);
@@ -612,7 +630,17 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
       }
       continue;
     }
-    await settleItem(projectDir, next.id, "failed", failureReason(result), lines, files, startedAt);
+    const kind = classifyGrokFailure({
+      stdout: result.stdout,
+      stderr: result.stderr,
+      stream: rawTail,
+      code: result.code,
+    }).kind;
+    await settleItem(projectDir, next.id, "failed", failureReason(result, rawTail), lines, files, startedAt);
+    if (kind === "billing") {
+      await pauseQueuedPrompts(projectDir);
+      stampBilling(projectDir);
+    }
     return;
   }
 }
@@ -677,6 +705,12 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
   if (run === null || run.status !== "running") return "idle";
   if (pidAlive(run.pid)) return "idle";
   const log = `${readBuildLog(projectDir, run.promptId)}\n${run.lastLines.join("\n")}`;
+  if (classifyGrokFailure({ stream: log }).kind === "billing") {
+    await settleItem(projectDir, run.promptId, "failed", BILLING_TOP_UP, run.lastLines, run.filesWritten, run.startedAt);
+    await pauseQueuedPrompts(projectDir);
+    stampBilling(projectDir);
+    return "halt";
+  }
   const expected = expectedOutputFiles(projectDir, run.promptId);
   const outputsExist = expected.every((file) => outputExists(projectDir, file));
   const decision = decideBuildRecovery({
@@ -731,6 +765,9 @@ async function planExplicit(
   projectDir: string,
   promptId: string | undefined,
 ): Promise<"start" | "idle" | "rejected"> {
+  if (readRunFile(projectDir)?.paused === true) {
+    return promptId === undefined ? "idle" : "rejected";
+  }
   const queue = await loadBuildQueue(projectDir);
   if (promptId !== undefined) {
     if (!PROMPT_ID.test(promptId)) return "rejected";
@@ -1160,26 +1197,80 @@ function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet:
   ].join("\n");
 }
 
-function failureReason(result: BuildSpawnResult): string {
+function failureReason(result: BuildSpawnResult, stream = ""): string {
+  const classified = classifyGrokFailure({
+    stdout: result.stdout,
+    stderr: result.stderr,
+    stream,
+    code: result.code,
+  });
+  if (classified.kind === "billing") return BILLING_TOP_UP;
   if (result.errorCode === "WATCH" || result.errorCode === "ENDED") {
     return "The build process ended without reporting.";
   }
   if (result.errorCode === "SETTLE") {
-    const text = publicText(result.stderr);
+    const text = presentReason(result.stderr);
     return text === "" ? "The build did not finish." : text;
   }
-  const blob = `${result.stderr}\n${result.stdout}`;
+  const blob = `${result.stderr}\n${result.stdout}\n${stream}`;
   if (result.errorCode === "ENOENT" || /grok is not on PATH/i.test(blob)) {
     return "grok is not on PATH. Run hh doctor.";
   }
-  if (/usage limit|rate limit|too many requests|\b429\b|quota exceeded/i.test(blob)) {
+  if (
+    classified.kind === "rate-limit" ||
+    /usage limit|rate limit|too many requests|\b429\b|quota exceeded/i.test(blob)
+  ) {
     return "The model hit a usage limit.";
   }
   if (/unauthorized|\b401\b|not logged in|authentication failed|sign in to grok/i.test(blob)) {
     return "The model needs a sign-in.";
   }
-  if (result.code === null) return "The build stopped before it finished.";
-  return `The build exited with code ${result.code}.`;
+  const fallback =
+    result.code === null ? "The build stopped before it finished." : `The build exited with code ${result.code}.`;
+  return sanitizeFailureReason(blob, fallback);
+}
+
+async function pauseQueuedPrompts(projectDir: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue === null) return;
+  let changed = false;
+  for (const item of queue.items) {
+    if (item.status !== "queued" || !PROMPT_ID.test(item.id)) continue;
+    item.status = "paused";
+    changed = true;
+  }
+  if (changed) await saveBuildQueue(projectDir, queue);
+}
+
+async function unpausePrompts(projectDir: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue === null) return;
+  let changed = false;
+  for (const item of queue.items) {
+    if (item.status !== "paused" || !PROMPT_ID.test(item.id)) continue;
+    item.status = "queued";
+    changed = true;
+  }
+  if (changed) await saveBuildQueue(projectDir, queue);
+}
+
+function stampBilling(projectDir: string): void {
+  const run = readRunFile(projectDir);
+  if (run === null) return;
+  writeRun(projectDir, {
+    ...run,
+    status: "failed",
+    reason: BILLING_TOP_UP,
+    paused: true,
+    escalation: BILLING_TOP_UP,
+    pid: null,
+  });
+}
+
+function clearBillingPause(projectDir: string): void {
+  const run = readRunFile(projectDir);
+  if (run === null) return;
+  writeRun(projectDir, { ...run, paused: false, escalation: "" });
 }
 
 function runPath(projectDir: string): string {
@@ -1195,6 +1286,8 @@ function readRunFile(projectDir: string): RunFile | null {
       ...record,
       recovery: typeof record.recovery === "string" ? record.recovery : "",
       recoveryRerun: record.recoveryRerun === true,
+      paused: record.paused === true,
+      escalation: typeof record.escalation === "string" ? record.escalation : "",
     };
   } catch {
     return null;
@@ -1210,8 +1303,12 @@ function writeRun(projectDir: string, run: RunFile): void {
   const next: RunFile = {
     ...run,
     filesWritten: [...files].sort().slice(0, FILE_CAP),
+    lastLines: visibleLines(run.lastLines),
+    reason: presentReason(run.reason),
     recovery,
     recoveryRerun,
+    paused: run.paused === true,
+    escalation: typeof run.escalation === "string" ? run.escalation : "",
   };
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
@@ -1263,12 +1360,25 @@ function pidAlive(pid: number | null): boolean {
 }
 
 function pushLines(lines: string[], chunk: string): void {
-  for (const part of chunk.split(/\r?\n/)) {
-    const clean = publicText(part);
-    if (clean === "") continue;
-    lines.push(clean.slice(0, LINE_CHARS));
-  }
+  lines.push(...visibleLines(chunk.split(/\r?\n/)));
   if (lines.length > LINE_CAP) lines.splice(0, lines.length - LINE_CAP);
+}
+
+function visibleLines(lines: readonly string[]): string[] {
+  const next: string[] = [];
+  for (const line of lines) {
+    if (isRawJsonLine(line)) continue;
+    const clean = publicText(line).replace(/[{}]/g, "").trim();
+    if (clean === "") continue;
+    next.push(clean.slice(0, LINE_CHARS));
+  }
+  return next.slice(-LINE_CAP);
+}
+
+function presentReason(reason: string): string {
+  const plain = publicText(reason);
+  if (plain === "" || !/[{}]/.test(plain)) return plain;
+  return sanitizeFailureReason(plain, "The build did not finish.");
 }
 
 function publicText(value: string): string {

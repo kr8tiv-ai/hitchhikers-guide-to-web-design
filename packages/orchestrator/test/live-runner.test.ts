@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { GrokMissingError, defaultConfig, type GuideConfig, type SpawnLike } from "@hitchhiker/engine";
+import { BILLING_TOP_UP, GrokBillingError, GrokMissingError, defaultConfig, type GuideConfig, type SpawnLike } from "@hitchhiker/engine";
 import {
   LiveUsageLimitError,
   commandFor,
@@ -139,6 +139,34 @@ describe("live runner", () => {
         () => advance({ projectDir: dir, finishedId: "001-home", outcome: "passed", commit: null }),
         /paused/,
       );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a 402 usage balance pauses and names the top-up", async () => {
+    const dir = project();
+    try {
+      const file = await writePrompt(dir, "003-pay.md", PROMPT);
+      await saveQueue(dir, {
+        items: [
+          { id: "003-pay", kind: "build", status: "running" },
+          { id: "004-next", kind: "build", status: "running" },
+        ],
+      });
+      const spawnImpl: SpawnLike = async () => ({
+        status: 1,
+        stdout: "",
+        stderr: "API error (status 402 Payment Required): Grok Build usage balance exhausted\n",
+        timedOut: false,
+        errorCode: null,
+      });
+      await assert.rejects(
+        () => runLivePrompt(file, { spawnImpl, projectDir: dir, config: config() }),
+        (error: unknown) => error instanceof GrokBillingError && error.message === BILLING_TOP_UP,
+      );
+      const queue = await loadQueue(dir);
+      assert.equal(queue?.items.every((item) => item.status === "paused"), true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -41,6 +41,10 @@ export interface DriveRun {
   reason: string;
   /** Restart recovery notice. Shown when the run reason has moved on. */
   recovery?: string;
+  /** True when a billing failure paused the queue. */
+  paused?: boolean;
+  /** Plain escalation. Empty when there is none. */
+  escalation?: string;
 }
 
 export interface DrivePageOptions {
@@ -134,6 +138,7 @@ export function progressHtml(items: readonly DriveItem[]): string {
 }
 
 export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null): string {
+  const banner = queuePaused(items, run) ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>
@@ -147,7 +152,7 @@ export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null
     run == null
       ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
       : runPanel(run);
-  return `<div class="hh-table-wrap">
+  return `${banner}<div class="hh-table-wrap">
             <table class="hh-table" aria-labelledby="queue-title">
               <thead>
                 <tr>
@@ -164,16 +169,26 @@ export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null
           ${tail}`;
 }
 
-export function escalationsHtml(items: readonly DriveItem[]): string {
+export function escalationsHtml(items: readonly DriveItem[], run?: DriveRun | null): string {
   const open = items.filter((item) => item.status === "escalated");
-  if (open.length === 0) {
+  const note = billingNote(run);
+  if (open.length === 0 && note === null) {
     return `<div class="hh-empty">
             <h2 class="hh-empty__title">No escalations</h2>
             <p>Marvin has nothing to complain about, which is his version of a good hour.</p>
             <p class="hh-empty__next">When a prompt stalls, the answer lands here.</p>
           </div>`;
   }
-  return open
+  const billing =
+    note === null
+      ? ""
+      : `<article class="hh-error" data-escalation="billing">
+            <p class="hh-kicker">Usage balance</p>
+            <h3 class="hh-error__title">Top up Grok Build</h3>
+            <p>${escapeHtml(note)}</p>
+            <p class="hh-error__next">Top up the balance, then press Retry on the failed prompt.</p>
+          </article>`;
+  const rows = open
     .map((item) => {
       const id = escapeHtml(item.id);
       return `<article class="hh-error" data-escalation-for="${id}">
@@ -185,6 +200,20 @@ export function escalationsHtml(items: readonly DriveItem[]): string {
           </article>`;
     })
     .join("\n");
+  return `${billing}${rows}`;
+}
+
+function billingNote(run?: DriveRun | null): string | null {
+  if (run == null) return null;
+  const escalation = (run.escalation ?? "").trim();
+  if (run.paused !== true && escalation === "") return null;
+  const text = escalation !== "" ? escalation : run.reason.trim();
+  const plain = text.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+  return plain === "" ? null : plain;
+}
+
+function queuePaused(items: readonly DriveItem[], run?: DriveRun | null): boolean {
+  return run?.paused === true || items.some((item) => item.status === "paused");
 }
 
 export function verdictsHtml(items: readonly DriveItem[]): string {
@@ -234,7 +263,7 @@ export function renderDriveDocument(
 
       <main id="drive-main" data-hh-ready>
       <div class="hh-dash">
-        <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue" aria-labelledby="queue-title">
+        <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue"${queuePaused(items, options?.run) ? ' data-queue-state="paused"' : ""} aria-labelledby="queue-title">
           <div class="hh-drive__toolbar">
             <h2 class="hh-title" id="queue-title">Prompt queue</h2>
           </div>
@@ -260,7 +289,7 @@ export function renderDriveDocument(
             </div>
           </div>
           <section data-region="escalations" id="drive-escalations" aria-label="Escalations">
-            ${escalationsHtml(items)}
+            ${escalationsHtml(items, options?.run)}
           </section>
           <section data-region="watchdog" aria-labelledby="watchdog-title">
             <h2 class="hh-title" id="watchdog-title">Marvin</h2>
@@ -451,20 +480,27 @@ function runPanel(run: DriveRun): string {
   const promptId = escapeHtml(run.promptId);
   const status = escapeHtml(run.status);
   const elapsedMs = Number.isFinite(run.elapsedMs) ? Math.max(0, Math.round(run.elapsedMs)) : 0;
-  const lines = run.lastLines.map((line) => escapeHtml(line)).join("\n");
+  const visible = shownLines(run.lastLines);
   const files =
     run.filesWritten.length === 0
       ? `<p data-files-written>No project files yet.</p>`
       : `<ul data-files-written>${run.filesWritten.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul>`;
-  const recovery = (run.recovery ?? "").trim();
-  const why = run.reason.trim();
+  const recovery = plainSentence(run.recovery ?? "");
+  const why = plainSentence(run.reason);
   const recoveryLine =
     recovery === "" ? "" : `<p data-build-reason data-recovery>${escapeHtml(recovery)}</p>`;
   const reasonLine =
     why === "" || why === recovery ? "" : `<p data-build-reason>${escapeHtml(why)}</p>`;
   const reason = `${recoveryLine}${reasonLine}`;
-  const log = lines === "" ? "" : `<pre data-build-log>${lines}</pre>`;
+  const log =
+    visible.length > 0
+      ? `<pre data-build-log>${visible.map((line) => escapeHtml(line)).join("\n")}</pre>`
+      : run.status === "failed" || run.paused === true
+        ? `<p data-build-log>The build log stays in the project log.</p>`
+        : "";
+  const held = run.paused === true ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
   return `<section data-region="build-run">
+            ${held}
             <p data-build-model="${model}" data-build-effort="${effort}" data-build-elapsed="${elapsedMs}">Model ${model}, effort ${effort}, duration ${durationText(elapsedMs)}.</p>
             <p data-current-prompt="${promptId}">Current prompt ${promptId}.</p>
             <p>Status ${status}.</p>
@@ -472,6 +508,30 @@ function runPanel(run: DriveRun): string {
             ${files}
             ${reason}
           </section>`;
+}
+
+function shownLines(lines: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (braceLine(line)) continue;
+    const clean = line.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
+    if (clean === "") continue;
+    kept.push(clean);
+  }
+  return kept;
+}
+
+function braceLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed === "") return false;
+  if (/^[{}\[\],\s]+$/.test(trimmed)) return true;
+  if (/^"[^"]*"\s*:/.test(trimmed)) return true;
+  const outside = trimmed.replace(/"(?:\\.|[^"\\])*"/g, "");
+  return /[{}]/.test(trimmed) && !/[A-Za-z]/.test(outside);
+}
+
+function plainSentence(text: string): string {
+  return text.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
 }
 
 function reviewPath(id: string): string | null {

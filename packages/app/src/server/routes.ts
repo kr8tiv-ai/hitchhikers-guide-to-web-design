@@ -6,9 +6,11 @@ import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import {
+  BILLING_TOP_UP,
   CassetteError,
   CassetteMissError,
   GrokMissingError,
+  isBillingFailure,
   GrokUnavailableError,
   InterviewError,
   LockHeld,
@@ -651,6 +653,22 @@ function createLiveTurn(
       if (started && moved && answerStored(projectDir, input.questionId)) {
         logDeskError(error);
         return aheadTurn(next, input, savedFailureMessage(error));
+      }
+      if (isBillingFailure(error)) {
+        const text = input.text ?? "";
+        const still = getInterview().next();
+        if (text.trim() !== "" && still !== null && still.id === input.questionId) {
+          try {
+            await writeDraftPost(projectDir, {
+              questionId: input.questionId,
+              text,
+              step: 0,
+              touchShown: false,
+            });
+          } catch {
+            // The billing error still reaches the card. The typed answer stays in the box.
+          }
+        }
       }
       throw error;
     } finally {
@@ -4105,10 +4123,12 @@ const NOT_SIGNED_IN =
 const WRITE_CODES = new Set(["EPERM", "EBUSY", "EACCES", "ENOSPC", "EROFS", "EIO"]);
 
 function savedFailureMessage(error: unknown): string {
+  if (isBillingFailure(error)) return BILLING_TOP_UP;
   return `Saved. The Guide's next question failed: ${guideFailureMessage(error)}`;
 }
 
 function guideFailureMessage(error: unknown): string {
+  if (isBillingFailure(error)) return BILLING_TOP_UP;
   if (error instanceof LockHeld) return LOCK_MESSAGE;
   if (isCassetteMiss(error)) return REPLAY_MESSAGE;
   if (error instanceof ThinkTimeoutError) return TIMEOUT_MESSAGE;

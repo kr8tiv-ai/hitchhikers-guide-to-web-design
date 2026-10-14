@@ -32,6 +32,7 @@ import {
   type SpawnLike,
   type SpawnOutput,
 } from "./grok-cli.ts";
+import { GrokBillingError, classifyGrokFailure } from "./grok-failure.ts";
 import { redact } from "./redact.ts";
 import { validateJson, type JsonSchema } from "./schema-validate.ts";
 
@@ -244,6 +245,10 @@ function runFailure(output: SpawnOutput, parsed: ParsedModel, timeoutMs: number)
   if (output.timedOut) return new ThinkTimeoutError(timeoutMs);
   if (output.errorCode === "ENOENT" || output.errorCode === "ENOTDIR") return new GrokMissingError();
   if (output.errorCode === "OUTPUT_LIMIT") return new ThinkRunError("grok output exceeded the capture limit.");
+  const heard = `${output.stderr}\n${output.stdout}\n${parsed.errorMessage ?? ""}`;
+  if (classifyGrokFailure({ stderr: heard }).kind === "billing") {
+    return new GrokBillingError();
+  }
   const blocked = unavailableMessage(output.stdout, output.stderr);
   if (output.status !== 0 && blocked !== undefined) return new GrokUnavailableError(redact(blocked));
   if (output.status !== 0) {
@@ -400,6 +405,7 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
         const failure = runFailure(output, parsed, timeoutMs);
         if (failure !== undefined) {
           if (failure instanceof ThinkTimeoutError) outcome = "timeout";
+          else if (failure instanceof GrokBillingError) outcome = "billing";
           else if (failure instanceof GrokUnavailableError) outcome = "unavailable";
           else if (failure instanceof GrokMissingError) outcome = "missing";
           throw failure;
@@ -462,6 +468,7 @@ export async function think<T>(req: ThinkRequest<T>, deps: ThinkDeps = {}): Prom
   } catch (error) {
     errorText = error instanceof Error ? error.message : "error";
     if (error instanceof ThinkInputError) outcome = "input";
+    else if (error instanceof GrokBillingError) outcome = "billing";
     else if (error instanceof GrokMissingError) outcome = "missing";
     else if (error instanceof GrokUnavailableError) outcome = "unavailable";
     else if (error instanceof ThinkTimeoutError) outcome = "timeout";

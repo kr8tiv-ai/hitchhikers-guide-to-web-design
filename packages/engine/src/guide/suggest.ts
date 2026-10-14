@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { isBillingFailure } from "../ai/grok-failure.ts";
 import type { think } from "../ai/think.ts";
 import { applyContextFacts, bindPacket } from "../context/index.ts";
 import { validateJson } from "../ai/schema-validate.ts";
@@ -104,7 +105,8 @@ export async function suggestOffer(
       deps.projectDir === undefined ? {} : { projectDir: deps.projectDir },
     );
     value = result.value;
-  } catch {
+  } catch (error) {
+    if (isBillingFailure(error)) throw error;
     const set = choiceSetFrom(undefined, facts, language, fallback);
     return { options: [], choices: set.choices, origin: set.origin };
   }

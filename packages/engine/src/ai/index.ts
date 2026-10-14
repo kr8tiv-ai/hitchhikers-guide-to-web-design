@@ -33,3 +33,12 @@ export type { JsonSchema, JsonType } from "./schema-validate.ts";
 export { think } from "./think.ts";
 export { ThinkRunError, ThinkSchemaError, ThinkTimeoutError } from "./think.ts";
 export type { ThinkDeps, ThinkRequest, ThinkResult } from "./think.ts";
+export {
+  BILLING_TOP_UP,
+  GrokBillingError,
+  classifyGrokFailure,
+  isBillingFailure,
+  isRawJsonLine,
+  sanitizeFailureReason,
+} from "./grok-failure.ts";
+export type { GrokFailureKind } from "./grok-failure.ts";

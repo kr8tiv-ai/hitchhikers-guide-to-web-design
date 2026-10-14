@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
 import type { think } from "../ai/think.ts";
 import { bindPacket, syncAnswer, writePhaseAdvisories } from "../context/index.ts";
 import type { PacketOptions } from "../context/packet.ts";
@@ -173,6 +174,7 @@ async function draftOrFallback(
   const recorded = deterministicBrief(facts, s.language);
   const first = await askDraft(s, facts, recorded, deps, priorError);
   if (first.brief !== null) return { brief: lockRecorded(first.brief, recorded), error: "" };
+  if (first.reason === BILLING_TOP_UP) return { brief: recorded, error: BILLING_TOP_UP };
   const second = await askDraft(s, facts, recorded, deps, joinPrior(priorError, first.reason));
   if (second.brief !== null) return { brief: lockRecorded(second.brief, recorded), error: "" };
   if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason) };
@@ -244,6 +246,7 @@ async function askDraft(
     if (issues.length > 0) return { brief: null, reason: issues.join("; ") };
     return { brief, reason: "" };
   } catch (error) {
+    if (isBillingFailure(error)) return { brief: null, reason: BILLING_TOP_UP };
     const reason = error instanceof Error && error.message.trim() !== "" ? error.message : "The draft did not pass.";
     return { brief: null, reason };
   }
@@ -281,7 +284,8 @@ async function askRevise(
     const merged = mergeBrief(draft, partial);
     if (briefIssues(merged, facts, s.language, recorded).length > 0) return null;
     return merged;
-  } catch {
+  } catch (error) {
+    if (isBillingFailure(error)) throw error;
     return null;
   }
 }

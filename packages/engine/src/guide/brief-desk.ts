@@ -4,6 +4,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
 import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
 import type { think } from "../ai/think.ts";
 import { loadDecisions, syncAnswer } from "../context/index.ts";
@@ -317,7 +318,8 @@ async function runRevise(
     await recordRevision(projectDir, text, before, draft, thinkFn);
     return readBriefDesk(projectDir);
   } catch (error) {
-    writePending(projectDir, { status: "pending", draft: before, buildStarted: false, error: "", note: "" });
+    const message = isBillingFailure(error) ? BILLING_TOP_UP : "";
+    writePending(projectDir, { status: "pending", draft: before, buildStarted: false, error: message, note: "" });
     throw error;
   }
 }

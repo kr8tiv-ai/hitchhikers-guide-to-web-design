@@ -70,7 +70,13 @@ export function paintDrive(document: DriveDocument, items: readonly DriveItem[],
   const cost = document.querySelector("[data-cost-line]");
   if (cost !== null) cost.textContent = costText(items);
   const escalations = document.querySelector("#drive-escalations");
-  if (escalations !== null) escalations.innerHTML = escalationsHtml(items);
+  if (escalations !== null) escalations.innerHTML = escalationsHtml(items, run);
+  const section = document.querySelector("#queue");
+  if (section !== null) {
+    const paused = run?.paused === true || items.some((item) => item.status === "paused");
+    if (paused) section.setAttribute("data-queue-state", "paused");
+    else section.removeAttribute("data-queue-state");
+  }
   const verdicts = document.querySelector("#drive-verdicts");
   if (verdicts !== null) verdicts.innerHTML = verdictsHtml(items);
   const watchdog = document.querySelector("#drive-watchdog");
@@ -230,7 +236,8 @@ export function mountDrive(env: DriveEnv): () => void {
         setNote(env.document, "The queue came back in an unknown shape.");
         return;
       }
-      paintDrive(env.document, items);
+      const run = await readRun(env);
+      paintDrive(env.document, items, run);
     } catch {
       if (ticket === generation) setNote(env.document, "Pause did not reach the desk.");
     } finally {
@@ -333,6 +340,7 @@ export function parseDriveRun(value: unknown): DriveRun | null {
   const filesWritten = run.filesWritten.filter((file): file is string => typeof file === "string");
   if (lastLines.length !== run.lastLines.length || filesWritten.length !== run.filesWritten.length) return null;
   const recovery = typeof run.recovery === "string" ? run.recovery : "";
+  const escalation = typeof run.escalation === "string" ? run.escalation : "";
   return {
     promptId: run.promptId,
     status: run.status,
@@ -343,6 +351,8 @@ export function parseDriveRun(value: unknown): DriveRun | null {
     filesWritten,
     reason: run.reason,
     recovery,
+    paused: run.paused === true,
+    escalation,
   };
 }
 

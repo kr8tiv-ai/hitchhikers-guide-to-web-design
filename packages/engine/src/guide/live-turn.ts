@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CassetteError, CassetteMissError } from "../ai/cassette.ts";
+import { isBillingFailure } from "../ai/grok-failure.ts";
 import type { ThinkRequest, ThinkResult } from "../ai/think.ts";
 import { think } from "../ai/think.ts";
 import {
@@ -715,6 +716,7 @@ function resolveTreePath(projectDir: string): string {
 }
 
 function isQuiet(error: unknown): boolean {
+  if (isBillingFailure(error)) return false;
   if (
     error instanceof GrokMissingError ||
     error instanceof GrokUnavailableError ||

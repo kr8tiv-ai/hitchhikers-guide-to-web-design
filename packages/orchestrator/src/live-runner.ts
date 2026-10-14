@@ -17,7 +17,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  GrokBillingError,
   GrokMissingError,
+  classifyGrokFailure,
   redact,
   resolveGrokCommand,
   spawnGrok,
@@ -245,6 +247,10 @@ export async function runLivePrompt(
   const id = path.basename(resolved, path.extname(resolved)).toLowerCase();
   await writeLog(deps.projectDir, id, output.stdout, output.stderr, exitCode);
   if (output.errorCode === "ENOENT" || output.errorCode === "ENOTDIR") throw new GrokMissingError();
+  if (classifyGrokFailure({ stdout: output.stdout, stderr: output.stderr }).kind === "billing") {
+    await pauseForLimit(deps.projectDir, id);
+    throw new GrokBillingError();
+  }
   if (USAGE_LIMIT.test(`${output.stdout}\n${output.stderr}`)) {
     await pauseForLimit(deps.projectDir, id);
     throw new LiveUsageLimitError();
