@@ -7,10 +7,12 @@ import { classifyAnswer } from "./answer-shape.ts";
 import { PUSHBACK_SCHEMA, PUSHBACK_TASK, type ChoiceOrigin, type Facts, type SuggestChoice } from "./schemas.ts";
 import {
   choiceAllowed,
+  followUpRejected,
   normalizeChoiceLabel,
   projectMentionsQuotes,
   reletterChoices,
   sessionBlock,
+  type FollowHistory,
   type SessionState,
 } from "./session-state.ts";
 import { choiceSetFrom } from "./suggest.ts";
@@ -68,6 +70,8 @@ export async function judgePushback(
     priorMessage?: string | undefined;
     /** Total follow-ups for this question. Unset keeps D-004 (two) for vague answers. */
     followUpCap?: number;
+    /** Earlier asks and answers for this decision point. A repeat of one is not shown. */
+    history?: readonly FollowHistory[];
   },
 ): Promise<PushJudgement> {
   const floor = pushbackFor(question, text) !== null;
@@ -101,6 +105,7 @@ export async function judgePushback(
             `Pre-classifier: ${classification.concreteLikely ? "concrete-likely" : "not concrete"}`,
             `Evidence: ${classification.evidence}`,
             `Pushes already used: ${prior}`,
+            ...historyLines(deps.history),
             "User answer:",
             text,
             "Say whether the answer is vague. Quote their words. Offer one sharper question in sharperChoice.",
@@ -170,6 +175,16 @@ export async function judgePushback(
       ...(prior >= 1 ? { note: ACCEPTED_AFTER_FOLLOW_UP } : {}),
     };
   }
+  if (deps.history !== undefined && followUpRejected(message, deps.history, text) !== null) {
+    return {
+      action: "accept",
+      count: prior,
+      quote: "",
+      message: "",
+      floor: false,
+      ...(prior >= 1 ? { note: ACCEPTED_AFTER_FOLLOW_UP } : {}),
+    };
+  }
   const follow = followUpChoices(raw, message, facts, language, question.ask);
   if (deps.session !== undefined) {
     const about = projectMentionsQuotes(deps.session);
@@ -199,6 +214,23 @@ function citesMissing(sharper: string): boolean {
   if (line.indexOf("one concrete detail the site should use") !== -1) return false;
   if (line.startsWith("that answer is still soft")) return false;
   return hasWord(line, "missing");
+}
+
+function historyLines(history: readonly FollowHistory[] | undefined): string[] {
+  if (history === undefined || history.length === 0) return [];
+  const lines = ["Asks already shown:"];
+  for (const item of history) {
+    if (item.ask.trim() !== "") lines.push(`- ${item.ask.trim()}`);
+  }
+  lines.push("Answers already given:");
+  let any = false;
+  for (const item of history) {
+    if (item.answer.trim() === "") continue;
+    lines.push(`- ${item.answer.trim()}`);
+    any = true;
+  }
+  if (!any) lines.push("- (none yet)");
+  return lines;
 }
 
 function sameFollowUp(message: string, prior: string | undefined): boolean {

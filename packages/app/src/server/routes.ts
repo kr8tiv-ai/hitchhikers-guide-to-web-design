@@ -586,6 +586,7 @@ function createLiveTurn(
         depth,
         language: "en",
         pushes: {},
+        maxFollowUps: 1,
       };
       started = true;
       const turnInput: {

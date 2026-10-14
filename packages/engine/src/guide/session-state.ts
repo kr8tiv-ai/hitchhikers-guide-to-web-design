@@ -663,3 +663,164 @@ export function userFacingText(question: Question): string {
 export function jargonHits(text: string): string[] {
   return JARGON.filter((item) => item.test(text)).map((item) => item.name);
 }
+
+/** One follow-up after the tree question. Callers can pass a higher cap. */
+export const DEFAULT_MAX_FOLLOW_UPS = 1;
+
+export interface FollowHistory {
+  ask: string;
+  answer: string;
+}
+
+const FOLLOW_STOP = new Set([
+  "that",
+  "this",
+  "with",
+  "from",
+  "your",
+  "have",
+  "what",
+  "when",
+  "where",
+  "which",
+  "about",
+  "there",
+  "their",
+  "they",
+  "them",
+  "then",
+  "than",
+  "into",
+  "only",
+  "must",
+  "never",
+  "here",
+  "does",
+  "will",
+  "would",
+  "should",
+  "could",
+  "been",
+  "being",
+  "were",
+  "again",
+  "along",
+  "anything",
+  "something",
+]);
+
+/**
+ * "repeat" when this line was already shown for the decision point.
+ * "covered" when most of its content words are already in an answer.
+ */
+export function followUpRejected(
+  proposed: string,
+  history: readonly FollowHistory[],
+  currentAnswer: string,
+): "repeat" | "covered" | null {
+  const asked = normalizeAsk(proposed);
+  if (asked === "") return null;
+  for (const item of history) {
+    if (normalizeAsk(item.ask) === asked) return "repeat";
+  }
+  const proposedWords = contentWords(proposed);
+  if (proposedWords.length === 0) return null;
+  const covered = new Set<string>();
+  for (const item of history) {
+    for (const word of contentWords(item.answer)) covered.add(word);
+  }
+  for (const word of contentWords(currentAnswer)) covered.add(word);
+  let hits = 0;
+  for (const word of proposedWords) {
+    if (covered.has(word)) hits += 1;
+  }
+  if (hits >= 3 && hits * 2 >= proposedWords.length) return "covered";
+  return null;
+}
+
+/**
+ * Ask startId, then at most one follow-up. A rejected follow-up ends the id.
+ * A filled id is skipped unless revisitId is that id.
+ */
+export async function walkFollowUps(input: {
+  questions: readonly Question[];
+  startId: string;
+  answers: readonly string[];
+  judge: (ctx: {
+    question: Question;
+    text: string;
+    prior: number;
+    history: FollowHistory[];
+  }) => Promise<{ action: "push" | "accept"; message: string }>;
+  maxFollowUps?: number;
+  revisitId?: string | null;
+  filled?: readonly string[];
+}): Promise<{ asks: string[]; followUps: number; nextId: string | null; askedId: string }> {
+  const max = input.maxFollowUps ?? DEFAULT_MAX_FOLLOW_UPS;
+  const filled = new Set(input.filled ?? []);
+  const revisit = input.revisitId ?? null;
+  const start = input.questions.find((item) => item.id === input.startId);
+  if (start === undefined) return { asks: [], followUps: 0, nextId: null, askedId: "" };
+  if (filled.has(start.id) && revisit !== start.id) {
+    const nextId = nextOpenId(input.questions, start.id, filled, revisit);
+    return { asks: [], followUps: 0, nextId, askedId: nextId ?? "" };
+  }
+  const asks = [start.ask];
+  const history: FollowHistory[] = [];
+  let followUps = 0;
+  for (const text of input.answers) {
+    const priorHistory = history.length === 0 ? [{ ask: start.ask, answer: "" }] : history.map((item) => ({ ...item }));
+    const judgement = await input.judge({ question: start, text, prior: followUps, history: priorHistory });
+    const currentAsk = asks[asks.length - 1] ?? start.ask;
+    history.push({ ask: currentAsk, answer: text });
+    if (judgement.action !== "push") {
+      return { asks, followUps, nextId: nextOpenId(input.questions, start.id, filled, revisit), askedId: start.id };
+    }
+    if (followUpRejected(judgement.message, history, text) !== null || followUps >= max) {
+      return { asks, followUps, nextId: nextOpenId(input.questions, start.id, filled, revisit), askedId: start.id };
+    }
+    followUps += 1;
+    asks.push(judgement.message);
+  }
+  return { asks, followUps, nextId: nextOpenId(input.questions, start.id, filled, revisit), askedId: start.id };
+}
+
+function nextOpenId(
+  questions: readonly Question[],
+  afterId: string,
+  filled: ReadonlySet<string>,
+  revisit: string | null,
+): string | null {
+  const from = questions.findIndex((item) => item.id === afterId);
+  for (let index = from + 1; index < questions.length; index += 1) {
+    const item = questions[index];
+    if (item === undefined) continue;
+    if (filled.has(item.id) && revisit !== item.id) continue;
+    return item.id;
+  }
+  return null;
+}
+
+function contentWords(text: string): string[] {
+  const lower = text.toLowerCase().replaceAll("\u2019", "'");
+  const words: string[] = [];
+  let index = 0;
+  while (index < lower.length) {
+    while (index < lower.length && !isFollowLetter(lower[index] ?? "")) index += 1;
+    const start = index;
+    while (index < lower.length && isFollowLetter(lower[index] ?? "")) index += 1;
+    if (start === index) continue;
+    const word = lower.slice(start, index);
+    if (word.length < 4 || FOLLOW_STOP.has(word)) continue;
+    words.push(word);
+  }
+  return words;
+}
+
+function normalizeAsk(text: string): string {
+  return text.trim().toLowerCase().replaceAll("\u2019", "'");
+}
+
+function isFollowLetter(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
+}

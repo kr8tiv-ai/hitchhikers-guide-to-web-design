@@ -30,9 +30,10 @@ import {
   projectMentionsQuotes,
   sessionBlock,
   topicFor,
+  type FollowHistory,
 } from "./session-state.ts";
 import { bannedAnswer } from "./answer-guard.ts";
-import { judgePushback } from "./pushback-judge.ts";
+import { ACCEPTED_AFTER_FOLLOW_UP, judgePushback } from "./pushback-judge.ts";
 import {
   GUIDE_MESSAGE_SCHEMA,
   GUIDE_MESSAGE_TASK,
@@ -71,6 +72,15 @@ export interface GuideSession {
   shown?: string[];
   /** Last follow-up on this question, so the same line is not shown twice. */
   lastFallback?: { id: string; message: string } | undefined;
+  /**
+   * When set, a non-floor follow-up stops after this many.
+   * Phrase-floor pushes keep the two-push cap. Not stored: each request sets it.
+   */
+  maxFollowUps?: number;
+  /** Asks already shown for a decision point, including the tree question. */
+  shownAsks?: Record<string, string[]>;
+  /** Answers already given for a decision point, including ones held for a follow-up. */
+  attemptAnswers?: Record<string, string[]>;
 }
 
 export interface GuideAcp {
@@ -299,7 +309,7 @@ async function answerText(
   const bound = await bindNamedLogo(s.projectDir, current, text, sessionState);
   const judgedState = bound ? loadSessionState(s.projectDir, questions) : sessionState;
   const facts = loadFacts(s.projectDir);
-  const judgement = await judgePushback(current, text, prior, {
+  let judgement = await judgePushback(current, text, prior, {
     think: deps.think,
     projectDir: s.projectDir,
     language: s.language,
@@ -307,7 +317,23 @@ async function answerText(
     session: judgedState,
     questions,
     priorMessage: s.lastFallback?.id === current.id ? s.lastFallback.message : undefined,
+    history: followHistory(s, current),
   });
+  if (
+    judgement.action === "push" &&
+    s.maxFollowUps !== undefined &&
+    prior >= s.maxFollowUps &&
+    judgement.floor !== true
+  ) {
+    judgement = {
+      action: "accept",
+      count: prior,
+      quote: "",
+      message: "",
+      floor: false,
+      note: ACCEPTED_AFTER_FOLLOW_UP,
+    };
+  }
   if (judgement.action === "push") {
     s.lastFallback = { id: current.id, message: judgement.message };
   } else if (s.lastFallback?.id === current.id) {
@@ -325,6 +351,7 @@ async function answerText(
     return advanceAnswer(s, current, false, deps);
   }
   if (judgement.action === "push") {
+    rememberAsk(s, current, text, judgement.message);
     if (judgement.floor) await storeFloorHold(s, text);
     s.pushes[current.id] = judgement.count;
     const turn: GuideTurn = {
@@ -733,6 +760,45 @@ function isQuiet(error: unknown): boolean {
   return error instanceof Error && /^cassette miss:/.test(error.message);
 }
 
+function followHistory(s: GuideSession, question: Question): FollowHistory[] {
+  const asks = s.shownAsks?.[question.id] ?? [];
+  const answers = s.attemptAnswers?.[question.id] ?? [];
+  if (asks.length === 0 && answers.length === 0) return [{ ask: question.ask, answer: "" }];
+  const count = Math.max(asks.length, answers.length);
+  const history: FollowHistory[] = [];
+  for (let index = 0; index < count; index += 1) {
+    history.push({ ask: asks[index] ?? question.ask, answer: answers[index] ?? "" });
+  }
+  return history;
+}
+
+function rememberAsk(s: GuideSession, question: Question, text: string, followUp: string): void {
+  const asks = s.shownAsks?.[question.id] ?? [];
+  const withBase = asks.length === 0 ? [question.ask, followUp] : [...asks, followUp];
+  const attempts = [...(s.attemptAnswers?.[question.id] ?? []), text];
+  s.shownAsks = { ...(s.shownAsks ?? {}), [question.id]: withBase };
+  s.attemptAnswers = { ...(s.attemptAnswers ?? {}), [question.id]: attempts };
+}
+
+function hasLines(map: Record<string, string[]> | undefined): boolean {
+  if (map === undefined) return false;
+  return Object.keys(map).length > 0;
+}
+
+function readStringMap(value: unknown): Record<string, string[]> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, string[]> = {};
+  for (const [id, list] of Object.entries(value)) {
+    if (!Array.isArray(list)) continue;
+    const lines: string[] = [];
+    for (const item of list) {
+      if (typeof item === "string" && item.trim() !== "") lines.push(item);
+    }
+    if (lines.length > 0) out[id] = lines;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 async function hydrate(s: GuideSession): Promise<void> {
   const saved = readGuideFile(s.projectDir);
   if (saved.language !== "") s.language = saved.language;
@@ -747,6 +813,8 @@ async function hydrate(s: GuideSession): Promise<void> {
   const shown = new Set([...(s.shown ?? []), ...saved.shown]);
   if (shown.size > 0) s.shown = [...shown];
   if (saved.lastFallback !== undefined) s.lastFallback = saved.lastFallback;
+  if (saved.shownAsks !== undefined) s.shownAsks = saved.shownAsks;
+  if (saved.attemptAnswers !== undefined) s.attemptAnswers = saved.attemptAnswers;
 }
 
 async function persistSession(s: GuideSession): Promise<void> {
@@ -756,6 +824,8 @@ async function persistSession(s: GuideSession): Promise<void> {
     pushes: s.pushes,
     shown: s.shown ?? [],
     ...(s.lastFallback === undefined ? {} : { lastFallback: s.lastFallback }),
+    ...(hasLines(s.shownAsks) ? { shownAsks: s.shownAsks } : {}),
+    ...(hasLines(s.attemptAnswers) ? { attemptAnswers: s.attemptAnswers } : {}),
   };
   await withStateLock(s.projectDir, async () => {
     await writeFile(
@@ -771,6 +841,8 @@ function readGuideFile(projectDir: string): {
   pushes: Record<string, number>;
   shown: string[];
   lastFallback?: { id: string; message: string };
+  shownAsks?: Record<string, string[]>;
+  attemptAnswers?: Record<string, string[]>;
 } {
   const empty = { language: "", pushes: {} as Record<string, number>, shown: [] as string[] };
   const file = path.join(projectDir, ".hitchhiker", SESSION_FILE);
@@ -796,7 +868,16 @@ function readGuideFile(projectDir: string): {
       last !== null && typeof last.id === "string" && typeof last.message === "string" && last.id !== ""
         ? { id: last.id, message: last.message }
         : undefined;
-    return lastFallback === undefined ? { language, pushes, shown } : { language, pushes, shown, lastFallback };
+    const shownAsks = readStringMap(value.shownAsks);
+    const attemptAnswers = readStringMap(value.attemptAnswers);
+    return {
+      language,
+      pushes,
+      shown,
+      ...(lastFallback === undefined ? {} : { lastFallback }),
+      ...(shownAsks === undefined ? {} : { shownAsks }),
+      ...(attemptAnswers === undefined ? {} : { attemptAnswers }),
+    };
   } catch {
     return empty;
   }
