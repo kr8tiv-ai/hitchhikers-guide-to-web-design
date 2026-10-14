@@ -197,6 +197,10 @@ textarea {
   font-style: italic;
 }
 
+.hh-turn--note {
+  color: var(--color-muted);
+}
+
 .hh-qcard {
   min-width: 0;
   display: grid;

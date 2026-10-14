@@ -103,6 +103,7 @@ import { settleQuestionText } from "../question-parts.ts";
 import { forgetGuideJobs, guideJobsFor } from "./guide-jobs.ts";
 import { CONTEXT_LABEL, guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { contextAssetFile, renderContextMain } from "./context-desk.ts";
+import { transcriptCopy, transcriptKind } from "./transcript-entry.ts";
 import { engineForDesk, voiceChromeFor } from "../client/voice-engine.ts";
 import {
   compactMapLabel,
@@ -2596,6 +2597,7 @@ interface LoggedTurn {
   id: string;
   ask: string | null;
   value: string;
+  status: AnswerRecord["status"];
 }
 
 function renderTranscript(
@@ -2609,6 +2611,7 @@ function renderTranscript(
     id: answer.id,
     ask: asks.get(answer.id) ?? null,
     value: dropInternalCopy(answer.value, hidden),
+    status: answer.status,
   }));
   // The card title is the current question. Repeating it here printed the ask twice.
   if (turns.length === 0) {
@@ -2633,15 +2636,21 @@ function renderTranscript(
 }
 
 function renderLoggedTurn(turn: LoggedTurn, index: number, undo: boolean): string {
-  const ask = turn.ask === null ? "" : `${turnLine("Guide", turn.ask, false)}\n`;
+  const kind = transcriptKind(turn.status, turn.value);
+  const ask =
+    kind === "not-asked" || turn.ask === null ? "" : `${turnLine("Guide", turn.ask, false)}\n`;
   const id = escapeHtml(turn.id);
-  const fieldId = `hh-edit-${index}`;
+  const shown = escapeHtml(transcriptCopy(kind, turn.value));
   const undoButton = undo
     ? `\n            <button type="button" class="hh-btn hh-btn--ghost" data-undo="answer">Undo</button>`
     : "";
+  if (kind !== "you") {
+    return `${ask}<p class="hh-turn hh-turn--note" data-answer-id="${id}" data-answer-kind="${kind}"><span data-answer-text>${shown}</span>${undoButton}</p>`;
+  }
+  const fieldId = `hh-edit-${index}`;
   return `${ask}<div class="hh-turn hh-turn--you" data-answer-id="${id}">
             <span class="hh-turn__who">You</span>
-            <span data-answer-text>${escapeHtml(turn.value)}</span>
+            <span data-answer-text>${shown}</span>
             <button type="button" class="hh-btn hh-btn--ghost" data-edit="${id}">Edit</button>${undoButton}
             <form hidden class="hh-qcard__composer" data-edit-form="${id}">
               <label class="hh-qcard__label" for="${fieldId}">Edit this answer</label>

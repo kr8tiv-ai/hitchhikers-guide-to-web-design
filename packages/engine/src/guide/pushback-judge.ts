@@ -23,7 +23,9 @@ import { GUIDE_FAIL_LINE, GUIDE_TIMEOUT_LINE } from "./guide-progress.ts";
  * Model verdict OR the 019 phrase floor. Vague answers still push twice (D-004).
  * A concrete-likely answer pushes at most once, and only when the judge names
  * the missing part. Named colours, a direct yes or no, a url, or a named list
- * override that gap. A global soft phrase still pushes. A model failure is not a soft verdict.
+ * override that gap. A substantive answer advances. A follow-up is asked only
+ * when one named part of the question is missing, and the line names that part.
+ * A global soft phrase still pushes. A model failure is not a soft verdict.
  */
 
 export const PUSH_CAP = 2;
@@ -167,7 +169,14 @@ export async function judgePushback(
     }
     return { action: "soft", count: prior, quote: safeQuote, message: "", floor };
   }
-  const message = sharperLine(sharper, question, text, language, facts);
+  let message = sharperLine(sharper, question, text, language, facts);
+  if (advanceSubstantive(question, text, sharper, concreteLikely, override, modelVague)) {
+    return { action: "accept", count: prior, quote: "", message: "", floor: false };
+  }
+  const named = namedPartFollowUp(question, text);
+  if (named !== null && isGenericDetailAsk(message) && pushbackFor(question, text) === null && !globalSoft(text)) {
+    message = named;
+  }
   if (sameFollowUp(message, deps.priorMessage)) {
     return {
       action: "accept",
@@ -209,6 +218,127 @@ export async function judgePushback(
 }
 
 const SHARPER_WHY = "A sharper question for this answer.";
+
+const GENERIC_DETAIL = "one concrete detail the site should use";
+const LOVE_FOLLOW = "What do you love about a site you admire?";
+const WINCE_FOLLOW = "What makes you wince on a site?";
+const LOVE_WORDS = ["love", "loved", "admire", "admired", "honesty", "honest", "calm", "photo", "photos"] as const;
+const WINCE_WORDS = [
+  "wince",
+  "hate",
+  "dislike",
+  "shout",
+  "spreadsheet",
+  "spreadsheets",
+  "salesy",
+  "clutter",
+  "cluttered",
+  "loud",
+] as const;
+const SUBSTANTIVE_WORDS = 8;
+
+/** The stock "one concrete detail" line. It does not name a missing part. */
+function isGenericDetailAsk(message: string): boolean {
+  return message.trim().toLowerCase().replaceAll("\u2019", "'").indexOf(GENERIC_DETAIL) !== -1;
+}
+
+/**
+ * A long, specific answer already covers the question.
+ * A cited gap on a concrete-likely answer still pushes. A phrase-floor hit still pushes.
+ */
+function advanceSubstantive(
+  question: Question,
+  text: string,
+  sharper: string,
+  concreteLikely: boolean,
+  override: boolean,
+  modelVague: boolean,
+): boolean {
+  if (!isSubstantiveAnswer(text)) return false;
+  if (globalSoft(text)) return false;
+  if (pushbackFor(question, text) !== null) return false;
+  if (concreteLikely && !override && modelVague && citesMissing(sharper) && !isGenericDetailAsk(sharper)) return false;
+  return true;
+}
+
+function isSubstantiveAnswer(text: string): boolean {
+  return contentCount(text) >= SUBSTANTIVE_WORDS;
+}
+
+function contentCount(text: string): number {
+  const lower = text.toLowerCase().replaceAll("\u2019", "'");
+  let count = 0;
+  let index = 0;
+  while (index < lower.length) {
+    while (index < lower.length && !isCountLetter(lower[index] ?? "")) index += 1;
+    const start = index;
+    while (index < lower.length && isCountLetter(lower[index] ?? "")) index += 1;
+    if (start === index) continue;
+    const word = lower.slice(start, index);
+    if (word.length < 4 || CONTENT_STOP.has(word)) continue;
+    count += 1;
+  }
+  return count;
+}
+
+function isCountLetter(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
+}
+
+const CONTENT_STOP = new Set([
+  "that",
+  "this",
+  "with",
+  "from",
+  "your",
+  "have",
+  "what",
+  "when",
+  "where",
+  "which",
+  "about",
+  "there",
+  "their",
+  "they",
+  "them",
+  "then",
+  "than",
+  "into",
+  "only",
+  "must",
+  "never",
+  "here",
+  "does",
+  "will",
+  "would",
+  "should",
+  "could",
+  "been",
+  "being",
+  "were",
+]);
+
+/**
+ * Love/wince questions have two named parts.
+ * One side alone is a follow-up that names the other side. Both, or neither, is not.
+ */
+function namedPartFollowUp(question: Question, text: string): string | null {
+  const ask = question.ask.toLowerCase();
+  if (ask.indexOf("love") === -1 || ask.indexOf("wince") === -1) return null;
+  const love = coversSide(text, LOVE_WORDS);
+  const wince = coversSide(text, WINCE_WORDS);
+  if (love && !wince) return WINCE_FOLLOW;
+  if (wince && !love) return LOVE_FOLLOW;
+  return null;
+}
+
+function coversSide(text: string, words: readonly string[]): boolean {
+  const lower = text.toLowerCase();
+  for (const word of words) {
+    if (hasWord(lower, word)) return true;
+  }
+  return false;
+}
 
 /** A soft verdict on a concrete-likely answer has to name the missing part. */
 function citesMissing(sharper: string): boolean {
