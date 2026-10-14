@@ -100,3 +100,43 @@ test("a second save is refused while the state lock is held", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a load waits while this process still holds the state lock", async () => {
+  const dir = tempProject();
+  const queue: QueueFile = { items: [item("001", "failed")] };
+  let releaseHold: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    releaseHold = resolve;
+  });
+  let holding = false;
+  let held: Promise<void> = Promise.resolve();
+  try {
+    await saveQueue(dir, queue);
+    held = withStateLock(dir, async () => {
+      holding = true;
+      await gate;
+    });
+    while (!holding) await new Promise((resolve) => setTimeout(resolve, 5));
+    let outcome: { ok: true; value: QueueFile | null } | { ok: false; error: unknown } | undefined;
+    const pending = loadQueue(dir).then(
+      (value) => {
+        outcome = { ok: true, value };
+      },
+      (error: unknown) => {
+        outcome = { ok: false, error };
+      },
+    );
+    // Longer than the desk and build retry budget (12 tries, 20ms apart).
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(outcome, undefined);
+    releaseHold();
+    await pending;
+    assert.equal(outcome?.ok, true);
+    if (outcome?.ok === true) assert.deepEqual(outcome.value, queue);
+    await held;
+  } finally {
+    releaseHold();
+    await held;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

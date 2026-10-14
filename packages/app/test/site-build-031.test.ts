@@ -7,7 +7,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { loadQueue, siteBuildSettled, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import { loadQueue, saveQueue, siteBuildSettled, withStateLock, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 
 const LINE = "The site helps a visitor book a visit.";
@@ -160,6 +160,68 @@ test("approve starts one build and the drive shows model, effort, and files", as
     assert.equal((await loadQueue(dir))?.items[0]?.status, "passed");
   } finally {
     release();
+    await siteBuildSettled(dir);
+    if (handle !== undefined) await handle.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("drive read and retry wait while this process holds the state lock", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "hh-app-build-lock-"));
+  seed(dir);
+  mkdirSync(path.join(dir, ".hitchhiker", "prompts"), { recursive: true });
+  writeFileSync(path.join(dir, ".hitchhiker", "prompts", "001.md"), "Write the home page.\n", "utf8");
+  await saveQueue(dir, { items: [{ id: "001", kind: "build", status: "failed" }] });
+  const buildSpawn: BuildSpawn = () => ({
+    pid: 424242,
+    done: Promise.resolve({ code: 0, stdout: "", stderr: "", errorCode: null }),
+  });
+  let releaseHold: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    releaseHold = resolve;
+  });
+  let holding = false;
+  let held: Promise<void> = Promise.resolve();
+  let handle: ServerHandle | undefined;
+  try {
+    handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
+    const home = await raw(handle.port, "GET", "/approve");
+    const token = tokenFrom(home.body);
+    held = withStateLock(dir, async () => {
+      holding = true;
+      await gate;
+    });
+    while (!holding) await new Promise((resolve) => setTimeout(resolve, 5));
+    let driveStatus: number | undefined;
+    let retryStatus: number | undefined;
+    const driveDone = raw(handle.port, "GET", "/api/drive").then((result) => {
+      driveStatus = result.status;
+      return result;
+    });
+    const retryDone = raw(
+      handle.port,
+      "POST",
+      "/api/drive/retry",
+      { "content-type": "application/json", "x-hh-csrf": token },
+      JSON.stringify({ id: "001" }),
+    ).then((result) => {
+      retryStatus = result.status;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(driveStatus, undefined);
+    assert.equal(retryStatus, undefined);
+    releaseHold();
+    const listed = await driveDone;
+    const retry = await retryDone;
+    assert.equal(listed.status, 200);
+    const queue = JSON.parse(listed.body) as { items?: unknown };
+    assert.deepEqual(Object.keys(queue).sort(), ["items"]);
+    assert.equal(retry.status, 200);
+    await held;
+  } finally {
+    releaseHold();
+    await held;
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
     rmSync(dir, { recursive: true, force: true });

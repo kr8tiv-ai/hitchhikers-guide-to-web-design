@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
@@ -27,6 +28,22 @@ export const STATE_LOCK_NAME = "STATE.md.lock";
 const LEGACY_STATE_LOCK_NAME = "state.lock";
 
 type Clock = () => number;
+
+/**
+ * Same-process callers queue here and open the lock file only after the
+ * holder releases it. A desk read gives up after a short retry, and a
+ * save in this process can still be flushing, so that read was reported
+ * as Lock held by our own pid. A nested call on the chain that already
+ * holds the lock still throws, so a save inside that hold cannot deadlock.
+ * A live other pid still blocks.
+ */
+const holders = new AsyncLocalStorage<Set<string>>();
+const waitTails = new Map<string, Promise<void>>();
+
+function processLockKey(lockPath: string): string {
+  const resolved = path.resolve(lockPath);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
 
 function errorCode(error: unknown): string | undefined {
   if (typeof error === "object" && error !== null && "code" in error) {
@@ -197,13 +214,31 @@ export async function withStateLock<T>(
   now: Clock = Date.now,
 ): Promise<T> {
   const dir = path.join(projectDir, ".hitchhiker");
-  await mkdir(dir, { recursive: true });
-  const lockPath = path.join(dir, STATE_LOCK_NAME);
-  const info = await acquire(lockPath, now);
+  const lockPath = path.resolve(dir, STATE_LOCK_NAME);
+  const key = processLockKey(lockPath);
+  if (holders.getStore()?.has(key) === true) throw new LockHeld(process.pid);
+
+  const previous = waitTails.get(key) ?? Promise.resolve();
+  let releaseWait: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    releaseWait = resolve;
+  });
+  const tail = previous.then(() => gate);
+  waitTails.set(key, tail);
   try {
-    return await fn();
+    await previous;
+    await mkdir(dir, { recursive: true });
+    const info = await acquire(lockPath, now);
+    try {
+      const next = new Set(holders.getStore());
+      next.add(key);
+      return await holders.run(next, async () => fn());
+    } finally {
+      await release(lockPath, info.pid);
+    }
   } finally {
-    await release(lockPath, info.pid);
+    releaseWait();
+    if (waitTails.get(key) === tail) waitTails.delete(key);
   }
 }
 

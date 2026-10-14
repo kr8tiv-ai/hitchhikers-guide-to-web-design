@@ -196,6 +196,30 @@ test("a live legacy state.lock refuses the write", async () => {
   }
 });
 
+test("withStateLock leaves a live lock file in place", async () => {
+  const dir = tempDir();
+  const lockPath = path.join(dir, ".hitchhiker", STATE_LOCK_NAME);
+  try {
+    mkdirSync(path.dirname(lockPath));
+    writeLock(lockPath, process.pid, new Date().toISOString());
+    const started = Date.now();
+    await assert.rejects(
+      () => withStateLock(dir, () => "ran"),
+      (error: unknown) => {
+        assert.ok(error instanceof LockHeld);
+        assert.equal(error.pid, process.pid);
+        return true;
+      },
+    );
+    assert.ok(Date.now() - started < 1000);
+    assert.equal(existsSync(lockPath), true);
+    const stored = JSON.parse(readFileSync(lockPath, "utf8")) as { pid: number };
+    assert.equal(stored.pid, process.pid);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a dead legacy state.lock is removed", async () => {
   const dir = tempDir();
   const hitch = path.join(dir, ".hitchhiker");
