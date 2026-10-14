@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderCard, type CardState } from "../src/card.ts";
-import { splitQuestionText } from "../src/question-parts.ts";
+import { settleQuestionText, splitQuestionText } from "../src/question-parts.ts";
 import type { Question } from "@hitchhiker/engine";
 
 const MAINTAINER =
@@ -75,6 +75,25 @@ test("the three Paradise Found recaps yield the question as the heading", () => 
     const html = card(parts, "DP-9.3");
     const h2 = heading(html);
     assert.equal(h2, item.ask);
+    assert.match(html, /data-card-help/);
+    const helpAt = html.indexOf("data-card-help");
+    const h2At = html.indexOf('id="hh-card-ask"');
+    assert.ok(helpAt > h2At, item.ask);
+  }
+});
+
+test("settle keeps a long Paradise Found recap under the heading", () => {
+  const cases = [
+    { text: MAINTAINER, ask: "Who will look after the site once it is live?", recap: "changes a price" },
+    { text: MOTION, ask: "Is anyone in the audience sensitive to motion?", recap: "reduced motion" },
+    { text: FILTERS, ask: "Which should the farm pages drop?", recap: "Acre and price filters" },
+  ];
+  for (const item of cases) {
+    const parts = settleQuestionText(item.text, item.ask);
+    assert.equal(parts.question, item.ask, item.ask);
+    assert.equal(parts.lead.includes(item.recap), false, item.ask);
+    assert.match(parts.help, new RegExp(item.recap));
+    const html = card(parts, "DP-9.3");
     assert.match(html, /data-card-help/);
     const helpAt = html.indexOf("data-card-help");
     const h2At = html.indexOf('id="hh-card-ask"');

@@ -235,7 +235,15 @@ export type {
   SiteBuildWatch,
 } from "./guide/site-build.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
-export { GUIDANCE_MARKERS, dropInternalCopy, guidanceCorpus, guidanceMarkerHits, repoGuidanceLines } from "./guide/guidance.ts";
+export {
+  GUIDANCE_MARKERS,
+  INTERNAL_LINES,
+  dropInternalCopy,
+  guidanceCorpus,
+  guidanceMarkerHits,
+  isModelInstruction,
+  repoGuidanceLines,
+} from "./guide/guidance.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
 export { STATIC_ANSWER_ERROR, bannedAnswer } from "./guide/answer-guard.ts";
 export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTask } from "./guide/interview-call.ts";

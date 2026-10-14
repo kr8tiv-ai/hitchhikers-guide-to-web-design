@@ -514,6 +514,18 @@ test("route slots, static files, and the browser modules are served", async () =
     assertSyntax(deskJs, "hh-desk-check.js");
     assertSyntax(cardJs, "hh-card-check.js");
     assertSyntax(partsJs, "hh-question-parts-check.js");
+    const motion = await fetch(new URL("/client/motion.js", handle.url));
+    const motionJs = await motion.text();
+    assert.equal(motion.status, 200);
+    assert.match(motionJs, /from "\/client\/question-parts\.js"/);
+    assert.equal(motionJs.includes("/src/question-parts.js"), false);
+    const explainer = await fetch(new URL("/src/motion-previews/movie-explainer.js", handle.url));
+    const explainerJs = await explainer.text();
+    assert.equal(explainer.status, 200);
+    assert.match(explainerJs, /from "\/client\/question-parts\.js"/);
+    assert.equal(explainerJs.includes("/src/question-parts.js"), false);
+    assertSyntax(motionJs, "hh-motion-check.js");
+    assertSyntax(explainerJs, "hh-movie-explainer-check.js");
   });
 });
 

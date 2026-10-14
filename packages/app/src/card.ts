@@ -1,6 +1,6 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
 import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
-import { dropInternalCopy, stripQuestionIds, stripRawMarkdown } from "./question-parts.ts";
+import { dropInternalCopy, omitModelInstructions, stripQuestionIds, stripRawMarkdown } from "./question-parts.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -562,7 +562,7 @@ export function renderCard(state: CardState): string {
   const uploading = (state.attach?.uploading ?? null) !== null;
   const answerOff = state.pending || uploading || (field.trim() === "" && !attachReady);
 
-  return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
+  return omitModelInstructions(`<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(ask)}</h2>
 ${helpBlock(help)}${whyLine(why)}${tipLine}${whereToLook(resources)}${fontHtml}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
@@ -579,7 +579,7 @@ ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard_
     <p class="hh-qcard__reading" data-guide-reading aria-live="polite">${state.pending ? escapeHtml(state.reading && state.reading !== "" ? state.reading : "Guide is reading your answer…") : ""}</p>
   </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
-</article>`;
+</article>`);
 }
 
 function draftStatus(note: string | null | undefined, fade: boolean | undefined): string {

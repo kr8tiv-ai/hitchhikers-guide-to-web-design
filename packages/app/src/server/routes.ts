@@ -3667,6 +3667,9 @@ function compileAppModule(filePath: string): string | null {
       const resolved = path.resolve(path.dirname(filePath), cleaned);
       const tsFile = `${resolved}.ts`;
       if (!existsSync(tsFile)) return `${lead}${quote}${spec}${quote}`;
+      if (path.normalize(tsFile).toLowerCase() === path.normalize(QUESTION_PARTS_SOURCE).toLowerCase()) {
+        return `${lead}${quote}/client/question-parts.js${quote}`;
+      }
       const url = `/src/${path.relative(SRC_ROOT, tsFile).replaceAll("\\", "/").replace(/\.ts$/, ".js")}`;
       return `${lead}${quote}${url}${quote}`;
     },

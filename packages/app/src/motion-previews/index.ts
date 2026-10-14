@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 
 import { families, familiesForLevel, type MotionFamily } from "./families.ts";
-import { renderMovieExplainer } from "./movie-explainer.ts";
+import { renderFilmShape, renderImagineCosts, renderMovieExplainer } from "./movie-explainer.ts";
+import { omitModelInstructions } from "../question-parts.ts";
 import {
   DEFAULT_APPETITE,
   appetiteName,
@@ -71,6 +72,16 @@ export function renderMotionPage(): string {
 </div>`;
 }
 
+/** Motion block the desk adds beside the current card. Prices stay on the budget question. */
+export function renderDeskMotion(questionId: string): string {
+  if (questionId === "DP-7.1") {
+    return omitModelInstructions(
+      `<div class="hh-motion" data-motion-block="prices">${renderImagineCosts()}</div>`,
+    );
+  }
+  return omitModelInstructions(renderDp6Supplement(questionId));
+}
+
 export function renderDp6Supplement(questionId: string): string {
   if (questionId === "DP-6.1") {
     return `<div class="hh-motion" data-motion-block="families">
@@ -85,7 +96,7 @@ export function renderDp6Supplement(questionId: string): string {
     </div>`;
   }
   if (questionId === "DP-6.3") {
-    return `<div class="hh-motion" data-motion-block="shape">${renderMovieExplainer()}</div>`;
+    return `<div class="hh-motion" data-motion-block="shape">${renderFilmShape()}</div>`;
   }
   if (questionId === "DP-6.4") {
     return `<div class="hh-motion" data-motion-block="source">
@@ -192,9 +203,8 @@ function bootMotionDesk(): void {
     const card = region.querySelector("[data-question-id]");
     if (card === null) return;
     const id = card.getAttribute("data-question-id") ?? "";
-    if (!id.startsWith("DP-6.")) return;
     if (region.querySelector(`[data-motion-supplement="${id}"]`) !== null) return;
-    const html = renderDp6Supplement(id);
+    const html = renderDeskMotion(id);
     if (html.length === 0) return;
     const holder = doc.createElement("div");
     holder.dataset.motionSupplement = id;
