@@ -1,6 +1,6 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
 import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
-import { dropInternalCopy, stripQuestionIds } from "./question-parts.ts";
+import { dropInternalCopy, stripQuestionIds, stripRawMarkdown } from "./question-parts.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -313,7 +313,7 @@ ${items.join("\n")}
 
 /** Last guard. The eyebrow keeps the id. The heading does not. */
 function headingAsk(ask: string): string {
-  return stripQuestionIds(ask);
+  return stripRawMarkdown(stripQuestionIds(ask)).replace(/\s+/g, " ").trim();
 }
 
 function heading(title: string, why: string, done: boolean): string {
@@ -533,8 +533,8 @@ export function renderCard(state: CardState): string {
   const busy = state.pending ? ' aria-busy="true"' : "";
   const ask = scrubCopy(headingAsk(question.ask), question);
   const why = scrubCopy(question.why, question);
-  const lead = scrubCopy(state.lead ?? "", question);
-  const help = scrubCopy(state.help ?? "", question);
+  const lead = scrubCopy(stripRawMarkdown(state.lead ?? ""), question);
+  const help = scrubCopy(stripRawMarkdown(state.help ?? ""), question);
   const pushback = state.pushback === null ? null : scrubCopy(state.pushback, question);
   const pushAttr = pushback === null || pushback === "" ? "" : attr("data-pushback", pushback);
   const pushLine =

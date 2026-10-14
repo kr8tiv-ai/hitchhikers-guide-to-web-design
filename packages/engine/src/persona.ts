@@ -105,7 +105,7 @@ export function buildSystemPrompt(skillPath: string, ctx: PersonaContext): strin
     lines.push(EXPRESS_LINE);
   }
   lines.push(
-    "Card shape: the heading is only this question. Put a recap in an earlier sentence. Never join them with a colon. Never repeat internal guidance to the user.",
+    "Card shape: the heading is only this question. Put a recap in an earlier sentence. Never join them with a colon or a markdown heading mark. Never repeat internal guidance to the user.",
   );
   const guidance = safePromptLine(ctx.question.guidance ?? "");
   if (guidance !== "") {

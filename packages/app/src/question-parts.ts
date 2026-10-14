@@ -87,6 +87,43 @@ function pack(sentences: readonly string[]): { question: string; help: string } 
 }
 
 /**
+ * Heading marks, bold marks, and list marks are model formatting.
+ * They never reach the heading or the lead as literal characters.
+ */
+export function stripRawMarkdown(text: string): string {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const bold = normalized.replace(/\*\*([\s\S]+?)\*\*/g, "$1").replace(/\*\*/g, "");
+  const headings = bold
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "")
+    .replace(/([.?!])[ \t]*#{1,6}[ \t]+/g, "$1 ");
+  return headings.replace(/^[ \t]{0,3}(?:[-*+]|\d+\.)[ \t]+/gm, "");
+}
+
+function cleanParts(parts: QuestionParts): QuestionParts {
+  const clean = (value: string): string => stripRawMarkdown(value).replace(/\s+/g, " ").trim();
+  return { lead: clean(parts.lead), question: clean(parts.question), help: clean(parts.help) };
+}
+
+/**
+ * A long recap does not fit in front of the heading, so the splitter parks it in help.
+ * It still belongs above the question, as the lead.
+ */
+function recapBeforeQuestion(parts: QuestionParts, source: string): QuestionParts {
+  if (parts.question === "" || parts.lead !== "") return parts;
+  const flat = source.replace(/\s+/g, " ").trim();
+  const askAt = flat.indexOf(parts.question);
+  if (askAt <= 0) return parts;
+  const before = flat.slice(0, askAt).trim();
+  const after = flat.slice(askAt + parts.question.length).trim();
+  if (before === "") return parts;
+  return {
+    lead: stripRepeated(before, parts.question),
+    question: parts.question,
+    help: stripRepeated(after, parts.question),
+  };
+}
+
+/**
  * A heading with no question is a recap that pushed the ask downward.
  * The last question sentence becomes the heading. The recap sits below it.
  */
@@ -273,26 +310,27 @@ function isAssetConfirmation(text: string): boolean {
  * A lead and a question are never joined with a colon.
  */
 export function settleQuestionText(text: string, baseAsk: string): QuestionParts {
-  const flat = text.replace(/\s+/g, " ").trim();
+  const flat = stripRawMarkdown(text).replace(/\s+/g, " ").trim();
   const base = baseAsk.replace(/\s+/g, " ").trim();
   const unjoined = flat.replace(/([.?!])\s*:\s+/g, "$1 ");
   if (base !== "" && unjoined === base) return { lead: "", question: base, help: "" };
   const peeled = peelGluedLead(splitQuestionText(unjoined));
   if (!isFullQuestion(peeled.question)) {
     if (isAssetConfirmation(peeled.question)) {
-      return {
+      return cleanParts({
         lead: stripRepeated(peeled.lead, peeled.question),
         question: peeled.question.trim(),
         help: stripRepeated(peeled.help, peeled.question),
-      };
+      });
     }
     const question = base !== "" ? base : peeled.question;
     const blob = join([peeled.lead, peeled.question, peeled.help]);
-    return { lead: stripRepeated(blob, question), question, help: "" };
+    return cleanParts({ lead: stripRepeated(blob, question), question, help: "" });
   }
-  return {
-    lead: stripRepeated(peeled.lead, peeled.question),
-    question: peeled.question.trim(),
-    help: stripRepeated(peeled.help, peeled.question),
-  };
+  const lifted = recapBeforeQuestion(peeled, unjoined);
+  return cleanParts({
+    lead: stripRepeated(lifted.lead, lifted.question),
+    question: lifted.question.trim(),
+    help: stripRepeated(lifted.help, lifted.question),
+  });
 }
