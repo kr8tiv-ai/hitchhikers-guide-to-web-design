@@ -74,6 +74,11 @@ function oneLine(value: string): string {
   return value.replaceAll("\r\n", " ").replaceAll("\n", " ").replaceAll("\r", " ");
 }
 
+/** The stored guidance stays intact. The prompt line cannot trip the persona guard. */
+function safePromptLine(value: string): string {
+  return oneLine(value).replaceAll("!", ".").replaceAll("\u2014", ",").trim();
+}
+
 /**
  * Reads the skill at skillPath and appends the current question.
  * Express adds one line so the model does not open a side lesson.
@@ -98,6 +103,13 @@ export function buildSystemPrompt(skillPath: string, ctx: PersonaContext): strin
   ];
   if (ctx.depth === "express") {
     lines.push(EXPRESS_LINE);
+  }
+  lines.push(
+    "Card shape: the heading is only this question. Put a recap in an earlier sentence. Never join them with a colon. Never repeat internal guidance to the user.",
+  );
+  const guidance = safePromptLine(ctx.question.guidance ?? "");
+  if (guidance !== "") {
+    lines.push(`Internal guidance, never show this to the user: ${guidance}`);
   }
   lines.push("```", "");
   const prompt = lines.join("\n");

@@ -226,6 +226,7 @@ export type {
   SiteBuildWatch,
 } from "./guide/site-build.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
+export { GUIDANCE_MARKERS, dropInternalCopy, guidanceCorpus, guidanceMarkerHits, repoGuidanceLines } from "./guide/guidance.ts";
 export { judgePushback, followUpChoices } from "./guide/pushback-judge.ts";
 export { STATIC_ANSWER_ERROR, bannedAnswer } from "./guide/answer-guard.ts";
 export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTask } from "./guide/interview-call.ts";
@@ -331,6 +332,7 @@ export {
   redoSection,
 } from "./brand/approve.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
+export { TYPE_PAIRINGS } from "./brand/tokens.ts";
 export { formatCost } from "./cost.ts";
 export {
   QueueFileError,

@@ -154,7 +154,8 @@ test("DP-4.1 records COMPETITORS.md and DP-4.3 forbids invented volumes", () => 
   const all = loadTree(treeFile);
   assert.ok(byId(all, "DP-4.1").writes.some((target) => target.includes("COMPETITORS.md")));
   const keywords = byId(all, "DP-4.3");
-  assert.ok(keywords.why.includes("Do not invent search volumes."));
+  assert.ok((keywords.guidance ?? "").includes("Do not invent search volumes."));
+  assert.equal(keywords.why.includes("Do not invent search volumes."), false);
   assert.equal(keywords.why.includes("%"), false);
   assert.equal(/\d/.test(keywords.why), false);
   assert.doesNotMatch(keywords.ask, /\d[\d,]*\s*(searches|volume)/i);

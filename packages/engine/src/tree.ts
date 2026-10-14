@@ -26,6 +26,8 @@ export interface Question {
   depth: Array<DepthName>;
   ask: string;
   why: string;
+  /** Model-only. Never render this on the card, in the transcript, or in the brief. */
+  guidance?: string;
   input: Array<InputName>;
   skipDefault: string;
   suggest?: string;
@@ -79,6 +81,7 @@ const QUESTION_KEYS = new Set([
   "depth",
   "ask",
   "why",
+  "guidance",
   "input",
   "skip_default",
   "suggest",
@@ -162,6 +165,8 @@ function toQuestion(value: Yaml, index: number): Question {
     skipDefault: requireString(value, "skip_default", id),
     writes: requireStringList(value, "writes", id),
   };
+  const guidance = optionalString(value, "guidance", id);
+  if (guidance !== undefined) question.guidance = guidance;
   const suggest = optionalString(value, "suggest", id);
   if (suggest !== undefined) question.suggest = suggest;
   const pushbackIf = optionalStringList(value, "pushback_if", id);

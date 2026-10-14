@@ -1,6 +1,6 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
 import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
-import { stripQuestionIds } from "./question-parts.ts";
+import { dropInternalCopy, stripQuestionIds } from "./question-parts.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -368,6 +368,15 @@ function confirmBlock(state: CardState): string {
   return `  <p class="hh-qcard__confirm" data-skip-confirm>${escapeHtml(SKIP_CONFIRM)}</p>\n`;
 }
 
+function hiddenLines(question: Question): string[] {
+  const line = question.guidance?.trim() ?? "";
+  return line === "" ? [] : [line];
+}
+
+function scrubCopy(text: string, question: Question): string {
+  return dropInternalCopy(text, hiddenLines(question));
+}
+
 function leadBlock(lead: string | undefined): string {
   const text = (lead ?? "").trim();
   if (text === "") return "";
@@ -378,6 +387,40 @@ function helpBlock(help: string | undefined): string {
   const text = (help ?? "").trim();
   if (text === "" || /suggest for me|skipping is allowed|three ways forward/i.test(text)) return "";
   return `  <p class="hh-qcard__help" data-card-help>${escapeHtml(text)}</p>\n`;
+}
+
+function whyLine(why: string): string {
+  if (why === "") return "";
+  return `  <p class="hh-qcard__why">${escapeHtml(why)}</p>\n`;
+}
+
+const FONT_EXAMPLES = /pick a style from these examples/i;
+
+/** Same six pairings as engine TYPE_PAIRINGS, in tree order. System stacks, no font files. */
+const FONT_PAIRS: readonly (readonly [string, string])[] = [
+  ["Bebas Neue", "Barlow"],
+  ["Space Grotesk", "Inter"],
+  ["DM Serif Display", "DM Sans"],
+  ["Fraunces", "Work Sans"],
+  ["Archivo Black", "Archivo"],
+  ["Clash Display", "Satoshi"],
+];
+
+/** Rendered type samples. System stacks stand in so the card does not load a font file. */
+function fontExamplesHtml(ask: string): string {
+  if (!FONT_EXAMPLES.test(ask)) return "";
+  const buttons = FONT_PAIRS.map((pair, index) => {
+    const label = `${pair[0]} + ${pair[1]}`;
+    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(label)}" data-pair="${index}" aria-pressed="false">
+      <span class="hh-type-sample__display">Find your calm</span>
+      <span class="hh-type-sample__text">A quiet line for the page.</span>
+      <span class="hh-type-sample__name">${escapeHtml(label)}</span>
+    </button>`;
+  });
+  return `  <div class="hh-type-samples" role="group" aria-label="Font examples">
+${buttons.join("\n")}
+  </div>
+`;
 }
 
 function sampleAnswer(question: Question): string {
@@ -488,32 +531,43 @@ export function renderCard(state: CardState): string {
   // An empty slot stays in the card for a later failure. The red treatment is only for a real error.
   const errorClass = state.error === null ? "hh-qcard__error" : "hh-error hh-qcard__error";
   const busy = state.pending ? ' aria-busy="true"' : "";
-  const pushAttr = state.pushback === null ? "" : attr("data-pushback", state.pushback);
+  const ask = scrubCopy(headingAsk(question.ask), question);
+  const why = scrubCopy(question.why, question);
+  const lead = scrubCopy(state.lead ?? "", question);
+  const help = scrubCopy(state.help ?? "", question);
+  const pushback = state.pushback === null ? null : scrubCopy(state.pushback, question);
+  const pushAttr = pushback === null || pushback === "" ? "" : attr("data-pushback", pushback);
   const pushLine =
-    state.pushback === null || state.pushback === ""
+    pushback === null || pushback === ""
       ? ""
-      : `  <p class="hh-qcard__push">${escapeHtml(state.pushback)}</p>\n`;
+      : `  <p class="hh-qcard__push">${escapeHtml(pushback)}</p>\n`;
   const hintLine = hint
     ? `  <p class="hh-qcard__hint" id="hh-card-hint">${escapeHtml(ANSWER_HINT)}</p>\n`
     : "";
-  const prepared = buildChoicesForQuestion(question.id, question.ask, state.pushback, state.choices);
+  const prepared = buildChoicesForQuestion(question.id, ask, pushback, state.choices);
   const choicesHtml = prepared === null ? "" : `${renderChoiceGroup(prepared)}\n`;
+  const tip = question.tip === undefined ? "" : scrubCopy(question.tip, question);
   const tipLine =
-    question.tip !== undefined && state.counts?.index === 1
-      ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(question.tip)}</p>\n`
+    tip !== "" && state.counts?.index === 1
+      ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(tip)}</p>\n`
       : "";
+  const fontHtml = fontExamplesHtml(ask);
+  const resources = question.resources?.map((item) => ({
+    ...item,
+    label: scrubCopy(item.label, question),
+    note: scrubCopy(item.note, question),
+  }));
   const attachHtml = renderAttach(question.id, state.attach);
   const attachReady = (state.attach?.chips ?? []).some((chip) => chip.ready && chip.error === undefined);
   const uploading = (state.attach?.uploading ?? null) !== null;
   const answerOff = state.pending || uploading || (field.trim() === "" && !attachReady);
 
   return `<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
-${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(state.lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(headingAsk(question.ask))}</h2>
-${helpBlock(state.help)}  <p class="hh-qcard__why">${escapeHtml(question.why)}</p>
-${tipLine}${whereToLook(question.resources)}${pushLine}  <div class="hh-qcard__composer">
+${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(ask)}</h2>
+${helpBlock(help)}${whyLine(why)}${tipLine}${whereToLook(resources)}${fontHtml}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
-    <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", sampleAnswer(question))}${described}>${escapeHtml(field)}</textarea>
+    <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", scrubCopy(sampleAnswer(question), question))}${described}>${escapeHtml(field)}</textarea>
 ${draftStatus(state.draftNote, state.draftFade)}  </label>
 ${attachHtml}${hintLine}  <p class="${errorClass}" id="hh-card-error" data-card-error${alert}>${escapeHtml(state.error ?? "")}</p>
 ${timeoutRetry(state.error)}

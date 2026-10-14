@@ -56,13 +56,19 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     });
     expect(fits).toBe(true);
 
-    await say(page, "The shop is mine, Towel and Tea.", "right number of hands", "DP-0.2");
+    await say(page, "The shop is mine, Towel and Tea.", "Have you built a website before", "DP-0.2");
+    await expect(page.locator("[data-card-lead]")).toContainText("right number of hands");
+    await expect(page.locator("#hh-card-ask")).not.toContainText("right number of hands");
     await say(page, "it's fine", "one concrete detail the shop site should keep", "DP-0.2");
     await expect(page.locator(".hh-qcard__push")).toContainText("it's fine");
     await expect(page.locator("#hh-card-draft")).toHaveValue("");
     await say(page, "it's fine", "one page, tool, or URL", "DP-0.2");
-    await say(page, "it's fine", "That note is soft", "DP-0.3");
-    await say(page, "I have used a site builder for a menu page.", "Building pages in a site builder counts", "DP-0.4");
+    await say(page, "it's fine", "How hands-on are you with websites?", "DP-0.3");
+    await expect(page.locator("[data-card-lead]")).toContainText("That note is soft");
+    await expect(page.locator("#hh-card-ask")).not.toContainText("That note is soft");
+    await say(page, "I have used a site builder for a menu page.", "Do you already have a logo", "DP-0.4");
+    await expect(page.locator("[data-card-lead]")).toContainText("Building pages in a site builder counts");
+    await expect(page.locator("#hh-card-ask")).not.toContainText("Building pages in a site builder counts");
     await say(page, "A logo sketch and a photo of the tins.", "why does this site exist", "DP-2.1");
     await say(page, "The site exists so a neighbor can order tea without calling.", "real sites should we walk", "DP-5.2");
 

@@ -654,6 +654,7 @@ const JARGON = [
 ] as const;
 
 export function userFacingText(question: Question): string {
+  // guidance is model-only. The jargon scan and the card must not see it.
   const parts = [question.ask, question.why, question.suggest ?? "", question.skipDefault, question.tip ?? ""];
   for (const follow of question.followUps ?? []) parts.push(follow.ask);
   return parts.join("\n");

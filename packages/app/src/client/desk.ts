@@ -980,6 +980,12 @@ export function mountDesk(env: DeskEnv): () => void {
       void postGuideNote("/api/guide-note", skipCheckId, "skip");
       return;
     }
+    const fontSample = readMarked(event.target, "data-font-sample");
+    if (fontSample !== null) {
+      event.preventDefault();
+      applyFontSample(fontSample);
+      return;
+    }
     const choiceId = readMarked(event.target, "data-choice-id");
     if (choiceId !== null) {
       event.preventDefault();
@@ -3070,6 +3076,25 @@ export function mountDesk(env: DeskEnv): () => void {
     selectChoice(id);
   }
 
+  /** Fills the draft with a font pairing. Nothing is sent until Answer. */
+  function applyFontSample(label: string): void {
+    ownWords = true;
+    selectedChoiceLabel = null;
+    offerOnFocus = null;
+    draft = label;
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined) field.value = label;
+    const root = region();
+    for (let index = 0; index < 6; index += 1) {
+      const node = root?.querySelector(`.hh-type-sample[data-pair="${index}"]`) ?? null;
+      if (node === null) continue;
+      const on = node.getAttribute("data-font-sample") === label;
+      node.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    rememberDraft(true);
+    syncAnswerLock();
+  }
+
   /** Marks one radio and fills the draft. Nothing is sent until Answer. */
   function selectChoice(id: string): void {
     if (id === "other") {
@@ -4766,6 +4791,7 @@ function asQuestion(value: unknown): Question | null {
   if (question.depth.length === 0) question.depth = ["deep"];
   if (question.input.length === 0) question.input = ["text"];
   if (typeof value.suggest === "string") question.suggest = value.suggest;
+  if (typeof value.guidance === "string" && value.guidance.trim() !== "") question.guidance = value.guidance;
   const pushbackIf = stringList(value.pushbackIf);
   if (Array.isArray(value.pushbackIf)) question.pushbackIf = pushbackIf;
   const requiredFor = stringList(value.requiredFor);

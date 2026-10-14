@@ -65,9 +65,14 @@ test.describe("desk clarity", () => {
       const askLocator = page.locator("#hh-card-ask");
       const restartLocator = page.locator("[data-restart-open]");
       // Windows can report empty content quads for one frame after a resize.
-      await expect.poll(async () => (await askLocator.boundingBox()) !== null).toBe(true);
-      const ask = await askLocator.boundingBox();
-      const restart = await restartLocator.boundingBox();
+      // Measure the frame that has both boxes. The next frame can be empty again.
+      let ask = await askLocator.boundingBox();
+      let restart = await restartLocator.boundingBox();
+      await expect.poll(async () => {
+        ask = await askLocator.boundingBox();
+        restart = await restartLocator.boundingBox();
+        return ask !== null && restart !== null;
+      }).toBe(true);
       expect(ask, `ask at ${width}`).not.toBeNull();
       expect(restart, `restart at ${width}`).not.toBeNull();
       expect(ask!.y).toBeGreaterThanOrEqual(0);

@@ -543,7 +543,8 @@ questions:
     module: vogon-neighbors
     depth: [express, standard, deep]
     ask: "Do you want a blog, and should keyword-based posts be written for you? Bring seed keywords if you have them, including ones competitors already rank for."
-    why: "Keywords come from a later crawl, the industry, the SEO pack, and any keyword-tool export you supply. Do not invent search volumes."
+    why: "Keywords come from a later crawl, the industry, the SEO pack, and any keyword-tool export you supply."
+    guidance: "Do not invent search volumes."
     input: [choice, text, voice]
     skip_default: "No blog. No keyword posts."
     suggest: "Yes or no on the blog, then any seeds you already trust. Leave volume blank."
@@ -709,7 +710,8 @@ questions:
     module: pan-galactic
     depth: [express, standard, deep]
     ask: "How should things move on the page?"
-    why: "Families cover research ids A1 through H3, each with a short loop from the pack and a real link. Magnetic buttons are banned, not offered. The walk names one tool in a clause and does not lecture."
+    why: "Families cover research ids A1 through H3, each with a short loop from the pack and a real link. Magnetic buttons are banned, not offered."
+    guidance: "The walk names one tool in a clause and does not lecture."
     input: [choice, text, voice]
     skip_default: "Reveals and a calm headline. No world, no film, no custom cursor."
     suggest: "The picker would use CSS, GSAP, Three, OGL, Theatre, Motion, anime.js, or vanilla. Magnetic buttons are banned."
@@ -800,7 +802,8 @@ questions:
     module: bistromathics
     depth: [express, standard, deep]
     ask: "How much are you OK spending on AI-made stills and videos? $0, a little, a fair amount, or you name it."
-    why: "Show the model and the resolution on every line. Do not promise 1080p inside a small cap. Prices live on the cost meter, not in this question. Stop at the cap."
+    why: "Name a ceiling, including zero. The cost meter shows what that ceiling can buy."
+    guidance: "Show the model and the resolution on every line. Do not promise 1080p inside a small cap. Prices live on the cost meter, not in this question. Stop at the cap."
     input: [choice, text, voice]
     skip_default: "$0 DIY. Prompts only."
     suggest: "DIY with prompts you run yourself, a small cap, a middle cap, a large cap, or a custom cap. The meter recomputes when the model or the resolution changes."
@@ -867,7 +870,8 @@ questions:
     module: content
     depth: [express, standard, deep]
     ask: "If there is a blog, what cadence and which topics?"
-    why: "Cadence and topics are yours. A keyword list needs your approval. Do not invent search volumes."
+    why: "Cadence and topics are yours. A keyword list needs your approval."
+    guidance: "Do not invent search volumes."
     input: [text, voice]
     skip_default: "No blog cadence."
     suggest: "A rhythm and a short topic list, or none."
@@ -904,7 +908,8 @@ questions:
     module: limits
     depth: [express, standard, deep]
     ask: "Do you own a web address (like yourbakery.com)? Hostinger is recommended. Vercel, Netlify, and Cloudflare are equal choices. No idea is fine."
-    why: "Hostinger is the recommended word, not a forced value. Vercel, Netlify, and Cloudflare are equal choices. No idea is a complete answer."
+    why: "Vercel, Netlify, and Cloudflare are equal choices. No idea is a complete answer."
+    guidance: "Hostinger is the recommended word, not a forced value."
     input: [choice, text, voice]
     skip_default: "no idea"
     suggest: "Hostinger, Vercel, Netlify, Cloudflare, or no idea. Add domain and email if you know them."

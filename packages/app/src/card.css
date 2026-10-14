@@ -327,6 +327,91 @@
   min-height: 44px;
 }
 
+.hh-type-samples {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.hh-type-sample {
+  display: grid;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-field);
+  color: var(--color-ink);
+  text-align: start;
+  cursor: pointer;
+}
+
+.hh-type-sample[aria-pressed="true"] {
+  border-color: var(--color-accent);
+}
+
+.hh-type-sample__display {
+  font-size: var(--type-title);
+  line-height: 1.1;
+}
+
+.hh-type-sample__text {
+  font-size: var(--type-body);
+  line-height: 1.4;
+}
+
+.hh-type-sample__name {
+  color: var(--color-muted);
+  font-family: var(--font-text);
+  font-size: var(--type-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hh-type-sample[data-pair="0"] .hh-type-sample__display {
+  font-family: Impact, "Arial Narrow", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hh-type-sample[data-pair="0"] .hh-type-sample__text {
+  font-family: "Arial Narrow", Arial, sans-serif;
+}
+
+.hh-type-sample[data-pair="1"] .hh-type-sample__display,
+.hh-type-sample[data-pair="1"] .hh-type-sample__text {
+  font-family: "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
+}
+
+.hh-type-sample[data-pair="2"] .hh-type-sample__display,
+.hh-type-sample[data-pair="2"] .hh-type-sample__text {
+  font-family: Georgia, "Palatino Linotype", Palatino, serif;
+}
+
+.hh-type-sample[data-pair="3"] .hh-type-sample__display {
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+}
+
+.hh-type-sample[data-pair="3"] .hh-type-sample__text {
+  font-family: "Segoe UI", "Avenir Next", sans-serif;
+}
+
+.hh-type-sample[data-pair="4"] .hh-type-sample__display {
+  font-family: "Arial Black", "Arial Bold", Impact, sans-serif;
+}
+
+.hh-type-sample[data-pair="4"] .hh-type-sample__text {
+  font-family: Arial, "Segoe UI", sans-serif;
+}
+
+.hh-type-sample[data-pair="5"] .hh-type-sample__display,
+.hh-type-sample[data-pair="5"] .hh-type-sample__text {
+  font-family: "Century Gothic", Futura, "Trebuchet MS", sans-serif;
+}
+
 .hh-mast__line {
   margin: 0;
   font-family: var(--font-display);

@@ -162,11 +162,13 @@ test("DP-6.5 defaults to calm and DP-6.6 always implements reduced motion", () =
 test("DP-7.1 points at the cost meter and does not invent a price table", () => {
   const question = byId(loadTree(treeFile), "DP-7.1");
   assert.equal(question.skipDefault, "$0 DIY. Prompts only.");
-  assert.match(question.why, /model/);
-  assert.match(question.why, /resolution/);
-  assert.match(question.why, /Do not promise 1080p inside a small cap/);
+  assert.match(question.guidance ?? "", /model/);
+  assert.match(question.guidance ?? "", /resolution/);
+  assert.match(question.guidance ?? "", /Do not promise 1080p inside a small cap/);
+  assert.match(question.guidance ?? "", /cost meter/);
   assert.match(question.why, /cost meter/);
-  const prose = `${question.ask}\n${question.why}\n${question.suggest ?? ""}`;
+  assert.equal((question.why + (question.suggest ?? "")).includes("Do not promise 1080p"), false);
+  const prose = `${question.ask}\n${question.why}\n${question.suggest ?? ""}\n${question.guidance ?? ""}`;
   assert.doesNotMatch(prose, /\$\s*[1-9]/);
 });
 
@@ -186,6 +188,7 @@ test("DP-9.2 recommends Hostinger, names the other hosts, and skips to no idea",
   assert.match(question.ask, /Vercel/);
   assert.match(question.ask, /Netlify/);
   assert.match(question.ask, /Cloudflare/);
-  assert.match(question.why, /not a forced value/);
+  assert.match(question.guidance ?? "", /not a forced value/);
+  assert.equal(question.why.includes("not a forced value"), false);
   assert.equal(question.ask.includes("!"), false);
 });

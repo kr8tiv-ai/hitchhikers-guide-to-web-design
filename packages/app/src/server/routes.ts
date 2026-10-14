@@ -49,6 +49,8 @@ import {
   recordVerdict,
   requiredIds,
   bannedAnswer,
+  dropInternalCopy,
+  guidanceCorpus,
   runTurn,
   seedExpressAssumptions,
   think,
@@ -89,7 +91,7 @@ import {
   type CardState,
 } from "../card.ts";
 import { attachQuestionId, formatBytes } from "../client/attach.ts";
-import { splitQuestionText } from "../question-parts.ts";
+import { settleQuestionText } from "../question-parts.ts";
 import { forgetGuideJobs, guideJobsFor } from "./guide-jobs.ts";
 import { CONTEXT_LABEL, guideTurnText, isLogoQuestion, reshapeDeskCard, withInterviewExtras } from "../client/desk.ts";
 import { contextAssetFile, renderContextMain } from "./context-desk.ts";
@@ -767,14 +769,15 @@ function unavailableGuideThink(): typeof think {
   };
 }
 
-function renderLiveExtras(overlay: LiveOverlay, done: boolean): string {
+function renderLiveExtras(overlay: LiveOverlay, done: boolean, hidden: readonly string[]): string {
   const parts: string[] = [];
-  if (overlay.message !== null && (overlay.calm || overlay.status === "pushed")) {
+  const message = overlay.message === null ? null : dropInternalCopy(overlay.message, hidden);
+  if (message !== null && message !== "" && (overlay.calm || overlay.status === "pushed")) {
     parts.push(
-      `<p class="hh-turn" data-calm="${overlay.calm ? "true" : "false"}"><span class="hh-turn__who">Guide</span> ${escapeHtml(overlay.message)}</p>`,
+      `<p class="hh-turn" data-calm="${overlay.calm ? "true" : "false"}"><span class="hh-turn__who">Guide</span> ${escapeHtml(message)}</p>`,
     );
-  } else if (done && overlay.message !== null) {
-    parts.push(turnLine("Guide", overlay.message, false));
+  } else if (done && message !== null && message !== "") {
+    parts.push(turnLine("Guide", message, false));
   }
   for (const card of overlay.cards) {
     if (!isHttpUrl(card.url)) continue;
@@ -2278,11 +2281,18 @@ function buildSession(
   const guarded = applyLogoGuard(projectDir, question, questions, choices);
   question = guarded.question;
   choices = guarded.choices;
-  const parts = splitQuestionText(question?.ask ?? "");
-  let lead = parts.lead;
-  let help = parts.help;
-  if (question !== null && parts.question !== "" && parts.question !== question.ask) {
-    question = { ...question, ask: parts.question };
+  const hidden = guidanceCorpus(questions);
+  const current = question;
+  const treeAsk =
+    current === null ? "" : (questions.find((item) => item.id === current.id)?.ask ?? current.ask);
+  const parts = settleQuestionText(question?.ask ?? "", treeAsk);
+  let lead = dropInternalCopy(parts.lead, hidden);
+  let help = dropInternalCopy(parts.help, hidden);
+  if (question !== null) {
+    const settled = parts.question !== "" ? parts.question : treeAsk;
+    const ask = dropInternalCopy(settled, hidden);
+    const why = dropInternalCopy(question.why, hidden);
+    question = { ...question, ask: ask === "" ? settled : ask, why };
   }
   if (question === null) {
     lead = "";
@@ -2309,8 +2319,11 @@ function buildSession(
   const stepTotal = questions.length;
   const stepIndex = counts === null ? (done ? stepTotal : 0) : counts.index;
   const calm = overlay.calm && overlay.message !== null;
+  const calmText = calm ? dropInternalCopy(overlay.message ?? "", hidden) : "";
   const baseStatus = calm
-    ? (overlay.message ?? "")
+    ? calmText === ""
+      ? "Ready."
+      : calmText
     : state.nextAction.trim().length > 0
       ? state.nextAction
       : "Ready.";
@@ -2334,7 +2347,7 @@ function buildSession(
   const showPreflight =
     preflight !== null && (firstRun || preflight.probes.some((probe) => probe.ok === false));
   const preflightHtml = showPreflight && preflight !== null ? `${renderPreflight(preflight)}\n` : "";
-  const transcript = `${preflightHtml}${renderTranscript(questions, answers, question)}${renderLiveExtras(overlay, done)}`;
+  const transcript = `${preflightHtml}${renderTranscript(questions, answers, question, hidden)}${renderLiveExtras(overlay, done, hidden)}`;
   const renderedCard = renderCard(card);
   const cardHtml = renderedCard.includes("No question yet.")
     ? renderEmptyInterview(questions[0]?.id ?? null)
@@ -2477,12 +2490,13 @@ function renderTranscript(
   tree: readonly Question[],
   answers: readonly AnswerRecord[],
   _current: Question | null,
+  hidden: readonly string[],
 ): string {
-  const asks = new Map(tree.map((question) => [question.id, question.ask]));
+  const asks = new Map(tree.map((question) => [question.id, dropInternalCopy(question.ask, hidden)]));
   const turns: LoggedTurn[] = answers.map((answer) => ({
     id: answer.id,
     ask: asks.get(answer.id) ?? null,
-    value: answer.value,
+    value: dropInternalCopy(answer.value, hidden),
   }));
   // The card title is the current question. Repeating it here printed the ask twice.
   if (turns.length === 0) {

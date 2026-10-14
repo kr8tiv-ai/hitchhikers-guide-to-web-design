@@ -20,6 +20,7 @@ import {
 } from "./brief-loop.ts";
 import { BRIEF_DRAFT_TASK, BRIEF_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
+import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
 import { ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
 
@@ -139,11 +140,17 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
   if (status === "revising" && !revisions.has(key)) status = pending.draft === null ? "idle" : "pending";
   if (jobs.has(key) && status !== "pending" && status !== "approved" && status !== "revising") status = "drafting";
   const state = loadState(projectDir);
+  const hidden = repoGuidanceLines();
+  const sources = sourcesFor(projectDir, pending.draft).map((source) => ({
+    ...source,
+    answer: dropInternalCopy(source.answer, hidden),
+    text: dropInternalCopy(source.text, hidden),
+  }));
   return {
     status,
     draft: pending.draft,
-    markdown: pending.draft === null ? "" : renderSiteBrief(pending.draft),
-    sources: sourcesFor(projectDir, pending.draft),
+    markdown: pending.draft === null ? "" : dropInternalCopy(renderSiteBrief(pending.draft), hidden),
+    sources,
     buildStarted: pending.buildStarted,
     phase: state?.phase ?? "Don't Panic",
     nextAction: state?.nextAction ?? "",
