@@ -824,3 +824,101 @@ function normalizeAsk(text: string): string {
 function isFollowLetter(ch: string): boolean {
   return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
 }
+
+const NOT_APPLICABLE_3D =
+  "Not applicable: 3D is none, so the custom generation budget is not asked.";
+
+/** Why DP-7.2 is not asked. Null when the 3D answer is empty or still wants a generated model. */
+export function threeDBudgetReason(threeDAnswer: string): string | null {
+  const value = threeDAnswer.trim();
+  if (value === "") return null;
+  const lower = value.toLowerCase();
+  if (lower.indexOf("tripo") !== -1 || lower.indexOf("meshy") !== -1 || lower.indexOf("generat") !== -1) return null;
+  if (!isNoneOrSkip(lower)) return null;
+  return NOT_APPLICABLE_3D;
+}
+
+/** SKIPPED rows for questions the stored answers make not applicable. Does not replace a row already on file. */
+export function notApplicablePatches(
+  questions: readonly Question[],
+  answers: readonly { id: string; status: string; value: string }[],
+): Array<{ id: string; status: "SKIPPED"; value: string }> {
+  if (!questions.some((question) => question.id === "DP-7.2")) return [];
+  const latest = new Map<string, { status: string; value: string }>();
+  for (const answer of answers) latest.set(answer.id, answer);
+  if (latest.has("DP-7.2")) return [];
+  const source = latest.get("DP-6.4");
+  if (source === undefined) return [];
+  const reason = threeDBudgetReason(source.value);
+  if (reason === null) return [];
+  return [{ id: "DP-7.2", status: "SKIPPED", value: reason }];
+}
+
+/** Append not-applicable rows. Existing rows stay, including an express assumption. */
+export function materializeNotApplicable<T extends { id: string; status: string; value: string }>(
+  questions: readonly Question[],
+  answers: readonly T[],
+): T[] {
+  const patches = notApplicablePatches(questions, answers);
+  if (patches.length === 0) return [...answers];
+  return [...answers, ...(patches as unknown as T[])];
+}
+
+/**
+ * Drop Tripo, Meshy, and custom-generation sentences when 3D is none, no, or skip.
+ * A line that only says "$0 for 3D." stays. Other 3D answers leave the copy as given.
+ */
+export function budgetCardCopy(text: string, threeDAnswer: string): string {
+  if (threeDBudgetReason(threeDAnswer) === null) return text;
+  const kept = splitBudgetSentences(text).filter((line) => !isCustomThreeDLine(line));
+  if (kept.length === 0) return "No custom generation budget.";
+  return kept.join(" ");
+}
+
+function isNoneOrSkip(lower: string): boolean {
+  const bare = lower.endsWith(".") ? lower.slice(0, -1).trim() : lower;
+  if (bare === "none" || bare === "no" || bare === "skip") return true;
+  if (lower.indexOf("no 3d") !== -1 || lower.indexOf("no models") !== -1) return true;
+  if (hasFollowWord(lower, "none")) return true;
+  if (lower.startsWith("no ") || lower.startsWith("no,") || lower.startsWith("no.")) return true;
+  return false;
+}
+
+function hasFollowWord(hay: string, word: string): boolean {
+  let from = 0;
+  while (from < hay.length) {
+    const at = hay.indexOf(word, from);
+    if (at < 0) return false;
+    const before = at === 0 ? " " : (hay[at - 1] ?? " ");
+    const after = hay[at + word.length] ?? " ";
+    if (!isFollowLetter(before) && !isFollowLetter(after)) return true;
+    from = at + 1;
+  }
+  return false;
+}
+
+function splitBudgetSentences(text: string): string[] {
+  const lines: string[] = [];
+  let rest = text.trim();
+  while (rest !== "") {
+    const at = rest.indexOf(". ");
+    if (at < 0) {
+      lines.push(rest);
+      break;
+    }
+    const line = rest.slice(0, at + 1).trim();
+    if (line !== "") lines.push(line);
+    rest = rest.slice(at + 2).trim();
+  }
+  return lines;
+}
+
+function isCustomThreeDLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.indexOf("tripo") !== -1 ||
+    lower.indexOf("meshy") !== -1 ||
+    lower.indexOf("3d generation") !== -1 ||
+    lower.indexOf("custom 3d") !== -1
+  );
+}

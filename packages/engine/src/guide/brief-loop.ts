@@ -21,6 +21,7 @@ import {
   type SiteBrief,
 } from "./schemas.ts";
 import { INTERVIEW_MODEL } from "./interview-call.ts";
+import { budgetCardCopy } from "./session-state.ts";
 import { loadFacts } from "./suggest.ts";
 import { guideTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -439,7 +440,9 @@ export function recordedField(
     parts.push(skipped);
     sourceIds.push(skippedId);
   }
-  return { text: parts.join(" "), sourceIds };
+  let text = parts.join(" ");
+  if (key === "budget") text = budgetCardCopy(text, byId.get("DP-6.4") ?? "");
+  return { text, sourceIds };
 }
 
 function coverageLine(facts: Facts): string {

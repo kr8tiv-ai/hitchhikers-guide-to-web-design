@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { materializeNotApplicable } from "./guide/session-state.ts";
 import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
@@ -99,14 +100,15 @@ export async function openInterview(
   await mkdir(dir, { recursive: true });
   const all = questionsForDepth(loadTree(resolveTreePath(projectDir)), depth);
   const saved = loadInterview(path.join(dir, "interview.json"));
+  const answers = materializeNotApplicable(all, saved.answers);
   const state = loadState(projectDir);
-  const shown = offeredQuestions(all, saved.answers);
-  const cursor = placeCursor(shown, saved.answers, state?.promptId ?? null, readRevisitId(projectDir));
+  const shown = offeredQuestions(all, answers);
+  const cursor = placeCursor(shown, answers, state?.promptId ?? null, readRevisitId(projectDir));
   const run = new InterviewRun(
     projectDir,
     all,
     shown,
-    saved.answers,
+    answers,
     saved.pushedIds,
     cursor,
     clock,
@@ -223,7 +225,7 @@ class InterviewRun {
   }
 
   async #commit(record: AnswerRecord): Promise<void> {
-    const answers = [...this.#answers, record];
+    const answers = materializeNotApplicable(this.#all, [...this.#answers, record]);
     const stored = materializePassedDefaults(this.#all, answers);
     const shown = offeredQuestions(this.#all, stored);
     const cursor = firstUnansweredIndex(shown, stored);
