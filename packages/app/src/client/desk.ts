@@ -826,6 +826,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let pending = false;
   /** Latest choice pressed while the suggest POST is still pending. */
   let choiceWait: string | null = null;
+  /** Draft text when that click was parked. A later edit is the person's own words. */
+  let choiceWaitSeen: string | null = null;
   /** Label of the choice selected on this card. Sent only when Answer is pressed. */
   let selectedChoiceLabel: string | null = null;
   let ready = false;
@@ -2807,6 +2809,7 @@ export function mountDesk(env: DeskEnv): () => void {
     pending = true;
     pauseDraftSave();
     choiceWait = null;
+    choiceWaitSeen = null;
     error = null;
     notice = null;
     cardHold = true;
@@ -2828,6 +2831,7 @@ export function mountDesk(env: DeskEnv): () => void {
         return;
       }
       choiceWait = null;
+      choiceWaitSeen = null;
       cardHold = false;
       showSuggestFailure(result.error);
       setBusy(false);
@@ -3021,9 +3025,11 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function resumeChoice(): void {
     const id = choiceWait;
+    const seen = choiceWaitSeen;
     choiceWait = null;
+    choiceWaitSeen = null;
     if (id === null || pending || token === null || !choicesOpen()) return;
-    void pickChoice(id);
+    void pickChoice(id, seen);
   }
 
   function answerIsChoice(): boolean {
@@ -3064,16 +3070,44 @@ export function mountDesk(env: DeskEnv): () => void {
     }
   }
 
-  async function pickChoice(id: string): Promise<void> {
+  async function pickChoice(id: string, seen: string | null = null): Promise<void> {
     if (token === null) return;
     if (pending) {
       // The session stream shows choices before the suggest POST settles.
-      if (choicesOpen()) choiceWait = id;
+      if (choicesOpen()) {
+        readDraft();
+        choiceWait = id;
+        choiceWaitSeen = draft;
+      }
       return;
     }
     choiceWait = null;
+    choiceWaitSeen = null;
     if (voiceActive()) await stopVoice();
+    if (id === "other" && seen !== null) {
+      readDraft();
+      if (draft !== seen) {
+        keepOtherDraft(draft);
+        return;
+      }
+    }
     selectChoice(id);
+  }
+
+  /** Other arrived after the person had already started writing. Keep those words. */
+  function keepOtherDraft(text: string): void {
+    ownWords = true;
+    selectedChoiceLabel = null;
+    offerOnFocus = null;
+    draft = text;
+    const field = region()?.querySelector("#hh-card-draft");
+    if (field !== null && field !== undefined) field.value = text;
+    markChoice("other");
+    rememberDraft(true);
+    hideAssumed();
+    syncAnswerLock();
+    announceChoices("Write your own answer.");
+    focusField();
   }
 
   /** Fills the draft with a font pairing. Nothing is sent until Answer. */

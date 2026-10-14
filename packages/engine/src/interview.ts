@@ -225,8 +225,9 @@ class InterviewRun {
   }
 
   async #commit(record: AnswerRecord): Promise<void> {
-    const answers = materializeNotApplicable(this.#all, [...this.#answers, record]);
-    const stored = materializePassedDefaults(this.#all, answers);
+    const answers = [...this.#answers, record];
+    const withReason = materializeNotApplicable(this.#all, answers);
+    const stored = materializePassedDefaults(this.#all, withReason);
     const shown = offeredQuestions(this.#all, stored);
     const cursor = firstUnansweredIndex(shown, stored);
     await this.#save(stored, cursor, this.#pushed, shown);

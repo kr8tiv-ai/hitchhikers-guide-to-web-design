@@ -52,8 +52,18 @@ test.afterAll(async () => {
 });
 
 // These tests share one project and each opens a new page. The desk restores a saved draft.
-test.beforeEach(async () => {
+// An answer returns a job id and publishes the next session when that job ends.
+// The next page must not open while that publish is still pending.
+test.beforeEach(async ({ request }) => {
   if (projectDir !== "") await rm(path.join(projectDir, ".hitchhiker", "drafts.json"), { force: true });
+  if (deskUrl === "") return;
+  await expect
+    .poll(async () => {
+      const response = await request.get(new URL("/api/session", deskUrl).href);
+      const body = (await response.json()) as { guideJob?: { status?: string } | null };
+      return body.guideJob?.status === "running" ? "running" : "idle";
+    })
+    .toBe("idle");
 });
 
 const HEARD = "Heard you. Check the words, then press Answer.";
@@ -826,10 +836,12 @@ test("multi-cycle: ten dictations then Answer submits every word in order once",
   await openDesk(page, "manual");
   const words = ["n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10"];
   await dictateCycles(page, "final-then-end", words);
+  const settled = watchAnswer(page);
   await page.locator('[data-action="answer"]').click();
   await expect.poll(async () => (await fetchMark(page)).draft).toBe(words.join(" "));
   expect((await fetchMark(page)).url).toContain("/api/answer");
   expect(answers).toHaveLength(1);
+  await settled;
 });
 
 test("multi-cycle: a paint between dictations still appends the later words", async ({ page }) => {
@@ -879,11 +891,13 @@ test("197 answer: a stop does not submit, and Answer sends the box once", async 
   await dictateOnto(page, "Typed.", "for", "for me");
   await expectHeard(page, "Typed. for me");
   expect(bodies).toEqual([]);
+  const settled = watchAnswer(page);
   await page.locator('[data-action="answer"]').click();
   await expect.poll(() => bodies.length).toBe(1);
   const payload = JSON.parse(bodies[0] ?? "{}") as { text?: string };
   expect(payload.text).toBe("Typed. for me");
   expect(bodies).toHaveLength(1);
+  await settled;
 });
 
 test("ten cycles keep one live recognizer and one late result handler", async ({ page }) => {
@@ -1362,6 +1376,26 @@ async function speak(page: Page, text: string, isFinal: boolean): Promise<void> 
   await expect(page.locator('[data-voice="hold"]')).toHaveText("Stop listening");
   await emit(page, text, isFinal);
   if (isFinal) await expect(page.locator("#hh-card-draft")).toHaveValue(new RegExp(text));
+}
+
+/** The answer route returns before the Guide job publishes the next session. */
+function watchAnswer(page: Page): Promise<void> {
+  const pending = page.waitForResponse(
+    (item) => new URL(item.url()).pathname === "/api/answer" && item.request().method() === "POST",
+  );
+  return pending.then(async (response) => {
+    const payload = (await response.json()) as { jobId?: unknown };
+    const jobId = typeof payload.jobId === "string" ? payload.jobId : "";
+    if (jobId === "") return;
+    await expect
+      .poll(async () => {
+        const job = await page.request.get(new URL(`/api/guide-job/${jobId}`, deskUrl).href);
+        if (!job.ok()) return "gone";
+        const body = (await job.json()) as { status?: string };
+        return body.status ?? "";
+      })
+      .not.toBe("running");
+  });
 }
 
 async function stop(page: Page): Promise<void> {

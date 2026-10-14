@@ -174,6 +174,53 @@ test("a failed answer leaves pending clear, keeps the draft, and accepts a secon
   }
 });
 
+test("a deferred Other click keeps words typed while Suggest was still pending", async () => {
+  const edited = "Yourself, or one named client. today";
+  let release: (response: Response) => void = () => {};
+  const suggested = {
+    ...session,
+    choices: {
+      forId: "DP-0.1",
+      origin: "model",
+      items: [
+        { id: "A", label: "For myself.", why: "Own business.", source: "DP-0.1" },
+        { id: "B", label: "For a client.", why: "Client work.", source: "DP-0.1" },
+      ],
+    },
+  };
+  const h = harness(async (input) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "/api/session") return Response.json(session);
+    if (url === "/api/suggest") return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    return Response.json({ error: "not this test" }, { status: 500 });
+  }, class {
+    addEventListener(): void {}
+    close(): void {}
+  });
+  const choices = element({ "data-choices": "DP-0.1" });
+  h.region.querySelector = (selector) => {
+    if (selector === "#hh-card-draft") return h.field;
+    if (selector === "[data-choices]") return choices;
+    return null;
+  };
+  const stop = mountDesk(h.env);
+  try {
+    await settle();
+    h.fire("click", { target: element({ "data-action": "suggest" }) });
+    await settle();
+    h.fire("click", { target: element({ "data-choice-id": "other" }) });
+    h.field.value = edited;
+    h.fire("input", { target: h.field });
+    release(Response.json({ session: suggested }));
+    await settle();
+    assert.equal(h.field.value, edited);
+  } finally {
+    stop();
+  }
+});
+
 test("the event stream says the desk is offline after a few failed reconnects", async () => {
   const h = harness(async () => Response.json(session), RecordingSource as unknown as DeskEnv["EventSource"]);
   const stop = mountDesk(h.env);
