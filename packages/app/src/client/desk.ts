@@ -2773,9 +2773,10 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       if (advance) {
         // A fill may already be in the box the stream painted. Leave that focus.
-        if (draftFocused()) focusField();
+        // A pushback parks the words until the person focuses the box. Do not take it.
+        if (draftFocused() && offerOnFocus === null) focusField();
         else if (focusChoices) focusChoiceGroup();
-        else focusNewQuestion();
+        else if (!draftFocused()) focusNewQuestion();
       }
     }
   }
@@ -3958,7 +3959,8 @@ export function mountDesk(env: DeskEnv): () => void {
 
   function paint(): void {
     // A fill focuses the box, then inserts the words. Keep that focus across this paint.
-    const returnToDraft = draftFocused();
+    // A pushback parks those words until the person focuses the box. Do not take that focus.
+    const returnToDraft = draftFocused() && offerOnFocus === null;
     if (dropLiveDraft) {
       dropLiveDraft = false;
       // Only the card still on screen. A new question renders its own empty box.
