@@ -112,7 +112,8 @@ function rootOf(url: string): string {
 async function expectHeld(page: Page, projectDir: string): Promise<void> {
   await expect(page.locator("#queue")).toHaveAttribute("data-queue-state", "paused");
   await expect(page.locator('[data-id="003"]')).toHaveAttribute("data-status", "running");
-  await expect(page.getByText("The queue is paused.")).toBeVisible();
+  await expect(page.getByText("Paused after 002", { exact: true })).toBeVisible();
+  await expect(page.locator("#drive-resume")).toBeEnabled();
   await page.waitForTimeout(400);
   const ids = await spawnIds(projectDir);
   expect(ids.filter((id) => id === "003")).toEqual(["003"]);

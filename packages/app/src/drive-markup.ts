@@ -152,12 +152,20 @@ export function driveQueueHeld(
   return pause != null || queuePaused(items, run);
 }
 
+function holdBanner(pause: DrivePause | null | undefined, held: boolean): string {
+  if (pause != null) {
+    const label = pause.after === "" ? "Paused before the first prompt." : `Paused after ${escapeHtml(pause.after)}`;
+    return `<p data-queue-state="paused">${label}</p><button class="hh-btn hh-btn--secondary" type="button" id="drive-resume" data-action="resume-queue">Resume</button>`;
+  }
+  return held ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
+}
+
 export function queueBodyHtml(
   items: readonly DriveItem[],
   run?: DriveRun | null,
   pause?: DrivePause | null,
 ): string {
-  const banner = driveQueueHeld(items, run, pause) ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
+  const banner = holdBanner(pause, driveQueueHeld(items, run, pause));
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>

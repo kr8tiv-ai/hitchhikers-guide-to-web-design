@@ -136,8 +136,10 @@ async function assertHeld(
   assert.equal(page.status, 200);
   assert.match(page.body, /id="queue"[^>]*data-queue-state="paused"/);
   const banner = /<p data-queue-state="paused">([^<]*)<\/p>/.exec(page.body)?.[1] ?? "";
-  assert.equal(banner, "The queue is paused.");
+  assert.equal(banner, `Paused after ${after}`);
+  assert.match(page.body, /id="drive-resume"[^>]*data-action="resume-queue"/);
   assert.equal(banner.includes("\u2014"), false);
+  assert.equal(banner.includes("!"), false);
   await delay(150);
   assert.deepEqual(seen, []);
   const again = await loadQueue(dir);

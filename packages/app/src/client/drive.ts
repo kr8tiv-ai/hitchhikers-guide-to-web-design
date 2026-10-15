@@ -1,5 +1,5 @@
 /**
- * Drive page. Polls the local queue, posts Pause with the CSRF token,
+ * Drive page. Polls the local queue, posts Pause and Resume with the CSRF token,
  * and repaints rows, progress, and cost. Importing this module from Node
  * does nothing: there is no document.
  */
@@ -165,6 +165,13 @@ export function mountDrive(env: DriveEnv): () => void {
       event.preventDefault?.();
       return;
     }
+    const queueResume = findMarked(target, "data-action", "resume-queue");
+    if (queueResume !== null) {
+      event.preventDefault?.();
+      if (gateLocked(queueResume)) return;
+      void postResumeQueue();
+      return;
+    }
     const buildAction = findBuildAction(target);
     if (buildAction !== null) {
       event.preventDefault?.();
@@ -215,6 +222,46 @@ export function mountDrive(env: DriveEnv): () => void {
       paintDrive(env.document, items, run, parseDrivePause(payload));
     } catch {
       if (ticket === generation) setNote(env.document, "The build did not reach the desk.");
+    } finally {
+      if (ticket === generation) pausePending = false;
+    }
+  };
+
+  const postResumeQueue = async (): Promise<void> => {
+    if (token === null) {
+      setNote(env.document, "Reload the page.");
+      return;
+    }
+    if (pausePending) return;
+    pausePending = true;
+    generation += 1;
+    const ticket = generation;
+    setNote(env.document, "");
+    try {
+      const response = await env.fetch("/api/drive/resume-queue", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+          "x-hh-csrf": token,
+        },
+        body: "{}",
+      });
+      if (ticket !== generation) return;
+      const payload = await readPayload(response);
+      if (!response.ok) {
+        setNote(env.document, resumeFailure(response.status, payload));
+        return;
+      }
+      const items = parseDriveQueue(payload);
+      if (items === null) {
+        setNote(env.document, "The queue came back in an unknown shape.");
+        return;
+      }
+      const run = await readRun(env);
+      paintDrive(env.document, items, run, parseDrivePause(payload));
+    } catch {
+      if (ticket === generation) setNote(env.document, "Resume did not reach the desk.");
     } finally {
       if (ticket === generation) pausePending = false;
     }
@@ -294,7 +341,7 @@ function setNote(document: DriveDocument, message: string): void {
   else note.removeAttribute("hidden");
 }
 
-function pauseFailure(status: number, payload: unknown): string {
+function plainFailure(payload: unknown): string | null {
   const message = isRecord(payload) && typeof payload.error === "string" ? payload.error : "";
   if (
     message.length > 0 &&
@@ -306,6 +353,19 @@ function pauseFailure(status: number, payload: unknown): string {
   ) {
     return message;
   }
+  return null;
+}
+
+function resumeFailure(status: number, payload: unknown): string {
+  const message = plainFailure(payload);
+  if (message !== null) return message;
+  if (status === 403) return "The desk refused this request. Reload the page.";
+  return "Resume did not save.";
+}
+
+function pauseFailure(status: number, payload: unknown): string {
+  const message = plainFailure(payload);
+  if (message !== null) return message;
   if (status === 409) return "No queue file is on disk.";
   if (status === 403) return "The desk refused this request. Reload the page.";
   return "Pause did not save.";

@@ -200,6 +200,42 @@ test("a throwing theme probe still posts pause", async () => {
   assert.match(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /data-status="paused"/);
 });
 
+test("Resume posts the queue clear and drops the pause line", async () => {
+  const held = {
+    items: [
+      { id: "007", kind: "build", status: "passed" },
+      { id: "008", kind: "build", status: "paused" },
+      { id: "009", kind: "build", status: "queued" },
+    ],
+    pause: { at: "2026-10-15T12:00:00.000Z", after: "007" },
+  };
+  const view = desk(held);
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  view.env.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    calls.push({ url, init });
+    if (url === "/api/drive/resume-queue") {
+      return Response.json({
+        items: held.items.map((item) => (item.id === "008" ? { ...item, status: "queued" } : item)),
+      });
+    }
+    return Response.json(held);
+  };
+  mountDrive(view.env);
+  await flush();
+  const body = view.regions.get("#drive-queue-body")?.innerHTML ?? "";
+  assert.match(body, /Paused after 007/);
+  assert.match(body, /data-action="resume-queue"/);
+  view.click(element({ id: "drive-resume", "data-action": "resume-queue" }));
+  await flush();
+  const posted = calls.find((call) => call.url === "/api/drive/resume-queue");
+  assert.ok(posted);
+  assert.equal(posted?.init?.method, "POST");
+  assert.equal(new Headers(posted?.init?.headers).get("x-hh-csrf"), TOKEN);
+  assert.doesNotMatch(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /Paused after 007/);
+  assert.doesNotMatch(view.regions.get("#drive-queue-body")?.innerHTML ?? "", /resume-queue/);
+});
+
 test("a disabled Resume control does not start a second run", async () => {
   const view = desk({ items: [] });
   mountDrive(view.env);
