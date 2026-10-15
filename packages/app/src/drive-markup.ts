@@ -47,10 +47,17 @@ export interface DriveRun {
   escalation?: string;
 }
 
+/** Queue-wide pause from queue.json. Absent means the queue is not held. */
+export interface DrivePause {
+  at: string;
+  after: string;
+}
+
 export interface DrivePageOptions {
   token?: string;
   scriptUrl?: string;
   run?: DriveRun | null;
+  pause?: DrivePause | null;
 }
 
 const STATUS_LABEL: Record<DriveStatus, string> = {
@@ -137,8 +144,20 @@ export function progressHtml(items: readonly DriveItem[]): string {
   return `<dl class="hh-drive__ledger" data-region="progress">${body}</dl>`;
 }
 
-export function queueBodyHtml(items: readonly DriveItem[], run?: DriveRun | null): string {
-  const banner = queuePaused(items, run) ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
+export function driveQueueHeld(
+  items: readonly DriveItem[],
+  run?: DriveRun | null,
+  pause?: DrivePause | null,
+): boolean {
+  return pause != null || queuePaused(items, run);
+}
+
+export function queueBodyHtml(
+  items: readonly DriveItem[],
+  run?: DriveRun | null,
+  pause?: DrivePause | null,
+): string {
+  const banner = driveQueueHeld(items, run, pause) ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>
@@ -263,7 +282,7 @@ export function renderDriveDocument(
 
       <main id="drive-main" data-hh-ready>
       <div class="hh-dash">
-        <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue"${queuePaused(items, options?.run) ? ' data-queue-state="paused"' : ""} aria-labelledby="queue-title">
+        <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue"${driveQueueHeld(items, options?.run, options?.pause) ? ' data-queue-state="paused"' : ""} aria-labelledby="queue-title">
           <div class="hh-drive__toolbar">
             <h2 class="hh-title" id="queue-title">Prompt queue</h2>
           </div>
@@ -276,7 +295,7 @@ export function renderDriveDocument(
             <p id="drive-pause-note" class="hh-approval__note" role="status" hidden></p>
           </div>
           <div id="drive-queue-body">
-            ${queueBodyHtml(items, options?.run)}
+            ${queueBodyHtml(items, options?.run, options?.pause)}
           </div>
         </section>
 

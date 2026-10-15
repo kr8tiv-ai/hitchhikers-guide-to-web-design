@@ -594,6 +594,33 @@ export async function resumeSiteBuild(projectDir: string, promptId: string): Pro
   if (outcome === "rejected" || outcome === "idle") throw new Error("That prompt is not waiting.");
 }
 
+/**
+ * Desk start. A paused queue, a legacy queue with a paused row, or a running
+ * row whose process is gone becomes a queue-wide pause after the last
+ * finished prompt. Item statuses stay as they are. Nothing is started.
+ */
+export async function holdInterruptedQueue(projectDir: string, now: Date = new Date()): Promise<boolean> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue === null) return false;
+  if (queue.pause !== undefined) return true;
+  const legacyPaused = queue.items.some((item) => item.status === "paused");
+  if (!legacyPaused && !runningIsInterrupted(projectDir, queue)) return false;
+  const at = now.toISOString();
+  await saveBuildQueue(projectDir, {
+    items: queue.items.map((item) => ({ id: item.id, kind: item.kind, status: item.status })),
+    pause: { at, after: lastFinishedPrompt(queue.items) },
+  });
+  return true;
+}
+
+function runningIsInterrupted(projectDir: string, queue: QueueFile): boolean {
+  const running = queue.items.filter((item) => item.status === "running");
+  if (running.length === 0) return false;
+  const run = readRunFile(projectDir);
+  const liveId = run !== null && run.status === "running" && pidAlive(run.pid) ? run.promptId : null;
+  return running.some((item) => item.id !== liveId);
+}
+
 /** Clear the queue-wide pause and start the next prompt. Resume is the only clear. */
 export async function resumePausedQueue(projectDir: string): Promise<void> {
   const queue = await loadBuildQueue(projectDir);

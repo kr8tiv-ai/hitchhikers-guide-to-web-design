@@ -7,6 +7,7 @@
 import {
   DRIVE_MAX_ROWS,
   costText,
+  driveQueueHeld,
   escalationsHtml,
   isDriveKind,
   isDriveStatus,
@@ -15,7 +16,7 @@ import {
   verdictsHtml,
   watchdogHtml,
 } from "../drive-markup.ts";
-import type { DriveItem, DriveRun } from "../drive-markup.ts";
+import type { DriveItem, DrivePause, DriveRun } from "../drive-markup.ts";
 
 const POLL_MS = 3_000;
 const ID_PATTERN = /^[a-z0-9-]+$/;
@@ -62,9 +63,24 @@ export function parseDriveQueue(value: unknown): DriveItem[] | null {
   return items;
 }
 
-export function paintDrive(document: DriveDocument, items: readonly DriveItem[], run: DriveRun | null = null): void {
+export function parseDrivePause(value: unknown): DrivePause | null {
+  if (!isRecord(value) || !isRecord(value.pause)) return null;
+  const at = value.pause.at;
+  const after = value.pause.after;
+  if (typeof at !== "string" || typeof after !== "string") return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(at)) return null;
+  if (after !== "" && !/^[a-z0-9-]+$/.test(after)) return null;
+  return { at, after };
+}
+
+export function paintDrive(
+  document: DriveDocument,
+  items: readonly DriveItem[],
+  run: DriveRun | null = null,
+  pause: DrivePause | null = null,
+): void {
   const queue = document.querySelector("#drive-queue-body");
-  if (queue !== null) queue.innerHTML = queueBodyHtml(items, run);
+  if (queue !== null) queue.innerHTML = queueBodyHtml(items, run, pause);
   const progress = document.querySelector("#drive-progress");
   if (progress !== null) progress.innerHTML = progressHtml(items);
   const cost = document.querySelector("[data-cost-line]");
@@ -73,7 +89,7 @@ export function paintDrive(document: DriveDocument, items: readonly DriveItem[],
   if (escalations !== null) escalations.innerHTML = escalationsHtml(items, run);
   const section = document.querySelector("#queue");
   if (section !== null) {
-    const paused = run?.paused === true || items.some((item) => item.status === "paused");
+    const paused = driveQueueHeld(items, run, pause);
     if (paused) section.setAttribute("data-queue-state", "paused");
     else section.removeAttribute("data-queue-state");
   }
@@ -125,15 +141,16 @@ export function mountDrive(env: DriveEnv): () => void {
       setNote(env.document, "The queue file could not be read.");
       return;
     }
-    const items = await readItems(response);
+    const payload = await readPayload(response);
     if (ticket !== generation || pausePending) return;
+    const items = parseDriveQueue(payload);
     if (items === null) {
       setNote(env.document, "The queue came back in an unknown shape.");
       return;
     }
     const run = await readRun(env);
     if (ticket !== generation || pausePending) return;
-    paintDrive(env.document, items, run);
+    paintDrive(env.document, items, run, parseDrivePause(payload));
   };
 
   const onClick = (event: DriveEvent): void => {
@@ -195,7 +212,7 @@ export function mountDrive(env: DriveEnv): () => void {
         return;
       }
       const run = await readRun(env);
-      paintDrive(env.document, items, run);
+      paintDrive(env.document, items, run, parseDrivePause(payload));
     } catch {
       if (ticket === generation) setNote(env.document, "The build did not reach the desk.");
     } finally {
@@ -237,7 +254,7 @@ export function mountDrive(env: DriveEnv): () => void {
         return;
       }
       const run = await readRun(env);
-      paintDrive(env.document, items, run);
+      paintDrive(env.document, items, run, parseDrivePause(payload));
     } catch {
       if (ticket === generation) setNote(env.document, "Pause did not reach the desk.");
     } finally {

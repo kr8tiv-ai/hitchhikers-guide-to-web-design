@@ -156,7 +156,16 @@ import {
   writeDraftPost,
   type SavedFile,
 } from "./draft-file.ts";
-import { pauseDrive, readDashboard, readDriveJson, readDriveProgress, resumeDrive, retryDrive, type DriveResult } from "./drive.ts";
+import {
+  pauseDrive,
+  readDashboard,
+  readDriveJson,
+  readDriveProgress,
+  resumeDrive,
+  resumeQueueDrive,
+  retryDrive,
+  type DriveResult,
+} from "./drive.ts";
 import { createSseHub, encodeSse, type SseHub, type SseSink } from "./sse.ts";
 import {
   applySettingsPost,
@@ -942,6 +951,10 @@ async function handlePost(
   }
   if (pathname === "/api/drive/pause") {
     sendDriveResult(req, res, await pauseDrive(projectDir));
+    return;
+  }
+  if (pathname === "/api/drive/resume-queue") {
+    sendDriveResult(req, res, await resumeQueueDrive(projectDir));
     return;
   }
   if (pathname === "/api/drive/retry" || pathname === "/api/drive/resume") {

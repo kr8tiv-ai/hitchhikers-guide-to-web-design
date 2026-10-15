@@ -1,6 +1,6 @@
 /**
  * BUG-034b: kill the desk after prompt 003, restart, and continue the queue.
- * The stub never launches grok.
+ * BUG-042: restart holds the interrupted run until Resume. The stub never launches grok.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -25,6 +25,8 @@ test("restart after prompt 003 ends passes it and starts 004", async ({ page }) 
     child = startDesk(projectDir, "end");
     const next = await readUrl(child);
     await page.goto(`${rootOf(next)}/hh-dashboard`);
+    await expectHeld(page, projectDir);
+    await resumeQueue(page);
     await expect(page.locator('[data-id="003"]')).toHaveAttribute("data-status", "passed", { timeout: 30_000 });
     await expect(page.locator('[data-id="004"]')).toHaveAttribute("data-status", "passed", { timeout: 30_000 });
     await expect(page.locator("[data-recovery]")).toContainText("003 recovered: output verified, passed");
@@ -52,8 +54,8 @@ test("restart before prompt 003 ends reruns it and 004 passes", async ({ page })
     child = startDesk(projectDir, "cut");
     const next = await readUrl(child);
     await page.goto(`${rootOf(next)}/hh-dashboard`);
-    const resume = page.locator('[data-action="resume"][data-prompt="003"]');
-    if ((await resume.count()) > 0 && (await resume.isEnabled())) await resume.click();
+    await expectHeld(page, projectDir);
+    await resumeQueue(page);
     await expect(page.locator('[data-id="003"]')).toHaveAttribute("data-status", "passed", { timeout: 30_000 });
     await expect(page.locator('[data-id="004"]')).toHaveAttribute("data-status", "passed", { timeout: 30_000 });
     await expect(page.locator("[data-recovery]")).toContainText("003 rerun after restart");
@@ -105,6 +107,38 @@ test("Resume continues an interrupted prompt once and then runs 004", async ({ p
 
 function rootOf(url: string): string {
   return url.replace(/\/$/, "");
+}
+
+async function expectHeld(page: Page, projectDir: string): Promise<void> {
+  await expect(page.locator("#queue")).toHaveAttribute("data-queue-state", "paused");
+  await expect(page.locator('[data-id="003"]')).toHaveAttribute("data-status", "running");
+  await expect(page.getByText("The queue is paused.")).toBeVisible();
+  await page.waitForTimeout(400);
+  const ids = await spawnIds(projectDir);
+  expect(ids.filter((id) => id === "003")).toEqual(["003"]);
+  expect(ids).not.toContain("004");
+  const queue = await readJson(path.join(projectDir, ".hitchhiker", "queue.json"));
+  expect(pauseAfter(queue)).toBe("002");
+  expect(itemStatus(queue, "003")).toBe("running");
+}
+
+async function resumeQueue(page: Page): Promise<void> {
+  const status = await page.evaluate(async () => {
+    const token = document.querySelector('meta[name="hh-csrf"]')?.getAttribute("content") ?? "";
+    const response = await fetch("/api/drive/resume-queue", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hh-csrf": token },
+      body: "{}",
+    });
+    return response.status;
+  });
+  expect(status).toBe(200);
+}
+
+function pauseAfter(queue: unknown): string {
+  if (typeof queue !== "object" || queue === null || !("pause" in queue)) return "";
+  const pause = queue.pause;
+  return typeof pause === "object" && pause !== null && "after" in pause && typeof pause.after === "string" ? pause.after : "";
 }
 
 async function approve(page: Page, url: string): Promise<void> {

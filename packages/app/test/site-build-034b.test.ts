@@ -1,5 +1,7 @@
 /**
- * BUG-034b: desk start recovers a dead run, and two Resume posts share one spawn.
+ * BUG-034b: a dead run is recovered after an explicit Resume.
+ * BUG-042: desk start holds that run and does not advance on its own.
+ * Two Resume posts for an interrupted row still share one spawn.
  */
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -171,7 +173,7 @@ test("Resume stays disabled while a run is live and the recovery line is shown",
   assert.equal(live.includes("!"), false);
 });
 
-test("desk start verifies a finished prompt and advances to the next one", { timeout: 20_000 }, async () => {
+test("desk start holds a finished prompt until Resume, then verifies and advances", { timeout: 20_000 }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-app-034b-start-"));
   seed(dir);
   const seen: string[] = [];
@@ -190,6 +192,30 @@ test("desk start verifies a finished prompt and advances to the next one", { tim
     writeEnd(dir);
     writeLogo(dir);
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
+    let held = false;
+    for (let attempt = 0; attempt < 40 && !held; attempt += 1) {
+      const queue = await loadQueue(dir);
+      const status = queue?.items.find((item) => item.id === "003")?.status;
+      if (status === "passed" || status === "queued" || seen.length > 0) {
+        assert.fail(`desk started the queue before Resume: ${status ?? "missing"}`);
+      }
+      held = queue?.pause !== undefined && status === "running" && queue.pause.after === "002";
+      if (!held) await delay(25);
+    }
+    assert.equal(held, true);
+    assert.deepEqual(seen, []);
+    const parked = await raw(handle.port, "GET", "/hh-dashboard");
+    assert.equal(parked.status, 200);
+    assert.match(parked.body, /id="queue"[^>]*data-queue-state="paused"/);
+    assert.match(parked.body, /data-id="003"[^>]*data-status="running"/);
+    const resumed = await raw(
+      handle.port,
+      "POST",
+      "/api/drive/resume-queue",
+      { "content-type": "application/json", "x-hh-csrf": tokenFrom(parked.body) },
+      "{}",
+    );
+    assert.equal(resumed.status, 200, resumed.body);
     let passed = false;
     for (let attempt = 0; attempt < 80 && !passed; attempt += 1) {
       try {

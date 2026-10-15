@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   clearProjectBuildRunner,
   getBuildRunner,
+  holdInterruptedQueue,
   installLiveBuildRunner,
   recoverSiteBuild,
   setProjectBuildRunner,
@@ -86,6 +87,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     throw new Error(`Project directory does not exist: ${projectDir}`);
   }
   bindBuildRunner(projectDir, opts);
+  await holdInterruptedQueue(projectDir);
   void recoverSiteBuild(projectDir);
 
   const app = await createDeskApp({

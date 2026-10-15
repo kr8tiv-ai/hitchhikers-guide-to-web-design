@@ -201,6 +201,7 @@ export {
   ensureSiteBuild,
   getBuildRunner,
   hasProjectBuildRunner,
+  holdInterruptedQueue,
   installLiveBuildRunner,
   continueSiteBuild,
   decideBuildRecovery,

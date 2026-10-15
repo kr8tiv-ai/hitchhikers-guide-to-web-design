@@ -1,7 +1,8 @@
 /**
  * Drive dashboard reads `.hitchhiker/queue.json` and pauses rows on disk.
  * Pause does not launch a model session. Retry and resume continue the
- * site build through the engine runner. The queue JSON stays `{ items }`.
+ * site build through the engine runner. A queue-wide pause is the `pause`
+ * object on queue.json. Item rows stay beside it.
  */
 
 import { access } from "node:fs/promises";
@@ -13,6 +14,7 @@ import {
   pauseQueue,
   readBuildRun,
   reconcileSiteBuild,
+  resumePausedQueue,
   resumeSiteBuild,
   retrySiteBuild,
   saveQueue,
@@ -35,7 +37,12 @@ export async function readDashboard(projectDir: string, token: string): Promise<
     return {
       kind: "html",
       status: 200,
-      html: renderDashboard(queue ?? { items: [] }, { token, scriptUrl: DRIVE_SCRIPT, run }),
+      html: renderDashboard(queue ?? { items: [] }, {
+        token,
+        scriptUrl: DRIVE_SCRIPT,
+        run,
+        pause: queue?.pause ?? null,
+      }),
     };
   } catch (error: unknown) {
     const message = readError(error);
@@ -61,6 +68,18 @@ export async function retryDrive(projectDir: string, promptId: string): Promise<
 
 export async function resumeDrive(projectDir: string, promptId: string): Promise<DriveResult> {
   return continueDrive(projectDir, promptId, "resume");
+}
+
+/** Explicit Resume. Clears the queue-wide pause and starts the next prompt. */
+export async function resumeQueueDrive(projectDir: string): Promise<DriveResult> {
+  try {
+    await resumePausedQueue(projectDir);
+    const queue = await loadQueueRetry(projectDir);
+    return { kind: "json", status: 200, body: queue ?? { items: [] } };
+  } catch (error: unknown) {
+    const message = readError(error) ?? (error instanceof Error ? safeDriveError(error.message) : null);
+    return { kind: "json", status: 400, body: { error: message ?? "The queue is not paused." } };
+  }
 }
 
 async function continueDrive(projectDir: string, promptId: string, action: "retry" | "resume"): Promise<DriveResult> {
