@@ -3,7 +3,7 @@
  * row. It does not rewrite the other rows and it does not start a prompt.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -79,6 +79,16 @@ async function park(dir: string, queue: QueueFile): Promise<string[]> {
   await saveQueue(dir, queue);
   return seen;
 }
+
+test("a project with no queue file is left untouched", async () => {
+  const dir = tempDir();
+  try {
+    assert.equal(await holdInterruptedQueue(dir, new Date(WHEN)), false);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("a legacy paused queue is held after the last finished prompt", async () => {
   const dir = tempDir();

@@ -600,6 +600,12 @@ export async function resumeSiteBuild(projectDir: string, promptId: string): Pro
  * finished prompt. Item statuses stay as they are. Nothing is started.
  */
 export async function holdInterruptedQueue(projectDir: string, now: Date = new Date()): Promise<boolean> {
+  const queueFile = path.join(projectDir, ".hitchhiker", "queue.json");
+  try {
+    if (!statSync(queueFile).isFile()) return false;
+  } catch {
+    return false;
+  }
   const queue = await loadBuildQueue(projectDir);
   if (queue === null) return false;
   if (queue.pause !== undefined) return true;
