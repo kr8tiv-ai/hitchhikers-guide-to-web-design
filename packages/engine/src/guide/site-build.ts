@@ -16,7 +16,14 @@ import {
 import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
-import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../queue-file.ts";
+import {
+  lastFinishedPrompt,
+  loadQueue,
+  resumeQueue,
+  saveQueue,
+  type QueueFile,
+  type QueueStatus,
+} from "../queue-file.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
 import {
   PlanCoverageError,
@@ -499,7 +506,7 @@ async function mergeBuildQueue(projectDir: string, ids: readonly string[]): Prom
     kept.push({ id, kind: "build", status: "queued" });
     seen.add(id);
   }
-  await saveBuildQueue(projectDir, { items: kept });
+  await saveBuildQueue(projectDir, queue.pause === undefined ? { items: kept } : { items: kept, pause: queue.pause });
 }
 
 export async function prepareSiteBuild(projectDir: string, briefMarkdown: string): Promise<string[]> {
@@ -587,6 +594,16 @@ export async function resumeSiteBuild(projectDir: string, promptId: string): Pro
   if (outcome === "rejected" || outcome === "idle") throw new Error("That prompt is not waiting.");
 }
 
+/** Clear the queue-wide pause and start the next prompt. Resume is the only clear. */
+export async function resumePausedQueue(projectDir: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue === null) throw new Error("No queue file is on disk.");
+  if (queue.pause === undefined) throw new Error("The queue is not paused.");
+  await saveBuildQueue(projectDir, resumeQueue(queue));
+  const outcome = await continueSiteBuild(projectDir);
+  if (outcome === "rejected") throw new Error("That prompt is not waiting.");
+}
+
 export function readBuildRun(projectDir: string): BuildRunView | null {
   const run = readRunFile(projectDir);
   if (run === null) return null;
@@ -619,6 +636,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
   for (;;) {
     if (readRunFile(projectDir)?.paused === true) return;
     const queue = await loadBuildQueue(projectDir);
+    if (queue?.pause !== undefined) return;
     const next = queue?.items.find((item) => item.status === "queued" && PROMPT_ID.test(item.id));
     if (next === undefined) return;
     const promptPath = path.join(projectDir, ".hitchhiker", "prompts", `${next.id}.md`);
@@ -759,6 +777,8 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
 async function recoverBody(projectDir: string): Promise<void> {
   try {
     if (runnerFor(projectDir) === null) return;
+    const held = await loadBuildQueue(projectDir);
+    if (held?.pause !== undefined) return;
     await enqueueControl(projectDir, async () => {
       if (jobs.has(path.resolve(projectDir))) return;
       const adopted = await adoptDeadRun(projectDir);
@@ -773,6 +793,8 @@ async function continueBody(projectDir: string, promptId?: string): Promise<Buil
   const key = path.resolve(projectDir);
   return enqueueControl(projectDir, async () => {
     if (jobs.has(key)) return "live";
+    const held = await loadBuildQueue(projectDir);
+    if (held?.pause !== undefined) return promptId === undefined ? "idle" : "rejected";
     const live = readRunFile(projectDir);
     if (live?.status === "running" && pidAlive(live.pid)) return "live";
     if (runnerFor(projectDir) === null) return promptId === undefined ? "idle" : "rejected";
@@ -1226,6 +1248,7 @@ async function finishItem(
   startedAt = new Date().toISOString(),
 ): Promise<void> {
   await setStatus(projectDir, promptId, status);
+  await rememberPauseAfter(projectDir);
   const previous = readRunFile(projectDir);
   const started = previous?.promptId === promptId ? previous.startedAt : startedAt;
   writeRun(projectDir, {
@@ -1242,6 +1265,14 @@ async function finishItem(
     recovery: "",
     recoveryRerun: false,
   });
+}
+
+async function rememberPauseAfter(projectDir: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue?.pause === undefined) return;
+  const after = lastFinishedPrompt(queue.items);
+  if (after === queue.pause.after) return;
+  await saveBuildQueue(projectDir, { items: queue.items, pause: { at: queue.pause.at, after } });
 }
 
 async function requeue(projectDir: string, promptId: string, from: "failed" | "interrupted"): Promise<void> {

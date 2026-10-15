@@ -26,8 +26,17 @@ export type QueueStatus =
   | "escalated"
   | "paused";
 
+/** Queue-wide hold. Present only while Pause is in force. Resume removes it. */
+export interface QueuePause {
+  /** ISO time the pause was recorded. */
+  at: string;
+  /** Last finished prompt. Empty when nothing has finished. */
+  after: string;
+}
+
 export interface QueueFile {
   items: Array<{ id: string; kind: "build" | "review"; status: QueueStatus }>;
+  pause?: QueuePause;
 }
 
 export class QueueFileError extends Error {
@@ -38,6 +47,7 @@ export class QueueFileError extends Error {
 }
 
 const ID_PATTERN = /^[a-z0-9-]+$/;
+const PAUSE_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 /** Key shapes that still fit the id charset, plus secret words. */
 const SECRET_PATTERN =
@@ -109,13 +119,35 @@ function assertItem(value: unknown, seen: Set<string>): QueueItem {
   return { id, kind, status: record.status };
 }
 
+function assertPause(value: unknown): QueuePause {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new QueueFileError("Queue pause must be an object.");
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== "at" && key !== "after") {
+      throw new QueueFileError("Queue pause has an unknown field.");
+    }
+  }
+  if (typeof record.at !== "string" || !PAUSE_AT.test(record.at)) {
+    throw new QueueFileError("Queue pause needs a when.");
+  }
+  if (typeof record.after !== "string" || (record.after !== "" && !ID_PATTERN.test(record.after))) {
+    throw new QueueFileError("Queue pause needs the prompt it follows.");
+  }
+  if (record.after !== "" && looksLikeSecret(record.after)) {
+    throw new QueueFileError("Queue pause looks like a secret.");
+  }
+  return { at: record.at, after: record.after };
+}
+
 function assertQueue(value: unknown): QueueFile {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new QueueFileError("Queue file must be an object.");
   }
   const record = value as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== "items") {
+    if (key !== "items" && key !== "pause") {
       throw new QueueFileError("Queue file has an unknown field.");
     }
   }
@@ -127,7 +159,17 @@ function assertQueue(value: unknown): QueueFile {
   for (const item of record.items) {
     items.push(assertItem(item, seen));
   }
-  return { items };
+  if (record.pause === undefined) return { items };
+  return { items, pause: assertPause(record.pause) };
+}
+
+/** Last prompt that passed or failed, in queue order. */
+export function lastFinishedPrompt(items: readonly QueueItem[]): string {
+  let after = "";
+  for (const item of items) {
+    if (item.status === "passed" || item.status === "failed") after = item.id;
+  }
+  return after;
 }
 
 function renderQueue(queue: QueueFile): string {
@@ -179,15 +221,36 @@ export async function loadQueue(projectDir: string): Promise<QueueFile | null> {
 }
 
 /**
- * Flip every running item to paused. Passed, fixing, queued, paused, and
- * escalated rows stay, including their order. An escalated row is not
- * rewritten to queued, and nothing is removed.
+ * Flip every running item to paused and set the queue-wide pause.
+ * Passed, fixing, queued, paused, and escalated rows stay, including their
+ * order. An escalated row is not rewritten to queued, and nothing is removed.
+ * `pause.after` is the last finished prompt. The running row may later be
+ * recorded with its real result. Only `resumeQueue` clears the flag.
  */
-export function pauseQueue(queue: QueueFile): QueueFile {
+export function pauseQueue(queue: QueueFile, now: Date = new Date()): QueueFile {
   const clean = assertQueue(queue);
+  const at = now.toISOString();
+  if (!PAUSE_AT.test(at)) {
+    throw new QueueFileError("Queue pause needs a when.");
+  }
   return {
     items: clean.items.map((item) =>
       item.status === "running" ? { ...item, status: "paused" } : { ...item },
     ),
+    pause: { at, after: lastFinishedPrompt(clean.items) },
   };
+}
+
+/**
+ * Clear the queue-wide pause. The first unfinished row that is paused
+ * becomes queued so Resume can start it. Later paused rows stay.
+ */
+export function resumeQueue(queue: QueueFile): QueueFile {
+  const clean = assertQueue(queue);
+  const items = clean.items.map((item) => ({ ...item }));
+  const next = items.find(
+    (item) => item.status !== "passed" && item.status !== "escalated" && item.status !== "fixing",
+  );
+  if (next !== undefined && next.status === "paused") next.status = "queued";
+  return { items };
 }

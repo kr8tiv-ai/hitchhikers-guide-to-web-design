@@ -101,7 +101,8 @@ test("pause then save keeps finished rows on disk", async () => {
   };
   try {
     await saveQueue(dir, queue);
-    await saveQueue(dir, pauseQueue(queue));
+    const when = new Date("2026-10-15T12:00:00.000Z");
+    await saveQueue(dir, pauseQueue(queue, when));
     const loaded = await loadQueue(dir);
     assert.deepEqual(loaded, {
       items: [
@@ -109,6 +110,7 @@ test("pause then save keeps finished rows on disk", async () => {
         item("002", "paused"),
         item("review-after-001", "escalated", "review"),
       ],
+      pause: { at: "2026-10-15T12:00:00.000Z", after: "001" },
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -9,7 +9,9 @@ export {
   QueueFileError,
   loadQueue,
   pauseQueue,
+  resumeQueue,
   saveQueue,
   type QueueFile,
+  type QueuePause,
   type QueueStatus,
 } from "@hitchhiker/engine";

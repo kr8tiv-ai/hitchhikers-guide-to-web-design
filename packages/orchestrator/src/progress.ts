@@ -7,8 +7,8 @@
  * scratch file is removed before `advance` returns. There is no second status
  * file.
  *
- * A queue with any item whose status is `paused` is paused. `advance` throws
- * and writes nothing. Resume the drive before advancing.
+ * A queue with a queue-wide pause, or any item whose status is `paused`, is
+ * paused. `advance` throws and writes nothing. Resume the drive before advancing.
  */
 
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -83,7 +83,7 @@ function applyAdvance(
   input: AdvanceInput,
   updatedAt: string,
 ): { items: QueueFile["items"]; state: GuideState; nextId: string | null } {
-  if (queue.items.some((item) => item.status === "paused")) {
+  if (queue.pause !== undefined || queue.items.some((item) => item.status === "paused")) {
     throw new ProgressError("Queue is paused. Resume the drive before advancing.");
   }
   const index = queue.items.findIndex((item) => item.id === input.finishedId);
@@ -196,7 +196,12 @@ function parseQueue(raw: string): QueueFile {
     throw new ProgressError("Queue file must be an object.");
   }
   const keys = Object.keys(value);
-  if (keys.length !== 1 || keys[0] !== "items" || !Array.isArray(value.items)) {
+  for (const key of keys) {
+    if (key !== "items" && key !== "pause") {
+      throw new ProgressError("Queue file needs an items array.");
+    }
+  }
+  if (!Array.isArray(value.items)) {
     throw new ProgressError("Queue file needs an items array.");
   }
   const seen = new Set<string>();
@@ -204,7 +209,26 @@ function parseQueue(raw: string): QueueFile {
   for (const item of value.items) {
     items.push(parseItem(item, seen));
   }
-  return { items };
+  if (value.pause === undefined) return { items };
+  return { items, pause: parsePause(value.pause) };
+}
+
+function parsePause(value: unknown): NonNullable<QueueFile["pause"]> {
+  if (!isRecord(value)) {
+    throw new ProgressError("Queue pause must be an object.");
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "at" && key !== "after") {
+      throw new ProgressError("Queue pause has an unknown field.");
+    }
+  }
+  if (typeof value.at !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.at)) {
+    throw new ProgressError("Queue pause needs a when.");
+  }
+  if (typeof value.after !== "string" || (value.after !== "" && !ID_PATTERN.test(value.after))) {
+    throw new ProgressError("Queue pause needs the prompt it follows.");
+  }
+  return { at: value.at, after: value.after };
 }
 
 function parseItem(value: unknown, seen: Set<string>): QueueFile["items"][number] {
