@@ -1281,7 +1281,6 @@ async function finishItem(
   startedAt = new Date().toISOString(),
 ): Promise<void> {
   await setStatus(projectDir, promptId, status);
-  await rememberPauseAfter(projectDir);
   const previous = readRunFile(projectDir);
   const started = previous?.promptId === promptId ? previous.startedAt : startedAt;
   writeRun(projectDir, {
@@ -1298,6 +1297,8 @@ async function finishItem(
     recovery: "",
     recoveryRerun: false,
   });
+  // After the run record: the Drive page reads status then reason, so the reason must land with the status.
+  await rememberPauseAfter(projectDir);
 }
 
 async function rememberPauseAfter(projectDir: string): Promise<void> {
