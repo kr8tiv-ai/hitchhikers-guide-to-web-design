@@ -12,7 +12,7 @@ import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { prepareSiteBuild } from "../src/guide/site-build.ts";
 import type { Facts } from "../src/guide/schemas.ts";
 import { generateBriefPlan, planFromBrief } from "../src/spec/brief-plan.ts";
-import { PlanCoverageError } from "../src/spec/plan-coverage.ts";
+import { PlanCoverageError, planCoverageRows } from "../src/spec/plan-coverage.ts";
 import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +107,27 @@ test("the Run 4 brief shape keeps all 11 pages and the dropped features", () => 
   for (const feature of FEATURES) {
     assert.match(blob, new RegExp(feature.replace(/[.]/g, "\\."), "i"), feature);
     assert.match(blob, /REQ-FEAT-/);
+  }
+  const rows = planCoverageRows(
+    planned.requirements,
+    prompts.map((prompt) => ({ requirements: prompt.requirements, promptId: prompt.id })),
+  );
+  const open = rows.filter((row) => !row.covered || row.promptIds.length === 0);
+  assert.deepEqual(
+    open.map((row) => row.label),
+    [],
+  );
+  for (const title of PAGES) {
+    assert.ok(
+      rows.some((row) => row.covered && row.label.startsWith(`${title} at `) && row.promptIds.length > 0),
+      title,
+    );
+  }
+  for (const feature of FEATURES) {
+    assert.ok(
+      rows.some((row) => row.covered && row.label.toLowerCase().includes(feature.toLowerCase()) && row.promptIds.length > 0),
+      feature,
+    );
   }
 });
 
