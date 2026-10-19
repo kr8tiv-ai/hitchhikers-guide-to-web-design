@@ -394,6 +394,12 @@ function whyLine(why: string): string {
   return `  <p class="hh-qcard__why">${escapeHtml(why)}</p>\n`;
 }
 
+/** Same tab. The desk nav on /gallery is the way back to this question. */
+function galleryOpen(question: Question): string {
+  if (question.id !== "DP-5.2") return "";
+  return `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary hh-qcard__gallery" href="/gallery">Open the gallery</a></p>\n`;
+}
+
 const FONT_EXAMPLES = /pick a style from these examples/i;
 
 /** Same six pairings as engine TYPE_PAIRINGS, in tree order. System stacks, no font files. */
@@ -552,6 +558,7 @@ export function renderCard(state: CardState): string {
       ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(tip)}</p>\n`
       : "";
   const fontHtml = fontExamplesHtml(ask);
+  const galleryHtml = galleryOpen(question);
   const resources = question.resources?.map((item) => ({
     ...item,
     label: scrubCopy(item.label, question),
@@ -564,7 +571,7 @@ export function renderCard(state: CardState): string {
 
   return omitModelInstructions(`<article class="hh-qcard"${attr("data-question-id", question.id)}${pushAttr}${busy} aria-labelledby="hh-card-ask">
 ${kickerBlock(question, state.counts)}${assumptionBlock(state.assumption)}${leadBlock(lead)}  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(ask)}</h2>
-${helpBlock(help)}${whyLine(why)}${tipLine}${whereToLook(resources)}${fontHtml}${pushLine}  <div class="hh-qcard__composer">
+${helpBlock(help)}${whyLine(why)}${galleryHtml}${tipLine}${whereToLook(resources)}${fontHtml}${pushLine}  <div class="hh-qcard__composer">
 ${choicesHtml}  <label class="hh-qcard__field">
     <span class="hh-qcard__label">Your answer</span>
     <textarea class="hh-qcard__input" id="hh-card-draft" name="draft" rows="5" autocomplete="off"${attr("placeholder", scrubCopy(sampleAnswer(question), question))}${described}>${escapeHtml(field)}</textarea>

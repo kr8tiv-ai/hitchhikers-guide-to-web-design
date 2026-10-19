@@ -123,6 +123,8 @@
 .hh-qcard .hh-choice:focus-visible,
 .hh-qcard__look a:focus,
 .hh-qcard__look a:focus-visible,
+.hh-qcard__gallery:focus,
+.hh-qcard__gallery:focus-visible,
 .hh-qcard__look summary:focus,
 .hh-qcard__look summary:focus-visible {
   outline: 2px solid var(--rule);

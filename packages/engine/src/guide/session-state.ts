@@ -217,6 +217,156 @@ export function sessionBlock(state: SessionState): string {
 
 export const ADMIRED_SITES_ASK = "What do you love about a site you admire, and what makes you wince?";
 
+const NO_LOVED_SITES =
+  /^(?:none|no favorites?|no sites?|no loved sites(?: named)?|skip(?:ped)?|n\/a|nothing)\b/i;
+
+const SITE_NAME_STOP = new Set([
+  "a",
+  "about",
+  "already",
+  "also",
+  "an",
+  "and",
+  "at",
+  "each",
+  "exactly",
+  "favourite",
+  "favourites",
+  "favorites",
+  "for",
+  "from",
+  "hate",
+  "i",
+  "just",
+  "like",
+  "likes",
+  "looked",
+  "love",
+  "loved",
+  "meh",
+  "my",
+  "name",
+  "named",
+  "no",
+  "none",
+  "note",
+  "notes",
+  "of",
+  "or",
+  "our",
+  "similar",
+  "site",
+  "sites",
+  "skip",
+  "skipped",
+  "that",
+  "the",
+  "this",
+  "too",
+  "we",
+  "what",
+  "with",
+  "yes",
+]);
+
+/**
+ * The DP-5.2 heading. Empty, skipped, and "none" keep the tree sentence.
+ * Named sites become one follow-up, at most four names, always the same words.
+ */
+export function galleryWalkAsk(answer: string, fallback: string): string {
+  const names = lovedSiteNames(answer);
+  if (names.length === 0) return fallback;
+  return `You named ${joinSiteNames(names)}. Let's look at a few more sites together. Say love, meh, or hate.`;
+}
+
+/**
+ * The live card heading. A named-site answer wins over a model line,
+ * including one that repeats the tree's "No favorites yet" sentence.
+ */
+export function applyGalleryWalk(
+  modelAsk: string,
+  lead: string,
+  recorded: string,
+  treeAsk: string,
+): { ask: string; lead: string; locked: boolean } {
+  const named = galleryWalkAsk(recorded, treeAsk);
+  if (named !== treeAsk) return { ask: named, lead: "", locked: true };
+  const model = modelAsk.replace(/\s+/g, " ").trim();
+  return { ask: model === "" ? treeAsk : model, lead, locked: false };
+}
+
+function lovedSiteNames(answer: string): string[] {
+  const text = answer.replace(/^ASSUMED:\s*/i, "").replace(/\s+/g, " ").trim();
+  if (text === "" || NO_LOVED_SITES.test(text)) return [];
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string): void => {
+    if (found.length >= 4) return;
+    const name = cleanSiteName(raw);
+    if (name === null) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push(name);
+  };
+  const colons: number[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === ":") colons.push(index);
+  }
+  if (colons.length > 0) {
+    let previous = 0;
+    for (const at of colons) {
+      let start = previous;
+      for (let index = at - 1; index >= previous; index -= 1) {
+        const ch = text[index] ?? "";
+        if (ch === "." || ch === "?" || ch === "!" || ch === "\n") {
+          start = index + 1;
+          break;
+        }
+      }
+      for (const part of splitSiteList(text.slice(start, at))) push(part);
+      previous = at + 1;
+    }
+    if (found.length > 0) return found;
+  }
+  for (const part of splitSiteList(text)) push(part);
+  return found;
+}
+
+function splitSiteList(clause: string): string[] {
+  return clause
+    .split(/\s*,\s*|\s+\band\b\s+/i)
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+}
+
+function cleanSiteName(raw: string): string | null {
+  const trimmed = raw
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/[^A-Za-z0-9'’.&-]+$/, "")
+    .trim();
+  const words = trimmed.split(/\s+/).filter((word) => word !== "");
+  while (words.length > 0 && isSiteStop(words[0] ?? "")) words.shift();
+  while (words.length > 0 && isSiteStop(words[words.length - 1] ?? "")) words.pop();
+  const name = words.join(" ");
+  if (name === "" || name.length > 40) return null;
+  if (!/[A-Z]/.test(name)) return null;
+  if (words.length > 4) return null;
+  const letters = name.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 2) return null;
+  return name;
+}
+
+function isSiteStop(word: string): boolean {
+  return SITE_NAME_STOP.has(word.toLowerCase().replace(/[^a-z]/g, ""));
+}
+
+function joinSiteNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 const SITE_BUILDERS =
   /\b(?:wordpress|webflow|wix|squarespace|framer|shopify|cargo|ghost|weebly|carrd)\b/i;
 const SITE_URL = /\b(?:https?:\/\/|www\.)\S+/i;
@@ -266,8 +416,11 @@ export function gateQuestion(
     const prior = state.answers.find((answer) => answer.id === "DP-0.2");
     if (prior !== undefined && noPriorSite(prior.text)) return { action: "ask", ask: ADMIRED_SITES_ASK };
   }
-  // The guided walk is the follow-up when no sites were named. It is not a second ask of the same topic.
-  if (question.id === "DP-5.2") return { action: "ask", ask: question.ask };
+  // The walk stays on the card. The wording follows the sites already named.
+  if (question.id === "DP-5.2") {
+    const loved = state.answers.find((answer) => answer.id === "DP-5.1")?.text ?? "";
+    return { action: "ask", ask: galleryWalkAsk(loved, question.ask) };
+  }
   const topic = topicFor(question);
   if (topic === undefined) return { action: "ask", ask: question.ask };
   const decision = state.decided.find((item) => item.topic === topic);
@@ -398,11 +551,6 @@ function conditionHolds(question: Question, state: SessionState, all: readonly Q
   if (question.id === "DP-0.2a") {
     const prior = state.answers.find((answer) => answer.id === "DP-0.2");
     if (prior !== undefined && /no prior site/.test(prior.text.toLowerCase())) return false;
-  }
-  if (question.id === "DP-5.2" && all.some((item) => item.id === "DP-5.1")) {
-    const loved = text("DP-5.1").trim();
-    if (loved === "") return false;
-    if (!/^(none|no favorites?|no sites?)\b/.test(loved)) return false;
   }
   const appetite = appetiteOf(text("DP-6.2"));
   if (question.id === "DP-6.3" && appetite !== null && appetite <= 4) return false;

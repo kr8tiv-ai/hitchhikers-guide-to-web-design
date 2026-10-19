@@ -71,6 +71,9 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     await expect(page.locator("#hh-card-ask")).not.toContainText("Building pages in a site builder counts");
     await say(page, "A logo sketch and a photo of the tins.", "why does this site exist", "DP-2.1");
     await say(page, "The site exists so a neighbor can order tea without calling.", "real sites should we walk", "DP-5.2");
+    await roundTripGallery(page, 375, 812);
+    await roundTripGallery(page, 1440, 900);
+    await page.setViewportSize({ width: 375, height: 812 });
 
     await page.locator('[data-action="suggest"]').click();
     await expect(page.locator("[data-question-id='DP-5.2']")).toBeVisible();
@@ -113,6 +116,23 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+async function roundTripGallery(page: Page, width: number, height: number): Promise<void> {
+  await page.setViewportSize({ width, height });
+  const link = page.locator("[data-question-id='DP-5.2'] a.hh-qcard__gallery");
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", "/gallery");
+  await expect(link).toHaveText("Open the gallery");
+  await link.focus();
+  await expect(link).toBeFocused();
+  const ring = await link.evaluate((node) => getComputedStyle(node).outlineStyle);
+  expect(ring).not.toBe("none");
+  await link.click();
+  await expect(page).toHaveURL(/\/gallery$/);
+  await page.locator("nav a[href='/']").click();
+  await expect(page.locator("[data-question-id='DP-5.2']")).toBeVisible();
+  await expect(page.locator("#hh-card-ask")).toContainText("real sites should we walk");
+}
 
 async function say(page: Page, text: string, ask: string, id: string | null): Promise<void> {
   await page.locator("#hh-card-draft").fill(text);

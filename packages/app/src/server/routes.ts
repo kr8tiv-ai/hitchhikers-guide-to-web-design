@@ -28,6 +28,7 @@ import {
   loadConfig,
   loadFacts,
   loadSessionState,
+  applyGalleryWalk,
   gateQuestion,
   assetDisplayName,
   guardLogoText,
@@ -2419,6 +2420,14 @@ function buildSession(
     const ask = dropInternalCopy(settled, hidden);
     const why = dropInternalCopy(question.why, hidden);
     question = { ...question, ask: ask === "" ? settled : ask, why };
+  }
+  if (question !== null && question.id === "DP-5.2" && projectDir !== "") {
+    const loved =
+      loadSessionState(projectDir, questions).answers.find((answer) => answer.id === "DP-5.1")?.text ?? "";
+    const walked = applyGalleryWalk(question.ask, lead, loved, treeAsk);
+    question = { ...question, ask: walked.ask };
+    lead = walked.lead;
+    if (walked.locked) help = "";
   }
   if (question === null) {
     lead = "";

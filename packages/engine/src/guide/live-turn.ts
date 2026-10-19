@@ -24,6 +24,7 @@ import {
   assetDisplayName,
   assetNamedIn,
   filterGuideText,
+  gateQuestion,
   guardLogoText,
   guardPriorSiteText,
   loadSessionState,
@@ -574,11 +575,12 @@ function promptContext(s: GuideSession, question: Question): string {
   try {
     const questions = loadTree(resolveTreePath(s.projectDir));
     const state = loadSessionState(s.projectDir, questions);
-    const ask = guardPriorSiteText(
+    let ask = guardPriorSiteText(
       guardLogoText(question.ask, state, question, questions),
       state,
       question.id,
     );
+    if (question.id === "DP-5.2") ask = gateQuestion(question, state, questions).ask;
     return `${sessionBlock(state)}\nQuestion to ask: ${safePromptLine(ask)}`;
   } catch {
     return "";

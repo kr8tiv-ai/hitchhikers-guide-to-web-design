@@ -262,6 +262,8 @@ export { INTERVIEW_MODEL, planInterview, interviewEffort, callCwd, isInterviewTa
 export {
   loadSessionState,
   gateQuestion,
+  galleryWalkAsk,
+  applyGalleryWalk,
   sessionBlock,
   filterGuideText,
   questionsToShow,
