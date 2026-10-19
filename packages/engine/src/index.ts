@@ -195,6 +195,17 @@ export {
 } from "./spec/language-pack.ts";
 export type { LanguageEntry, LanguageQuery } from "./spec/language-pack.ts";
 export {
+  SKILL_INCLUDE_TOKEN_BUDGET,
+  expandSkillIncludes,
+  loadSkillPacks,
+  parseSkillPack,
+  planSkillLines,
+  selectSkillPacks,
+  siteTypeForWorld,
+  skillVersionMentions,
+} from "./spec/skills.ts";
+export type { SkillExpansion, SkillPack, SkillQuery } from "./spec/skills.ts";
+export {
   SECTION_STILL_MODEL,
   planSectionStills,
   stillPath,
