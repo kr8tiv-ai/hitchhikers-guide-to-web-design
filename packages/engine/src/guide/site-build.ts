@@ -34,6 +34,13 @@ import {
 } from "../queue-file.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
 import {
+  designLanguageFor,
+  knowledgeRoot,
+  sectionIdOf,
+  type DesignLibrary,
+  type GalleryNote,
+} from "../spec/design-language.ts";
+import {
   PlanCoverageError,
   checkPlanCoverage,
   planCoverageMessage,
@@ -566,11 +573,16 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
+  const library = readDesignLibrary(projectDir, briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];
   for (const prompt of prompts) {
-    writeFileSync(path.join(dir, `${prompt.id}.md`), renderPrompt(prompt, briefMarkdown, packet, projectDir), "utf8");
+    writeFileSync(
+      path.join(dir, `${prompt.id}.md`),
+      renderPrompt(prompt, briefMarkdown, packet, projectDir, library),
+      "utf8",
+    );
     ids.push(prompt.id);
   }
   await mergeBuildQueue(projectDir, ids);
@@ -1598,9 +1610,16 @@ async function retryLock<T>(fn: () => Promise<T>): Promise<T> {
   throw new LockHeld(process.pid);
 }
 
-function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet: string, projectDir: string): string {
+function renderPrompt(
+  prompt: SitePromptSkeleton,
+  briefMarkdown: string,
+  packet: string,
+  projectDir: string,
+  library: DesignLibrary = readDesignLibrary(projectDir, briefMarkdown),
+): string {
   const brief = briefMarkdown.trim() === "" ? "The brief text was empty." : briefMarkdown.trim();
   const files = prompt.filesModified.length === 0 ? "none" : prompt.filesModified.join(", ");
+  const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library);
   const rendered = [
     "---",
     `id: ${prompt.id}`,
@@ -1634,8 +1653,90 @@ function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet:
       : [`Acceptance: ${prompt.acceptance.join(" ")}`]),
     ...(prompt.requirements.length === 0 ? [] : [`Requirements: ${prompt.requirements.join(", ")}`]),
     "",
+    "## Design language",
+    "",
+    design,
+    "",
   ].join("\n");
   return relativizePromptText(rendered, projectDir);
+}
+
+function readDesignLibrary(projectDir: string, briefMarkdown: string): DesignLibrary {
+  const root = knowledgeRoot();
+  return {
+    goldenDir: path.join(root, "golden"),
+    recipes: readOptional(path.join(root, "packs", "motion", "recipes.md")),
+    gallery: readGallery(path.join(root, "galleries", "curated.json")),
+    assetsMarkdown: readOptional(path.join(projectDir, ".hitchhiker", "ASSETS.md")),
+    facts: factsAllowed(projectDir, briefMarkdown),
+    styleText: briefMarkdown,
+  };
+}
+
+function artDirectionLine(projectDir: string, brief: string, prompt: SitePromptSkeleton): string {
+  const section = sectionIdOf(prompt);
+  const written = readOptional(path.join(projectDir, ".hitchhiker", "ART-DIRECTION.md"));
+  if (written.trim() !== "") {
+    const block = markdownSection(written, section);
+    if (block !== "") return block;
+    const intro = written.replace(/^#[^\n]*\n/, "").trim();
+    if (intro !== "") return intro.replace(/\s+/g, " ").slice(0, 500);
+  }
+  const vibe = markdownSection(brief, "Vibe") || markdownSection(brief, "Motion");
+  if (vibe !== "") return `${section === "" ? "Section" : section}: ${vibe.replace(/\s+/g, " ").trim()}`;
+  return "Follow the site brief and add one signature idea of your own.";
+}
+
+function factsAllowed(projectDir: string, brief: string): string {
+  const fromBrief = markdownSection(brief, "Facts");
+  const answers = briefAnswers(projectDir)
+    .map((answer) => answer.value.trim())
+    .filter((value) => value !== "");
+  const parts = [fromBrief, ...answers].filter((part) => part.trim() !== "");
+  if (parts.length === 0) return "Only facts written in the interview. A missing fact stays a TODO in copy.";
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function markdownSection(markdown: string, heading: string): string {
+  const pattern = new RegExp(`^##\\s+${heading}\\s*$`, "im");
+  const match = pattern.exec(markdown);
+  if (match === null || match.index === undefined) return "";
+  const start = match.index + match[0].length;
+  const rest = markdown.slice(start);
+  const next = rest.search(/\n##\s+/);
+  return (next === -1 ? rest : rest.slice(0, next)).trim();
+}
+
+function readGallery(file: string): GalleryNote[] {
+  const text = readOptional(file);
+  if (text.trim() === "") return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  const notes: GalleryNote[] = [];
+  for (const row of raw) {
+    if (typeof row !== "object" || row === null) continue;
+    const record = row as Record<string, unknown>;
+    notes.push({
+      styleWorld: typeof record.styleWorld === "string" ? record.styleWorld : "",
+      name: typeof record.name === "string" ? record.name : "",
+      why: typeof record.why === "string" ? record.why : "",
+      borrow: typeof record.borrow === "string" ? record.borrow : "",
+    });
+  }
+  return notes;
+}
+
+function readOptional(file: string): string {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
 }
 
 function failureReason(result: BuildSpawnResult, stream = ""): string {

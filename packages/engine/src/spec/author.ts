@@ -377,6 +377,9 @@ function repairInput(
   ].join("\n");
 }
 
+/** Character caps `fitRequest` starts from. Design language clips notes with the same numbers. */
+export const FIT_REQUEST_CAPS = { pack: 12_000, template: 8_000, anchor: 8_000 } as const;
+
 function fitRequest(
   entry: SitePromptSkeleton,
   golden: string,
@@ -385,9 +388,9 @@ function fitRequest(
   packs: ReadonlyMap<string, string>,
   templateList: string,
 ): string {
-  let packCap = 12_000;
-  let templateCap = 8_000;
-  let anchorCap = 8_000;
+  let packCap: number = FIT_REQUEST_CAPS.pack;
+  let templateCap: number = FIT_REQUEST_CAPS.template;
+  let anchorCap: number = FIT_REQUEST_CAPS.anchor;
   let input = compose(entry, golden, anchors, contextMd, packs, templateList, packCap, templateCap, anchorCap);
   while (estimateTokens(input) > AUTHOR_TOKEN_BUDGET && packCap > 0) {
     packCap = Math.floor(packCap / 2);
