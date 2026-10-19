@@ -625,9 +625,37 @@ function featureTier(name: string): { tier: Tier; effort: SiteEffort } {
   return { tier: "Cup of Tea", effort: "medium" };
 }
 
-function motionTitle(library: MotionLib, sectionId: string): string {
+function motionClause(id: string, sectionId: string): string {
+  const key = id.toLowerCase();
+  if (key.includes("hero-signature")) return "This is the hero signature.";
+  if (key.includes("parallax")) return "Layered media with soft parallax.";
+  if (key.includes("reveal")) {
+    return /farm|card|grid/i.test(sectionId)
+      ? "Staggered card reveals for the farm cards at about 400 ms."
+      : "Staggered fade-and-rise reveals at about 400 ms.";
+  }
+  if (key.includes("transition")) return "Section transition with a view transition or a GSAP timeline.";
+  if (key.includes("scroll") || key.endsWith("-lenis")) return "One scroll owner for this page.";
+  return "";
+}
+
+function motionTitle(library: MotionLib, sectionId: string, clause = ""): string {
   const pin = library === "theatre" ? ", core package pinned at 0.7.2, never studio" : "";
-  return `Bind ${library} on the ${sectionId} section${pin}. ${MOTION_BIND_SENTENCE}`;
+  const detail = clause === "" ? "" : ` ${clause}`;
+  return `Bind ${library} on the ${sectionId} section${pin}.${detail} ${MOTION_BIND_SENTENCE}`;
+}
+
+function effectAcceptance(effect: CleanEffect): string[] {
+  const clause = motionClause(effect.id, effect.sectionId);
+  const lines = [clause === "" ? "Scroll-driven motion for this section." : clause];
+  if (effect.library === "three" || effect.library === "ogl" || effect.library === "theatre") {
+    lines.push("The phone path uses a still fallback. One WebGL context on the page.");
+  }
+  lines.push("Reduced motion stays visible and complete.");
+  lines.push(
+    "Phone Lighthouse stays at 90. LCP stays at most 2.5 seconds. CLS stays at most 0.1. The hero media weight stays inside REQ-PERF.",
+  );
+  return lines;
 }
 
 function sectionSlice(pageIndex: number, sectionIndex: number): string {
@@ -857,6 +885,9 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [file, pagePath],
           requirement: `REQ-STRUCT-${slugId(sectionId)}`,
+          acceptance: [
+            "Use an asymmetric grid, overlapping media where the story needs it, and a real type scale.",
+          ],
         }),
         job(claim, {
           phase: "improbability-drive",
@@ -897,7 +928,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       job(claim, {
         phase: "improbability-drive",
         slice: webgl ? "Magrathea" : "Pan Galactic Gargle Blaster",
-        title: motionTitle(effect.library, effect.sectionId),
+        title: motionTitle(effect.library, effect.sectionId, motionClause(effect.id, effect.sectionId)),
         tier: webgl ? "Heart of Gold" : "Gargle Blaster",
         effort: webgl ? "xhigh" : "high",
         files: [
@@ -906,6 +937,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         ],
         requirement: `REQ-FX-${slugId(effect.id)}`,
         library: effect.library,
+        acceptance: effectAcceptance(effect),
       }),
     );
   }

@@ -3,7 +3,7 @@
  * continues the queue once.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -49,14 +49,36 @@ async function cleanup(dir: string): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
 }
 
-async function queueFrom(dir: string, running: "003" | "001"): Promise<void> {
+async function queueFrom(dir: string, running: string): Promise<void> {
   await prepareSiteBuild(dir, "Brief.");
-  const items = ["001", "002", "003", "004"].map((id) => ({
+  const items = ["001", "002", "003", "004", "005", "006"].map((id) => ({
     id,
     kind: "build" as const,
     status: (id === running ? "running" : id < running ? "passed" : "queued") as "running" | "passed" | "queued",
   }));
   await saveQueue(dir, { items });
+}
+
+function promptIdWith(dir: string, needle: string): string {
+  const folder = path.join(dir, ".hitchhiker", "prompts");
+  const names = readdirSync(folder).filter((name) => name.endsWith(".md")).sort();
+  for (const name of names) {
+    if (readFileSync(path.join(folder, name), "utf8").includes(needle)) return name.slice(0, -3);
+  }
+  throw new Error(`missing prompt containing ${needle}`);
+}
+
+async function queueLogo(dir: string): Promise<{ logo: string; next: string }> {
+  await prepareSiteBuild(dir, "Brief.");
+  const logo = promptIdWith(dir, "public/logo.svg");
+  const next = String(Number(logo) + 1).padStart(3, "0");
+  const items = ["001", "002", "003", "004", "005", "006", "007", "008"].map((id) => ({
+    id,
+    kind: "build" as const,
+    status: (id === logo ? "running" : id < logo ? "passed" : "queued") as "running" | "passed" | "queued",
+  }));
+  await saveQueue(dir, { items });
+  return { logo, next };
 }
 
 function writeRunning(dir: string, promptId: string, recoveryRerun = false): void {
@@ -132,29 +154,29 @@ test("clean end plus outputs runs the gate and marks the prompt passed", { timeo
   const seen: string[] = [];
   let gates = 0;
   setProjectBuildRunner(dir, spawnCounting(seen));
-  setSiteBuildGate(dir, (info) => {
-    if (info.promptId !== "003") return;
-    gates += 1;
-    assert.ok(info.files.includes("public/logo.svg"));
-  });
   try {
-    await queueFrom(dir, "003");
-    const prompt = readFileSync(path.join(dir, ".hitchhiker", "prompts", "003.md"), "utf8");
+    const { logo, next } = await queueLogo(dir);
+    setSiteBuildGate(dir, (info) => {
+      if (info.promptId !== logo) return;
+      gates += 1;
+      assert.ok(info.files.includes("public/logo.svg"));
+    });
+    const prompt = readFileSync(path.join(dir, ".hitchhiker", "prompts", `${logo}.md`), "utf8");
     assert.match(prompt, /public\/logo\.svg/);
     assert.match(prompt, /src\/components\/Logo\.astro/);
-    writeRunning(dir, "003");
-    writeEnd(dir, "003");
+    writeRunning(dir, logo);
+    writeEnd(dir, logo);
     writeLogo(dir);
     await recoverSiteBuild(dir);
     await siteBuildSettled(dir);
     const queue = await loadQueue(dir);
-    assert.equal(queue?.items.find((item) => item.id === "003")?.status, "passed");
-    assert.equal(queue?.items.find((item) => item.id === "004")?.status, "passed");
-    assert.equal(seen.includes("003"), false);
-    assert.equal(seen[0], "004");
+    assert.equal(queue?.items.find((item) => item.id === logo)?.status, "passed");
+    assert.equal(queue?.items.find((item) => item.id === next)?.status, "passed");
+    assert.equal(seen.includes(logo), false);
+    assert.equal(seen[0], next);
     assert.equal(gates, 1);
     const run = readBuildRun(dir);
-    assert.match(run?.recovery ?? "", /003 recovered: output verified, passed/);
+    assert.match(run?.recovery ?? "", new RegExp(`${logo} recovered: output verified, passed`));
     assert.equal(run?.model, BUILD_MODEL);
     assert.equal(run?.effort, BUILD_EFFORT);
   } finally {
@@ -209,16 +231,16 @@ test("a failing gate marks the recovered prompt failed and does not advance", { 
     throw new Error("gate broke");
   });
   try {
-    await queueFrom(dir, "003");
-    writeRunning(dir, "003");
-    writeEnd(dir, "003");
+    const { logo, next } = await queueLogo(dir);
+    writeRunning(dir, logo);
+    writeEnd(dir, logo);
     writeLogo(dir);
     await recoverSiteBuild(dir);
     await siteBuildSettled(dir);
     assert.deepEqual(seen, []);
     const queue = await loadQueue(dir);
-    assert.equal(queue?.items.find((item) => item.id === "003")?.status, "failed");
-    assert.equal(queue?.items.find((item) => item.id === "004")?.status, "queued");
+    assert.equal(queue?.items.find((item) => item.id === logo)?.status, "failed");
+    assert.equal(queue?.items.find((item) => item.id === next)?.status, "queued");
     assert.match(readBuildRun(dir)?.reason ?? "", /gate broke/);
     assert.notEqual(readBuildRun(dir)?.status, "running");
   } finally {
@@ -248,17 +270,17 @@ test("the watchdog recovers a dead running row that is not in this process", { t
   const seen: string[] = [];
   setProjectBuildRunner(dir, spawnCounting(seen));
   try {
-    await queueFrom(dir, "003");
-    writeRunning(dir, "003");
-    writeEnd(dir, "003");
+    const { logo, next } = await queueLogo(dir);
+    writeRunning(dir, logo);
+    writeEnd(dir, logo);
     writeLogo(dir);
     runBuildWatchdog(dir);
     await recoverSiteBuild(dir);
     await siteBuildSettled(dir);
-    assert.equal(seen.includes("003"), false);
-    assert.equal((await loadQueue(dir))?.items.find((item) => item.id === "003")?.status, "passed");
-    assert.equal((await loadQueue(dir))?.items.find((item) => item.id === "004")?.status, "passed");
-    assert.match(readBuildRun(dir)?.recovery ?? "", /003 recovered: output verified, passed/);
+    assert.equal(seen.includes(logo), false);
+    assert.equal((await loadQueue(dir))?.items.find((item) => item.id === logo)?.status, "passed");
+    assert.equal((await loadQueue(dir))?.items.find((item) => item.id === next)?.status, "passed");
+    assert.match(readBuildRun(dir)?.recovery ?? "", new RegExp(`${logo} recovered: output verified, passed`));
   } finally {
     await cleanup(dir);
   }

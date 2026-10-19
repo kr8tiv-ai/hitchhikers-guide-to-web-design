@@ -117,7 +117,7 @@ export function readMediaSettings(projectDir: string): MediaSettings {
   };
 }
 
-export function grokCliProvider(projectDir: string, spawn: SpawnLike, env: NodeJS.ProcessEnv = process.env): MediaProvider {
+export function grokCliProvider(projectDir: string, run: SpawnLike, env: NodeJS.ProcessEnv = process.env): MediaProvider {
   let serial = 0;
   return {
     async generateImage(req) {
@@ -135,7 +135,7 @@ export function grokCliProvider(projectDir: string, spawn: SpawnLike, env: NodeJ
       ].join("\n");
       const promptFile = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.prompt.txt`);
       await writeFile(promptFile, prompt, "utf8");
-      const result = await spawn({
+      const result = await run({
         command: "grok",
         args: [
           "--no-auto-update",

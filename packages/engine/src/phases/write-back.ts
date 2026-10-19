@@ -19,8 +19,11 @@ import { loadConfig, saveConfig, type DeployTarget } from "../config.ts";
 import { syncAnswer } from "../context/index.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { renderBrief, type AnswerRecord } from "../required.ts";
+import { planFromBrief } from "../spec/brief-plan.ts";
+import { translateBrief } from "../spec/art-direction.ts";
 import { planMotion } from "../spec/motion.ts";
 import { decideStack, type StackPick } from "../spec/stack.ts";
+import { visualMotionRequests } from "../spec/visual-motion.ts";
 
 export type BeforeJumpTarget =
   | "brief"
@@ -312,8 +315,21 @@ async function writeVoice(projectDir: string, field: string, text: string): Prom
 
 async function writeMotion(projectDir: string, field: string, text: string): Promise<string> {
   const appetite = lastLevel(text) ?? lastLevel(latestValue(readInterview(projectDir).answers, "DP-6.2")) ?? 4;
+  const onDisk = existsSync(briefPath(projectDir)) ? await readFile(briefPath(projectDir), "utf8") : "";
+  const parsed = onDisk.trim() === "" ? [] : planFromBrief(onDisk).pages;
+  const pages = parsed.length > 0 ? parsed : [{ id: "home", sections: ["hero"] }];
+  const art = translateBrief(
+    onDisk.trim() === ""
+      ? `# Site Brief\n\n## Motion\n\nThe motion score is ${appetite}.\n`
+      : onDisk,
+    [],
+    pages.flatMap((page) => page.sections),
+  );
   const plan = planMotion({
-    requests: [{ id: "hero-fade", kind: "tiny-fade", element: "hero", page: "home" }],
+    requests: visualMotionRequests(
+      pages.map((page) => ({ id: page.id, sections: page.sections })),
+      art,
+    ),
     appetite,
     stack: "astro",
   });

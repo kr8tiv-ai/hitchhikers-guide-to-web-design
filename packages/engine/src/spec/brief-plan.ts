@@ -4,7 +4,9 @@
  * earlier one-page package. A listed page is never dropped to fit a count.
  */
 
-import { directionAcceptance, sectionAcceptance, translateBrief } from "./art-direction.ts";
+import { directionAcceptance, sectionAcceptance, translateBrief, type ArtDirection } from "./art-direction.ts";
+import { planMotion } from "./motion.ts";
+import { sectionForMotion, visualMotionRequests } from "./visual-motion.ts";
 import {
   featureRequirementId,
   generateSkeleton,
@@ -331,15 +333,49 @@ export function planFromBrief(briefMarkdown: string, answers: readonly BriefAnsw
   return { pages, features, requirements };
 }
 
+function effectsFromArt(
+  pages: readonly PlannedPage[],
+  art: ArtDirection,
+  stack: SiteStack,
+): SiteSkeletonInput["effects"] {
+  const visualPages = pages.map((page) => ({ id: page.id, sections: page.sections }));
+  const requests = visualMotionRequests(visualPages, art);
+  const planned = planMotion({ requests, appetite: art.motion.score, stack });
+  const pageOf = new Map(requests.map((request) => [request.id, request.page]));
+  const effects: SiteSkeletonInput["effects"] = [];
+  const seen = new Set<string>();
+  for (const row of planned.assignments) {
+    const hashed = row.id.indexOf("#");
+    const pageId = pageOf.get(row.id) ?? (hashed > 0 ? row.id.slice(0, hashed) : "");
+    const page = pages.find((item) => item.id === pageId);
+    if (page === undefined) continue;
+    const id = row.id.replaceAll("#", "-");
+    if (seen.has(id)) continue;
+    seen.add(id);
+    effects.push({
+      id,
+      library: row.library,
+      sectionId: sectionForMotion(page.sections, row.element),
+      page: pageId,
+    });
+  }
+  return effects;
+}
+
 export function generateBriefPlan(
   briefMarkdown: string,
   stack: SiteStack = "astro",
   answers: readonly BriefAnswer[] = [],
 ): { prompts: SitePromptSkeleton[]; warnings: string[]; planned: BriefPlan } {
   const planned = planFromBrief(briefMarkdown, answers);
+  const art = translateBrief(
+    briefMarkdown,
+    answers,
+    planned.pages.flatMap((page) => page.sections),
+  );
   const input: SiteSkeletonInput = {
     pages: planned.pages,
-    effects: [],
+    effects: effectsFromArt(planned.pages, art, stack),
     features: planned.features,
     integrations: [],
     seoItems: [],
@@ -347,11 +383,6 @@ export function generateBriefPlan(
     protectedPaths: [],
   };
   const generated = generateSkeleton(input);
-  const art = translateBrief(
-    briefMarkdown,
-    answers,
-    planned.pages.flatMap((page) => page.sections),
-  );
   const bySection = new Map(art.sections.map((section) => [section.sectionId, section]));
   for (const prompt of generated.prompts) {
     const requirement = prompt.requirements[0] ?? "";
