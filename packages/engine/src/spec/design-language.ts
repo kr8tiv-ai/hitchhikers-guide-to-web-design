@@ -15,6 +15,7 @@ import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
 import { languageBlockFor, languageQueryFrom } from "./language-pack.ts";
 import type { SitePromptSkeleton } from "./site-prompts.ts";
+import { expandSkillIncludes, loadSkillPacks, planSkillLines, siteTypeForWorld } from "./skills.ts";
 
 export { styleWorldFrom };
 
@@ -75,7 +76,9 @@ export function designLanguageFor(
   const gate = gateCard(library.facts, assets);
   const direction = oneLine(artDirection, "Follow the site brief and add one signature idea of your own.");
   const libraryBlock = libraryLines(library, section);
-  const language = languageBlockFor(languageQueryFrom(section, direction, library.styleText));
+  const languageQuery = languageQueryFrom(section, direction, library.styleText);
+  const language = languageBlockFor(languageQuery);
+  const skills = section === "" ? "" : skillBlock(section, direction, languageQuery.appetite, library.styleText);
   return [
     FRAMING,
     "",
@@ -87,6 +90,7 @@ export function designLanguageFor(
     "",
     direction,
     ...(language === "" ? [] : ["", language]),
+    ...(skills === "" ? [] : ["", skills]),
     "",
     "### Example",
     "",
@@ -123,6 +127,18 @@ export function sectionIdOf(prompt: SitePromptSkeleton): string {
   const image = /^Art-direct and place the image set for ([^:]+):/i.exec(prompt.title);
   if (image?.[1] !== undefined) return slug(image[1]);
   return "";
+}
+
+function skillBlock(section: string, artDirection: string, appetite: number, styleText: string): string {
+  const lines = planSkillLines({
+    siteType: siteTypeForWorld(styleWorldFrom(`${styleText}\n${artDirection}`)),
+    motionAppetite: appetite,
+    sectionKind: section,
+    artDirection,
+  });
+  if (lines === "") return "";
+  const expanded = expandSkillIncludes(lines, loadSkillPacks());
+  return ["### Skills", "", expanded.text].join("\n");
 }
 
 function libraryLines(library: DesignLibrary, section: string): string {

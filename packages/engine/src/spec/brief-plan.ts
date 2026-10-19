@@ -5,6 +5,7 @@
  */
 
 import { directionAcceptance, sectionAcceptance, translateBrief, type ArtDirection } from "./art-direction.ts";
+import { planSkillLines, siteTypeForWorld } from "./skills.ts";
 import { planMotion } from "./motion.ts";
 import { sectionForMotion, visualMotionRequests } from "./visual-motion.ts";
 import {
@@ -435,6 +436,13 @@ export function generateBriefPlan(
     const section = bySection.get(sectionId);
     if (section === undefined) continue;
     prompt.acceptance = sectionAcceptance(section, art);
+    const skills = planSkillLines({
+      siteType: siteTypeForWorld(art.styleWorld),
+      motionAppetite: art.motion.score,
+      sectionKind: sectionId,
+      artDirection: `${section.layout} ${section.media} ${section.motion}`,
+    });
+    if (skills !== "") prompt.acceptance = [...prompt.acceptance, ...skills.split("\n")];
   }
   return { ...generated, planned };
 }
