@@ -156,9 +156,31 @@ export function driveQueueHeld(
   return pause != null || queuePaused(items, run);
 }
 
-function holdBanner(pause: DrivePause | null | undefined, held: boolean): string {
+function runningPromptId(items: readonly DriveItem[], run?: DriveRun | null): string | null {
+  if (run?.status !== "running") return null;
+  const id = run.promptId.trim();
+  if (id === "") return null;
+  // Pause flips a live row to paused while the process keeps going.
+  // A row left as running is an interrupted hold, not a live prompt.
+  const row = items.find((item) => item.id === id);
+  if (row !== undefined && row.status === "running") return null;
+  return id;
+}
+
+function holdBanner(
+  pause: DrivePause | null | undefined,
+  held: boolean,
+  items: readonly DriveItem[],
+  run?: DriveRun | null,
+): string {
   if (pause != null) {
-    const label = pause.after === "" ? "Paused before the first prompt." : `Paused after ${escapeHtml(pause.after)}`;
+    const running = runningPromptId(items, run);
+    const label =
+      running !== null
+        ? `Pause set. ${escapeHtml(running)} is still running and will finish first.`
+        : pause.after === ""
+          ? "Paused before the first prompt."
+          : `Paused after ${escapeHtml(pause.after)}`;
     return `<p data-queue-state="paused">${label}</p><button class="hh-btn hh-btn--secondary" type="button" id="drive-resume" data-action="resume-queue">Resume</button>`;
   }
   return held ? `<p data-queue-state="paused">The queue is paused.</p>` : "";
@@ -169,7 +191,7 @@ export function queueBodyHtml(
   run?: DriveRun | null,
   pause?: DrivePause | null,
 ): string {
-  const banner = holdBanner(pause, driveQueueHeld(items, run, pause));
+  const banner = holdBanner(pause, driveQueueHeld(items, run, pause), items, run);
   if (items.length === 0) {
     return `<div class="hh-empty" id="drive-empty">
             <h2 class="hh-empty__title">No plan is on the desk</h2>

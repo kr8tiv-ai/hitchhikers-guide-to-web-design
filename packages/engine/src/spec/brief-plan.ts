@@ -48,23 +48,18 @@ const FEATURES: ReadonlyArray<{ name: string; when: (text: string) => boolean }>
     name: "farm inquiry prefilled with farm id",
     when: (text) => /inquir/i.test(text) && /prefilled|farm id/i.test(text),
   },
-  { name: "newsletter", when: (text) => /newsletter/i.test(text) },
+  { name: "footer newsletter signup", when: (text) => /newsletter/i.test(text) },
   { name: "WhatsApp link", when: (text) => /whatsapp/i.test(text) },
   { name: "gallery", when: (text) => /\bgallery\b/i.test(text) },
-  {
-    name: "llms.txt and FAQ JSON-LD",
-    when: (text) => /llms\.txt/i.test(text) && /faq/i.test(text),
-  },
-  { name: "contact form", when: (text) => /contact form/i.test(text) },
-  { name: "general contact form", when: (text) => /contact form/i.test(text) },
-  { name: "footer newsletter signup", when: (text) => /newsletter/i.test(text) },
+  { name: "general contact form", when: (text) => /general contact form/i.test(text) },
+  { name: "contact form", when: (text) => /contact form/i.test(text) && !/general contact form/i.test(text) },
   { name: "blog and monthly guide", when: (text) => wantsBlog(text) },
   { name: "footer legal disclaimer", when: (text) => /disclaimer/i.test(text) },
   {
     name: "FAQ structured data",
     when: (text) => /faq/i.test(text) && /structured data|json-ld/i.test(text),
   },
-  { name: "llms.txt", when: (text) => /llms\.txt/i.test(text) && !/faq/i.test(text) },
+  { name: "llms.txt", when: (text) => /llms\.txt/i.test(text) },
 ];
 
 const HOME_PAGE: PlannedPage = {

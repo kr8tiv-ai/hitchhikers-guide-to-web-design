@@ -616,7 +616,7 @@ function coverageLine(facts: Facts): string {
 /** A complete count. Never a list that stops in the middle of an id. */
 function summarizeCoverage(covered: readonly string[], uncovered: readonly string[], max: number): string {
   const total = covered.length + uncovered.length;
-  const head = `Covered ${covered.length} of ${total}.`;
+  const head = `Covered ${covered.length} of ${total} answers.`;
   const listed = uncovered.length === 0 ? head : `${head} Uncovered: ${uncovered.join(", ")}.`;
   if (listed.length <= max) return listed;
   const counts = uncovered.length === 0 ? head : `${head} Uncovered ${uncovered.length} of ${total}.`;

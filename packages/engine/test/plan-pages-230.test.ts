@@ -31,10 +31,11 @@ const FEATURES = [
   "EN-ES toggle",
   "caretaker sign-up form",
   "farm inquiry prefilled with farm id",
-  "newsletter",
+  "footer newsletter signup",
   "WhatsApp link",
   "gallery",
-  "llms.txt and FAQ JSON-LD",
+  "llms.txt",
+  "FAQ structured data",
 ] as const;
 
 const BRIEF = `# Site Brief

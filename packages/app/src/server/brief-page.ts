@@ -10,8 +10,14 @@ export interface ApproveCoverage {
   message: string;
 }
 
+function coverageCount(rows: readonly { covered: boolean }[]): string {
+  const covered = rows.filter((row) => row.covered).length;
+  return `Plan coverage: ${covered} of ${rows.length} pages and features covered`;
+}
+
 function coverageTable(coverage: ApproveCoverage | undefined): string {
   if (coverage === undefined || coverage.rows.length === 0) return "";
+  const count = coverageCount(coverage.rows);
   const rows = coverage.rows
     .map((row) => {
       const prompts = row.promptIds.length > 0 ? row.promptIds.join(", ") : row.covered ? "Listed" : "None";
@@ -28,12 +34,13 @@ function coverageTable(coverage: ApproveCoverage | undefined): string {
     ? `<p>Approve stays off until every row is covered.</p>${coverage.message === "" ? "" : `<p data-plan-coverage-note>${escapeHtml(coverage.message)}</p>`}`
     : "";
   return `<table class="hh-table" data-plan-coverage>
-      <caption>Plan coverage</caption>
+      <caption>${escapeHtml(count)}</caption>
       <thead><tr><th>Item</th><th>Prompts</th><th>Status</th></tr></thead>
       <tbody>
         ${rows}
       </tbody>
     </table>
+    <p data-plan-coverage-count>${escapeHtml(count)}</p>
     ${note}`;
 }
 

@@ -38,6 +38,25 @@ test("Drive shows Paused after 007 until Resume starts 008", async ({ page }) =>
   }
 });
 
+test("a pause while 001 is still running names that prompt", async ({ page }) => {
+  test.setTimeout(60_000);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-pause-238-"));
+  const child = startRunningDesk(projectDir);
+  try {
+    const url = await readUrl(child);
+    await page.goto(`${url.replace(/\/$/, "")}/hh-dashboard`);
+    await expect(page.getByText("Pause set. 001 is still running and will finish first.", { exact: true })).toBeVisible();
+    await expect(page.locator("#drive-resume")).toBeEnabled();
+    await expect(page.getByText("Paused before the first prompt.", { exact: true })).toHaveCount(0);
+    await page.waitForTimeout(400);
+    await expect(page.getByText("Pause set. 001 is still running and will finish first.", { exact: true })).toBeVisible();
+    expect(await spawnIds(projectDir)).toEqual([]);
+  } finally {
+    await stopDesk(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 test("a paused drive shows a turn-cap failure and Retry keeps the partial work", async ({ page }) => {
   test.setTimeout(60_000);
   const projectDir = await mkdtemp(path.join(tmpdir(), "hh-pause-044-"));
@@ -58,6 +77,75 @@ test("a paused drive shows a turn-cap failure and Retry keeps the partial work",
     await rm(projectDir, { recursive: true, force: true });
   }
 });
+
+function startRunningDesk(projectDir: string): ChildProcess {
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  return spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", runningChild()], {
+    env: {
+      ...process.env,
+      HH_E2E_PROJECT: projectDir,
+      HH_E2E_SERVER: pathToFileURL(serverFile).href,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+function runningChild(): string {
+  return `
+    import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+    import path from "node:path";
+    const specifier = process.env.HH_E2E_SERVER;
+    const projectDir = process.env.HH_E2E_PROJECT;
+    mkdirSync(path.join(projectDir, "interview"), { recursive: true });
+    mkdirSync(path.join(projectDir, ".hitchhiker", "prompts"), { recursive: true });
+    writeFileSync(path.join(projectDir, "interview", "tree.yaml"), ${JSON.stringify(`questions:
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What should the site do?"
+    why: "The job of the site."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md"
+`)});
+    writeFileSync(path.join(projectDir, ".hitchhiker", "prompts", "001.md"), "Prompt 001\\n");
+    writeFileSync(path.join(projectDir, ".hitchhiker", "prompts", "002.md"), "Prompt 002\\n");
+    writeFileSync(path.join(projectDir, ".hitchhiker", "queue.json"), JSON.stringify({
+      items: [
+        { id: "001", kind: "build", status: "paused" },
+        { id: "002", kind: "build", status: "paused" },
+      ],
+      pause: { at: "2026-10-19T00:00:00.000Z", after: "" },
+    }, null, 2));
+    writeFileSync(path.join(projectDir, ".hitchhiker", "build-run.json"), JSON.stringify({
+      promptId: "001",
+      status: "running",
+      model: "grok-4.7-build-fast",
+      effort: "xhigh",
+      startedAt: "2026-10-19T00:00:00.000Z",
+      elapsedMs: 10,
+      lastLines: [],
+      filesWritten: [],
+      reason: "",
+      pid: process.pid,
+      recovery: "",
+      recoveryRerun: false,
+    }));
+    const loaded = await import(specifier);
+    const think = async () => {
+      throw new Error("the pause desk must not ask the model");
+    };
+    const buildSpawn = (request) => {
+      appendFileSync(path.join(projectDir, "spawn-order.txt"), request.promptId + "\\n");
+      return { pid: 999999, done: Promise.resolve({ code: 0, stdout: "", stderr: "", errorCode: null }) };
+    };
+    const handle = await loaded.startServer({ projectDir, open: false, guideThink: think, buildSpawn });
+    process.stdout.write(handle.url + "\\n");
+    await new Promise(() => {});
+  `;
+}
 
 function startNoteDesk(projectDir: string): ChildProcess {
   const serverFile = path.resolve(here, "../src/server/server.ts");
