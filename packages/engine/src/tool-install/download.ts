@@ -220,12 +220,24 @@ function writeResponse(
   const stream = createWriteStream(partial, { flags: append ? "a" : "w" });
   let received = start;
   return new Promise((resolve, reject) => {
+    let settled = false;
     let onAbort: () => void = () => {};
     const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
       options.signal.removeEventListener("abort", onAbort);
       response.destroy();
+      // The open is async. Unlinking before it finishes lets the open recreate
+      // the partial file after cancel (macOS tmp is slow enough to lose the race).
+      const rejectClosed = (): void => {
+        reject(error);
+      };
+      if (stream.closed) {
+        rejectClosed();
+        return;
+      }
+      stream.once("close", rejectClosed);
       stream.destroy();
-      reject(error);
     };
     onAbort = (): void => {
       fail(new InstallCancelled());
@@ -247,8 +259,11 @@ function writeResponse(
     response.on("error", fail);
     stream.on("error", fail);
     response.on("end", () => {
+      if (settled) return;
       options.signal.removeEventListener("abort", onAbort);
       stream.end(() => {
+        if (settled) return;
+        settled = true;
         resolve();
       });
     });

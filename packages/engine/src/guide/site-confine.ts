@@ -11,6 +11,9 @@
  * read_file. build-002.log calls list_dir, grep, read_file, write,
  * search_replace, and run_terminal_command. The deny list is best effort.
  * The audit below is what the desk records after the run.
+ * A Windows project path uses path.win32 even when this process is POSIX.
+ * When realpath differs from the path as given (macOS /var and /private/var),
+ * both spellings are confined and stripped.
  */
 import { readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
@@ -65,21 +68,17 @@ export function buildConfinementArgs(projectDir: string, options: ConfinementOpt
 }
 
 export function confinementDenyRules(projectDir: string, options: ConfinementOptions = {}): string[] {
-  const platform = options.platform ?? (process.platform === "win32" ? "win32" : "posix");
-  const api = platform === "win32" ? path.win32 : path.posix;
-  const project = resolveProject(projectDir, api, options.siblings === undefined);
-  const parent = api.dirname(project);
-  if (parent === project) return [];
-  const names = options.siblings ?? readSiblingNames(parent);
+  const platform = options.platform ?? platformForPath(projectDir);
+  const api = pathApi(platform);
+  const projects = pathSpellings(projectDir, api, options.siblings === undefined);
   const rules: string[] = [];
-  const parentSlash = toSlash(parent);
-  for (const tool of TOOLS) rules.push(`${tool}(${parentSlash})`);
-  for (const name of names) {
-    if (!usableName(name)) continue;
-    const full = api.resolve(parent, name);
-    if (samePath(full, project, platform)) continue;
-    const pattern = `${toSlash(full)}/**`;
-    for (const tool of TOOLS) rules.push(`${tool}(${pattern})`);
+  const seen = new Set<string>();
+  for (const project of projects) {
+    for (const rule of denyRulesFor(project, api, platform, options.siblings)) {
+      if (seen.has(rule)) continue;
+      seen.add(rule);
+      rules.push(rule);
+    }
   }
   return rules;
 }
@@ -106,8 +105,8 @@ export function confinementRuleMatches(rule: string, candidate: string, platform
 
 /** Tool-call path arguments, and paths written into shell commands. Capped at 10. */
 export function auditOutsideAccess(stream: string, projectDir: string): OutsideAudit {
-  const project = resolveProject(projectDir, path, true);
-  const platform = process.platform === "win32" ? "win32" : "posix";
+  const platform = platformForPath(projectDir);
+  const projects = pathSpellings(projectDir, pathApi(platform), true);
   const hits: OutsideAccess[] = [];
   const seen = new Set<string>();
   let writePath = "";
@@ -127,7 +126,7 @@ export function auditOutsideAccess(stream: string, projectDir: string): OutsideA
     if (event === null) continue;
     const tool = event.tool;
     for (const filePath of event.paths) {
-      if (isInsideProject(project, filePath, platform)) continue;
+      if (isInsideProject(projects, filePath, platform)) continue;
       const kind = WRITE_TOOLS.has(tool) || (SHELL_TOOLS.has(tool) && shellWrites(event.command, filePath)) ? "write" : "read";
       add(tool, filePath, kind);
     }
@@ -137,13 +136,23 @@ export function auditOutsideAccess(stream: string, projectDir: string): OutsideA
 
 /** Drop absolute, parent, and home paths from a generated prompt. */
 export function relativizePromptText(text: string, projectDir: string): string {
-  const platform = process.platform === "win32" ? "win32" : "posix";
-  const project = resolveProject(projectDir, path, true);
-  const parent = path.dirname(project);
+  const platform = platformForPath(projectDir);
+  const api = pathApi(platform);
+  const projects = longestFirst(pathSpellings(projectDir, api, true));
+  let next = text;
+  for (const project of projects) next = replaceProjectPrefix(next, project, platform);
+  const parents: string[] = [];
+  for (const project of projects) {
+    const parent = api.dirname(project);
+    if (!samePath(parent, project, platform)) parents.push(parent);
+  }
+  for (const parent of longestFirst([...new Set(parents)])) next = replaceOutsidePrefix(next, parent, platform);
+  const homePlatform = hostPlatform();
   const home = os.homedir();
-  let next = replaceProjectPrefix(text, project, platform);
-  if (parent !== project) next = replaceOutsidePrefix(next, parent, platform);
-  if (home.trim() !== "") next = replaceOutsidePrefix(next, home, platform);
+  if (home.trim() !== "") {
+    const homes = longestFirst(pathSpellings(home, pathApi(homePlatform), true));
+    for (const root of homes) next = replaceOutsidePrefix(next, root, homePlatform);
+  }
   next = next.replace(
     /(^|[\s"'`(])([A-Za-z]:[\\/][^\s"'`<>|]*)/g,
     "$1(outside this folder)",
@@ -156,21 +165,69 @@ export function relativizePromptText(text: string, projectDir: string): string {
   return next;
 }
 
-function resolveProject(
+function pathApi(platform: "win32" | "posix"): typeof path.win32 | typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
+function hostPlatform(): "win32" | "posix" {
+  return process.platform === "win32" ? "win32" : "posix";
+}
+
+/** Drive letters and backslashes are Windows paths on every host. */
+function platformForPath(value: string): "win32" | "posix" {
+  const trimmed = value.trim();
+  if (/^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.includes("\\")) return "win32";
+  if (trimmed.startsWith("/") || trimmed.startsWith("~/")) return "posix";
+  return hostPlatform();
+}
+
+/**
+ * The path as given, plus its realpath when that directory exists and differs.
+ * macOS tmp is /var/folders while realpath is /private/var/folders. A rule or
+ * a prompt strip that keeps only one spelling misses the other.
+ */
+function pathSpellings(
   projectDir: string,
   api: typeof path.win32 | typeof path.posix,
   real: boolean,
-): string {
+): string[] {
   const resolved = api.resolve(projectDir);
-  if (!real) return resolved;
+  if (!real) return [resolved];
   const hostWin = process.platform === "win32";
   const apiWin = api === path.win32;
-  if (hostWin !== apiWin) return resolved;
+  if (hostWin !== apiWin) return [resolved];
   try {
-    return realpathSync(resolved);
+    const canonical = realpathSync(resolved);
+    return canonical === resolved ? [resolved] : [resolved, canonical];
   } catch {
-    return resolved;
+    return [resolved];
   }
+}
+
+function longestFirst(values: readonly string[]): string[] {
+  return [...values].sort((left, right) => right.length - left.length);
+}
+
+function denyRulesFor(
+  project: string,
+  api: typeof path.win32 | typeof path.posix,
+  platform: "win32" | "posix",
+  siblings: readonly string[] | undefined,
+): string[] {
+  const parent = api.dirname(project);
+  if (samePath(parent, project, platform)) return [];
+  const names = siblings ?? readSiblingNames(parent);
+  const rules: string[] = [];
+  const parentSlash = toSlash(parent);
+  for (const tool of TOOLS) rules.push(`${tool}(${parentSlash})`);
+  for (const name of names) {
+    if (!usableName(name)) continue;
+    const full = api.resolve(parent, name);
+    if (samePath(full, project, platform)) continue;
+    const pattern = `${toSlash(full)}/**`;
+    for (const tool of TOOLS) rules.push(`${tool}(${pattern})`);
+  }
+  return rules;
 }
 
 function readSiblingNames(parent: string): string[] {
@@ -195,19 +252,20 @@ function samePath(left: string, right: string, platform: "win32" | "posix"): boo
   return fold(toSlash(left)) === fold(toSlash(right));
 }
 
-function isInsideProject(project: string, candidate: string, platform: "win32" | "posix"): boolean {
+function isInsideProject(projects: readonly string[], candidate: string, platform: "win32" | "posix"): boolean {
   const trimmed = candidate.trim();
   if (trimmed === "" || trimmed === ".") return true;
   if (/^https?:\/\//i.test(trimmed)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return true;
   const api = platform === "win32" ? path.win32 : path.posix;
-  const absolute = api.isAbsolute(trimmed) ? api.resolve(trimmed) : api.resolve(project, trimmed);
-  const root = toSlash(project);
-  const file = toSlash(absolute);
   const fold = platform === "win32" ? (value: string) => value.toLowerCase() : (value: string) => value;
-  const left = fold(root);
-  const right = fold(file);
-  return right === left || right.startsWith(`${left}/`);
+  for (const project of projects) {
+    const absolute = api.isAbsolute(trimmed) ? api.resolve(trimmed) : api.resolve(project, trimmed);
+    const left = fold(toSlash(project));
+    const right = fold(toSlash(absolute));
+    if (right === left || right.startsWith(`${left}/`)) return true;
+  }
+  return false;
 }
 
 interface ToolEvent {
