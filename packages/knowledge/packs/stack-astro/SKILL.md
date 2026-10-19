@@ -1,5 +1,11 @@
 ---
 name: stack-astro
+version: 7.4.1
+license: MIT
+docs: https://docs.astro.build
+llms: none
+checked: 2026-10-19
+npm: astro
 description: How a generated Astro site follows STACK-DECISION.md and the shared motion module. React islands are the exception.
 when-to-use: Use when the stack record picks astro, or when a site prompt adds pages, content, or motion on an Astro site.
 paths:
@@ -30,7 +36,11 @@ Set `document.documentElement.dataset.page` to the page name in `MOTION.md` so o
 
 Theatre runtime is `@theatre/core` only. Do not import `@theatre/studio`.
 
-If the page uses Astro view transitions, refresh ScrollTrigger after navigation. Do not construct a second Lenis. The motion module remains the owner.
+If the page uses Astro view transitions, refresh ScrollTrigger after navigation. A second Lenis is a second scroll owner, so the motion module remains the owner.
+
+## Transitions and images
+
+Multi-page sites can use ClientRouter and transition:name on an element that continues across pages. Picture can ask for avif and webp. Islands stay the exception named above.
 
 Import only the libraries the motion plan assigned. GSAP, including ScrollTrigger and SplitText, is the base engine when the plan uses it. Motion, anime.js, OGL or raw WebGL, and vanilla effects stay on the elements the plan named.
 

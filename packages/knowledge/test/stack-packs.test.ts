@@ -47,7 +47,7 @@ test("three stack packs parse and follow the decision record", () => {
       false,
       name,
     );
-    assert.equal(/\b\d+\.\d+\.\d+\b/.test(markdown), false, name);
+    assert.equal(/\b\d+\.\d+\.\d+\b/.test(bodyAfterFrontmatter(markdown)), false, name);
     assert.equal(/npm\s+install[^\n]*@latest/i.test(markdown), false, name);
     assert.equal(markdown.includes("@latest"), false, name);
     assert.match(markdown, /re-resolve at install/, name);

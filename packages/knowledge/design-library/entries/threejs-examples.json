@@ -1,0 +1,39 @@
+{
+  "id": "threejs-examples",
+  "kind": "technique",
+  "title": "Three.js examples",
+  "url": "https://threejs.org/examples/",
+  "source": "three-showcase",
+  "sourcePage": "https://threejs.org/examples/",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "technical",
+    "bold"
+  ],
+  "sectionTypes": [
+    "hero",
+    "gallery"
+  ],
+  "techniques": [
+    "glsl-gradient-noise",
+    "image-distortion-hover"
+  ],
+  "libraries": [
+    "three",
+    "glsl"
+  ],
+  "promptLanguage": "Distort one image on hover with a small noise field, and keep a gradient that never becomes a glossy wash. The still underneath stays sharp if the shader does not run.",
+  "notes": "The examples index is the map of official scenes. This entry records the distortion idea in our words.",
+  "perfCost": "medium",
+  "reducedMotion": "Reduced motion leaves the image undistorted and still.",
+  "sourceUrl": "https://threejs.org/examples/",
+  "license": "link-only",
+  "creditLine": "Three.js examples, https://threejs.org/examples/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

@@ -1,0 +1,44 @@
+{
+  "id": "dark-luxury-grade",
+  "kind": "pattern",
+  "title": "Dark luxury grade",
+  "url": "https://gsap.com/docs/v3/",
+  "source": "original-note",
+  "sourcePage": "https://gsap.com/docs/v3/",
+  "styleWorld": "minimal-luxury",
+  "family": "dark-luxury",
+  "moods": [
+    "dark",
+    "luxurious",
+    "calm",
+    "minimal",
+    "editorial"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story"
+  ],
+  "techniques": [
+    "grain-and-grade",
+    "typographic-scale",
+    "lenis-smooth-scroll"
+  ],
+  "libraries": [
+    "lenis",
+    "css-scroll",
+    "vanilla"
+  ],
+  "promptLanguage": "A dark field, a fine grain, and a soft reveal on a large serif headline. Lenis eases the column while the palette stays quiet and expensive.",
+  "notes": "Our note for a dark luxury world. It is not a copy of a brand site, and the GSAP docs link is only the page we had open.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion keeps the grade and shows the headline at full size immediately.",
+  "sourceUrl": "https://gsap.com/docs/v3/",
+  "license": "link-only",
+  "creditLine": "Original note. GSAP docs were open at https://gsap.com/docs/v3/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

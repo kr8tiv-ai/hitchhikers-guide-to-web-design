@@ -1,5 +1,10 @@
 ---
 name: motion
+version: built-in
+license: MIT
+docs: https://gsap.com/docs/v3/
+llms: https://gsap.com/llms.txt
+checked: 2026-10-19
 description: Copy one recipe from the full motion toolkit. The Guide ships every library, and a page imports the one its effect uses.
 when-to-use: Use when a site prompt adds one effect, or when planMotion has named the library for that effect.
 paths:

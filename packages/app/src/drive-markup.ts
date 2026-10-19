@@ -49,6 +49,11 @@ export interface DriveRun {
   stopReason?: string;
   /** True when this row failed because Grok hit a turn cap. */
   turnLimited?: boolean;
+  /**
+   * False when the run file still says running but the process is gone.
+   * Omitted means the caller already knows the run is live.
+   */
+  live?: boolean;
 }
 
 /** Queue-wide pause from queue.json. Absent means the queue is not held. */
@@ -157,13 +162,13 @@ export function driveQueueHeld(
 }
 
 function runningPromptId(items: readonly DriveItem[], run?: DriveRun | null): string | null {
-  if (run?.status !== "running") return null;
+  if (run?.status !== "running" || run.live === false) return null;
   const id = run.promptId.trim();
   if (id === "") return null;
-  // Pause flips a live row to paused while the process keeps going.
-  // A row left as running is an interrupted hold, not a live prompt.
+  // The run record names the prompt that is still going, including when
+  // the row is still marked running. An interrupted row is not live.
   const row = items.find((item) => item.id === id);
-  if (row !== undefined && row.status === "running") return null;
+  if (row !== undefined && row.status === "interrupted") return null;
   return id;
 }
 
@@ -200,7 +205,7 @@ export function queueBodyHtml(
           </div>`;
   }
   const live = items.some((item) => item.status === "running") || run?.status === "running";
-  const rows = items.map((item) => row(item, live, run)).join("\n");
+  const rows = items.map((item) => row(item, live, run, pause)).join("\n");
   const tail =
     run == null
       ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
@@ -507,15 +512,19 @@ function keepsPartialWork(item: DriveItem, run?: DriveRun | null): boolean {
   return /desk sets no cap|Grok stopped after \d+ turns/.test(run.reason);
 }
 
-function row(item: DriveItem, live = false, run?: DriveRun | null): string {
+function row(item: DriveItem, live = false, run?: DriveRun | null, pause?: DrivePause | null): string {
   const id = escapeHtml(item.id);
   const current = item.status === "running" ? ` class="is-current"` : "";
   const passed = item.status === "passed" ? " hh-drive__status--passed" : "";
   const held = live ? ` disabled aria-disabled="true"` : "";
   const note = keepsPartialWork(item, run) ? `<p class="hh-small" data-retry-note>Partial work is kept.</p>` : "";
+  const queueNote =
+    pause != null && item.status === "failed"
+      ? `<p class="hh-small" data-queue-retry>The queue is paused. Retry clears the pause and runs this prompt.</p>`
+      : "";
   const action =
     item.status === "failed"
-      ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>${note}`
+      ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>${note}${queueNote}`
       : item.status === "interrupted"
         ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="resume" data-prompt="${id}"${held}>Resume</button>`
         : "";

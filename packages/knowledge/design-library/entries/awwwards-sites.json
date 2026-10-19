@@ -1,0 +1,36 @@
+{
+  "id": "awwwards-sites",
+  "kind": "site",
+  "title": "Awwwards websites",
+  "url": "https://www.awwwards.com/websites/",
+  "source": "awwwards",
+  "sourcePage": "https://www.awwwards.com/websites/",
+  "styleWorld": "editorial",
+  "family": "portfolio",
+  "moods": [
+    "editorial",
+    "minimal"
+  ],
+  "sectionTypes": [
+    "gallery"
+  ],
+  "techniques": [
+    "typographic-scale"
+  ],
+  "libraries": [
+    "vanilla"
+  ],
+  "promptLanguage": "Use the directory as a prompt to name a type scale, then draw the page yourself. A winner is not a template.",
+  "notes": "The websites index was opened with the sites-of-the-day list. Nothing from the gallery is stored.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion changes nothing in the type scale.",
+  "sourceUrl": "https://www.awwwards.com/websites/",
+  "license": "link-only",
+  "creditLine": "Awwwards websites index, https://www.awwwards.com/websites/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

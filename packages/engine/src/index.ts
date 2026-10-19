@@ -383,6 +383,23 @@ export {
 } from "./brand/approve.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
 export { TYPE_PAIRINGS } from "./brand/tokens.ts";
+export {
+  brandKitFromAnswers,
+  contrastRatio,
+  defaultPalette,
+  passesBodyContrast,
+  passesLargeContrast,
+  writeBrandKit,
+} from "./brand/kit-from-interview.ts";
+export type { BrandAnswer, BrandPalette } from "./brand/kit-from-interview.ts";
+export {
+  FILM_CREDIT,
+  ambientSoundMarkup,
+  artCallsForFilm,
+  briefOptsIntoSound,
+  filmVideoMarkup,
+  filmVideoSlot,
+} from "./spec/film-media.ts";
 export { formatCost } from "./cost.ts";
 export {
   QueueFileError,

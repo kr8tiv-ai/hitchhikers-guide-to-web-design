@@ -26,11 +26,28 @@ const FRAMING =
 const EXAMPLE_LINE =
   "The golden template below is an example inside this packet, not the only legal output.";
 
+const REMIX_LINE = "Take the thinking, not the skin.";
+const REMIX_DETAIL =
+  "These are inspiration for the language of what is possible. Remix, improve and add your own idea; do not reproduce an entry.";
+
 export interface GalleryNote {
   styleWorld: string;
   name: string;
   why: string;
   borrow: string;
+}
+
+export interface PickedDesignNote {
+  sectionType: string;
+  title: string;
+  promptLanguage: string;
+  techniqueNote: string;
+}
+
+export interface DesignPackNote {
+  name: string;
+  stale: boolean;
+  excerpt: string;
 }
 
 export interface DesignLibrary {
@@ -40,6 +57,8 @@ export interface DesignLibrary {
   assetsMarkdown: string;
   facts: string;
   styleText: string;
+  picked?: readonly PickedDesignNote[];
+  packs?: readonly DesignPackNote[];
 }
 
 export function designLanguageFor(
@@ -54,8 +73,13 @@ export function designLanguageFor(
   const assets = assetPaths(library.assetsMarkdown, section);
   const gate = gateCard(library.facts, assets);
   const direction = oneLine(artDirection, "Follow the site brief and add one signature idea of your own.");
+  const libraryBlock = libraryLines(library, section);
   return [
     FRAMING,
+    "",
+    REMIX_LINE,
+    REMIX_DETAIL,
+    ...(libraryBlock === "" ? [] : ["", libraryBlock]),
     "",
     "### Art direction",
     "",
@@ -96,6 +120,15 @@ export function sectionIdOf(prompt: SitePromptSkeleton): string {
   const image = /^Art-direct and place the image set for ([^:]+):/i.exec(prompt.title);
   if (image?.[1] !== undefined) return slug(image[1]);
   return "";
+}
+
+function libraryLines(library: DesignLibrary, section: string): string {
+  const picked = (library.picked ?? []).filter((note) => section === "" || note.sectionType === section).slice(0, 4);
+  const packs = (library.packs ?? []).filter((pack) => !pack.stale && pack.excerpt.trim() !== "").slice(0, 2);
+  if (picked.length === 0 && packs.length === 0) return "";
+  const lines = picked.flatMap((note) => [`- ${note.title}: ${note.promptLanguage}`, `Technique: ${note.techniqueNote}`]);
+  for (const pack of packs) lines.push(pack.excerpt.trim());
+  return lines.join("\n");
 }
 
 function readGolden(prompt: SitePromptSkeleton, goldenDir: string): string {

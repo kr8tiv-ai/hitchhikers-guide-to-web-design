@@ -1,0 +1,38 @@
+{
+  "id": "howler-sound",
+  "kind": "technique",
+  "title": "Howler opt-in sound",
+  "url": "https://github.com/goldfire/howler.js",
+  "source": "official-docs",
+  "sourcePage": "https://howlerjs.com/",
+  "styleWorld": "playful",
+  "family": "playful",
+  "moods": [
+    "cinematic",
+    "dark"
+  ],
+  "sectionTypes": [
+    "hero",
+    "footer"
+  ],
+  "techniques": [
+    "ambient-sound-toggle"
+  ],
+  "libraries": [
+    "howler",
+    "web-audio"
+  ],
+  "promptLanguage": "Sound stays off until a labelled control is pressed, and that press is what starts the audio context. The choice is remembered and said so on the control.",
+  "notes": "Howler is the reference for a small player, and no Howler source is stored. Ambient audio is opt-in.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion starts silent, and sound begins only if the visitor turns it on.",
+  "sourceUrl": "https://github.com/goldfire/howler.js",
+  "license": "link-only",
+  "creditLine": "Howler, https://github.com/goldfire/howler.js",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

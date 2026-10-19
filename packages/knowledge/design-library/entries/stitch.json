@@ -1,0 +1,40 @@
+{
+  "id": "stitch",
+  "kind": "site",
+  "title": "Stitch",
+  "url": "https://stitch.withgoogle.com/",
+  "source": "direct",
+  "sourcePage": "https://stitch.withgoogle.com/",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "calm",
+    "editorial",
+    "minimal"
+  ],
+  "sectionTypes": [
+    "story",
+    "gallery"
+  ],
+  "techniques": [
+    "asymmetric-editorial-grid",
+    "typographic-scale"
+  ],
+  "libraries": [
+    "css-scroll",
+    "vanilla"
+  ],
+  "promptLanguage": "Build an asymmetric grid with one wide image and a narrow text column, and a type scale that jumps only once. Alignment stays deliberate.",
+  "notes": "Stitch was opened as a product page. The grid note is our pattern, not their interface.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion keeps the same grid with no entrance.",
+  "sourceUrl": "https://stitch.withgoogle.com/",
+  "license": "link-only",
+  "creditLine": "Stitch, https://stitch.withgoogle.com/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

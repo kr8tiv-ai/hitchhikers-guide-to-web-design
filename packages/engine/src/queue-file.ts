@@ -225,7 +225,8 @@ export async function loadQueue(projectDir: string): Promise<QueueFile | null> {
  * Passed, fixing, queued, paused, and escalated rows stay, including their
  * order. An escalated row is not rewritten to queued, and nothing is removed.
  * `pause.after` is the last finished prompt. The running row may later be
- * recorded with its real result. Only `resumeQueue` clears the flag.
+ * recorded with its real result. `resumeQueue` clears the flag. Explicit
+ * Retry calls it. An automatic retry does not.
  */
 export function pauseQueue(queue: QueueFile, now: Date = new Date()): QueueFile {
   const clean = assertQueue(queue);

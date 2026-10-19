@@ -10,6 +10,14 @@ export interface ApproveCoverage {
   message: string;
 }
 
+function brandPanel(markdown: string): string {
+  if (markdown.trim() === "") return "";
+  return `<section data-brand-kit>
+        <h2>Brand kit</h2>
+        <pre>${escapeHtml(markdown)}</pre>
+      </section>`;
+}
+
 function coverageCount(rows: readonly { covered: boolean }[]): string {
   const covered = rows.filter((row) => row.covered).length;
   return `Plan coverage: ${covered} of ${rows.length} pages and features covered`;
@@ -58,6 +66,7 @@ export function approveMain(
   changeError = "",
   coverage?: ApproveCoverage,
   confirmError = "",
+  brandMarkdown = "",
 ): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
@@ -132,6 +141,7 @@ export function approveMain(
         ${same}
         ${sections}
         ${coverageTable(coverage)}
+        ${brandPanel(brandMarkdown)}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           ${confirm}

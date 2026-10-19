@@ -1,0 +1,37 @@
+{
+  "id": "r3f-docs",
+  "kind": "technique",
+  "title": "React Three Fiber",
+  "url": "https://r3f.docs.pmnd.rs/",
+  "source": "official-docs",
+  "sourcePage": "https://r3f.docs.pmnd.rs/",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "technical",
+    "cinematic"
+  ],
+  "sectionTypes": [
+    "hero"
+  ],
+  "techniques": [
+    "r3f-island"
+  ],
+  "libraries": [
+    "r3f",
+    "three"
+  ],
+  "promptLanguage": "Mount a small React Three Fiber island on an Astro page and keep the rest of the page as HTML. The canvas has a poster and a width it can afford.",
+  "notes": "Official R3F docs, and the island boundary is the idea we keep. Their examples are not copied into this library.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion does not hydrate the island and shows the poster instead.",
+  "sourceUrl": "https://r3f.docs.pmnd.rs/",
+  "license": "link-only",
+  "creditLine": "React Three Fiber docs, https://r3f.docs.pmnd.rs/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

@@ -5,7 +5,7 @@
  * Acceptance is written beside config.json. voiceEngine stays local until that file matches the current card.
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ConfigError,
@@ -56,6 +56,7 @@ interface SettingsInput {
   model: string;
   effort: Effort;
   acceptQuote: boolean;
+  imagineBrowser: boolean;
 }
 
 export interface SettingsView {
@@ -68,6 +69,7 @@ export interface SettingsView {
   restPerHour: number;
   streamingPerHour: number;
   note: string | null;
+  imagineBrowser: boolean;
 }
 
 export interface SettingsFlash {
@@ -87,7 +89,7 @@ export async function loadSettingsView(projectDir: string): Promise<SettingsView
   const rates = await loadXaiSttRates();
   const config = loadConfig(projectDir);
   const quote = await readQuoteFile(projectDir);
-  return viewFrom(config, quote, rates);
+  return { ...viewFrom(config, quote, rates), imagineBrowser: await readImagineBrowser(projectDir) };
 }
 
 export function settingsStatus(view: SettingsView): string {
@@ -158,6 +160,14 @@ export function renderSettingsMain(
         </div>
         <p class="hh-qcard__why" data-effort-hint>Higher is more thorough and slower.</p>
       </div>
+      <div data-settings="imagine">
+        <p class="hh-qcard__label">Grok Imagine in the browser</p>
+        <p class="hh-qcard__why" data-imagine-explain>Use my Grok Imagine in my browser. The desk opens an embedded browser with a profile in this project's data folder. You sign in to your own Grok account yourself. The desk drives pages in that profile and never reads, exports, or extracts cookies, tokens, or credentials. Off means this path is not built. The Grok CLI stays first. An optional API key is labelled billed per use, and the desk does not switch to it on its own.</p>
+        <label class="hh-btn hh-btn--secondary">
+          <input type="checkbox" name="imagineBrowser" value="yes" data-imagine-browser${view.imagineBrowser ? " checked" : ""} />
+          Use my Grok Imagine in my browser
+        </label>
+      </div>
       <div class="hh-qcard__actions">
         <button class="hh-btn hh-btn--primary" type="submit" data-tip="Writes voice, model, and effort for this project.">Save settings</button>
       </div>
@@ -172,7 +182,7 @@ export async function applySettingsPost(
   const rates = await loadXaiSttRates();
   const current = loadConfig(projectDir);
   const previous = await readQuoteFile(projectDir);
-  const view = viewFrom(current, previous, rates);
+  const view = { ...viewFrom(current, previous, rates), imagineBrowser: await readImagineBrowser(projectDir) };
   const parsed = parseSettingsBody(raw, contentType, current.model);
   if ("error" in parsed) return { status: 400, error: parsed.error, view };
 
@@ -199,6 +209,7 @@ export async function applySettingsPost(
     await withStateLock(projectDir, async () => {
       await replaceViaTemp(path.join(dir, STT_QUOTE_FILENAME), quoteJson(quote));
       await replaceViaTemp(path.join(dir, "config.json"), `${JSON.stringify(checked, null, 2)}\n`);
+      await writeImagineBrowser(projectDir, parsed.imagineBrowser);
     });
   } catch (error: unknown) {
     if (error instanceof LockHeld) {
@@ -268,6 +279,7 @@ function viewFrom(config: GuideConfig, quote: QuoteFile | null, rates: XaiSttRat
       config.voiceEngine === "xai" && !accepted
         ? "The config names xAI speech-to-text, and the rate is not accepted, so this page keeps the free engine."
         : null,
+    imagineBrowser: false,
   };
 }
 
@@ -342,6 +354,7 @@ function parseSettingsBody(
   let model: unknown;
   let effort: unknown;
   let acceptQuote = false;
+  let imagineBrowser = false;
   if (mime === "application/json") {
     let value: unknown;
     try {
@@ -354,12 +367,14 @@ function parseSettingsBody(
     model = value.model;
     effort = value.effort;
     acceptQuote = value.acceptQuote === true || value.acceptQuote === "yes";
+    imagineBrowser = value.imagineBrowser === true || value.imagineBrowser === "yes";
   } else if (mime === "application/x-www-form-urlencoded") {
     const params = new URLSearchParams(raw);
     voice = params.get("voice");
     model = params.get("model");
     effort = params.get("effort");
     acceptQuote = params.getAll("acceptQuote").includes("yes");
+    imagineBrowser = params.get("imagineBrowser") === "yes";
   } else {
     return { error: "The desk could not read that request." };
   }
@@ -375,7 +390,39 @@ function parseSettingsBody(
   if (!modelAllowed(trimmed, currentModel)) {
     return { error: "Model must be a short name such as grok-4.7." };
   }
-  return { voice, model: trimmed, effort, acceptQuote };
+  return { voice, model: trimmed, effort, acceptQuote, imagineBrowser };
+}
+
+async function readImagineBrowser(projectDir: string): Promise<boolean> {
+  try {
+    const text = await readFile(mediaSettingsFile(projectDir), "utf8");
+    const raw: unknown = JSON.parse(text);
+    return typeof raw === "object" && raw !== null && (raw as { browser?: unknown }).browser === true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeImagineBrowser(projectDir: string, browser: boolean): Promise<void> {
+  const file = mediaSettingsFile(projectDir);
+  let order = ["grok-cli", "browser", "api"];
+  let api = false;
+  try {
+    const raw: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (typeof raw === "object" && raw !== null) {
+      const record = raw as { order?: unknown; api?: unknown };
+      if (Array.isArray(record.order) && record.order.every((item) => typeof item === "string")) order = record.order;
+      api = record.api === true;
+    }
+  } catch {
+    order = ["grok-cli", "browser", "api"];
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await replaceViaTemp(file, `${JSON.stringify({ order, browser, api }, null, 2)}\n`);
+}
+
+function mediaSettingsFile(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "assets", "media.json");
 }
 
 function modelAllowed(value: string, current: string): boolean {

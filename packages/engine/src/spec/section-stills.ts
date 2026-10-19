@@ -8,6 +8,7 @@ import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer, type ArtDirection } from "./art-direction.ts";
 import type { PlannedPage } from "./brief-plan.ts";
+import { artCallsForFilm, filmVideoSlot } from "./film-media.ts";
 
 export const SECTION_STILL_MODEL = "grok-imagine-image-2.0";
 
@@ -30,10 +31,25 @@ export interface SectionStillSlot {
   replaces?: string;
 }
 
+export interface SectionVideoSlot {
+  id: string;
+  kind: "video";
+  model: string;
+  prompt: string;
+  aspect: string;
+  n: number;
+  subjectIsReal: false;
+  light: string;
+  seconds: number;
+  resolution: "480p" | "720p";
+  generateAudio: false;
+}
+
 export interface SectionStillPlan {
   artBlock: string;
   kept: SuppliedStill[];
   slots: SectionStillSlot[];
+  videos: SectionVideoSlot[];
 }
 
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"]);
@@ -87,7 +103,7 @@ export function planSectionStills(input: {
     if (real.has(sectionId)) slot.replaces = sectionId;
     slots.push(slot);
   }
-  return { artBlock, kept, slots };
+  return { artBlock, kept, slots, videos: [] };
 }
 
 export function stillPrompt(sectionId: string, art: ArtDirection, artBlock: string, aspect: string): string {
@@ -136,12 +152,14 @@ export function writeSectionStillPlan(
     art,
     supplied: findSuppliedStills(projectDir, brief, sections),
   });
+  const videos = artCallsForFilm(brief, art) ? [filmVideoSlot(art, brief)] : [];
+  const written = { ...plan, videos };
   const dir = path.join(projectDir, ".hitchhiker", "assets");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "slots.json"), `${JSON.stringify({ slots: plan.slots }, null, 2)}\n`, "utf8");
+  writeFileSync(path.join(dir, "slots.json"), `${JSON.stringify({ slots: [...written.slots, ...written.videos] }, null, 2)}\n`, "utf8");
   const assetsPath = path.join(projectDir, ".hitchhiker", "ASSETS.md");
-  if (!exists(assetsPath)) writeFileSync(assetsPath, renderAssetTable(plan), "utf8");
-  return plan;
+  if (!exists(assetsPath)) writeFileSync(assetsPath, renderAssetTable(written), "utf8");
+  return written;
 }
 
 function renderAssetTable(plan: SectionStillPlan): string {

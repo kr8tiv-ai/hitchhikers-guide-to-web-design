@@ -111,7 +111,19 @@ function driveRun(run: ReturnType<typeof readBuildRun>): DriveRun | null {
   };
   if (run.turnLimited) view.turnLimited = true;
   if (run.stopReason !== "") view.stopReason = run.stopReason;
+  view.live = pidAlive(run.pid);
   return view;
+}
+
+function pidAlive(pid: number | null): boolean {
+  if (pid === null || !Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    const code = typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : "";
+    return code === "EPERM";
+  }
 }
 
 function safeDriveError(message: string): string | null {

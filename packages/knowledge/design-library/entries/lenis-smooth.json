@@ -1,0 +1,43 @@
+{
+  "id": "lenis-smooth",
+  "kind": "technique",
+  "title": "Lenis smooth scroll",
+  "url": "https://github.com/darkroomengineering/lenis",
+  "source": "direct",
+  "sourcePage": "https://github.com/darkroomengineering/lenis",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "calm",
+    "editorial",
+    "minimal"
+  ],
+  "sectionTypes": [
+    "story",
+    "hero"
+  ],
+  "techniques": [
+    "lenis-smooth-scroll",
+    "layered-parallax"
+  ],
+  "libraries": [
+    "lenis",
+    "gsap"
+  ],
+  "promptLanguage": "Lenis eases the story column and a soft reveal lifts the first line. Layered parallax stays slow enough to read.",
+  "notes": "MIT library by darkroom.engineering. The ticker snippet is our remix of the documented GSAP ticker recipe.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion uses the native scroller and keeps every line on screen.",
+  "sourceUrl": "https://github.com/darkroomengineering/lenis",
+  "license": "MIT",
+  "creditLine": "Lenis by darkroom.engineering, MIT, https://github.com/darkroomengineering/lenis",
+  "licenseTextPath": "snippets/lenis-gsap-ticker/LICENSE",
+  "ingestMode": "code",
+  "snippets": [
+    "snippets/lenis-gsap-ticker/ticker.ts"
+  ],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

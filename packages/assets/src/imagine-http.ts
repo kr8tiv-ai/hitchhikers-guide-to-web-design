@@ -75,6 +75,8 @@ export interface VideoRequest {
   seconds: number;
   resolution: VideoResolution;
   aspect?: string;
+  /** Sent only when set. Decorative video passes false. xAI otherwise turns audio on. */
+  generateAudio?: boolean;
 }
 
 export interface HttpDeps {
@@ -159,6 +161,7 @@ export function startVideo(req: VideoRequest, deps: HttpDeps): Promise<{ id: str
   };
   if (req.aspect !== undefined) body.aspect_ratio = req.aspect;
   if (req.image !== undefined) body.image = req.image;
+  if (req.generateAudio !== undefined) body.generate_audio = req.generateAudio;
   return postJson(videoUrl(), body, deps).then(readRequestId);
 }
 

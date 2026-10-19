@@ -1,0 +1,36 @@
+{
+  "id": "threejs-home",
+  "kind": "site",
+  "title": "Three.js",
+  "url": "https://threejs.org/",
+  "source": "official-docs",
+  "sourcePage": "https://threejs.org/",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero"
+  ],
+  "techniques": [
+    "three-hero"
+  ],
+  "libraries": [
+    "three"
+  ],
+  "promptLanguage": "A WebGL hero holds one clear object on a quiet ground, with a still poster behind the canvas. The scene explains the offer before it shows off the shader.",
+  "notes": "Official Three.js home, read as vocabulary for a single-scene hero. No example code is stored here.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows the poster and skips the render loop.",
+  "sourceUrl": "https://threejs.org/",
+  "license": "link-only",
+  "creditLine": "Three.js, https://threejs.org/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

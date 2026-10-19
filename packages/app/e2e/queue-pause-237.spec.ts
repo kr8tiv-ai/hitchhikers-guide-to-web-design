@@ -326,3 +326,150 @@ function childSource(): string {
     await new Promise(() => {});
   `;
 }
+
+test("Retry on a paused queue clears the pause", async ({ page }) => {
+  test.setTimeout(60_000);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-pause-046-"));
+  const child = startFixedDesk(projectDir, {
+    items: [
+      { id: "001", kind: "build", status: "failed" },
+      { id: "002", kind: "build", status: "queued" },
+    ],
+    pause: { at: "2026-10-19T00:00:00.000Z", after: "001" },
+    run: { promptId: "001", status: "failed" },
+  });
+  try {
+    const url = await readUrl(child);
+    await page.goto(`${url.replace(/\/$/, "")}/hh-dashboard`);
+    await expect(page.getByText("Paused after 001", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-queue-retry]")).toHaveText(
+      "The queue is paused. Retry clears the pause and runs this prompt.",
+    );
+    await page.locator('[data-action="retry"][data-prompt="001"]').click();
+    await expect(page.locator("[data-queue-state='paused']")).toHaveCount(0, { timeout: 20_000 });
+    expect(await spawnIds(projectDir)).toContain("001");
+  } finally {
+    await stopDesk(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("a pause while 064 is running names 064, then the settled line", async ({ page }) => {
+  test.setTimeout(60_000);
+  const runningDir = await mkdtemp(path.join(tmpdir(), "hh-pause-047-"));
+  const running = startFixedDesk(runningDir, {
+    items: [
+      { id: "063", kind: "build", status: "passed" },
+      { id: "064", kind: "build", status: "running" },
+    ],
+    pause: { at: "2026-10-19T00:00:00.000Z", after: "063" },
+    run: { promptId: "064", status: "running" },
+  });
+  try {
+    const url = await readUrl(running);
+    await page.goto(`${url.replace(/\/$/, "")}/hh-dashboard`);
+    await expect(page.getByText("Pause set. 064 is still running and will finish first.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Paused after 063", { exact: true })).toHaveCount(0);
+  } finally {
+    await stopDesk(running);
+    await rm(runningDir, { recursive: true, force: true });
+  }
+
+  const settledDir = await mkdtemp(path.join(tmpdir(), "hh-pause-047b-"));
+  const settled = startFixedDesk(settledDir, {
+    items: [
+      { id: "063", kind: "build", status: "passed" },
+      { id: "064", kind: "build", status: "passed" },
+    ],
+    pause: { at: "2026-10-19T00:00:00.000Z", after: "064" },
+    run: { promptId: "064", status: "passed" },
+  });
+  try {
+    const url = await readUrl(settled);
+    await page.goto(`${url.replace(/\/$/, "")}/hh-dashboard`);
+    await expect(page.getByText("Paused after 064", { exact: true })).toBeVisible();
+    await expect(page.getByText("still running")).toHaveCount(0);
+  } finally {
+    await stopDesk(settled);
+    await rm(settledDir, { recursive: true, force: true });
+  }
+});
+
+function startFixedDesk(
+  projectDir: string,
+  seed: {
+    items: { id: string; kind: string; status: string }[];
+    pause: { at: string; after: string };
+    run: { promptId: string; status: string };
+  },
+): ChildProcess {
+  const serverFile = path.resolve(here, "../src/server/server.ts");
+  return spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", fixedChild(seed)], {
+    env: {
+      ...process.env,
+      HH_E2E_PROJECT: projectDir,
+      HH_E2E_SERVER: pathToFileURL(serverFile).href,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+function fixedChild(seed: {
+  items: { id: string; kind: string; status: string }[];
+  pause: { at: string; after: string };
+  run: { promptId: string; status: string };
+}): string {
+  return `
+    import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+    import path from "node:path";
+    const specifier = process.env.HH_E2E_SERVER;
+    const projectDir = process.env.HH_E2E_PROJECT;
+    mkdirSync(path.join(projectDir, "interview"), { recursive: true });
+    mkdirSync(path.join(projectDir, ".hitchhiker", "prompts"), { recursive: true });
+    writeFileSync(path.join(projectDir, "interview", "tree.yaml"), ${JSON.stringify(`questions:
+  - id: DP-2.1
+    module: the-question
+    depth: [express, standard, deep]
+    ask: "What should the site do?"
+    why: "The job of the site."
+    input: [text]
+    skip_default: "Site why not stated."
+    writes:
+      - "SITE-BRIEF.md"
+`)});
+    for (const item of ${JSON.stringify(seed.items)}) {
+      writeFileSync(path.join(projectDir, ".hitchhiker", "prompts", item.id + ".md"), "Prompt " + item.id + "\\n");
+    }
+    writeFileSync(path.join(projectDir, ".hitchhiker", "queue.json"), JSON.stringify({
+      items: ${JSON.stringify(seed.items)},
+      pause: ${JSON.stringify(seed.pause)},
+    }, null, 2));
+    writeFileSync(path.join(projectDir, ".hitchhiker", "build-run.json"), JSON.stringify({
+      promptId: ${JSON.stringify(seed.run.promptId)},
+      status: ${JSON.stringify(seed.run.status)},
+      model: "grok-4.7-build-fast",
+      effort: "xhigh",
+      startedAt: "2026-10-19T00:00:00.000Z",
+      elapsedMs: 10,
+      lastLines: [],
+      filesWritten: [],
+      reason: "",
+      pid: ${seed.run.status === "running" ? "process.pid" : "null"},
+      recovery: "",
+      recoveryRerun: false,
+    }));
+    const loaded = await import(specifier);
+    const think = async () => {
+      throw new Error("the pause desk must not ask the model");
+    };
+    const buildSpawn = (request) => {
+      appendFileSync(path.join(projectDir, "spawn-order.txt"), request.promptId + "\\n");
+      request.onOutput?.('{"type":"end","stopReason":"end_turn"}');
+      return { pid: 999999, done: Promise.resolve({ code: 0, stdout: "", stderr: "", errorCode: null }) };
+    };
+    const handle = await loaded.startServer({ projectDir, open: false, guideThink: think, buildSpawn });
+    process.stdout.write(handle.url + "\\n");
+    await new Promise(() => {});
+  `;
+}

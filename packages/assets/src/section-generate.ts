@@ -39,10 +39,39 @@ export interface MediaImageRequest {
   n: number;
 }
 
+export interface MediaVideoRequest {
+  model: string;
+  prompt: string;
+  seconds: number;
+  resolution: "480p" | "720p" | "1080p";
+  aspect?: string;
+  image?: string;
+  generateAudio?: boolean;
+}
+
+export interface MediaPoll {
+  url?: string;
+  bytes?: Uint8Array;
+}
+
+export class ImagineHandsBack extends Error {
+  constructor(message = "Imagine needs you. A captcha, sign-in, or limit stopped the browser. Nothing was generated.") {
+    super(message);
+    this.name = "ImagineHandsBack";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export interface ImaginePageDriver {
+  openImagine?(projectDir: string): Promise<void>;
+  submitStill(prompt: string): Promise<{ bytes: Uint8Array } | { handsBack: string }>;
+  submitVideo?(prompt: string): Promise<{ bytes: Uint8Array } | { handsBack: string }>;
+}
+
 export interface MediaProvider {
   generateImage(req: MediaImageRequest): Promise<GeneratedImage[]>;
-  startVideo?(req: { model: string; prompt: string; seconds: number; aspect?: string }): Promise<{ id: string }>;
-  pollVideo?(id: string): Promise<{ url: string }>;
+  startVideo?(req: MediaVideoRequest): Promise<{ id: string }>;
+  pollVideo?(id: string): Promise<MediaPoll>;
 }
 
 export interface GenerateSectionResult {
@@ -62,6 +91,7 @@ export interface DeskProviderDeps {
   fetchImpl?: typeof fetch;
   key?: string;
   client?: ImagineClient;
+  browserDriver?: ImaginePageDriver;
 }
 
 interface CreditRow {
@@ -117,68 +147,124 @@ export function readMediaSettings(projectDir: string): MediaSettings {
   };
 }
 
+const VIDEO_CREDIT = "Concept video, generated with Grok Imagine";
+
 export function grokCliProvider(projectDir: string, run: SpawnLike, env: NodeJS.ProcessEnv = process.env): MediaProvider {
   let serial = 0;
+  const safeEnv = deskEnv(env);
   return {
     async generateImage(req) {
       serial += 1;
       const dest = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.png`);
-      await mkdir(path.dirname(dest), { recursive: true });
-      const prompt = [
-        "Use the image_gen tool and save the still to the path below.",
+      await runCli(projectDir, run, safeEnv, dest, [
+        "Use features.image_gen on the existing Grok login and save the still to the path below.",
+        "No API key is attached.",
         `Model: ${req.model}`,
         `Aspect ratio: ${req.aspect}`,
         `Count: ${req.n}`,
         `Save the image bytes to ${dest}`,
         "Prompt:",
         req.prompt,
-      ].join("\n");
-      const promptFile = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.prompt.txt`);
-      await writeFile(promptFile, prompt, "utf8");
-      const result = await run({
-        command: "grok",
-        args: [
-          "--no-auto-update",
-          "--no-alt-screen",
-          "--prompt-file",
-          promptFile,
-          "-m",
-          BUILD_MODEL,
-          "--effort",
-          BUILD_EFFORT,
-          "--cwd",
-          projectDir,
-        ],
-        cwd: projectDir,
-        env,
-        timeoutMs: 120_000,
-      });
-      if (result.status !== 0) throw new Error("Grok CLI image generation failed.");
+      ]);
       const bytes = await readFile(dest);
       return [{ b64: Buffer.from(bytes).toString("base64") }];
+    },
+    async startVideo(req) {
+      serial += 1;
+      const dest = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.mp4`);
+      const audio = req.generateAudio === true ? "true" : "false";
+      await runCli(projectDir, run, safeEnv, dest, [
+        "Use features.video_gen on the existing Grok login and save the video to the path below.",
+        "No API key is attached.",
+        `generate_audio: ${audio}`,
+        `Model: ${req.model}`,
+        `Seconds: ${req.seconds}`,
+        `Resolution: ${req.resolution}`,
+        `Save the video bytes to ${dest}`,
+        "Prompt:",
+        req.prompt,
+      ]);
+      await readFile(dest);
+      return { id: dest };
+    },
+    async pollVideo(id) {
+      return { bytes: await readFile(id) };
     },
   };
 }
 
-/** Opt-in browser Imagine. This does not open a page, scrape a session, or bypass a limit. */
-export function browserHandsBackProvider(): MediaProvider {
+/** Opt-in browser Imagine. Without a driver it hands control back and generates nothing. */
+export function browserHandsBackProvider(projectDir = "", driver?: ImaginePageDriver): MediaProvider {
+  if (driver === undefined) {
+    return {
+      async generateImage() {
+        throw new ImagineHandsBack("Browser Imagine is on, and no signed-in session is attached. Nothing was generated.");
+      },
+    };
+  }
+  return browserImagineProvider(projectDir, driver);
+}
+
+export function browserImagineProvider(projectDir: string, driver: ImaginePageDriver): MediaProvider {
+  let lastAt = 0;
+  const pace = async (): Promise<void> => {
+    const wait = 3000 - (Date.now() - lastAt);
+    if (lastAt !== 0 && wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastAt = Date.now();
+  };
   return {
-    async generateImage() {
-      throw new Error(
-        "Browser Imagine is on. A captcha or a limit hands control back to the user. No page was driven.",
-      );
+    async generateImage(req) {
+      await pace();
+      if (driver.openImagine !== undefined) await driver.openImagine(projectDir);
+      const result = await driver.submitStill(req.prompt);
+      if ("handsBack" in result) throw new ImagineHandsBack(result.handsBack);
+      const dest = path.join(projectDir, ".hitchhiker", "assets", "browser-out", `${Date.now()}.png`);
+      await mkdir(path.dirname(dest), { recursive: true });
+      await writeFile(dest, result.bytes);
+      return [{ b64: Buffer.from(result.bytes).toString("base64") }];
+    },
+    async startVideo(req) {
+      await pace();
+      if (driver.submitVideo === undefined) throw new ImagineHandsBack("Video is not available in this browser session.");
+      const result = await driver.submitVideo(req.prompt);
+      if ("handsBack" in result) throw new ImagineHandsBack(result.handsBack);
+      const dest = path.join(projectDir, ".hitchhiker", "assets", "browser-out", `${Date.now()}.mp4`);
+      await mkdir(path.dirname(dest), { recursive: true });
+      await writeFile(dest, result.bytes);
+      return { id: dest };
+    },
+    async pollVideo(id) {
+      return { bytes: await readFile(id) };
     },
   };
 }
 
 export function apiMediaProvider(deps: { key: string; fetchImpl: typeof fetch; client?: ImagineClient }): MediaProvider {
   const client = deps.client ?? createImagineClient();
+  const http = { key: deps.key, fetchImpl: deps.fetchImpl };
   return {
     async generateImage(req) {
       return client.generateImage(
         { model: req.model, prompt: req.prompt, aspect: req.aspect, n: req.n },
-        { key: deps.key, fetchImpl: deps.fetchImpl },
+        http,
       );
+    },
+    async startVideo(req) {
+      return client.startVideo(
+        {
+          model: req.model,
+          prompt: req.prompt,
+          seconds: req.seconds,
+          resolution: req.resolution,
+          ...(req.aspect === undefined ? {} : { aspect: req.aspect }),
+          ...(req.image === undefined ? {} : { image: req.image }),
+          ...(req.generateAudio === undefined ? {} : { generateAudio: req.generateAudio }),
+        },
+        http,
+      );
+    },
+    async pollVideo(id) {
+      return client.pollVideo(id, { ...http, sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) });
     },
   };
 }
@@ -190,7 +276,7 @@ export function resolveDeskProvider(projectDir: string, deps: DeskProviderDeps =
     if (name === "grok-cli" && deps.spawn !== undefined) {
       chain.push(grokCliProvider(projectDir, deps.spawn, deps.env ?? process.env));
     }
-    if (name === "browser" && settings.browser) chain.push(browserHandsBackProvider());
+    if (name === "browser" && settings.browser) chain.push(browserHandsBackProvider(projectDir, deps.browserDriver));
     if (name === "api" && settings.api && deps.key !== undefined && deps.key.trim() !== "" && deps.fetchImpl !== undefined) {
       const api: { key: string; fetchImpl: typeof fetch; client?: ImagineClient } = {
         key: deps.key,
@@ -216,6 +302,21 @@ export async function generateSectionStills(
   const fallbacks: string[] = [];
   const usedStock = new Set<string>();
   for (const slot of slots) {
+    if (slot.kind === "video") {
+      const video = await tryVideo(projectDir, provider, slot, options.fetchImpl);
+      if (video === null) {
+        await dropSlot(projectDir, slot.id);
+        const note = `Video was unavailable for ${slot.id}. Stills and motion only.`;
+        fallbacks.push(note);
+        await appendNote(projectDir, note);
+        continue;
+      }
+      count += 1;
+      credits.push(generatedCredit(slot, video.rel));
+      await updateAssetRows(projectDir, [assetRow(slot.id, "imagine", video.rel, "generated", "done")]);
+      await persist(projectDir, credits, pictures, count);
+      continue;
+    }
     if (slot.kind !== "still") continue;
     if (slot.status === "done" && slot.file !== undefined && slot.file.length > 0) continue;
     if (refusesRealReplacement(slot)) throw new RealSubjectError(slot.id);
@@ -240,6 +341,7 @@ export async function generateSectionStills(
 }
 
 function chainProvider(chain: readonly MediaProvider[]): MediaProvider {
+  let videoOwner: MediaProvider | undefined;
   return {
     async generateImage(req) {
       let last = "No Imagine provider is available.";
@@ -247,12 +349,121 @@ function chainProvider(chain: readonly MediaProvider[]): MediaProvider {
         try {
           return await provider.generateImage(req);
         } catch (error) {
+          if (error instanceof ImagineHandsBack) throw error;
           last = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : last;
         }
       }
       throw new Error(last);
     },
+    async startVideo(req) {
+      let last = "No Imagine provider is available.";
+      for (const provider of chain) {
+        if (provider.startVideo === undefined) continue;
+        try {
+          const started = await provider.startVideo(req);
+          videoOwner = provider;
+          return started;
+        } catch (error) {
+          if (error instanceof ImagineHandsBack) throw error;
+          last = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : last;
+        }
+      }
+      throw new Error(last);
+    },
+    async pollVideo(id) {
+      if (videoOwner?.pollVideo === undefined) throw new Error("No Imagine provider is available.");
+      return videoOwner.pollVideo(id);
+    },
   };
+}
+
+function deskEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (key === "XAI_API_KEY" || key === "OPENAI_API_KEY") continue;
+    if (/API_KEY|APIKEY|SECRET|TOKEN|AUTHORIZATION/i.test(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
+async function runCli(
+  projectDir: string,
+  run: SpawnLike,
+  env: NodeJS.ProcessEnv,
+  dest: string,
+  lines: string[],
+): Promise<void> {
+  await mkdir(path.dirname(dest), { recursive: true });
+  const promptFile = dest.replace(/\.(png|mp4)$/i, ".prompt.txt");
+  await writeFile(promptFile, lines.join("\n"), "utf8");
+  const result = await run({
+    command: "grok",
+    args: [
+      "--no-auto-update",
+      "--no-alt-screen",
+      "--prompt-file",
+      promptFile,
+      "-m",
+      BUILD_MODEL,
+      "--effort",
+      BUILD_EFFORT,
+      "--cwd",
+      projectDir,
+    ],
+    cwd: projectDir,
+    env,
+    timeoutMs: 120_000,
+  });
+  if (result.status !== 0) throw new Error("Grok CLI media generation failed.");
+}
+
+async function tryVideo(
+  projectDir: string,
+  provider: MediaProvider,
+  slot: AssetSlot,
+  fetchImpl: typeof fetch | undefined,
+): Promise<{ rel: string } | null> {
+  if (provider.startVideo === undefined || provider.pollVideo === undefined) return null;
+  try {
+    const started = await provider.startVideo({
+      model: slot.model,
+      prompt: slot.prompt,
+      seconds: slot.seconds ?? 8,
+      resolution: slot.resolution ?? "720p",
+      aspect: slot.aspect,
+      ...(slot.image === undefined ? {} : { image: slot.image }),
+      ...(slot.generateAudio === undefined ? {} : { generateAudio: slot.generateAudio }),
+    });
+    const polled = await provider.pollVideo(started.id);
+    const bytes = polled.bytes ?? (polled.url === undefined ? null : await downloadBytes(polled.url, fetchImpl));
+    if (bytes === null || bytes.byteLength === 0) return null;
+    const rel = `src/assets/generated/${slot.id}.mp4`;
+    const abs = path.join(projectDir, ...rel.split("/"));
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, bytes);
+    const copy = path.join(generatedDir(projectDir), `${slot.id}.mp4`);
+    await mkdir(path.dirname(copy), { recursive: true });
+    await writeFile(copy, bytes);
+    return { rel };
+  } catch (error) {
+    if (error instanceof ImagineHandsBack) throw error;
+    return null;
+  }
+}
+
+async function downloadBytes(url: string, fetchImpl: typeof fetch | undefined): Promise<Uint8Array | null> {
+  if (fetchImpl === undefined) return null;
+  const response = await fetchImpl(url);
+  if (!response.ok) return null;
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+async function dropSlot(projectDir: string, id: string): Promise<void> {
+  const file = slotsFile(projectDir);
+  const raw = JSON.parse(await readFile(file, "utf8")) as { slots?: { id?: string }[] };
+  const slots = (raw.slots ?? []).filter((slot) => slot.id !== id);
+  await writeFile(file, `${JSON.stringify({ slots }, null, 2)}\n`, "utf8");
 }
 
 async function tryGenerate(
@@ -271,6 +482,7 @@ async function tryGenerate(
       if (images.length > 0) return { images, error: "" };
       last = "Imagine image response had no images.";
     } catch (error) {
+      if (error instanceof ImagineHandsBack) throw error;
       last = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Imagine failed.";
     }
   }
@@ -382,7 +594,7 @@ function generatedCredit(slot: AssetSlot, file: string): CreditRow {
   return {
     file,
     origin: "generated",
-    label: CONCEPT_LABEL,
+    label: slot.kind === "video" ? VIDEO_CREDIT : CONCEPT_LABEL,
     prompt: redact(slot.prompt),
     model: slot.model,
     alt: altFor(slot.id),

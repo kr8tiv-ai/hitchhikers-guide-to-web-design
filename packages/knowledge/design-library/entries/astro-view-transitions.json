@@ -1,0 +1,36 @@
+{
+  "id": "astro-view-transitions",
+  "kind": "technique",
+  "title": "Astro view transitions",
+  "url": "https://docs.astro.build/en/guides/view-transitions/",
+  "source": "official-docs",
+  "sourcePage": "https://docs.astro.build/en/guides/view-transitions/",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "calm",
+    "minimal"
+  ],
+  "sectionTypes": [
+    "transition"
+  ],
+  "techniques": [
+    "view-transitions"
+  ],
+  "libraries": [
+    "view-transitions"
+  ],
+  "promptLanguage": "Name the shared element and let the router crossfade it between two Astro pages. The heading is the thing that continues.",
+  "notes": "Official view transitions guide. The pattern below the technique file is ours.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion disables the named transition and loads the next page complete.",
+  "sourceUrl": "https://docs.astro.build/en/guides/view-transitions/",
+  "license": "link-only",
+  "creditLine": "Astro view transitions guide, https://docs.astro.build/en/guides/view-transitions/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

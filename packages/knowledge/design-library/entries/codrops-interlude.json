@@ -1,0 +1,39 @@
+{
+  "id": "codrops-interlude",
+  "kind": "technique",
+  "title": "Interlude Astro page transitions",
+  "url": "https://tympanus.net/codrops/2026/10/07/interlude-astro-page-transitions/",
+  "source": "codrops",
+  "sourcePage": "https://tympanus.net/codrops/2026/10/07/interlude-astro-page-transitions/",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "calm",
+    "editorial",
+    "minimal"
+  ],
+  "sectionTypes": [
+    "transition",
+    "hero"
+  ],
+  "techniques": [
+    "view-transitions"
+  ],
+  "libraries": [
+    "view-transitions",
+    "vanilla"
+  ],
+  "promptLanguage": "Crossfade the shared title with a named view transition and keep the first frame still. The next page arrives as a continuation, not a reload.",
+  "notes": "A Codrops tutorial opened for the transition language. The note is ours and the demo code stays on their site.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion swaps the transition for an instant, complete page.",
+  "sourceUrl": "https://tympanus.net/codrops/2026/10/07/interlude-astro-page-transitions/",
+  "license": "link-only",
+  "creditLine": "Codrops, Interlude: Page transitions in Astro, https://tympanus.net/codrops/2026/10/07/interlude-astro-page-transitions/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

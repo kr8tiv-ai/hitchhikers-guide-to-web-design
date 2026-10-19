@@ -329,6 +329,7 @@ function videoRequest(slot: AssetSlot): VideoRequest {
     aspect: slot.aspect,
   };
   if (slot.image !== undefined) req.image = slot.image;
+  if (slot.generateAudio !== undefined) req.generateAudio = slot.generateAudio;
   validateVideoRequest(req);
   return req;
 }

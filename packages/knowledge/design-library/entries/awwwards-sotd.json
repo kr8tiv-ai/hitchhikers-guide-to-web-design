@@ -1,0 +1,37 @@
+{
+  "id": "awwwards-sotd",
+  "kind": "site",
+  "title": "Awwwards sites of the day",
+  "url": "https://www.awwwards.com/websites/sites_of_the_day/",
+  "source": "awwwards",
+  "sourcePage": "https://www.awwwards.com/websites/sites_of_the_day/",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "editorial",
+    "bold"
+  ],
+  "sectionTypes": [
+    "gallery",
+    "hero"
+  ],
+  "techniques": [
+    "asymmetric-editorial-grid"
+  ],
+  "libraries": [
+    "css-scroll"
+  ],
+  "promptLanguage": "Treat a site-of-the-day index as a reminder that craft is public and specific. Compose a new grid instead of tracing a winner.",
+  "notes": "Index opened for orientation, and automated collection of this host is refused. This seed row is a link and our note.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion keeps the grid static.",
+  "sourceUrl": "https://www.awwwards.com/websites/sites_of_the_day/",
+  "license": "link-only",
+  "creditLine": "Awwwards sites of the day index, https://www.awwwards.com/websites/sites_of_the_day/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

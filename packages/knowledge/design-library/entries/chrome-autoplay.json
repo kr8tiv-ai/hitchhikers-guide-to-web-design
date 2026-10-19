@@ -1,0 +1,36 @@
+{
+  "id": "chrome-autoplay",
+  "kind": "technique",
+  "title": "Scroll video and autoplay policy",
+  "url": "https://developer.chrome.com/blog/autoplay/",
+  "source": "official-docs",
+  "sourcePage": "https://developer.chrome.com/blog/autoplay/",
+  "styleWorld": "scroll-film",
+  "family": "scroll-gsap",
+  "moods": [
+    "cinematic",
+    "bold"
+  ],
+  "sectionTypes": [
+    "hero"
+  ],
+  "techniques": [
+    "scroll-video"
+  ],
+  "libraries": [
+    "vanilla"
+  ],
+  "promptLanguage": "Scrub a silent image sequence or a muted clip with the scroll, and keep a poster as the first paint. Sound never starts by itself.",
+  "notes": "Chrome's autoplay note is why decorative video stays muted. The sequence itself is generated for the brand, not taken from a reference site.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows the poster and does not scrub the sequence.",
+  "sourceUrl": "https://developer.chrome.com/blog/autoplay/",
+  "license": "link-only",
+  "creditLine": "Chrome autoplay policy, https://developer.chrome.com/blog/autoplay/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

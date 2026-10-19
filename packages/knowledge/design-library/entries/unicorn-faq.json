@@ -1,0 +1,38 @@
+{
+  "id": "unicorn-faq",
+  "kind": "site",
+  "title": "Unicorn Studio FAQ",
+  "url": "https://www.unicorn.studio/docs/faqs/",
+  "source": "official-docs",
+  "sourcePage": "https://www.unicorn.studio/docs/faqs/",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero"
+  ],
+  "techniques": [
+    "three-hero",
+    "r3f-island"
+  ],
+  "libraries": [
+    "three",
+    "r3f"
+  ],
+  "promptLanguage": "Prefer a scene we render ourselves, with a poster, over a pasted embed. A third-party scene is welcome only when the owner supplies it and it can be self-hosted.",
+  "notes": "The FAQ was opened to see how embeds are offered. We do not copy their studio files.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows the poster and does not start the scene.",
+  "sourceUrl": "https://www.unicorn.studio/docs/faqs/",
+  "license": "link-only",
+  "creditLine": "Unicorn Studio FAQ, https://www.unicorn.studio/docs/faqs/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

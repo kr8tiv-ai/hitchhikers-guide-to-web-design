@@ -1,0 +1,39 @@
+{
+  "id": "gsap-standard-license",
+  "kind": "technique",
+  "title": "GSAP standard license",
+  "url": "https://gsap.com/community/standard-license/",
+  "source": "official-docs",
+  "sourcePage": "https://gsap.com/community/standard-license/",
+  "styleWorld": "scroll-film",
+  "family": "scroll-gsap",
+  "moods": [
+    "bold",
+    "technical",
+    "cinematic"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story"
+  ],
+  "techniques": [
+    "scrolltrigger-pin-timeline"
+  ],
+  "libraries": [
+    "gsap",
+    "scrolltrigger"
+  ],
+  "promptLanguage": "Pin the hero and scrub a short timeline as the visitor scrolls, then release into the next section. The film is the sequence of frames, not a template.",
+  "notes": "The standard license page was opened for terms, and commercial site use is allowed. A visual builder that competes with a site tool is not what we ship.",
+  "perfCost": "medium",
+  "reducedMotion": "Reduced motion shows each frame in document order without pinning.",
+  "sourceUrl": "https://gsap.com/community/standard-license/",
+  "license": "none-stated",
+  "creditLine": "GSAP standard license, https://gsap.com/community/standard-license/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

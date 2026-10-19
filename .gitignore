@@ -27,6 +27,9 @@ hh-build-plan/_grok-run.*
 .hh-driver/empty-stdin.txt
 .hh-driver/driver.pid
 
+# Design library screenshots are regenerated on demand.
+packages/knowledge/design-library/shots/
+
 # Playwright shots and traces. The e2e spec writes these locally.
 packages/app/e2e/screens/
 packages/app/e2e/.artifacts/

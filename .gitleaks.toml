@@ -8,4 +8,5 @@ description = "Test fixtures and replay cassettes"
 paths = [
   '''packages/.*/test/cassettes/.*''',
   '''packages/.*/test/fixtures/.*''',
+  '''packages/knowledge/design-library/snippets/.*''',
 ]

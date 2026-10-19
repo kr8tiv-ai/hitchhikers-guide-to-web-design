@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
 import {
   BILLING_TOP_UP,
@@ -32,13 +33,17 @@ import {
   type QueueFile,
   type QueueStatus,
 } from "../queue-file.ts";
+import { writeBrandKit } from "../brand/kit-from-interview.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
+import { styleWorldFrom } from "../spec/art-direction.ts";
 import { writeSectionStillPlan } from "../spec/section-stills.ts";
 import {
   designLanguageFor,
   knowledgeRoot,
   sectionIdOf,
   type DesignLibrary,
+  type DesignPackNote,
+  type PickedDesignNote,
   type GalleryNote,
 } from "../spec/design-language.ts";
 import {
@@ -599,10 +604,11 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   }
   const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
+  writeBrandKit(projectDir, answers);
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
-  const library = readDesignLibrary(projectDir, briefMarkdown);
+  const library = await attachDesignSelection(readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];
@@ -675,6 +681,7 @@ export async function retrySiteBuild(projectDir: string, promptId: string): Prom
   await requeue(projectDir, promptId, "failed");
   if (billing) await unpausePrompts(projectDir);
   if (billing) clearBillingPause(projectDir);
+  await releaseQueuePause(projectDir);
   if (resume && current !== null) writeRun(projectDir, { ...current, resumeNext: true });
   void ensureSiteBuild(projectDir);
 }
@@ -717,7 +724,7 @@ function runningIsInterrupted(projectDir: string, queue: QueueFile): boolean {
   return running.some((item) => item.id !== liveId);
 }
 
-/** Clear the queue-wide pause and start the next prompt. Resume is the only clear. */
+/** Clear the queue-wide pause and start the next prompt. Explicit Retry also clears it. Auto-retry does not. */
 export async function resumePausedQueue(projectDir: string): Promise<void> {
   const queue = await loadBuildQueue(projectDir);
   if (queue === null) throw new Error("No queue file is on disk.");
@@ -1736,6 +1743,110 @@ function renderPrompt(
     "",
   ].join("\n");
   return relativizePromptText(rendered, projectDir);
+}
+
+async function releaseQueuePause(projectDir: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue?.pause === undefined) return;
+  await saveBuildQueue(projectDir, resumeQueue(queue));
+}
+
+async function attachDesignSelection(library: DesignLibrary, brief: string): Promise<DesignLibrary> {
+  try {
+    const href = pathToFileURL(path.join(knowledgeRoot(), "src", "design-library.ts")).href;
+    const mod = (await import(href)) as {
+      loadDesignEntries: (dir: string) => Array<{
+        id: string;
+        title: string;
+        styleWorld: string;
+        promptLanguage: string;
+        notes: string;
+        libraries: string[];
+        retired?: boolean;
+        sectionTypes: string[];
+      }>;
+      loadDesignIndex: (dir: string) => unknown;
+      selectDesignEntries: (
+        input: {
+          artDirection: string;
+          sectionType: string;
+          styleWorld: string;
+          moods: string[];
+          motionScore: number;
+          budget3d: number;
+          stack: string[];
+        },
+        entries: unknown[],
+        options: { index?: unknown },
+      ) => Array<{ title: string; promptLanguage: string; notes: string; sectionTypes: string[] }>;
+    };
+    const dir = path.join(knowledgeRoot(), "design-library");
+    const entries = mod.loadDesignEntries(dir).filter((entry) => entry.retired !== true);
+    const index = mod.loadDesignIndex(dir);
+    const moods = ["calm", "editorial", "bold", "technical", "playful", "minimal", "dark", "luxurious"].filter((mood) =>
+      brief.toLowerCase().includes(mood),
+    );
+    const picked: PickedDesignNote[] = [];
+    for (const sectionType of ["hero", "story", "gallery", "footer"]) {
+      const selected = mod.selectDesignEntries(
+        {
+          artDirection: brief,
+          sectionType,
+          styleWorld: styleWorldFrom(brief),
+          moods: moods.length >= 2 ? moods.slice(0, 6) : ["calm", "editorial"],
+          motionScore: /bold|tech|film/i.test(brief) ? 8 : 4,
+          budget3d: /webgl|shader|3d/i.test(brief) ? 1 : 0,
+          stack: ["astro", "lenis", "gsap", "vanilla"],
+        },
+        entries,
+        index === null ? {} : { index },
+      );
+      for (const entry of selected.slice(0, 4)) {
+        const section = entry.sectionTypes.includes(sectionType) ? sectionType : (entry.sectionTypes[0] ?? sectionType);
+        picked.push({
+          sectionType: section,
+          title: entry.title,
+          promptLanguage: entry.promptLanguage,
+          techniqueNote: entry.notes,
+        });
+      }
+    }
+    return { ...library, picked, packs: freshPackNotes() };
+  } catch {
+    return library;
+  }
+}
+
+function freshPackNotes(): DesignPackNote[] {
+  const dir = path.join(knowledgeRoot(), "packs");
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+  const notes = [];
+  for (const name of names) {
+    let text = "";
+    try {
+      text = readFileSync(path.join(dir, name, "SKILL.md"), "utf8");
+    } catch {
+      continue;
+    }
+    if (!/^checked:\s*\S+/m.test(text)) continue;
+    const stale = /^stale:\s*true\s*$/m.test(text);
+    const body = text.split(/^---\s*$/m).slice(2).join("---").trim();
+    notes.push({ name, stale, excerpt: stale ? "" : promptSafeExcerpt(body) });
+  }
+  notes.sort((left, right) => left.name.localeCompare(right.name));
+  return notes;
+}
+
+function promptSafeExcerpt(body: string): string {
+  const excerpt = body.slice(0, 280).trim();
+  if (excerpt.includes("!") || excerpt.includes("{{") || excerpt.includes("/Users/") || excerpt.includes("/home/")) return "";
+  if (/[A-Za-z]:[\\/]/.test(excerpt)) return "";
+  return excerpt;
 }
 
 function readDesignLibrary(projectDir: string, briefMarkdown: string): DesignLibrary {

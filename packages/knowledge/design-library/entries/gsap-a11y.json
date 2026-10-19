@@ -1,0 +1,38 @@
+{
+  "id": "gsap-a11y",
+  "kind": "technique",
+  "title": "GSAP accessibility",
+  "url": "https://gsap.com/resources/a11y/",
+  "source": "official-docs",
+  "sourcePage": "https://gsap.com/resources/a11y/",
+  "styleWorld": "scroll-film",
+  "family": "scroll-gsap",
+  "moods": [
+    "technical",
+    "calm"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story"
+  ],
+  "techniques": [
+    "split-text-reveal"
+  ],
+  "libraries": [
+    "gsap",
+    "splittext"
+  ],
+  "promptLanguage": "Reveal split lines without removing them from the accessibility tree, and keep an aria label on the intact phrase. Motion is a bonus on top of readable text.",
+  "notes": "The accessibility note on GSAP's site is the source for the aria reminder. We do not copy their demos.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion leaves the phrase intact and visible.",
+  "sourceUrl": "https://gsap.com/resources/a11y/",
+  "license": "none-stated",
+  "creditLine": "GSAP accessibility, https://gsap.com/resources/a11y/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

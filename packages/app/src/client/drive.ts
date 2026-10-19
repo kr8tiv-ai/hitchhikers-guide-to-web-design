@@ -433,6 +433,9 @@ export function parseDriveRun(value: unknown): DriveRun | null {
   };
   if (run.turnLimited === true) view.turnLimited = true;
   if (typeof run.stopReason === "string" && run.stopReason !== "") view.stopReason = run.stopReason;
+  // A refresh must keep a dead process as not live. Dropping false makes a
+  // restart hold look like the prompt is still running.
+  if (typeof run.live === "boolean") view.live = run.live;
   return view;
 }
 

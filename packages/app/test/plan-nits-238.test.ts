@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { paintDrive } from "../src/client/drive.ts";
+import { paintDrive, parseDriveRun } from "../src/client/drive.ts";
 import { queueBodyHtml, type DriveRun } from "../src/drive-markup.ts";
 import { approveMain } from "../src/server/brief-page.ts";
 import type { BriefDeskView } from "@hitchhiker/engine";
@@ -109,11 +109,33 @@ test("a running prompt under a pause is named, and a settled pause is not", () =
       { id: "007", kind: "build", status: "passed" },
       { id: "008", kind: "build", status: "running" },
     ],
-    { ...runningRun(), promptId: "008" },
+    { ...runningRun(), status: "interrupted", promptId: "008" },
     { at: WHEN, after: "007" },
   );
   assert.match(interrupted, /Paused after 007/);
   assert.equal(interrupted.includes("still running"), false);
+
+  const during = queueBodyHtml(
+    [
+      { id: "063", kind: "build", status: "passed" },
+      { id: "064", kind: "build", status: "running" },
+    ],
+    { ...runningRun(), promptId: "064" },
+    { at: WHEN, after: "063" },
+  );
+  assert.match(during, /Pause set\. 064 is still running and will finish first\./);
+  assert.equal(during.includes("Paused after 063"), false);
+
+  const after = queueBodyHtml(
+    [
+      { id: "063", kind: "build", status: "passed" },
+      { id: "064", kind: "build", status: "passed" },
+    ],
+    { ...runningRun(), status: "passed", promptId: "064" },
+    { at: WHEN, after: "064" },
+  );
+  assert.match(after, /Paused after 064/);
+  assert.equal(after.includes("still running"), false);
 });
 
 interface FakeEl {
@@ -170,4 +192,44 @@ test("the drive refresh paints the running pause line", () => {
     { at: WHEN, after: "" },
   );
   assert.match(regions.get("#drive-queue-body")?.innerHTML ?? "", /Pause set\. 001 is still running/);
+});
+
+test("a progress refresh keeps a dead run from looking live", () => {
+  const payload = {
+    promptId: "003",
+    status: "running",
+    model: "grok-4.7-build-fast",
+    effort: "xhigh",
+    elapsedMs: 10,
+    lastLines: [],
+    filesWritten: [],
+    reason: "",
+    recovery: "",
+    paused: false,
+    escalation: "",
+  };
+  const dead = parseDriveRun({ run: { ...payload, live: false } });
+  assert.equal(dead?.live, false);
+  const held = queueBodyHtml(
+    [
+      { id: "002", kind: "build", status: "passed" },
+      { id: "003", kind: "build", status: "running" },
+    ],
+    dead,
+    { at: WHEN, after: "002" },
+  );
+  assert.match(held, /Paused after 002/);
+  assert.equal(held.includes("still running"), false);
+
+  const omitted = parseDriveRun({ run: { ...payload, promptId: "064" } });
+  assert.equal(omitted?.live, undefined);
+  const during = queueBodyHtml(
+    [
+      { id: "063", kind: "build", status: "passed" },
+      { id: "064", kind: "build", status: "running" },
+    ],
+    omitted,
+    { at: WHEN, after: "063" },
+  );
+  assert.match(during, /Pause set\. 064 is still running and will finish first\./);
 });

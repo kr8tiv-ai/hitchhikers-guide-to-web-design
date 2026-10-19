@@ -16,10 +16,16 @@ import {
 } from "@hitchhiker/engine";
 
 interface StillModule {
-  readMediaSettings(projectDir: string): { api: boolean };
+  readMediaSettings(projectDir: string): { api: boolean; browser: boolean };
   resolveDeskProvider(
     projectDir: string,
-    deps: { spawn?: SpawnLike; env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch; key?: string },
+    deps: {
+      spawn?: SpawnLike;
+      env?: NodeJS.ProcessEnv;
+      fetchImpl?: typeof fetch;
+      key?: string;
+      browserDriver?: unknown;
+    },
   ): { generateImage(req: { model: string; prompt: string; aspect: string; n: number }): Promise<unknown> };
   generateSectionStills(
     projectDir: string,
@@ -49,12 +55,22 @@ export async function attachSectionStills(projectDir: string): Promise<void> {
     } catch {
       command = "grok";
     }
-    const deps: { spawn: SpawnLike; env: NodeJS.ProcessEnv; fetchImpl: typeof fetch; key?: string } = {
+    const deps: {
+      spawn: SpawnLike;
+      env: NodeJS.ProcessEnv;
+      fetchImpl: typeof fetch;
+      key?: string;
+      browserDriver?: unknown;
+    } = {
       spawn: (request) => spawnGrok({ ...request, command }),
       env: process.env,
       fetchImpl: globalThis.fetch,
     };
     if (key !== "") deps.key = key;
+    if (settings.browser) {
+      const browser = await import("./imagine-browser.ts");
+      deps.browserDriver = await browser.embeddedImagineDriver(dir);
+    }
     const provider = mod.resolveDeskProvider(dir, deps);
     await mod.generateSectionStills(dir, provider, { fetchImpl: globalThis.fetch });
   });

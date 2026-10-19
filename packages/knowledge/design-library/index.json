@@ -1,0 +1,273 @@
+{
+  "built": "2026-10-19",
+  "entries": [
+    "astro-images",
+    "astro-view-transitions",
+    "awwwards-sites",
+    "awwwards-sotd",
+    "chrome-autoplay",
+    "codrops-interlude",
+    "dark-luxury-grade",
+    "framer-agents",
+    "gsap-a11y",
+    "gsap-standard-license",
+    "howler-sound",
+    "lenis-smooth",
+    "motion-split",
+    "r3f-docs",
+    "stitch",
+    "threejs-examples",
+    "threejs-home",
+    "unicorn-faq"
+  ],
+  "by": {
+    "styleWorld": {
+      "3d-world": [
+        "r3f-docs",
+        "threejs-examples",
+        "threejs-home",
+        "unicorn-faq"
+      ],
+      "editorial": [
+        "astro-images",
+        "astro-view-transitions",
+        "awwwards-sites",
+        "awwwards-sotd",
+        "codrops-interlude",
+        "lenis-smooth",
+        "stitch"
+      ],
+      "minimal-luxury": [
+        "dark-luxury-grade"
+      ],
+      "playful": [
+        "framer-agents",
+        "howler-sound"
+      ],
+      "scroll-film": [
+        "chrome-autoplay",
+        "gsap-a11y",
+        "gsap-standard-license",
+        "motion-split"
+      ]
+    },
+    "moods": {
+      "bold": [
+        "awwwards-sotd",
+        "chrome-autoplay",
+        "framer-agents",
+        "gsap-standard-license",
+        "motion-split",
+        "threejs-examples"
+      ],
+      "calm": [
+        "astro-images",
+        "astro-view-transitions",
+        "codrops-interlude",
+        "dark-luxury-grade",
+        "gsap-a11y",
+        "lenis-smooth",
+        "stitch"
+      ],
+      "cinematic": [
+        "chrome-autoplay",
+        "gsap-standard-license",
+        "howler-sound",
+        "r3f-docs",
+        "threejs-home",
+        "unicorn-faq"
+      ],
+      "dark": [
+        "dark-luxury-grade",
+        "howler-sound"
+      ],
+      "editorial": [
+        "astro-images",
+        "awwwards-sites",
+        "awwwards-sotd",
+        "codrops-interlude",
+        "dark-luxury-grade",
+        "lenis-smooth",
+        "stitch"
+      ],
+      "luxurious": [
+        "dark-luxury-grade"
+      ],
+      "minimal": [
+        "astro-view-transitions",
+        "awwwards-sites",
+        "codrops-interlude",
+        "dark-luxury-grade",
+        "lenis-smooth",
+        "stitch"
+      ],
+      "playful": [
+        "framer-agents"
+      ],
+      "technical": [
+        "gsap-a11y",
+        "gsap-standard-license",
+        "motion-split",
+        "r3f-docs",
+        "threejs-examples",
+        "threejs-home",
+        "unicorn-faq"
+      ]
+    },
+    "sectionTypes": {
+      "cards": [
+        "framer-agents"
+      ],
+      "footer": [
+        "howler-sound"
+      ],
+      "gallery": [
+        "astro-images",
+        "awwwards-sites",
+        "awwwards-sotd",
+        "stitch",
+        "threejs-examples"
+      ],
+      "hero": [
+        "awwwards-sotd",
+        "chrome-autoplay",
+        "codrops-interlude",
+        "dark-luxury-grade",
+        "framer-agents",
+        "gsap-a11y",
+        "gsap-standard-license",
+        "howler-sound",
+        "lenis-smooth",
+        "motion-split",
+        "r3f-docs",
+        "threejs-examples",
+        "threejs-home",
+        "unicorn-faq"
+      ],
+      "story": [
+        "astro-images",
+        "dark-luxury-grade",
+        "gsap-a11y",
+        "gsap-standard-license",
+        "lenis-smooth",
+        "motion-split",
+        "stitch"
+      ],
+      "transition": [
+        "astro-view-transitions",
+        "codrops-interlude"
+      ]
+    },
+    "techniques": {
+      "ambient-sound-toggle": [
+        "howler-sound"
+      ],
+      "asymmetric-editorial-grid": [
+        "awwwards-sotd",
+        "stitch"
+      ],
+      "glsl-gradient-noise": [
+        "threejs-examples"
+      ],
+      "grain-and-grade": [
+        "astro-images",
+        "dark-luxury-grade"
+      ],
+      "image-distortion-hover": [
+        "threejs-examples"
+      ],
+      "layered-parallax": [
+        "framer-agents",
+        "lenis-smooth"
+      ],
+      "lenis-smooth-scroll": [
+        "dark-luxury-grade",
+        "lenis-smooth"
+      ],
+      "r3f-island": [
+        "r3f-docs",
+        "unicorn-faq"
+      ],
+      "scroll-video": [
+        "chrome-autoplay"
+      ],
+      "scrolltrigger-pin-timeline": [
+        "gsap-standard-license"
+      ],
+      "split-text-reveal": [
+        "gsap-a11y",
+        "motion-split"
+      ],
+      "three-hero": [
+        "threejs-home",
+        "unicorn-faq"
+      ],
+      "typographic-scale": [
+        "awwwards-sites",
+        "dark-luxury-grade",
+        "stitch"
+      ],
+      "view-transitions": [
+        "astro-view-transitions",
+        "codrops-interlude"
+      ]
+    },
+    "libraries": {
+      "css-scroll": [
+        "awwwards-sotd",
+        "dark-luxury-grade",
+        "stitch"
+      ],
+      "glsl": [
+        "threejs-examples"
+      ],
+      "gsap": [
+        "gsap-a11y",
+        "gsap-standard-license",
+        "lenis-smooth"
+      ],
+      "howler": [
+        "howler-sound"
+      ],
+      "lenis": [
+        "dark-luxury-grade",
+        "lenis-smooth"
+      ],
+      "motion": [
+        "motion-split"
+      ],
+      "r3f": [
+        "r3f-docs",
+        "unicorn-faq"
+      ],
+      "scrolltrigger": [
+        "gsap-standard-license"
+      ],
+      "splittext": [
+        "gsap-a11y"
+      ],
+      "three": [
+        "r3f-docs",
+        "threejs-examples",
+        "threejs-home",
+        "unicorn-faq"
+      ],
+      "vanilla": [
+        "astro-images",
+        "awwwards-sites",
+        "chrome-autoplay",
+        "codrops-interlude",
+        "dark-luxury-grade",
+        "framer-agents",
+        "stitch"
+      ],
+      "view-transitions": [
+        "astro-view-transitions",
+        "codrops-interlude"
+      ],
+      "web-audio": [
+        "howler-sound"
+      ]
+    }
+  }
+}

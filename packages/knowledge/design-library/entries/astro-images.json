@@ -1,0 +1,37 @@
+{
+  "id": "astro-images",
+  "kind": "technique",
+  "title": "Astro images",
+  "url": "https://docs.astro.build/en/guides/images/",
+  "source": "official-docs",
+  "sourcePage": "https://docs.astro.build/en/guides/images/",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "calm",
+    "editorial"
+  ],
+  "sectionTypes": [
+    "gallery",
+    "story"
+  ],
+  "techniques": [
+    "grain-and-grade"
+  ],
+  "libraries": [
+    "vanilla"
+  ],
+  "promptLanguage": "Serve the picture as AVIF and WebP through the image component, with a sized poster for the first screen. A light grain sits in CSS and does not bake text into the file.",
+  "notes": "The Astro images guide is the reference for formats. The grade is our art direction, not a copied stylesheet.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion keeps the same pictures without a fade.",
+  "sourceUrl": "https://docs.astro.build/en/guides/images/",
+  "license": "link-only",
+  "creditLine": "Astro images guide, https://docs.astro.build/en/guides/images/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

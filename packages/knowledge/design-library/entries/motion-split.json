@@ -1,0 +1,37 @@
+{
+  "id": "motion-split",
+  "kind": "technique",
+  "title": "Motion split reveal",
+  "url": "https://github.com/motiondivision/motion",
+  "source": "official-docs",
+  "sourcePage": "https://github.com/motiondivision/motion",
+  "styleWorld": "scroll-film",
+  "family": "scroll-gsap",
+  "moods": [
+    "bold",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story"
+  ],
+  "techniques": [
+    "split-text-reveal"
+  ],
+  "libraries": [
+    "motion"
+  ],
+  "promptLanguage": "Split the headline into lines and reveal them in order with a short rise. The words stay in the DOM so a reader can select them.",
+  "notes": "Official Motion repository, MIT. This entry stores the idea, not their example source.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion shows the whole headline at once.",
+  "sourceUrl": "https://github.com/motiondivision/motion",
+  "license": "link-only",
+  "creditLine": "Motion, https://github.com/motiondivision/motion",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}

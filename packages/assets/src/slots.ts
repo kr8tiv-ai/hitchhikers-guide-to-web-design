@@ -34,6 +34,7 @@ export interface AssetSlot {
   seconds?: number;
   resolution?: VideoFrame;
   image?: string;
+  generateAudio?: boolean;
   /** Recorded yes to replace this real subject. */
   realPersonYes?: boolean;
   /** Set when this job would stand in for an existing asset. */
@@ -92,6 +93,7 @@ const SLOT_KEYS = [
   "seconds",
   "resolution",
   "image",
+  "generateAudio",
   "realPersonYes",
   "replaces",
   "gradeScore",
@@ -329,6 +331,7 @@ function assignOptional(slot: AssetSlot, entry: Record<string, unknown>, id: str
     slot.resolution = value;
   }
   if (Object.hasOwn(entry, "image")) slot.image = readString(entry, "image", 0);
+  if (Object.hasOwn(entry, "generateAudio")) slot.generateAudio = readBool(entry, "generateAudio", id);
   if (Object.hasOwn(entry, "realPersonYes")) slot.realPersonYes = readBool(entry, "realPersonYes", id);
   if (Object.hasOwn(entry, "replaces")) {
     const replaces = readString(entry, "replaces", 0);

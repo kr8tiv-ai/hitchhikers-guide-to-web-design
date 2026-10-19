@@ -3029,6 +3029,15 @@ function planGapNote(projectDir: string, desk: BriefDeskView): string {
   }
 }
 
+function brandMarkdown(projectDir: string): string {
+  if (projectDir === "") return "";
+  try {
+    return readFileSync(path.join(projectDir, ".hitchhiker", "brand", "BRAND.md"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function renderApproveBrief(
   token: string,
   notice: string | null,
@@ -3062,7 +3071,7 @@ function renderApproveBrief(
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk, changeError, coverage, confirmError),
+    main: approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir)),
     script: "/client/brief-change.js",
   });
 }

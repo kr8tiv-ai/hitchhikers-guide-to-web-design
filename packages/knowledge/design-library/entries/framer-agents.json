@@ -1,0 +1,37 @@
+{
+  "id": "framer-agents",
+  "kind": "site",
+  "title": "Framer agents",
+  "url": "https://www.framer.com/agents/",
+  "source": "direct",
+  "sourcePage": "https://www.framer.com/agents/",
+  "styleWorld": "playful",
+  "family": "playful",
+  "moods": [
+    "playful",
+    "bold"
+  ],
+  "sectionTypes": [
+    "hero",
+    "cards"
+  ],
+  "techniques": [
+    "layered-parallax"
+  ],
+  "libraries": [
+    "vanilla"
+  ],
+  "promptLanguage": "Stack two planes that move at different rates over a bright ground. The offer stays in the front plane and the motion stays light.",
+  "notes": "The agents page was opened as a product reference. We do not copy its layout.",
+  "perfCost": "low",
+  "reducedMotion": "Reduced motion parks both planes and keeps the offer readable.",
+  "sourceUrl": "https://www.framer.com/agents/",
+  "license": "link-only",
+  "creditLine": "Framer agents, https://www.framer.com/agents/",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-19",
+  "verified": "human",
+  "retired": false
+}
