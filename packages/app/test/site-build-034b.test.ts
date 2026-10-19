@@ -4,7 +4,7 @@
  * Two Resume posts for an interrupted row still share one spawn.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -101,11 +101,11 @@ async function queueAt(dir: string, running: "003" | "interrupted"): Promise<voi
   });
 }
 
-function writeRunning(dir: string): void {
+function writeRunning(dir: string, promptId: string): void {
   writeFileSync(
     path.join(dir, ".hitchhiker", "build-run.json"),
     `${JSON.stringify({
-      promptId: "003",
+      promptId,
       status: "running",
       model: BUILD_MODEL,
       effort: BUILD_EFFORT,
@@ -122,10 +122,24 @@ function writeRunning(dir: string): void {
   );
 }
 
-function writeEnd(dir: string): void {
+function writeEnd(dir: string, promptId: string): void {
   const logs = path.join(dir, ".hitchhiker", "logs");
   mkdirSync(logs, { recursive: true });
-  writeFileSync(path.join(logs, "build-003.log"), '{"type":"end","stopReason":"end_turn"}\n', "utf8");
+  writeFileSync(path.join(logs, `build-${promptId}.log`), '{"type":"end","stopReason":"end_turn"}\n', "utf8");
+}
+
+function promptIdWith(dir: string, needle: string): string {
+  const folder = path.join(dir, ".hitchhiker", "prompts");
+  const hit = readdirSync(folder)
+    .filter((name) => /^\d{3}\.md$/.test(name))
+    .sort()
+    .find((name) => readFileSync(path.join(folder, name), "utf8").includes(needle));
+  assert.ok(hit, needle);
+  return hit.slice(0, 3);
+}
+
+function shiftId(id: string, by: number): string {
+  return String(Number(id) + by).padStart(3, "0");
 }
 
 function writeLogo(dir: string): void {
@@ -187,19 +201,30 @@ test("desk start holds a finished prompt until Resume, then verifies and advance
   };
   let handle: ServerHandle | undefined;
   try {
-    await queueAt(dir, "003");
-    writeRunning(dir);
-    writeEnd(dir);
+    await prepareSiteBuild(dir, "Brief.");
+    const logo = promptIdWith(dir, "public/logo.svg");
+    const next = shiftId(logo, 1);
+    const before = shiftId(logo, -1);
+    const count = Number(next);
+    await saveQueue(dir, {
+      items: Array.from({ length: count }, (_, index) => {
+        const id = String(index + 1).padStart(3, "0");
+        const status = id < logo ? "passed" : id === logo ? "running" : "queued";
+        return { id, kind: "build" as const, status };
+      }),
+    });
+    writeRunning(dir, logo);
+    writeEnd(dir, logo);
     writeLogo(dir);
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
     let held = false;
     for (let attempt = 0; attempt < 40 && !held; attempt += 1) {
       const queue = await loadQueue(dir);
-      const status = queue?.items.find((item) => item.id === "003")?.status;
+      const status = queue?.items.find((item) => item.id === logo)?.status;
       if (status === "passed" || status === "queued" || seen.length > 0) {
         assert.fail(`desk started the queue before Resume: ${status ?? "missing"}`);
       }
-      held = queue?.pause !== undefined && status === "running" && queue.pause.after === "002";
+      held = queue?.pause !== undefined && status === "running" && queue.pause.after === before;
       if (!held) await delay(25);
     }
     assert.equal(held, true);
@@ -207,7 +232,7 @@ test("desk start holds a finished prompt until Resume, then verifies and advance
     const parked = await raw(handle.port, "GET", "/hh-dashboard");
     assert.equal(parked.status, 200);
     assert.match(parked.body, /id="queue"[^>]*data-queue-state="paused"/);
-    assert.match(parked.body, /data-id="003"[^>]*data-status="running"/);
+    assert.match(parked.body, new RegExp(`data-id="${logo}"[^>]*data-status="running"`));
     const resumed = await raw(
       handle.port,
       "POST",
@@ -221,24 +246,25 @@ test("desk start holds a finished prompt until Resume, then verifies and advance
       try {
         const queue = await loadQueue(dir);
         passed =
-          queue?.items.find((item) => item.id === "003")?.status === "passed" &&
-          queue?.items.find((item) => item.id === "004")?.status === "passed";
+          queue?.items.find((item) => item.id === logo)?.status === "passed" &&
+          queue?.items.find((item) => item.id === next)?.status === "passed";
       } catch (error: unknown) {
         if (!(error instanceof LockHeld)) throw error;
       }
       if (!passed) await delay(50);
     }
     assert.equal(passed, true);
-    assert.equal(seen.includes("003"), false);
-    assert.equal(seen.includes("004"), true);
+    assert.equal(seen.includes(logo), false);
+    assert.equal(seen.includes(next), true);
+    const recovered = `${logo} recovered: output verified, passed`;
     let page = "";
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const next = await raw(handle.port, "GET", "/hh-dashboard");
-      page = next.body;
-      if (next.status === 200 && page.includes("003 recovered: output verified, passed")) break;
+      const view = await raw(handle.port, "GET", "/hh-dashboard");
+      page = view.body;
+      if (view.status === 200 && page.includes(recovered)) break;
       await delay(50);
     }
-    assert.match(page, /003 recovered: output verified, passed/);
+    assert.match(page, new RegExp(recovered.replace(/[.]/g, "\\.")));
     assert.match(page, /data-build-model="grok-4\.7-build-fast"/);
     assert.match(page, /data-build-effort="xhigh"/);
     assert.equal(readBuildRun(dir)?.model, BUILD_MODEL);

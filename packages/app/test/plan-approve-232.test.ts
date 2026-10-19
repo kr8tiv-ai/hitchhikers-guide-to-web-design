@@ -2,7 +2,7 @@
  * BUG-041: /approve shows the coverage table and refuses a plan that drops a page.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -153,7 +153,12 @@ test("a complete plan is accepted and Approve stays on", async () => {
       `csrf=${token}&action=approve`,
     );
     assert.equal(accepted.status, 303);
-    const written = readFileSync(path.join(dir, ".hitchhiker", "prompts", "012.md"), "utf8");
+    const prompts = path.join(dir, ".hitchhiker", "prompts");
+    const written = readdirSync(prompts)
+      .filter((name) => name.endsWith(".md"))
+      .map((name) => readFileSync(path.join(prompts, name), "utf8"))
+      .find((text) => text.includes("Add the Home route"));
+    assert.ok(written, "the home route prompt is written");
     assert.match(written, /Add the Home route/);
   } finally {
     if (handle !== undefined) await handle.close();
