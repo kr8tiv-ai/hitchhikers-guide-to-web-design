@@ -16,4 +16,5 @@ export const SITE_RULES = [
   "Reduced motion stays visible and complete.",
   "Phone Lighthouse is at least 90 in performance, accessibility, best practices, and SEO.",
   "Anti-slop: no purple-to-blue gradients, no magnetic buttons, no default Tailwind indigo look, no invented testimonials, no lorem, and no exclamation marks in copy.",
+  "The workspace is this folder only: use relative paths, do not read or list the parent folder, sibling projects, or other drives, and if something is missing, say so in the report and keep going.",
 ].join("\n");

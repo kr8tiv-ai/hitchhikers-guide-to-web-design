@@ -14,6 +14,14 @@ import {
   sanitizeFailureReason,
 } from "../ai/grok-failure.ts";
 import { buildContextPacket, renderContextPacket } from "../context/packet.ts";
+import {
+  auditOutsideAccess,
+  buildConfinementArgs,
+  outsideWarning,
+  outsideWriteReason,
+  relativizePromptText,
+  type OutsideAccess,
+} from "./site-confine.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import { LockHeld } from "../lock.ts";
 import {
@@ -120,6 +128,8 @@ export interface BuildRunView {
   paused?: boolean;
   /** Plain escalation for the drive. Empty when there is none. */
   escalation?: string;
+  /** Tool calls whose path resolved outside the project. Capped, no file contents. */
+  outsideAccess: OutsideAccess[];
 }
 
 export interface BuildRecoveryInput {
@@ -152,6 +162,7 @@ interface RunFile {
   recoveryRerun: boolean;
   paused?: boolean;
   escalation?: string;
+  outsideAccess?: OutsideAccess[];
 }
 
 let runner: BuildSpawn | null = null;
@@ -322,6 +333,7 @@ export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
     "streaming-json",
     "--effort",
     BUILD_EFFORT,
+    ...buildConfinementArgs(cwd),
   ];
 }
 
@@ -530,7 +542,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];
   for (const prompt of prompts) {
-    writeFileSync(path.join(dir, `${prompt.id}.md`), renderPrompt(prompt, briefMarkdown, packet), "utf8");
+    writeFileSync(path.join(dir, `${prompt.id}.md`), renderPrompt(prompt, briefMarkdown, packet, projectDir), "utf8");
     ids.push(prompt.id);
   }
   await mergeBuildQueue(projectDir, ids);
@@ -640,7 +652,11 @@ export async function resumePausedQueue(projectDir: string): Promise<void> {
 export function readBuildRun(projectDir: string): BuildRunView | null {
   const run = readRunFile(projectDir);
   if (run === null) return null;
-  return { ...run, elapsedMs: run.status === "running" ? elapsed(run) : run.elapsedMs };
+  return {
+    ...run,
+    elapsedMs: run.status === "running" ? elapsed(run) : run.elapsedMs,
+    outsideAccess: run.outsideAccess ?? [],
+  };
 }
 
 async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
@@ -768,6 +784,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
     }
     const files = diffSnapshots(before, snapshot(projectDir));
     const evidence = `${result.stdout}\n${result.stderr}\n${rawTail}\n${readBuildLog(projectDir, next.id)}`;
+    const outside = auditOutsideAccess(evidence, projectDir);
     if (logHitTurnLimit(evidence)) {
       const kind = classifyGrokFailure({
         stdout: result.stdout,
@@ -776,18 +793,41 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         code: result.code,
       }).kind;
       if (kind !== "billing") {
-        await settleItem(projectDir, next.id, "failed", TURN_LIMIT_REASON, lines, files, startedAt);
+        await settleItem(projectDir, next.id, "failed", TURN_LIMIT_REASON, lines, files, startedAt, outside.hits);
         return;
       }
+    }
+    if (outside.writePath !== "") {
+      await settleItem(
+        projectDir,
+        next.id,
+        "failed",
+        outsideWriteReason(outside.writePath),
+        lines,
+        files,
+        startedAt,
+        outside.hits,
+      );
+      return;
     }
     if (result.code === 0 && result.errorCode === null) {
       try {
         const gate = buildGates.get(key);
         if (gate !== undefined) await gate({ projectDir, promptId: next.id, files });
-        await settleItem(projectDir, next.id, "passed", "", lines, files, startedAt);
+        const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
+        await settleItem(projectDir, next.id, "passed", reason, lines, files, startedAt, outside.hits);
       } catch (error: unknown) {
         const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
-        await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not finish." : reason, lines, files, startedAt);
+        await settleItem(
+          projectDir,
+          next.id,
+          "failed",
+          reason === "" ? "The build did not finish." : reason,
+          lines,
+          files,
+          startedAt,
+          outside.hits,
+        );
         return;
       }
       continue;
@@ -798,7 +838,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
       stream: rawTail,
       code: result.code,
     }).kind;
-    await settleItem(projectDir, next.id, "failed", failureReason(result, rawTail), lines, files, startedAt);
+    await settleItem(projectDir, next.id, "failed", failureReason(result, rawTail), lines, files, startedAt, outside.hits);
     if (kind === "billing") {
       await pauseQueuedPrompts(projectDir);
       stampBilling(projectDir);
@@ -871,14 +911,28 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
   if (run === null || run.status !== "running") return "idle";
   if (pidAlive(run.pid)) return "idle";
   const log = `${readBuildLog(projectDir, run.promptId)}\n${run.lastLines.join("\n")}`;
+  const outside = auditOutsideAccess(log, projectDir);
   if (classifyGrokFailure({ stream: log }).kind === "billing") {
-    await settleItem(projectDir, run.promptId, "failed", BILLING_TOP_UP, run.lastLines, run.filesWritten, run.startedAt);
+    await settleItem(projectDir, run.promptId, "failed", BILLING_TOP_UP, run.lastLines, run.filesWritten, run.startedAt, outside.hits);
     await pauseQueuedPrompts(projectDir);
     stampBilling(projectDir);
     return "halt";
   }
   if (logHitTurnLimit(log)) {
-    await settleItem(projectDir, run.promptId, "failed", TURN_LIMIT_REASON, run.lastLines, run.filesWritten, run.startedAt);
+    await settleItem(projectDir, run.promptId, "failed", TURN_LIMIT_REASON, run.lastLines, run.filesWritten, run.startedAt, outside.hits);
+    return "halt";
+  }
+  if (outside.writePath !== "") {
+    await settleItem(
+      projectDir,
+      run.promptId,
+      "failed",
+      outsideWriteReason(outside.writePath),
+      run.lastLines,
+      run.filesWritten,
+      run.startedAt,
+      outside.hits,
+    );
     return "halt";
   }
   const expected = expectedOutputFiles(projectDir, run.promptId);
@@ -894,14 +948,15 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     try {
       const gate = buildGates.get(path.resolve(projectDir));
       if (gate !== undefined) await gate({ projectDir, promptId: run.promptId, files });
-      const reason = recoveredReason(run.promptId);
-      await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt);
-      stampRecovery(projectDir, reason, false);
+      const recovered = recoveredReason(run.promptId);
+      const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : recovered;
+      await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt, outside.hits);
+      stampRecovery(projectDir, recovered, false);
       return "continue";
     } catch (error: unknown) {
       const text = error instanceof Error ? publicText(error.message) : "";
       const reason = text === "" ? "The build did not finish." : text;
-      await settleItem(projectDir, run.promptId, "failed", reason, run.lastLines, files, run.startedAt);
+      await settleItem(projectDir, run.promptId, "failed", reason, run.lastLines, files, run.startedAt, outside.hits);
       return "halt";
     }
   }
@@ -1214,9 +1269,10 @@ async function settleItem(
   lines: readonly string[],
   files: readonly string[],
   startedAt = new Date().toISOString(),
+  outside?: OutsideAccess[],
 ): Promise<void> {
   try {
-    await finishItem(projectDir, promptId, status, reason, lines, files, startedAt);
+    await finishItem(projectDir, promptId, status, reason, lines, files, startedAt, outside);
   } catch (error: unknown) {
     const fallback = error instanceof Error ? publicText(error.message) : "";
     const text = publicText(fallback === "" ? reason : fallback);
@@ -1228,7 +1284,7 @@ async function settleItem(
     try {
       const previous = readRunFile(projectDir);
       const started = previous?.promptId === promptId ? previous.startedAt : startedAt;
-      writeRun(projectDir, {
+      const failed: RunFile = {
         promptId,
         status: "failed",
         model: BUILD_MODEL,
@@ -1241,7 +1297,9 @@ async function settleItem(
         pid: null,
         recovery: "",
         recoveryRerun: false,
-      });
+      };
+      if (outside !== undefined) failed.outsideAccess = outside;
+      writeRun(projectDir, failed);
     } catch {
       // A second disk failure leaves the watchdog to catch a still-running row.
     }
@@ -1279,11 +1337,12 @@ async function finishItem(
   lines: readonly string[],
   files: readonly string[],
   startedAt = new Date().toISOString(),
+  outside?: OutsideAccess[],
 ): Promise<void> {
   await setStatus(projectDir, promptId, status);
   const previous = readRunFile(projectDir);
   const started = previous?.promptId === promptId ? previous.startedAt : startedAt;
-  writeRun(projectDir, {
+  const record: RunFile = {
     promptId,
     status,
     model: BUILD_MODEL,
@@ -1296,7 +1355,9 @@ async function finishItem(
     pid: null,
     recovery: "",
     recoveryRerun: false,
-  });
+  };
+  if (outside !== undefined) record.outsideAccess = outside;
+  writeRun(projectDir, record);
   // After the run record: the Drive page reads status then reason, so the reason must land with the status.
   await rememberPauseAfter(projectDir);
 }
@@ -1350,10 +1411,10 @@ async function retryLock<T>(fn: () => Promise<T>): Promise<T> {
   throw new LockHeld(process.pid);
 }
 
-function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet: string): string {
+function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet: string, projectDir: string): string {
   const brief = briefMarkdown.trim() === "" ? "The brief text was empty." : briefMarkdown.trim();
   const files = prompt.filesModified.length === 0 ? "none" : prompt.filesModified.join(", ");
-  return [
+  const rendered = [
     "---",
     `id: ${prompt.id}`,
     `title: ${prompt.title}`,
@@ -1387,6 +1448,7 @@ function renderPrompt(prompt: SitePromptSkeleton, briefMarkdown: string, packet:
     ...(prompt.requirements.length === 0 ? [] : [`Requirements: ${prompt.requirements.join(", ")}`]),
     "",
   ].join("\n");
+  return relativizePromptText(rendered, projectDir);
 }
 
 function failureReason(result: BuildSpawnResult, stream = ""): string {
@@ -1469,18 +1531,38 @@ function runPath(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "build-run.json");
 }
 
+function readOutside(value: unknown): OutsideAccess[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const hits: OutsideAccess[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const row = item as { tool?: unknown; path?: unknown };
+    if (typeof row.tool !== "string" || typeof row.path !== "string") continue;
+    const tool = row.tool.trim().slice(0, 80);
+    const filePath = row.path.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 240);
+    if (tool === "" || filePath === "") continue;
+    hits.push({ tool, path: filePath });
+    if (hits.length >= 10) break;
+  }
+  return hits.length > 0 ? hits : undefined;
+}
+
 function readRunFile(projectDir: string): RunFile | null {
   try {
     const parsed: unknown = JSON.parse(readFileSync(runPath(projectDir), "utf8"));
     if (!isRun(parsed)) return null;
-    const record = parsed as RunFile & { recovery?: unknown; recoveryRerun?: unknown };
-    return {
+    const record = parsed as RunFile & { recovery?: unknown; recoveryRerun?: unknown; outsideAccess?: unknown };
+    const outsideAccess = readOutside(record.outsideAccess);
+    const loaded: RunFile = {
       ...record,
       recovery: typeof record.recovery === "string" ? record.recovery : "",
       recoveryRerun: record.recoveryRerun === true,
       paused: record.paused === true,
       escalation: typeof record.escalation === "string" ? record.escalation : "",
     };
+    delete loaded.outsideAccess;
+    if (outsideAccess !== undefined) loaded.outsideAccess = outsideAccess;
+    return loaded;
   } catch {
     return null;
   }
@@ -1492,6 +1574,8 @@ function writeRun(projectDir: string, run: RunFile): void {
   const same = previous?.promptId === run.promptId;
   const recovery = run.recovery !== "" ? run.recovery : (previous?.recovery ?? "");
   const recoveryRerun = run.recoveryRerun || (same && previous?.recoveryRerun === true);
+  const explicitOutside = Object.hasOwn(run, "outsideAccess");
+  const outsideAccess = explicitOutside ? run.outsideAccess : same ? previous?.outsideAccess : undefined;
   const next: RunFile = {
     ...run,
     filesWritten: [...files].sort().slice(0, FILE_CAP),
@@ -1502,6 +1586,8 @@ function writeRun(projectDir: string, run: RunFile): void {
     paused: run.paused === true,
     escalation: typeof run.escalation === "string" ? run.escalation : "",
   };
+  delete next.outsideAccess;
+  if (outsideAccess !== undefined && outsideAccess.length > 0) next.outsideAccess = outsideAccess;
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(runPath(projectDir), `${JSON.stringify(next)}\n`, "utf8");

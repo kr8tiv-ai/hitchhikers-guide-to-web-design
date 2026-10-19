@@ -223,6 +223,14 @@ export {
   siteBuildSettled,
   siteBuildWatchConfig,
 } from "./guide/site-build.ts";
+export {
+  auditOutsideAccess,
+  buildConfinementArgs,
+  confinementRuleMatches,
+  outsideWarning,
+  outsideWriteReason,
+} from "./guide/site-confine.ts";
+export type { ConfinementOptions, OutsideAccess, OutsideAudit } from "./guide/site-confine.ts";
 export type {
   BuildContinueOutcome,
   BuildRecoveryDecision,
