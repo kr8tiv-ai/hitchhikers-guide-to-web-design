@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Page transitions
 
-Add a custom transition between pages: a thin line in the accent color sweeps across the screen, the old page fades and lifts 20px, the new page rises in, about 700ms total. The logo and nav persist without flicker. Re-initialize the motion clock after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick fade. When the stack is Astro, use View Transitions (ClientRouter). Edit {{files}} for {{page}}. {{section}} is the outlet. Import only {{library}} on {{element}}. Do not also bind this element with another library.
+Add a custom transition between pages: a thin line in the accent color sweeps across the screen, the old page fades and lifts 20px, the new page rises in, about 700ms total. The logo and nav persist without flicker. Re-initialize the motion clock after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick fade. When the stack is Astro, use View Transitions (ClientRouter). Edit {{files}} for {{page}}. {{section}} is the outlet. This example uses {{library}} on {{element}}. Do not also bind this element with another library.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add one page transition and re-init the motion clock after navigation.
 <task>
 TASK: Page transitions
 
-Add a custom transition between pages: a thin line in the accent color sweeps across the screen, the old page fades and lifts 20px, the new page rises in, about 700ms total. The logo and nav persist without flicker. Re-initialize the motion clock after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick fade. When the stack is Astro, use View Transitions (ClientRouter). Edit {{files}} for {{page}}. {{section}} is the outlet. Import only {{library}} on {{element}}. Do not also bind this element with another library.
+Add a custom transition between pages: a thin line in the accent color sweeps across the screen, the old page fades and lifts 20px, the new page rises in, about 700ms total. The logo and nav persist without flicker. Re-initialize the motion clock after each navigation (kill old triggers, then refresh). Reduced motion: a plain quick fade. When the stack is Astro, use View Transitions (ClientRouter). Edit {{files}} for {{page}}. {{section}} is the outlet. This example uses {{library}} on {{element}}. Do not also bind this element with another library.
 </task>
 
 <must_haves>

@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: SplitText heading
 
-On {{element}} in {{section}} of {{page}}, split the heading into lines with GSAP SplitText. Each line is masked and rises from below with a 0.06s stagger when it enters the viewport. The animation plays once. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+On {{element}} in {{section}} of {{page}}, split the heading into lines with GSAP SplitText. Each line is masked and rises from below with a 0.06s stagger when it enters the viewport. The animation plays once. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Split one heading into lines with GSAP SplitText.
 <task>
 TASK: SplitText heading
 
-On {{element}} in {{section}} of {{page}}, split the heading into lines with GSAP SplitText. Each line is masked and rises from below with a 0.06s stagger when it enters the viewport. The animation plays once. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+On {{element}} in {{section}} of {{page}}, split the heading into lines with GSAP SplitText. Each line is masked and rises from below with a 0.06s stagger when it enters the viewport. The animation plays once. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 </task>
 
 <must_haves>

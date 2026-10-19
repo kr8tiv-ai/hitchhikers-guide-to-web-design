@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Structure
 
-Structure: site map, navigation, then each page and section. Register {{page}} and {{section}} in {{files}} with the component path and the one job of the section. Do not import {{library}} onto {{element}}. No effects yet.
+Structure: site map, navigation, then each page and section. Register {{page}} and {{section}} in {{files}} with the component path and the one job of the section. No effects yet.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Register pages and sections before any effect.
 <task>
 TASK: Structure
 
-Structure: site map, navigation, then each page and section. Register {{page}} and {{section}} in {{files}} with the component path and the one job of the section. Do not import {{library}} onto {{element}}. No effects yet.
+Structure: site map, navigation, then each page and section. Register {{page}} and {{section}} in {{files}} with the component path and the one job of the section. No effects yet.
 </task>
 
 <must_haves>

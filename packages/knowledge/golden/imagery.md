@@ -1,6 +1,6 @@
 # Goal
 
-Place the approved image, or leave a TODO when none was supplied.
+Art-direct and place the image set: use the supplied image if it fits, otherwise the generated set.
 
 # Files
 
@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Imagery
 
-Place the approved image for {{section}} on {{page}} in {{files}}. Crop for intent: leave calm space where text sits, and make sure the image reads at phone size. If no image was supplied, leave a clearly named TODO and do not invent a photo. Alt text states what the picture shows. Do not import {{library}} onto {{element}}.
+Place the approved image for {{section}} on {{page}} in {{files}}. Crop for intent: leave calm space where text sits, and make sure the image reads at phone size. If no supplied image fits, place the generated concept set. A real person, place, product or listing is never generated. Alt text states what the picture shows. Do not import {{library}} onto {{element}}.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -22,7 +22,7 @@ No em dashes, no exclamation points.
 
 truths:
 
-- The section shows the approved image or a named TODO.
+- The section shows the supplied image or the generated concept set.
 
 artifacts:
 
@@ -35,15 +35,15 @@ key_links:
 
 prohibitions:
 
-- Do not invent a photo, a person, or a stock scene.
+- A real person, place, product or listing is never generated.
 - Do not paste site-rules.ts into this prompt.
 
 # Verify
 
-Load {{page}} at 375. Confirm the image has alt text or the TODO is visible in the source.
+Load {{page}} at 375. Confirm the image has alt text and is the supplied still or the generated concept set.
 
 <objective>
-Place the approved image, or leave a TODO when none was supplied.
+Art-direct and place the image set: use the supplied image if it fits, otherwise the generated set.
 </objective>
 
 <read_first>
@@ -53,22 +53,22 @@ Place the approved image, or leave a TODO when none was supplied.
 <task>
 TASK: Imagery
 
-Place the approved image for {{section}} on {{page}} in {{files}}. Crop for intent: leave calm space where text sits, and make sure the image reads at phone size. If no image was supplied, leave a clearly named TODO and do not invent a photo. Alt text states what the picture shows. Do not import {{library}} onto {{element}}.
+Place the approved image for {{section}} on {{page}} in {{files}}. Crop for intent: leave calm space where text sits, and make sure the image reads at phone size. If no supplied image fits, place the generated concept set. A real person, place, product or listing is never generated. Alt text states what the picture shows. Do not import {{library}} onto {{element}}.
 </task>
 
 <must_haves>
 truths:
-- The section shows the approved image or a named TODO.
+- The section shows the supplied image or the generated concept set.
 artifacts:
 - {{files}}
 key_links:
 - {{files}} is the work of this prompt for {{section}}.
 prohibitions:
-- Do not invent a photo, a person, or a stock scene.
+- A real person, place, product or listing is never generated.
 </must_haves>
 
 <verify>
-Load {{page}} at 375. Confirm the image has alt text or the TODO is visible in the source.
+Load {{page}} at 375. Confirm the image has alt text and is the supplied still or the generated concept set.
 </verify>
 
 <report_back>

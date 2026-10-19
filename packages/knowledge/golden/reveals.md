@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Scroll reveals
 
-Create a reusable reveal on {{element}} in {{section}} of {{page}}. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. (1) Headings: split text into lines (GSAP SplitText), each line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clip-path window opening from the center outward while the image inside scales from 1.1 to 1. (3) Cards in grids stagger by 0.1s. Each animation plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+Create a reusable reveal on {{element}} in {{section}} of {{page}}. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. (1) Headings: split text into lines (GSAP SplitText), each line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clip-path window opening from the center outward while the image inside scales from 1.1 to 1. (3) Cards in grids stagger by 0.1s. Each animation plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add one reveal system with GSAP ScrollTrigger.
 <task>
 TASK: Scroll reveals
 
-Create a reusable reveal on {{element}} in {{section}} of {{page}}. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. (1) Headings: split text into lines (GSAP SplitText), each line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clip-path window opening from the center outward while the image inside scales from 1.1 to 1. (3) Cards in grids stagger by 0.1s. Each animation plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+Create a reusable reveal on {{element}} in {{section}} of {{page}}. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. (1) Headings: split text into lines (GSAP SplitText), each line masked and rising from below with a 0.06s stagger when it enters the viewport. (2) Images: a clip-path window opening from the center outward while the image inside scales from 1.1 to 1. (3) Cards in grids stagger by 0.1s. Each animation plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 </task>
 
 <must_haves>

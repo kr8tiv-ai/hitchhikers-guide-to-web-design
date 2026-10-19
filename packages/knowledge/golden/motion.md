@@ -1,6 +1,6 @@
 # Goal
 
-Add one effect on {{element}} by importing only {{library}}.
+Add one effect on {{element}}. This example uses {{library}}.
 
 {{library}} is one MotionLib name. Allowed values: `gsap`, `lenis`, `three`, `ogl`, `motion`, `anime`, `theatre`, `css-scroll`, `vanilla`.
 
@@ -16,7 +16,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: One effect on {{element}}
 
-Import only {{library}} for {{element}}. Do not import a second motion library for this effect. If {{library}} is `css-scroll` or `vanilla`, add no package. If {{library}} is `theatre`, import `@theatre/core` only, pinned. Do not import `@theatre/studio`. Otherwise import the one package {{library}} names, and no other library from the motion toolkit.
+This example uses {{library}} for {{element}}. Do not import a second motion library for this effect. If {{library}} is `css-scroll` or `vanilla`, add no package. If {{library}} is `theatre`, import `@theatre/core` only, pinned. Do not import `@theatre/studio`. Otherwise import the one package {{library}} names, and no other library from the motion toolkit.
 
 Motion must feel confident and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and opacity.
 
@@ -30,7 +30,7 @@ No em dashes, no exclamation points. Never write "as before" or "see above".
 
 truths:
 
-- {{element}} has one effect, and that effect imports only {{library}}.
+- {{element}} has one effect. This example uses {{library}}.
 - Reduced motion is simply visible and still complete.
 - The phone version stays calm.
 
@@ -57,7 +57,7 @@ prohibitions:
 Scroll {{element}} into view, then repeat with prefers-reduced-motion. Confirm the import list adds only {{library}}, the effect plays once, and reduced motion is simply visible.
 
 <objective>
-Add one effect on {{element}} by importing only {{library}}.
+Add one effect on {{element}}. This example uses {{library}}.
 </objective>
 
 <read_first>
@@ -65,12 +65,12 @@ Add one effect on {{element}} by importing only {{library}}.
 </read_first>
 
 <task>
-On {{page}}, in {{section}}, edit {{files}}. Import only {{library}} for {{element}}. Do not also bind this element with another library. Motion must feel confident and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and opacity. Reduced motion: everything is simply visible.
+On {{page}}, in {{section}}, edit {{files}}. This example uses {{library}} for {{element}}. Do not also bind this element with another library. Motion must feel confident and quick but never bouncy: short eases, respect prefers-reduced-motion, animate only transform and opacity. Reduced motion: everything is simply visible.
 </task>
 
 <must_haves>
 truths:
-- {{element}} has one effect, and that effect imports only {{library}}.
+- {{element}} has one effect. This example uses {{library}}.
 artifacts:
 - {{files}}
 key_links:

@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Navigation and menu
 
-Build a slim top bar (about 56px): logo left, text links from the route module, and one outlined action on the right. Transparent over the hero, soft frosted background after 80px of scroll, hides on scroll down and comes back on scroll up. Under 1024px show only the logo and a Menu button that opens a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes, focus stays inside the open menu and returns to the button on close. Add the same links to the footer. Edit {{files}} for {{page}}. The bar mounts in {{section}}. Do not import {{library}} onto {{element}} in this prompt. If scroll behavior needs a library, leave a TODO for the later motion prompt.
+Build a slim top bar (about 56px): logo left, text links from the route module, and one outlined action on the right. Transparent over the hero, soft frosted background after 80px of scroll, hides on scroll down and comes back on scroll up. Under 1024px show only the logo and a Menu button that opens a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes, focus stays inside the open menu and returns to the button on close. Add the same links to the footer. Edit {{files}} for {{page}}. The bar mounts in {{section}}. Scroll behavior may use any appropriate library, including {{library}} on {{element}}, in this prompt.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add the site nav from the route module.
 <task>
 TASK: Navigation and menu
 
-Build a slim top bar (about 56px): logo left, text links from the route module, and one outlined action on the right. Transparent over the hero, soft frosted background after 80px of scroll, hides on scroll down and comes back on scroll up. Under 1024px show only the logo and a Menu button that opens a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes, focus stays inside the open menu and returns to the button on close. Add the same links to the footer. Edit {{files}} for {{page}}. The bar mounts in {{section}}. Do not import {{library}} onto {{element}} in this prompt. If scroll behavior needs a library, leave a TODO for the later motion prompt.
+Build a slim top bar (about 56px): logo left, text links from the route module, and one outlined action on the right. Transparent over the hero, soft frosted background after 80px of scroll, hides on scroll down and comes back on scroll up. Under 1024px show only the logo and a Menu button that opens a full-screen menu with big links. Menu button: 44px minimum tap target, aria-expanded, Escape closes, focus stays inside the open menu and returns to the button on close. Add the same links to the footer. Edit {{files}} for {{page}}. The bar mounts in {{section}}. Scroll behavior may use any appropriate library, including {{library}} on {{element}}, in this prompt.
 </task>
 
 <must_haves>

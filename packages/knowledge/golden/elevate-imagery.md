@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Imagery pass
 
-Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and leave a clearly named placeholder slot. Do not invent a photo in the page. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Do not import {{library}} onto {{element}}. At most eight ranked changes.
+Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and place the generated concept set. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Rank the changes.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -35,7 +35,7 @@ key_links:
 
 prohibitions:
 
-- Do not invent a photo or a person.
+- A real person, place, product or listing is never generated.
 - Do not paste site-rules.ts into this prompt.
 
 # Verify
@@ -53,7 +53,7 @@ Grade the images so the site feels like one world.
 <task>
 TASK: Imagery pass
 
-Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and leave a clearly named placeholder slot. Do not invent a photo in the page. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Do not import {{library}} onto {{element}}. At most eight ranked changes.
+Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and place the generated concept set. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Rank the changes.
 </task>
 
 <must_haves>
@@ -64,7 +64,7 @@ artifacts:
 key_links:
 - {{files}} is the work of this prompt for {{section}}.
 prohibitions:
-- Do not invent a photo or a person.
+- A real person, place, product or listing is never generated.
 </must_haves>
 
 <verify>

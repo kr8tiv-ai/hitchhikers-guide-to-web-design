@@ -1,6 +1,6 @@
 # Goal
 
-Build the homepage hero with real copy and no effect library.
+Build the homepage hero with real copy and room for the motion the art direction names.
 
 # Files
 
@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Homepage hero
 
-Build the homepage hero in {{files}}. Full viewport height. Background from the approved still, with a poster image so something shows instantly. Headline in the display font, very large, low-left, with generous empty space. One line under it. One button linking to the approved URL. Text must pass contrast over the image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video. {{page}} holds {{section}}. Do not import {{library}} onto {{element}}. No effects yet; motion comes in a later prompt.
+Build the homepage hero in {{files}}. Full viewport height. Background from the approved still, with a poster image so something shows instantly. Headline in the display font, very large, low-left, with generous empty space. One line under it. One button linking to the approved URL. Text must pass contrast over the image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video. {{page}} holds {{section}}. Add the motion the art direction names.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -43,7 +43,7 @@ prohibitions:
 Load {{page}} at 375 and at 1440. Read the headline. Confirm nothing animates.
 
 <objective>
-Build the homepage hero with real copy and no effect library.
+Build the homepage hero with real copy and room for the motion the art direction names.
 </objective>
 
 <read_first>
@@ -53,7 +53,7 @@ Build the homepage hero with real copy and no effect library.
 <task>
 TASK: Homepage hero
 
-Build the homepage hero in {{files}}. Full viewport height. Background from the approved still, with a poster image so something shows instantly. Headline in the display font, very large, low-left, with generous empty space. One line under it. One button linking to the approved URL. Text must pass contrast over the image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video. {{page}} holds {{section}}. Do not import {{library}} onto {{element}}. No effects yet; motion comes in a later prompt.
+Build the homepage hero in {{files}}. Full viewport height. Background from the approved still, with a poster image so something shows instantly. Headline in the display font, very large, low-left, with generous empty space. One line under it. One button linking to the approved URL. Text must pass contrast over the image (add a soft dark gradient behind it if needed). On mobile, use the still image, not the video. {{page}} holds {{section}}. Add the motion the art direction names.
 </task>
 
 <must_haves>

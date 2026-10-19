@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Phone gate
 
-Run Lighthouse on real mobile for {{page}}. Lighthouse mobile 90 in all four categories: performance, accessibility, best practices, and SEO. Check LCP at most 2.5 seconds, CLS at most 0.1, and the INP lab proxy at most 200 milliseconds. Edit {{files}}. {{section}} is the page under test. Do not import {{library}} onto {{element}}. A desktop score is not the gate.
+Run Lighthouse on real mobile for {{page}}. Lighthouse mobile 90 in all four categories: performance, accessibility, best practices, and SEO. Check LCP at most 2.5 seconds, CLS at most 0.1, and the INP lab proxy at most 200 milliseconds. Edit {{files}}. {{section}} is the page under test. A desktop score is not the gate.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Run the phone Lighthouse gate and the lab vitals.
 <task>
 TASK: Phone gate
 
-Run Lighthouse on real mobile for {{page}}. Lighthouse mobile 90 in all four categories: performance, accessibility, best practices, and SEO. Check LCP at most 2.5 seconds, CLS at most 0.1, and the INP lab proxy at most 200 milliseconds. Edit {{files}}. {{section}} is the page under test. Do not import {{library}} onto {{element}}. A desktop score is not the gate.
+Run Lighthouse on real mobile for {{page}}. Lighthouse mobile 90 in all four categories: performance, accessibility, best practices, and SEO. Check LCP at most 2.5 seconds, CLS at most 0.1, and the INP lab proxy at most 200 milliseconds. Edit {{files}}. {{section}} is the page under test. A desktop score is not the gate.
 </task>
 
 <must_haves>

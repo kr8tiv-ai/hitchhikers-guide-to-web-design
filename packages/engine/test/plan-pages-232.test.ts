@@ -98,7 +98,7 @@ test("the Run 4 brief shape keeps all 11 pages and the dropped features", () => 
     assert.ok(layout, `layout ${title}`);
     assert.ok(copy, `copy ${title}`);
     const section = layout.title.slice("Build the ".length, layout.title.indexOf(" layout"));
-    const image = prompts.find((prompt) => prompt.title === `Place the approved image for ${section}, or leave a TODO if none was supplied.`);
+    const image = prompts.find((prompt) => prompt.title === `Art-direct and place the image set for ${section}: use the supplied image if it fits, otherwise the generated set.`);
     assert.ok(image, `image ${title}`);
   }
   const detail = routePrompt(prompts, "Farm detail");

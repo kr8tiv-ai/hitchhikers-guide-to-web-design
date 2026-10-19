@@ -346,8 +346,8 @@ test("pickGolden maps kinds onto template files", () => {
     [skeleton({ title: "Set color and type tokens from the approved brand.", requirements: ["REQ-TOKENS"] }), "tokens.md"],
     [skeleton({ title: "Record the approved page ids and titles in the route module.", requirements: ["REQ-ROUTES"] }), "routes.md"],
     [skeleton({ title: "Add the site nav from the route module.", requirements: ["REQ-NAV"] }), "nav.md"],
-    [skeleton({ title: "Build the hero layout on Home with no effect library.", requirements: ["REQ-STRUCT-hero"] }), "hero.md"],
-    [skeleton({ title: "Build the offer layout on Home with no effect library.", requirements: ["REQ-STRUCT-offer"] }), "section.md"],
+    [skeleton({ title: "Build the hero layout on Home.", requirements: ["REQ-STRUCT-hero"] }), "hero.md"],
+    [skeleton({ title: "Build the offer layout on Home.", requirements: ["REQ-STRUCT-offer"] }), "section.md"],
     [skeleton({ title: "Place real copy in the hero section.", requirements: ["REQ-COPY-hero"] }), "page.md"],
     [skeleton({ title: "Add the feature: contact form.", requirements: ["REQ-FEAT-contact-form"] }), "forms.md"],
     [skeleton({ title: "Add the feature: gallery.", requirements: ["REQ-FEAT-gallery"] }), "feature.md"],
@@ -408,7 +408,7 @@ test("a huge pack excerpt is trimmed before the anchor and the skeleton", () => 
     const sentinel = "SENTINELTAIL";
     writeFileSync(path.join(packRoot, "SKILL.md"), `${"word ".repeat(200_000)}${sentinel}`, "utf8");
     const entry = skeleton({
-      title: "Build the offer layout on Home with no effect library.",
+      title: "Build the offer layout on Home.",
       requirements: ["REQ-STRUCT-offer"],
       filesModified: ["src/components/SectionOffer.astro"],
     });

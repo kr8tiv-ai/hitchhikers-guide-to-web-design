@@ -121,7 +121,7 @@ export function lintGolden(name: GoldenName, text: string): string[] {
   if (name === "motion") {
     if (!text.includes("{{library}}")) problems.push("missing {{library}}");
     if (!text.includes("{{element}}")) problems.push("missing {{element}}");
-    if (!/import only \{\{library\}\}/i.test(text)) problems.push("missing import only {{library}}");
+    if (!/this example uses \{\{library\}\}/i.test(text)) problems.push("missing This example uses {{library}}");
     for (const lib of MOTION_LIB_NAMES) {
       if (!text.includes(`\`${lib}\``)) problems.push(`missing MotionLib \`${lib}\``);
     }

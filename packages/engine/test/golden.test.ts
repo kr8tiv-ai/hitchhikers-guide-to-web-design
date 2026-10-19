@@ -85,7 +85,7 @@ test("three golden templates exist and pass the denylist", () => {
   assertClean("motion", loaded.motion);
   assert.ok(loaded.motion.includes("{{library}}"));
   assert.ok(loaded.motion.includes("{{element}}"));
-  assert.match(loaded.motion, /import only \{\{library\}\}/i);
+  assert.match(loaded.motion, /this example uses \{\{library\}\}/i);
   for (const lib of MOTION_LIBS) {
     assert.ok(loaded.motion.includes(`\`${lib}\``), lib);
   }

@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Form
 
-Add one form for {{section}} on {{page}} in {{files}}. Collect only the fields the plan named. Make sure it gets permission and follows the email marketing rules when it collects an address. The submit control says what happens. Errors sit on the fields. Do not import {{library}} onto {{element}}. Do not write a key into source.
+Add one form for {{section}} on {{page}} in {{files}}. Collect only the fields the plan named. Make sure it gets permission and follows the email marketing rules when it collects an address. The submit control says what happens. Errors sit on the fields. Do not write a key into source.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add one form that asks permission and stores no secrets in the repo.
 <task>
 TASK: Form
 
-Add one form for {{section}} on {{page}} in {{files}}. Collect only the fields the plan named. Make sure it gets permission and follows the email marketing rules when it collects an address. The submit control says what happens. Errors sit on the fields. Do not import {{library}} onto {{element}}. Do not write a key into source.
+Add one form for {{section}} on {{page}} in {{files}}. Collect only the fields the plan named. Make sure it gets permission and follows the email marketing rules when it collects an address. The submit control says what happens. Errors sit on the fields. Do not write a key into source.
 </task>
 
 <must_haves>

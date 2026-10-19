@@ -1,6 +1,6 @@
 # Goal
 
-Propose at most eight upgrades, ranked, and do not apply them all.
+Propose ranked upgrades and apply the ones that serve the art direction.
 
 # Files
 
@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Elevate plan
 
-Review the live local site cold before changing it. Write an upgrade plan with no more than 8 upgrades, ranked by impact versus effort, each explained in one plain sentence. This prompt records the plan in {{files}}. It does not apply the upgrades. {{page}} and {{section}} are the scope. Do not import {{library}} onto {{element}}. Protect everything that already works. Do not write the word elevate in site copy. The name belongs to this pass only.
+Review the live local site cold before changing it. Write an upgrade plan with upgrades ranked by impact versus effort, each explained in one plain sentence. This prompt records the plan in {{files}}. It does not apply the upgrades. {{page}} and {{section}} are the scope. Protect everything that already works. Do not write the word elevate in site copy. The name belongs to this pass only.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -22,7 +22,7 @@ No em dashes, no exclamation points.
 
 truths:
 
-- The plan has at most eight ranked upgrades and changes no layout.
+- The plan has ranked upgrades.
 
 artifacts:
 
@@ -40,10 +40,10 @@ prohibitions:
 
 # Verify
 
-Count the upgrades in {{files}}. Confirm the count is at most 8 and the page files are untouched.
+Count the upgrades in {{files}}. Confirm the upgrades are ranked and the page files are untouched.
 
 <objective>
-Propose at most eight upgrades, ranked, and do not apply them all.
+Propose ranked upgrades and apply the ones that serve the art direction.
 </objective>
 
 <read_first>
@@ -53,12 +53,12 @@ Propose at most eight upgrades, ranked, and do not apply them all.
 <task>
 TASK: Elevate plan
 
-Review the live local site cold before changing it. Write an upgrade plan with no more than 8 upgrades, ranked by impact versus effort, each explained in one plain sentence. This prompt records the plan in {{files}}. It does not apply the upgrades. {{page}} and {{section}} are the scope. Do not import {{library}} onto {{element}}. Protect everything that already works. Do not write the word elevate in site copy. The name belongs to this pass only.
+Review the live local site cold before changing it. Write an upgrade plan with upgrades ranked by impact versus effort, each explained in one plain sentence. This prompt records the plan in {{files}}. It does not apply the upgrades. {{page}} and {{section}} are the scope. Protect everything that already works. Do not write the word elevate in site copy. The name belongs to this pass only.
 </task>
 
 <must_haves>
 truths:
-- The plan has at most eight ranked upgrades and changes no layout.
+- The plan has ranked upgrades.
 artifacts:
 - {{files}}
 key_links:
@@ -68,7 +68,7 @@ prohibitions:
 </must_haves>
 
 <verify>
-Count the upgrades in {{files}}. Confirm the count is at most 8 and the page files are untouched.
+Count the upgrades in {{files}}. Confirm the upgrades are ranked and the page files are untouched.
 </verify>
 
 <report_back>

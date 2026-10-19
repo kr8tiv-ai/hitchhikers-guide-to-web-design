@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Routes
 
-Write the approved page ids and titles into {{files}}. {{page}} is one id. {{section}} is not a route. Do not import {{library}} onto {{element}}. Do not create the page files in this prompt.
+Write the approved page ids and titles into {{files}}. {{page}} is one id. {{section}} is not a route. Do not create the page files in this prompt.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Record the approved page ids and titles.
 <task>
 TASK: Routes
 
-Write the approved page ids and titles into {{files}}. {{page}} is one id. {{section}} is not a route. Do not import {{library}} onto {{element}}. Do not create the page files in this prompt.
+Write the approved page ids and titles into {{files}}. {{page}} is one id. {{section}} is not a route. Do not create the page files in this prompt.
 </task>
 
 <must_haves>

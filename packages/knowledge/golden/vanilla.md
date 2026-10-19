@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Vanilla effect
 
-On {{element}} in {{section}} of {{page}}, write the effect in vanilla JS. Add no package. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Reduced motion: everything is simply visible.
+On {{element}} in {{section}} of {{page}}, write the effect in vanilla JS. Add no package. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Reduced motion: everything is simply visible.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Bind one effect with vanilla JS and no motion package.
 <task>
 TASK: Vanilla effect
 
-On {{element}} in {{section}} of {{page}}, write the effect in vanilla JS. Add no package. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Reduced motion: everything is simply visible.
+On {{element}} in {{section}} of {{page}}, write the effect in vanilla JS. Add no package. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Reduced motion: everything is simply visible.
 </task>
 
 <must_haves>

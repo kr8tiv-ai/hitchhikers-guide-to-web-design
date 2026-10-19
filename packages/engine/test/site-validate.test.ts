@@ -77,8 +77,16 @@ function onlyRule(report: ValidationReport, rule: string): void {
 
 test("validatePackage accepts a generated package for each stack", () => {
   for (const stack of ["astro", "next", "vite-react", "sveltekit"] as const) {
-    const report = validatePackage(seal(calmInput(stack)));
+    const prompts = seal(calmInput(stack));
+    const report = validatePackage(prompts);
     assert.equal(report.ok, true, `${stack} ${JSON.stringify(report.errors, null, 2)}`);
+    assert.ok(prompts.some((prompt) => prompt.title === "Build the hero layout on Home."));
+    assert.ok(
+      prompts.some((prompt) =>
+        prompt.title.startsWith("Art-direct and place the image set for hero:"),
+      ),
+    );
+    assert.equal(prompts.some((prompt) => /no effect library/i.test(prompt.title)), false);
   }
 });
 

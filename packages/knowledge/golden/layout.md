@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Document shell
 
-Add the document shell in {{files}} for {{page}}. One skip link, one main landmark, and the font and token stylesheets. The shell names {{section}} as the outlet for later sections. Do not import {{library}} onto {{element}}. Do not add a page section in this prompt.
+Add the document shell in {{files}} for {{page}}. One skip link, one main landmark, and the font and token stylesheets. The shell names {{section}} as the outlet for later sections. Do not add a page section in this prompt.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add the document shell for the chosen stack.
 <task>
 TASK: Document shell
 
-Add the document shell in {{files}} for {{page}}. One skip link, one main landmark, and the font and token stylesheets. The shell names {{section}} as the outlet for later sections. Do not import {{library}} onto {{element}}. Do not add a page section in this prompt.
+Add the document shell in {{files}} for {{page}}. One skip link, one main landmark, and the font and token stylesheets. The shell names {{section}} as the outlet for later sections. Do not add a page section in this prompt.
 </task>
 
 <must_haves>

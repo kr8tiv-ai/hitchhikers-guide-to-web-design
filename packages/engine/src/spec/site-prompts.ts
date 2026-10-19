@@ -7,8 +7,8 @@
  * - The final once-over is the last Improbability Drive entry (v2 §11.4).
  *   §5.2 has no final-pass slice, so the entry uses Sub-Etha Signal, the last
  *   slice of that phase.
- * - Imagery is one prompt per section. The input has no asset rows. The title
- *   says to leave a TODO when no image was supplied.
+ * - Imagery is one prompt per section. Use the supplied image when it fits,
+ *   otherwise the generated set. No section is left without a picture.
  * - Next.js paths follow packages/templates/next-app (src/app). Vite paths
  *   follow vite-react-world. SvelteKit has no template: src/routes and src/lib.
  * - depends_on is a chain. Each entry depends on the previous id.
@@ -772,7 +772,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "improbability-drive",
       slice: "Vogon Constructor Fleet",
-      title: "Add the shared ticker and the reduced-motion check. Import no effect library.",
+      title: "Add the shared ticker and the reduced-motion check.",
       tier: "Cup of Tea",
       effort: "medium",
       files: ["src/scripts/motion.ts"],
@@ -818,7 +818,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         job(claim, {
           phase: "improbability-drive",
           slice,
-          title: `Build the ${sectionId} layout on ${page.title} with no effect library.`,
+          title: `Build the ${sectionId} layout on ${page.title}.`,
           tier: "Cup of Tea",
           effort: "medium",
           files: [file, pagePath],
@@ -843,7 +843,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         job(claim, {
           phase: "improbability-drive",
           slice: sectionSlice(pageIndex, sectionIndex),
-          title: `Place the approved image for ${sectionId}, or leave a TODO if none was supplied.`,
+          title: `Art-direct and place the image set for ${sectionId}: use the supplied image if it fits, otherwise the generated set.`,
           tier: "Cup of Tea",
           effort: "medium",
           files: [componentFile(stack, `Section${pascal(slugId(sectionId))}`)],
@@ -1087,7 +1087,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Slartibartfast's Fjords",
-      title: "Elevate pass for type and spacing. At most eight ranked upgrades.",
+      title: "Elevate pass for type and spacing. Rank the upgrades.",
       tier: "Forty-Two",
       effort: "xhigh",
       files: ["src/styles/type.css", "tests/elevate-type.spec.ts"],
@@ -1096,7 +1096,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Slartibartfast's Fjords",
-      title: "Elevate pass for the effect that already owns each element.",
+      title: "Elevate pass for motion. Add the motion the art direction asks for that is still missing, then refine what exists.",
       tier: "Forty-Two",
       effort: "xhigh",
       files: ["src/scripts/motion.ts", "tests/elevate-motion.spec.ts"],
@@ -1105,7 +1105,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Slartibartfast's Fjords",
-      title: "Elevate pass for imagery. Do not invent a photo.",
+      title: "Elevate pass for imagery. Replace weak, generic or missing images with art-directed generated ones.",
       tier: "Forty-Two",
       effort: "xhigh",
       files: ["src/styles/imagery.css", "tests/elevate-imagery.spec.ts"],

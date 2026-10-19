@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Copy pass
 
-Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Do not import {{library}} onto {{element}}. At most eight ranked changes.
+Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Rank the changes.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Rewrite copy in the brand voice and mark missing facts TODO.
 <task>
 TASK: Copy pass
 
-Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Do not import {{library}} onto {{element}}. At most eight ranked changes.
+Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Rank the changes.
 </task>
 
 <must_haves>

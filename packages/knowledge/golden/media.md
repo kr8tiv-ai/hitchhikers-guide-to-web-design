@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Media and performance pass
 
-Find every image and video used by {{section}} on {{page}}. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and serve them with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264, crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the poster only. Keep originals in /_archive/originals. Edit {{files}}. Do not import {{library}} onto {{element}}. Report a before and after size table. Target: LCP under 2.5s, no layout shift.
+Find every image and video used by {{section}} on {{page}}. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and serve them with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264, crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the poster only. Keep originals in /_archive/originals. Edit {{files}}. Report a before and after size table. Target: LCP under 2.5s, no layout shift.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Compress images and video and record the weight.
 <task>
 TASK: Media and performance pass
 
-Find every image and video used by {{section}} on {{page}}. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and serve them with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264, crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the poster only. Keep originals in /_archive/originals. Edit {{files}}. Do not import {{library}} onto {{element}}. Report a before and after size table. Target: LCP under 2.5s, no layout shift.
+Find every image and video used by {{section}} on {{page}}. Images: export AVIF and WebP at 1280, 1920 and 2560 widths and serve them with sizes. Videos: encode a WebM (AV1) and an MP4 (H.264, crf 23, -movflags +faststart, no audio), each loop under about 4 MB where possible, with a poster frame. Video tags: muted, playsinline, loop, preload="metadata". Mobile and save-data users get the poster only. Keep originals in /_archive/originals. Edit {{files}}. Report a before and after size table. Target: LCP under 2.5s, no layout shift.
 </task>
 
 <must_haves>

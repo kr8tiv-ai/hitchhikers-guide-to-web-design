@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Theatre timeline
 
-Import @theatre/core only, pinned at 0.7.2, on {{element}} in {{section}} of {{page}}. Do not import @theatre/studio. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. The timeline plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy. Subscribe to the shared ticker. Do not start a second animation frame loop.
+Import @theatre/core only, pinned at 0.7.2, on {{element}} in {{section}} of {{page}}. Do not import @theatre/studio. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. The timeline plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy. Subscribe to the shared ticker. Do not start a second animation frame loop.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Bind one Theatre core timeline. Never the studio package.
 <task>
 TASK: Theatre timeline
 
-Import @theatre/core only, pinned at 0.7.2, on {{element}} in {{section}} of {{page}}. Do not import @theatre/studio. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. The timeline plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy. Subscribe to the shared ticker. Do not start a second animation frame loop.
+Import @theatre/core only, pinned at 0.7.2, on {{element}} in {{section}} of {{page}}. Do not import @theatre/studio. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. The timeline plays once. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy. Subscribe to the shared ticker. Do not start a second animation frame loop.
 </task>
 
 <must_haves>

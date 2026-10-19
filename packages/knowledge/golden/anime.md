@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: anime.js effect
 
-Import only {{library}} for {{element}} in {{section}} of {{page}}. Edit {{files}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Duration stays under 700ms. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+This example uses {{library}} for {{element}} in {{section}} of {{page}}. Edit {{files}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Duration stays under 700ms. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Bind one anime.js effect on one element.
 <task>
 TASK: anime.js effect
 
-Import only {{library}} for {{element}} in {{section}} of {{page}}. Edit {{files}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Duration stays under 700ms. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
+This example uses {{library}} for {{element}} in {{section}} of {{page}}. Edit {{files}}. Do not also bind this element with another library. Animate only transform and opacity. The effect plays once. Duration stays under 700ms. Reduced motion: everything is simply visible. Motion must feel confident and quick but never bouncy.
 </task>
 
 <must_haves>

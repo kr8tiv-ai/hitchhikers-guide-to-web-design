@@ -68,12 +68,11 @@ test("RULES is one constant shared with the skeleton module", () => {
   assert.match(SITE_RULES, /GPL and AGPL are out/);
   assert.match(SITE_RULES, /@theatre\/studio/);
   assert.match(SITE_RULES, /@theatre\/core only, pinned, never @latest/);
-  assert.match(SITE_RULES, /Motion toolkit \(D-001\)/);
-  assert.match(SITE_RULES, /Import only the libraries this prompt names/);
-  assert.match(SITE_RULES, /Do not load every motion library on this page/);
-  assert.match(SITE_RULES, /One scroll owner per page/);
-  assert.match(SITE_RULES, /One ticker/);
-  assert.match(SITE_RULES, /One WebGL context/);
+  assert.match(SITE_RULES, /The full motion toolkit is available/);
+  assert.match(SITE_RULES, /Any appropriate library may be used/);
+  assert.match(SITE_RULES, /One scroll owner, one ticker and one WebGL context per page/);
+  assert.match(SITE_RULES, /one ticker/);
+  assert.match(SITE_RULES, /one WebGL context/);
   assert.match(SITE_RULES, /Reduced motion/);
   assert.match(SITE_RULES, /at least 90/);
   assert.match(SITE_RULES, /no invented testimonials/);
@@ -151,7 +150,8 @@ test("a 3-page calm fixture yields 50 to 150 real entries", () => {
   const clock = prompts.find((prompt) => prompt.requirements.includes("REQ-MOTION-CLOCK"));
   assert.ok(clock);
   assert.equal(clock.library, undefined);
-  assert.match(clock.title, /Import no effect library/);
+  assert.match(clock.title, /reduced-motion check/);
+  assert.equal(/no effect library/i.test(clock.title), false);
   for (const lib of MOTION_LIBS) {
     if (lib === "motion") continue;
     assert.equal(clock.title.includes(lib), false, lib);

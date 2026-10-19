@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: CSS scroll
 
-On {{element}} in {{section}} of {{page}}, use CSS animation-timeline. Add no package. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. This page does not also use Lenis. Animate only transform and opacity. Reduced motion: everything is simply visible.
+On {{element}} in {{section}} of {{page}}, use CSS animation-timeline. Add no package. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. This page does not also use Lenis. Animate only transform and opacity. Reduced motion: everything is simply visible.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Drive one effect with CSS scroll-driven animation.
 <task>
 TASK: CSS scroll
 
-On {{element}} in {{section}} of {{page}}, use CSS animation-timeline. Add no package. Edit {{files}}. Import only {{library}}. Do not also bind this element with another library. This page does not also use Lenis. Animate only transform and opacity. Reduced motion: everything is simply visible.
+On {{element}} in {{section}} of {{page}}, use CSS animation-timeline. Add no package. Edit {{files}}. This example uses {{library}}. Do not also bind this element with another library. This page does not also use Lenis. Animate only transform and opacity. Reduced motion: everything is simply visible.
 </task>
 
 <must_haves>

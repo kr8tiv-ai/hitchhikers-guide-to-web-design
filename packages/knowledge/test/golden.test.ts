@@ -69,7 +69,7 @@ test("a missing motion token fails", () => {
   const motion = loadGolden(goldenDir).motion.replaceAll("{{library}}", "LIBRARY");
   const problems = lintGolden("motion", motion);
   assert.ok(problems.includes("missing {{library}}"));
-  assert.ok(problems.includes("missing import only {{library}}"));
+  assert.ok(problems.includes("missing This example uses {{library}}"));
 });
 
 test("a missing element token fails", () => {
