@@ -712,6 +712,16 @@ function assertUniquePageFiles(stack: SiteStack, pages: readonly CleanPage[]): v
   });
 }
 
+const BEAUTY_ACCEPTANCE = [
+  "This is the beauty gate.",
+  "Screenshot every page at 375, 768, 1440, and 1920.",
+  "Score each section for visual richness from 0 to 10 with one line of reason.",
+  "A text-only section, a TODO or placeholder image, a score below 8, or named AI slop fails this gate.",
+  "A failing section fails the brand gate and the jury. The jury total cannot pass while a section fails.",
+  "Queue one visual remediation prompt per failing section, with the art direction, the screenshot path, the reason, and the design language, then rerun this gate.",
+  "Stop after three failed rounds. The Drive shows Failed with the sections and reasons, and the queue stops for a human.",
+];
+
 function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] {
   const { stack, pages, effects } = input;
   assertUniquePageFiles(stack, pages);
@@ -1031,6 +1041,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     effort: SiteEffort;
     file: string;
     slice: string;
+    acceptance?: string[];
   }> = [
     {
       requirement: "REQ-GATE-ANTISLOP",
@@ -1107,10 +1118,11 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     {
       requirement: "REQ-GATE-BRAND",
       slice: "Total Perspective Vortex",
-      title: "Score each brand dimension and require 8 out of 10.",
+      title: "Score each brand dimension and require 8 out of 10. Run the beauty gate on every section.",
       tier: "Heart of Gold",
-      effort: "high",
+      effort: "xhigh",
       file: "tests/brand-signoff.spec.ts",
+      acceptance: BEAUTY_ACCEPTANCE,
     },
   ];
 
@@ -1124,6 +1136,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         effort: gate.effort,
         files: [gate.file],
         requirement: gate.requirement,
+        ...(gate.acceptance === undefined ? {} : { acceptance: gate.acceptance }),
       }),
     );
   }
@@ -1148,11 +1161,12 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Total Perspective Vortex",
-      title: "Score the jury at weights 40, 30, 20, and 10 for design, usability, creativity, and content.",
+      title: "Score the jury at weights 40, 30, 20, and 10 for design, usability, creativity, and content. The beauty gate can fail this score.",
       tier: "Heart of Gold",
-      effort: "high",
+      effort: "xhigh",
       files: ["tests/jury.spec.ts"],
       requirement: "REQ-JURY",
+      acceptance: BEAUTY_ACCEPTANCE,
     }),
     job(claim, {
       phase: "mostly-harmless",

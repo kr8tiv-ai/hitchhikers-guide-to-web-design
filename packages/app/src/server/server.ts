@@ -8,6 +8,7 @@ import {
   installLiveBuildRunner,
   recoverSiteBuild,
   setProjectBuildRunner,
+  setBeautyRunner,
   setSectionStillRunner,
   type BuildSpawn,
 } from "@hitchhiker/engine";
@@ -189,6 +190,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
       if (closing === null) {
         clearProjectBuildRunner(projectDir);
         setSectionStillRunner(projectDir, null);
+        setBeautyRunner(projectDir, null);
         app.close();
         closing = closeServer(server);
       }

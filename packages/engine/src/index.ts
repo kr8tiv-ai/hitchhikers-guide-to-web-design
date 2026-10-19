@@ -228,6 +228,7 @@ export {
   setBuildRunner,
   setProjectBuildRunner,
   setSectionStillRunner,
+  setBeautyRunner,
   setSiteBuildGate,
   siteBuildSettled,
   siteBuildWatchConfig,

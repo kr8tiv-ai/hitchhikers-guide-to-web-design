@@ -206,6 +206,7 @@ const jobs = new Map<string, Promise<void>>();
 const watchOverrides = new Map<string, SiteBuildWatch>();
 const buildGates = new Map<string, SiteBuildGate>();
 const sectionStillRunners = new Map<string, (projectDir: string) => Promise<void>>();
+const beautyRunners = new Map<string, (projectDir: string, promptId: string) => Promise<void>>();
 
 interface LiveBuild {
   projectDir: string;
@@ -287,11 +288,22 @@ export function setSectionStillRunner(
   else sectionStillRunners.set(key, runner);
 }
 
+/** Desk beauty gate. Runs after a brand or jury prompt passes. A missing runner is a no-op. */
+export function setBeautyRunner(
+  projectDir: string,
+  runner: ((projectDir: string, promptId: string) => Promise<void>) | null,
+): void {
+  const key = path.resolve(projectDir);
+  if (runner === null) beautyRunners.delete(key);
+  else beautyRunners.set(key, runner);
+}
+
 export function resetSiteBuildWatch(projectDir: string): void {
   const key = path.resolve(projectDir);
   watchOverrides.delete(key);
   buildGates.delete(key);
   sectionStillRunners.delete(key);
+  beautyRunners.delete(key);
   liveBuilds.delete(key);
   rearmWatch();
 }
@@ -955,6 +967,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
           const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
           await settleItem(projectDir, next.id, "passed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits);
           await maybeRunSectionStills(projectDir, next.id);
+          await maybeRunBeauty(projectDir, next.id);
         } catch (error: unknown) {
           const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
           await settleItem(
@@ -1127,6 +1140,7 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
       const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : recovered;
       await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt, outside.hits);
       await maybeRunSectionStills(projectDir, run.promptId);
+      await maybeRunBeauty(projectDir, run.promptId);
       stampRecovery(projectDir, recovered, false);
       return "continue";
     } catch (error: unknown) {
@@ -1614,12 +1628,28 @@ async function loadBuildQueue(projectDir: string): Promise<QueueFile | null> {
 }
 
 const ART_REQUIREMENT = /Requirements: [^\n]*\bREQ-ART-/;
+const BEAUTY_REQUIREMENT = /Requirements: [^\n]*\bREQ-GATE-(?:BRAND|JURY)\b/;
 
 /**
  * After the last art-direction prompt passes, run the desk stills step.
  * A missing runner is a no-op. A runner error is written for the Drive
  * and does not pause the queue.
  */
+async function maybeRunBeauty(projectDir: string, promptId: string): Promise<void> {
+  const runner = beautyRunners.get(path.resolve(projectDir));
+  if (runner === undefined) return;
+  const own = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
+  if (!BEAUTY_REQUIREMENT.test(own)) return;
+  try {
+    await runner(projectDir, promptId);
+  } catch (error: unknown) {
+    const reason = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "The beauty gate did not run.";
+    const dir = path.join(projectDir, ".hitchhiker");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(path.join(dir, "beauty.md"), `Beauty gate did not run. ${reason}\n`, "utf8");
+  }
+}
+
 async function maybeRunSectionStills(projectDir: string, promptId: string): Promise<void> {
   const runner = sectionStillRunners.get(path.resolve(projectDir));
   if (runner === undefined) return;

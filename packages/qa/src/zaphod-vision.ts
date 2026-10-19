@@ -38,6 +38,17 @@ export interface JuryInput {
   blocked: boolean;
 }
 
+export interface VisualSectionScore {
+  page: string;
+  section: string;
+  score: number;
+  reason: string;
+  textOnly: boolean;
+  todoImage: boolean;
+  placeholderImage: boolean;
+  slop: string;
+}
+
 export interface ReviewVerdict {
   verdict: "PASS" | "PASS_WITH_KNOWN_ISSUES" | "FIX" | "ESCALATE";
   reasons: string[];
@@ -48,6 +59,8 @@ export interface ReviewVerdict {
   fixRound: 0 | 1 | 2;
   boots: boolean;
   fixes: string[];
+  /** Empty unless this review asked for per-section visual richness. */
+  sections: VisualSectionScore[];
 }
 
 const PILLAR_NAMES = [
@@ -110,6 +123,34 @@ const ZAPHOD_SCHEMA: JsonSchema = {
     },
   },
 };
+
+const SECTION_SCHEMA: JsonSchema = {
+  type: "object",
+  required: ["page", "section", "score", "reason", "textOnly", "todoImage", "placeholderImage", "slop"],
+  properties: {
+    page: { type: "string", maxLength: 80 },
+    section: { type: "string", maxLength: 80 },
+    score: { type: "number" },
+    reason: { type: "string", maxLength: 240 },
+    textOnly: { type: "boolean" },
+    todoImage: { type: "boolean" },
+    placeholderImage: { type: "boolean" },
+    slop: { type: "string", maxLength: 200 },
+  },
+};
+
+function schemaFor(askSections: boolean): JsonSchema {
+  if (!askSections) return ZAPHOD_SCHEMA;
+  const required = ZAPHOD_SCHEMA.required ?? [];
+  return {
+    type: "object",
+    required: [...required, "sections"],
+    properties: {
+      ...ZAPHOD_SCHEMA.properties,
+      sections: { type: "array", minItems: 1, items: SECTION_SCHEMA },
+    },
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -227,6 +268,45 @@ function readModel(value: unknown): {
   };
 }
 
+function readSections(value: unknown): VisualSectionScore[] {
+  if (!isRecord(value) || !Array.isArray(value.sections)) {
+    throw new Error("Zaphod schema failed: section scores are missing.");
+  }
+  const sections: VisualSectionScore[] = [];
+  for (const item of value.sections) {
+    if (
+      !isRecord(item) ||
+      typeof item.page !== "string" ||
+      typeof item.section !== "string" ||
+      typeof item.reason !== "string" ||
+      typeof item.textOnly !== "boolean" ||
+      typeof item.todoImage !== "boolean" ||
+      typeof item.placeholderImage !== "boolean" ||
+      typeof item.slop !== "string"
+    ) {
+      throw new Error("Zaphod schema failed: a section score is incomplete.");
+    }
+    const page = item.page.trim();
+    const section = item.section.trim();
+    const reason = item.reason.trim();
+    if (page.length === 0 || section.length === 0 || reason.length === 0) {
+      throw new Error("Zaphod schema failed: a section score is incomplete.");
+    }
+    sections.push({
+      page,
+      section,
+      score: readScore("score", item.score),
+      reason,
+      textOnly: item.textOnly,
+      todoImage: item.todoImage,
+      placeholderImage: item.placeholderImage,
+      slop: item.slop.trim(),
+    });
+  }
+  if (sections.length === 0) throw new Error("Zaphod schema failed: section scores are missing.");
+  return sections;
+}
+
 export async function zaphodReview(
   input: {
     prompt: SitePrompt;
@@ -234,26 +314,31 @@ export async function zaphodReview(
     diff: string;
     fixRound?: 0 | 1 | 2;
     phoneBlocked?: boolean;
+    /** When set, vision also scores each section and the call is grok-4.7-build-fast at xhigh. */
+    askSections?: readonly { page: string; section: string }[];
   },
   deps: { think: typeof think },
 ): Promise<ReviewVerdict> {
   const truths = truthsFromBody(input.prompt.body);
   const fixRound = input.fixRound ?? 0;
-  const effort = reviewEffort(input.prompt);
+  const ask = input.askSections !== undefined && input.askSections.length > 0;
+  const effort = ask ? "xhigh" : reviewEffort(input.prompt);
   const request: ThinkRequest<unknown> = {
     task: "zaphod-vision",
-    schema: ZAPHOD_SCHEMA,
+    schema: schemaFor(ask),
     input: JSON.stringify({
       id: input.prompt.id,
       kind: input.prompt.kind,
       truths,
       diff: input.diff,
+      ...(ask ? { sections: input.askSections } : {}),
     }),
     images: input.shots,
     effort,
+    ...(ask ? { model: "grok-4.7-build-fast" } : {}),
   };
   const result = await deps.think(request);
-  const errors = validateJson(result.value, ZAPHOD_SCHEMA);
+  const errors = validateJson(result.value, schemaFor(ask));
   if (errors.length > 0) throw new Error(`Zaphod schema failed: ${errors.join("; ")}`);
   const model = readModel(result.value);
   const checks = checkTruths(truths, model.evidence);
@@ -286,5 +371,33 @@ export async function zaphodReview(
     fixRound,
     boots: model.boots,
     fixes,
+    sections: ask ? readSections(result.value) : [],
   };
+}
+
+/** Section visual-richness scores. This is the beauty-gate call through zaphodReview. */
+export async function zaphodReviewSections(
+  input: { sections: readonly { page: string; section: string }[]; shots: readonly string[] },
+  deps: { think: typeof think },
+): Promise<VisualSectionScore[]> {
+  if (input.sections.length === 0) throw new Error("Name at least one section to score.");
+  const lines = input.sections.map((row) => `- ${row.page} ${row.section} is scored for visual richness.`);
+  const prompt: SitePrompt = {
+    id: "beauty",
+    kind: "once-over",
+    tier: "Forty-Two",
+    effort: "xhigh",
+    title: "Score each section for visual richness.",
+    body: `<must_haves>\ntruths:\n${lines.join("\n")}\n</must_haves>\n`,
+  };
+  const verdict = await zaphodReview(
+    {
+      prompt,
+      shots: [...input.shots],
+      diff: "Beauty gate.",
+      askSections: input.sections,
+    },
+    deps,
+  );
+  return verdict.sections;
 }

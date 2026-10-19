@@ -174,6 +174,17 @@ test("a 3-page calm fixture yields 50 to 150 real entries", () => {
     assert.equal(/do not invent a photo/i.test(title), false, title);
     assert.equal(/at most eight/i.test(title), false, title);
   }
+  const brandGate = prompts.find((prompt) => prompt.requirements.includes("REQ-GATE-BRAND"));
+  const juryGate = prompts.find((prompt) => prompt.requirements.includes("REQ-JURY"));
+  assert.ok(brandGate);
+  assert.ok(juryGate);
+  assert.equal(brandGate.effort, "xhigh");
+  assert.equal(juryGate.effort, "xhigh");
+  assert.match(brandGate.title, /beauty gate/i);
+  const beauty = `${brandGate.acceptance?.join(" ")} ${juryGate.acceptance?.join(" ")}`;
+  assert.match(beauty, /remediation/i);
+  assert.match(beauty, /three failed rounds/i);
+  assert.match(beauty, /jury total cannot pass/i);
   assert.ok(prompts.some((prompt) => prompt.requirements.includes("REQ-GATE-LIGHTHOUSE")));
 });
 
