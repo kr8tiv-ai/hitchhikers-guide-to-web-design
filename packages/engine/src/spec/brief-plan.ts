@@ -275,6 +275,45 @@ function pushPage(pages: PlannedPage[], title: string): void {
   });
 }
 
+/**
+ * Optional `## Sections` lines override the default one-section pages.
+ * `Home: hero, story, farms` names those ids. A missing heading leaves
+ * the defaults (`hero` on the first page, `${id}-main` on the rest).
+ */
+function applyNamedSections(markdown: string, pages: PlannedPage[]): PlannedPage[] {
+  const body = sectionBody(markdown, "Sections");
+  if (body.trim() === "") return pages;
+  const assigned = new Map<string, string[]>();
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.replace(/^[-*]\s*/, "").trim();
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const rawPage = line.slice(0, colon).trim();
+    const page = pages.find((item) => {
+      if (item.id === slug(rawPage)) return true;
+      if (item.title.toLowerCase() === rawPage.toLowerCase()) return true;
+      const title = canonicalTitle(rawPage);
+      return title !== null && item.title.toLowerCase() === title.toLowerCase();
+    });
+    if (page === undefined) continue;
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const part of line.slice(colon + 1).split(",")) {
+      const id = slug(part);
+      if (id === "" || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+    if (ids.length === 0) continue;
+    assigned.set(page.id, ids);
+  }
+  if (assigned.size === 0) return pages;
+  return pages.map((page) => {
+    const next = assigned.get(page.id);
+    return next === undefined ? page : { ...page, sections: next };
+  });
+}
+
 function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage[]; parsed: boolean } {
   const lines = [...corpus.matchAll(/Pages:\s*[^\n]+/gi)].map((match) => match[0] ?? "");
   const sources = lines.length > 0 ? lines : [sectionBody(markdown, "Pages")];
@@ -293,12 +332,13 @@ function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage
   }
   if (wantsBlog(corpus)) pushPage(found, "Blog");
   const pages = found.length === 0 ? [HOME_PAGE] : found;
+  const withDefaults = pages.map((page, index) => ({
+    ...page,
+    sections: page.sections.length > 0 ? page.sections : index === 0 ? ["hero"] : [`${page.id}-main`],
+  }));
   return {
     parsed: parsed || found.length > 0,
-    pages: pages.map((page, index) => ({
-      ...page,
-      sections: page.sections.length > 0 ? page.sections : index === 0 ? ["hero"] : [`${page.id}-main`],
-    })),
+    pages: applyNamedSections(markdown, withDefaults),
   };
 }
 
