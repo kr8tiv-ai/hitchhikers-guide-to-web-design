@@ -418,7 +418,7 @@ export function parseDriveRun(value: unknown): DriveRun | null {
   if (lastLines.length !== run.lastLines.length || filesWritten.length !== run.filesWritten.length) return null;
   const recovery = typeof run.recovery === "string" ? run.recovery : "";
   const escalation = typeof run.escalation === "string" ? run.escalation : "";
-  return {
+  const view: DriveRun = {
     promptId: run.promptId,
     status: run.status,
     model: run.model,
@@ -431,6 +431,9 @@ export function parseDriveRun(value: unknown): DriveRun | null {
     paused: run.paused === true,
     escalation,
   };
+  if (run.turnLimited === true) view.turnLimited = true;
+  if (typeof run.stopReason === "string" && run.stopReason !== "") view.stopReason = run.stopReason;
+  return view;
 }
 
 async function readRun(env: DriveEnv): Promise<DriveRun | null> {

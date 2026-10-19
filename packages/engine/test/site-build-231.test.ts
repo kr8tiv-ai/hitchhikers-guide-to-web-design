@@ -1,6 +1,7 @@
 /**
  * A site build stops on a real blocker. It does not stop on a turn cap,
  * and a max_turns_reached end is a failed row with Retry, never a pass.
+ * A real cap auto-retries once (238). The second cap still fails and stays put.
  */
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -164,9 +165,10 @@ test("exit 0 with max_turns_reached fails the row and does not advance", async (
     const queue = await loadQueue(dir);
     assert.equal(queue?.items[0]?.status, "failed");
     assert.equal(queue?.items[1]?.status, "queued");
-    assert.deepEqual(seen, ["001"]);
+    assert.deepEqual(seen, ["001", "001"]);
     const reason = readBuildRun(dir)?.reason ?? "";
-    assert.match(reason, /turn limit/);
+    assert.match(reason, /80/);
+    assert.match(reason, /desk sets no cap/);
     assert.match(reason, /Retry/);
     assert.equal(reason.includes("!"), false);
   } finally {
@@ -182,7 +184,8 @@ test("a recovered log with max_turns_reached and end_turn fails instead of passi
   let calls = 0;
   const spawn: BuildSpawn = () => {
     calls += 1;
-    return { pid: 424242, done: Promise.resolve(result(0)) };
+    const line = '{"type":"max_turns_reached"}\n{"type":"end","stopReason":"cancelled","num_turns":80}\n';
+    return { pid: 424242, done: Promise.resolve(result(0, line, "")) };
   };
   setProjectBuildRunner(dir, spawn);
   try {
@@ -231,8 +234,9 @@ test("a recovered log with max_turns_reached and end_turn fails instead of passi
     const after = await loadQueue(dir);
     assert.equal(after?.items.find((item) => item.id === "001")?.status, "failed");
     assert.equal(after?.items.find((item) => item.id === "002")?.status, "queued");
-    assert.equal(calls, 0);
+    assert.equal(calls, 1);
     const reason = readBuildRun(dir)?.reason ?? "";
+    assert.match(reason, /desk sets no cap/);
     assert.match(reason, /Retry/);
     assert.equal(reason.includes("!"), false);
   } finally {

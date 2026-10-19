@@ -4,7 +4,7 @@
  * The live spawn is installed only when a desk or CLI command asks for it.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
 import {
@@ -44,6 +44,7 @@ import {
 } from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
 import { loadFacts } from "./suggest.ts";
+import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
 
 export const BUILD_MODEL = "grok-4.7-build-fast";
 export const BUILD_EFFORT = "xhigh";
@@ -53,9 +54,6 @@ export const BUILD_WATCHDOG_INTERVAL_MS = 30_000;
 export const BUILD_IDLE_MS = 30 * 60 * 1000;
 /** After a stream `end` event, wait this long for the child to exit. */
 export const BUILD_EXIT_GRACE_MS = 5_000;
-
-const TURN_LIMIT_REASON =
-  "The build stopped because it hit a turn limit. Press Retry to run this prompt again.";
 
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
@@ -130,6 +128,18 @@ export interface BuildRunView {
   escalation?: string;
   /** Tool calls whose path resolved outside the project. Capped, no file contents. */
   outsideAccess: OutsideAccess[];
+  /** Turns reported by the stream. Null when the run did not say. */
+  turns: number | null;
+  /** Desk turn cap. Null when the desk set none. */
+  turnCap: number | null;
+  /** Final stop reason that meant a cap, or empty. */
+  stopReason: string;
+  /** Grok session to continue. Empty when the stream did not name one. */
+  sessionId: string;
+  /** True after the one unattended turn-cap retry for this prompt. */
+  autoRetried: boolean;
+  /** True when the row failed because of a turn cap. */
+  turnLimited: boolean;
 }
 
 export interface BuildRecoveryInput {
@@ -163,6 +173,23 @@ interface RunFile {
   paused?: boolean;
   escalation?: string;
   outsideAccess?: OutsideAccess[];
+  turns?: number | null;
+  turnCap?: number | null;
+  stopReason?: string;
+  sessionId?: string;
+  autoRetried?: boolean;
+  /** The next spawn continues this session. Human Retry sets it. */
+  resumeNext?: boolean;
+  turnLimited?: boolean;
+}
+
+interface TurnStamp {
+  turns: number | null;
+  turnCap: number | null;
+  stopReason: string;
+  sessionId: string;
+  autoRetried: boolean;
+  turnLimited: boolean;
 }
 
 let runner: BuildSpawn | null = null;
@@ -319,10 +346,11 @@ export function continueSiteBuild(projectDir: string, promptId?: string): Promis
  * grok --help lists --max-turns with no default, so omitting it leaves the
  * run uncapped. A site build stops on a real blocker, not a turn count.
  */
-export function buildSpawnArgs(cwd: string, promptPath: string): string[] {
+export function buildSpawnArgs(cwd: string, promptPath: string, resumeSessionId?: string): string[] {
+  const head = ["--no-auto-update", "--no-alt-screen"];
+  if (resumeSessionId !== undefined && resumeSessionId !== "") head.push("--resume", resumeSessionId);
   return [
-    "--no-auto-update",
-    "--no-alt-screen",
+    ...head,
     "--prompt-file",
     promptPath,
     "-m",
@@ -594,10 +622,19 @@ export async function reconcileSiteBuild(projectDir: string): Promise<boolean> {
 }
 
 export async function retrySiteBuild(projectDir: string, promptId: string): Promise<void> {
-  const billing = readRunFile(projectDir)?.paused === true;
+  const current = readRunFile(projectDir);
+  const billing = current?.paused === true;
+  const resume =
+    !billing &&
+    current !== null &&
+    current.promptId === promptId &&
+    current.turnLimited === true &&
+    typeof current.sessionId === "string" &&
+    current.sessionId !== "";
   await requeue(projectDir, promptId, "failed");
   if (billing) await unpausePrompts(projectDir);
   if (billing) clearBillingPause(projectDir);
+  if (resume && current !== null) writeRun(projectDir, { ...current, resumeNext: true });
   void ensureSiteBuild(projectDir);
 }
 
@@ -656,6 +693,12 @@ export function readBuildRun(projectDir: string): BuildRunView | null {
     ...run,
     elapsedMs: run.status === "running" ? elapsed(run) : run.elapsedMs,
     outsideAccess: run.outsideAccess ?? [],
+    turns: typeof run.turns === "number" ? run.turns : null,
+    turnCap: typeof run.turnCap === "number" ? run.turnCap : null,
+    stopReason: run.stopReason ?? "",
+    sessionId: run.sessionId ?? "",
+    autoRetried: run.autoRetried === true,
+    turnLimited: run.turnLimited === true,
   };
 }
 
@@ -680,6 +723,117 @@ async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
   }
 }
 
+interface PromptAttempt {
+  startedAt: string;
+  lines: string[];
+  files: string[];
+  rawTail: string;
+  result: BuildSpawnResult;
+}
+
+async function spawnPrompt(
+  projectDir: string,
+  spawnFn: BuildSpawn,
+  promptId: string,
+  promptPath: string,
+  resumeSession: string,
+): Promise<{ halt: true } | { halt: false; attempt: PromptAttempt }> {
+  const key = path.resolve(projectDir);
+  const startedAt = new Date().toISOString();
+  const lines: string[] = [];
+  const before = snapshot(projectDir);
+  resetBuildLog(projectDir, promptId);
+  const pidBox = { pid: null as number | null };
+  const buffered: string[] = [];
+  let rawTail = "";
+  let feed: ((chunk: string) => void) | null = null;
+  let sealed = false;
+  let handle: BuildSpawnHandle;
+  try {
+    handle = spawnFn({
+      command: "grok",
+      args: buildSpawnArgs(projectDir, promptPath, resumeSession === "" ? undefined : resumeSession),
+      cwd: projectDir,
+      promptId,
+      model: BUILD_MODEL,
+      effort: BUILD_EFFORT,
+      onOutput: (chunk) => {
+        if (sealed) return;
+        appendBuildLog(projectDir, promptId, chunk);
+        rawTail = tailText(rawTail, chunk);
+        if (feed) feed(chunk);
+        else buffered.push(chunk);
+        pushLines(lines, chunk);
+        try {
+          writeRun(projectDir, liveRun(promptId, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
+        } catch {
+          // A progress write must not skip settlement.
+        }
+      },
+    });
+    pidBox.pid = handle.pid > 0 ? handle.pid : null;
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
+    await settleItem(projectDir, promptId, "failed", reason === "" ? "The build did not start." : reason, lines, []);
+    return { halt: true };
+  }
+  const watch = siteBuildWatchConfig(projectDir);
+  const control = trackSettlement(handle, watch.exitGraceMs);
+  if (pidBox.pid !== null) {
+    registerLive({
+      projectDir: key,
+      promptId,
+      pid: pidBox.pid,
+      intervalMs: watch.intervalMs,
+      idleMs: watch.idleMs,
+      lastActivity: Date.now(),
+      lastScan: Date.now(),
+      force: control.force,
+    });
+  }
+  feed = (chunk) => {
+    control.feed(chunk);
+    const job = liveBuilds.get(key);
+    if (job !== undefined && job.promptId === promptId) job.lastActivity = Date.now();
+  };
+  for (const chunk of buffered) feed(chunk);
+  if (pidBox.pid !== null) {
+    try {
+      await setStatus(projectDir, promptId, "running");
+      writeRun(projectDir, liveRun(promptId, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
+    } catch (error: unknown) {
+      control.force({
+        code: 1,
+        stdout: "",
+        stderr: error instanceof Error ? error.message : "The build did not start.",
+        errorCode: "SETTLE",
+      });
+      sealed = true;
+      if (liveBuilds.get(key)?.promptId === promptId) unregisterLive(key);
+      const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
+      await settleItem(projectDir, promptId, "failed", reason === "" ? "The build did not start." : reason, lines, []);
+      return { halt: true };
+    }
+  }
+  let result: BuildSpawnResult;
+  try {
+    result = await control.done;
+  } finally {
+    sealed = true;
+    if (liveBuilds.get(key)?.promptId === promptId) unregisterLive(key);
+  }
+  return {
+    halt: false,
+    attempt: {
+      startedAt,
+      lines,
+      files: diffSnapshots(before, snapshot(projectDir)),
+      rawTail,
+      result,
+    },
+  };
+}
+
 async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
   const key = path.resolve(projectDir);
   for (;;) {
@@ -688,10 +842,10 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
     if (queue?.pause !== undefined) return;
     const next = queue?.items.find((item) => item.status === "queued" && PROMPT_ID.test(item.id));
     if (next === undefined) return;
-    const promptPath = path.join(projectDir, ".hitchhiker", "prompts", `${next.id}.md`);
+    const originalPath = path.join(projectDir, ".hitchhiker", "prompts", `${next.id}.md`);
     let exists = false;
     try {
-      exists = statSync(promptPath).isFile();
+      exists = statSync(originalPath).isFile();
     } catch {
       exists = false;
     }
@@ -699,151 +853,110 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
       await settleItem(projectDir, next.id, "failed", "The prompt file is missing.", [], []);
       return;
     }
-    const startedAt = new Date().toISOString();
-    const lines: string[] = [];
-    const before = snapshot(projectDir);
-    resetBuildLog(projectDir, next.id);
-    const pidBox = { pid: null as number | null };
-    const buffered: string[] = [];
-    let rawTail = "";
-    let feed: ((chunk: string) => void) | null = null;
-    let sealed = false;
-    let handle: BuildSpawnHandle;
-    try {
-      handle = spawnFn({
-        command: "grok",
-        args: buildSpawnArgs(projectDir, promptPath),
-        cwd: projectDir,
-        promptId: next.id,
-        model: BUILD_MODEL,
-        effort: BUILD_EFFORT,
-        onOutput: (chunk) => {
-          if (sealed) return;
-          appendBuildLog(projectDir, next.id, chunk);
-          rawTail = tailText(rawTail, chunk);
-          if (feed) feed(chunk);
-          else buffered.push(chunk);
-          pushLines(lines, chunk);
-          try {
-            writeRun(projectDir, liveRun(next.id, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
-          } catch {
-            // A progress write must not skip settlement.
-          }
-        },
+    const prior = readRunFile(projectDir);
+    const same = prior?.promptId === next.id;
+    let alreadyRetried = same && prior?.autoRetried === true;
+    let resumeSession = same && prior?.sessionId && (prior.resumeNext === true || prior.autoRetried === true) ? prior.sessionId : "";
+    let promptPath = resumeSession !== "" ? writeContinuation(projectDir, next.id) : originalPath;
+    for (;;) {
+      const spawned = await spawnPrompt(projectDir, spawnFn, next.id, promptPath, resumeSession);
+      if (spawned.halt) return;
+      const attempt = spawned.attempt;
+      const log = `${attempt.rawTail}\n${readBuildLog(projectDir, next.id)}`;
+      const evidence = `${attempt.result.stdout}\n${attempt.result.stderr}\n${log}`;
+      const outside = auditOutsideAccess(evidence, projectDir);
+      const cap = judgeTurnCap({
+        stdout: attempt.result.stdout,
+        stderr: attempt.result.stderr,
+        log,
+        code: attempt.result.code,
+        turnCap: null,
       });
-      pidBox.pid = handle.pid > 0 ? handle.pid : null;
-    } catch (error: unknown) {
-      const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
-      await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not start." : reason, lines, []);
-      return;
-    }
-    const watch = siteBuildWatchConfig(projectDir);
-    const control = trackSettlement(handle, watch.exitGraceMs);
-    if (pidBox.pid !== null) {
-      registerLive({
-        projectDir: key,
-        promptId: next.id,
-        pid: pidBox.pid,
-        intervalMs: watch.intervalMs,
-        idleMs: watch.idleMs,
-        lastActivity: Date.now(),
-        lastScan: Date.now(),
-        force: control.force,
-      });
-    }
-    feed = (chunk) => {
-      control.feed(chunk);
-      const job = liveBuilds.get(key);
-      if (job !== undefined && job.promptId === next.id) job.lastActivity = Date.now();
-    };
-    for (const chunk of buffered) feed(chunk);
-    if (pidBox.pid !== null) {
-      try {
-        await setStatus(projectDir, next.id, "running");
-        writeRun(projectDir, liveRun(next.id, startedAt, lines, diffSnapshots(before, snapshot(projectDir)), pidBox.pid));
-      } catch (error: unknown) {
-        control.force({
-          code: 1,
-          stdout: "",
-          stderr: error instanceof Error ? error.message : "The build did not start.",
-          errorCode: "SETTLE",
-        });
-        sealed = true;
-        if (liveBuilds.get(key)?.promptId === next.id) unregisterLive(key);
-        const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
-        await settleItem(projectDir, next.id, "failed", reason === "" ? "The build did not start." : reason, lines, []);
-        return;
-      }
-    }
-    let result: BuildSpawnResult;
-    try {
-      result = await control.done;
-    } finally {
-      sealed = true;
-      if (liveBuilds.get(key)?.promptId === next.id) unregisterLive(key);
-    }
-    const files = diffSnapshots(before, snapshot(projectDir));
-    const evidence = `${result.stdout}\n${result.stderr}\n${rawTail}\n${readBuildLog(projectDir, next.id)}`;
-    const outside = auditOutsideAccess(evidence, projectDir);
-    if (logHitTurnLimit(evidence)) {
       const kind = classifyGrokFailure({
-        stdout: result.stdout,
-        stderr: result.stderr,
+        stdout: attempt.result.stdout,
+        stderr: attempt.result.stderr,
         stream: evidence,
-        code: result.code,
+        code: attempt.result.code,
       }).kind;
-      if (kind !== "billing") {
-        await settleItem(projectDir, next.id, "failed", TURN_LIMIT_REASON, lines, files, startedAt, outside.hits);
-        return;
+      if (cap !== null && kind !== "billing") {
+        const reason = turnLimitReason(cap.turns, cap.turnCap);
+        appendBuildLog(projectDir, next.id, `${reason}\n`);
+        const paused = (await loadBuildQueue(projectDir))?.pause !== undefined;
+        if (paused || alreadyRetried) {
+          await settleItem(projectDir, next.id, "failed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits, stampFrom(cap, alreadyRetried));
+          return;
+        }
+        alreadyRetried = true;
+        writeRun(projectDir, {
+          ...liveRun(next.id, attempt.startedAt, attempt.lines, attempt.files, null),
+          reason,
+          turns: cap.turns,
+          turnCap: cap.turnCap,
+          stopReason: cap.stopReason,
+          sessionId: cap.sessionId,
+          autoRetried: true,
+          resumeNext: false,
+          turnLimited: true,
+        });
+        if ((await loadBuildQueue(projectDir))?.pause !== undefined) {
+          await settleItem(projectDir, next.id, "failed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits, stampFrom(cap, true));
+          return;
+        }
+        resumeSession = cap.sessionId;
+        promptPath = resumeSession !== "" ? writeContinuation(projectDir, next.id) : originalPath;
+        continue;
       }
-    }
-    if (outside.writePath !== "") {
-      await settleItem(
-        projectDir,
-        next.id,
-        "failed",
-        outsideWriteReason(outside.writePath),
-        lines,
-        files,
-        startedAt,
-        outside.hits,
-      );
-      return;
-    }
-    if (result.code === 0 && result.errorCode === null) {
-      try {
-        const gate = buildGates.get(key);
-        if (gate !== undefined) await gate({ projectDir, promptId: next.id, files });
-        const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
-        await settleItem(projectDir, next.id, "passed", reason, lines, files, startedAt, outside.hits);
-      } catch (error: unknown) {
-        const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
+      if (outside.writePath !== "") {
         await settleItem(
           projectDir,
           next.id,
           "failed",
-          reason === "" ? "The build did not finish." : reason,
-          lines,
-          files,
-          startedAt,
+          outsideWriteReason(outside.writePath),
+          attempt.lines,
+          attempt.files,
+          attempt.startedAt,
           outside.hits,
         );
         return;
       }
-      continue;
+      if (attempt.result.code === 0 && attempt.result.errorCode === null) {
+        try {
+          const gate = buildGates.get(key);
+          if (gate !== undefined) await gate({ projectDir, promptId: next.id, files: attempt.files });
+          const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
+          await settleItem(projectDir, next.id, "passed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits);
+        } catch (error: unknown) {
+          const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
+          await settleItem(
+            projectDir,
+            next.id,
+            "failed",
+            reason === "" ? "The build did not finish." : reason,
+            attempt.lines,
+            attempt.files,
+            attempt.startedAt,
+            outside.hits,
+          );
+          return;
+        }
+        break;
+      }
+      await settleItem(
+        projectDir,
+        next.id,
+        "failed",
+        failureReason(attempt.result, attempt.rawTail),
+        attempt.lines,
+        attempt.files,
+        attempt.startedAt,
+        outside.hits,
+      );
+      if (kind === "billing") {
+        await pauseQueuedPrompts(projectDir);
+        stampBilling(projectDir);
+      }
+      return;
     }
-    const kind = classifyGrokFailure({
-      stdout: result.stdout,
-      stderr: result.stderr,
-      stream: rawTail,
-      code: result.code,
-    }).kind;
-    await settleItem(projectDir, next.id, "failed", failureReason(result, rawTail), lines, files, startedAt, outside.hits);
-    if (kind === "billing") {
-      await pauseQueuedPrompts(projectDir);
-      stampBilling(projectDir);
-    }
-    return;
   }
 }
 
@@ -918,9 +1031,41 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     stampBilling(projectDir);
     return "halt";
   }
-  if (logHitTurnLimit(log)) {
-    await settleItem(projectDir, run.promptId, "failed", TURN_LIMIT_REASON, run.lastLines, run.filesWritten, run.startedAt, outside.hits);
-    return "halt";
+  const cap = judgeTurnCap({ stdout: "", stderr: "", log, code: null, turnCap: null });
+  if (cap !== null) {
+    const reason = turnLimitReason(cap.turns, cap.turnCap);
+    appendBuildLog(projectDir, run.promptId, `${reason}\n`);
+    const paused = (await loadBuildQueue(projectDir))?.pause !== undefined;
+    if (paused || run.autoRetried === true) {
+      await settleItem(
+        projectDir,
+        run.promptId,
+        "failed",
+        reason,
+        run.lastLines,
+        run.filesWritten,
+        run.startedAt,
+        outside.hits,
+        stampFrom(cap, run.autoRetried === true),
+      );
+      return "halt";
+    }
+    writeRun(projectDir, {
+      ...run,
+      status: "running",
+      reason,
+      pid: null,
+      elapsedMs: elapsed(run),
+      turns: cap.turns,
+      turnCap: cap.turnCap,
+      stopReason: cap.stopReason,
+      sessionId: cap.sessionId,
+      autoRetried: true,
+      resumeNext: cap.sessionId !== "",
+      turnLimited: true,
+    });
+    await setStatus(projectDir, run.promptId, "queued");
+    return "continue";
   }
   if (outside.writePath !== "") {
     await settleItem(
@@ -1064,8 +1209,41 @@ function readBuildLog(projectDir: string, promptId: string): string {
 
 function resetBuildLog(projectDir: string, promptId: string): void {
   const file = buildLogPath(projectDir, promptId);
+  const prev = path.join(path.dirname(file), `build-${promptId}.prev.log`);
   mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    if (statSync(file).isFile() && statSync(file).size > 0) copyFileSync(file, prev);
+  } catch {
+    // The first attempt has no log yet.
+  }
   writeFileSync(file, "", "utf8");
+}
+
+function continuationPath(projectDir: string, promptId: string): string {
+  return path.join(projectDir, ".hitchhiker", "continue", `${promptId}.md`);
+}
+
+/** Kept outside prompts/ so plan coverage never treats it as a task. */
+function writeContinuation(projectDir: string, promptId: string): string {
+  const file = continuationPath(projectDir, promptId);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    "You stopped at the turn limit. Check what exists, finish the task, and run the gate.\n",
+    "utf8",
+  );
+  return file;
+}
+
+function stampFrom(cap: TurnCap, autoRetried: boolean): TurnStamp {
+  return {
+    turns: cap.turns,
+    turnCap: cap.turnCap,
+    stopReason: cap.stopReason,
+    sessionId: cap.sessionId,
+    autoRetried,
+    turnLimited: true,
+  };
 }
 
 function appendBuildLog(projectDir: string, promptId: string, chunk: string): void {
@@ -1239,10 +1417,6 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
   };
 }
 
-function logHitTurnLimit(text: string): boolean {
-  return /"type"\s*:\s*"max_turns_reached"/.test(text) || /\bmax turns reached\b/i.test(text);
-}
-
 function readEndReason(buffer: string): string | null {
   let found: string | null = null;
   for (const line of buffer.split(/\r?\n/)) {
@@ -1270,9 +1444,10 @@ async function settleItem(
   files: readonly string[],
   startedAt = new Date().toISOString(),
   outside?: OutsideAccess[],
+  stamp?: TurnStamp,
 ): Promise<void> {
   try {
-    await finishItem(projectDir, promptId, status, reason, lines, files, startedAt, outside);
+    await finishItem(projectDir, promptId, status, reason, lines, files, startedAt, outside, stamp);
   } catch (error: unknown) {
     const fallback = error instanceof Error ? publicText(error.message) : "";
     const text = publicText(fallback === "" ? reason : fallback);
@@ -1299,11 +1474,21 @@ async function settleItem(
         recoveryRerun: false,
       };
       if (outside !== undefined) failed.outsideAccess = outside;
+      if (stamp !== undefined) applyStamp(failed, stamp);
       writeRun(projectDir, failed);
     } catch {
       // A second disk failure leaves the watchdog to catch a still-running row.
     }
   }
+}
+
+function applyStamp(record: RunFile, stamp: TurnStamp): void {
+  record.turns = stamp.turns;
+  record.turnCap = stamp.turnCap;
+  record.stopReason = stamp.stopReason;
+  record.sessionId = stamp.sessionId;
+  record.autoRetried = stamp.autoRetried;
+  record.turnLimited = stamp.turnLimited;
 }
 
 function liveRun(
@@ -1338,6 +1523,7 @@ async function finishItem(
   files: readonly string[],
   startedAt = new Date().toISOString(),
   outside?: OutsideAccess[],
+  stamp?: TurnStamp,
 ): Promise<void> {
   await setStatus(projectDir, promptId, status);
   const previous = readRunFile(projectDir);
@@ -1357,6 +1543,7 @@ async function finishItem(
     recoveryRerun: false,
   };
   if (outside !== undefined) record.outsideAccess = outside;
+  if (stamp !== undefined) applyStamp(record, stamp);
   writeRun(projectDir, record);
   // After the run record: the Drive page reads status then reason, so the reason must land with the status.
   await rememberPauseAfter(projectDir);
@@ -1562,10 +1749,63 @@ function readRunFile(projectDir: string): RunFile | null {
     };
     delete loaded.outsideAccess;
     if (outsideAccess !== undefined) loaded.outsideAccess = outsideAccess;
+    loaded.turns = readCount(record.turns);
+    loaded.turnCap = readCount(record.turnCap);
+    loaded.stopReason = readPlain(record.stopReason);
+    loaded.sessionId = readSession(record.sessionId);
+    loaded.autoRetried = record.autoRetried === true;
+    loaded.resumeNext = record.resumeNext === true;
+    loaded.turnLimited = record.turnLimited === true;
     return loaded;
   } catch {
     return null;
   }
+}
+
+const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function readCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function readSession(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return SESSION_ID.test(trimmed) ? trimmed : "";
+}
+
+function readPlain(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u001f{}]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function keptCount(run: RunFile, previous: RunFile | null, same: boolean, key: "turns" | "turnCap"): number | null {
+  if (Object.hasOwn(run, key)) return readCount(run[key]);
+  if (!same || previous === null) return null;
+  return readCount(previous[key]);
+}
+
+function keptPlain(run: RunFile, previous: RunFile | null, same: boolean, key: "stopReason"): string {
+  if (Object.hasOwn(run, key)) return readPlain(run[key]);
+  if (!same || previous === null) return "";
+  return readPlain(previous[key]);
+}
+
+function keptSession(run: RunFile, previous: RunFile | null, same: boolean): string {
+  if (Object.hasOwn(run, "sessionId")) return readSession(run.sessionId);
+  if (!same || previous === null) return "";
+  return readSession(previous.sessionId);
+}
+
+function keptFlag(
+  run: RunFile,
+  previous: RunFile | null,
+  same: boolean,
+  key: "autoRetried" | "resumeNext" | "turnLimited",
+): boolean {
+  if (Object.hasOwn(run, key)) return run[key] === true;
+  if (!same || previous === null) return false;
+  return previous[key] === true;
 }
 
 function writeRun(projectDir: string, run: RunFile): void {
@@ -1588,6 +1828,37 @@ function writeRun(projectDir: string, run: RunFile): void {
   };
   delete next.outsideAccess;
   if (outsideAccess !== undefined && outsideAccess.length > 0) next.outsideAccess = outsideAccess;
+  const turns = keptCount(run, previous, same, "turns");
+  const turnCap = keptCount(run, previous, same, "turnCap");
+  const stopReason = keptPlain(run, previous, same, "stopReason");
+  const sessionId = keptSession(run, previous, same);
+  const autoRetried = keptFlag(run, previous, same, "autoRetried");
+  const resumeNext = keptFlag(run, previous, same, "resumeNext");
+  const turnLimited = keptFlag(run, previous, same, "turnLimited");
+  delete next.turns;
+  delete next.turnCap;
+  delete next.stopReason;
+  delete next.sessionId;
+  delete next.autoRetried;
+  delete next.resumeNext;
+  delete next.turnLimited;
+  if (
+    turns !== null ||
+    turnCap !== null ||
+    stopReason !== "" ||
+    sessionId !== "" ||
+    autoRetried ||
+    resumeNext ||
+    turnLimited
+  ) {
+    next.turns = turns;
+    next.turnCap = turnCap;
+    next.stopReason = stopReason;
+    next.sessionId = sessionId;
+    next.autoRetried = autoRetried;
+    next.resumeNext = resumeNext;
+    next.turnLimited = turnLimited;
+  }
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(runPath(projectDir), `${JSON.stringify(next)}\n`, "utf8");

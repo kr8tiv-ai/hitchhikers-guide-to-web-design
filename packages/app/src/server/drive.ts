@@ -96,7 +96,7 @@ async function continueDrive(projectDir: string, promptId: string, action: "retr
 
 function driveRun(run: ReturnType<typeof readBuildRun>): DriveRun | null {
   if (run === null) return null;
-  return {
+  const view: DriveRun = {
     promptId: run.promptId,
     status: run.status,
     model: run.model,
@@ -109,6 +109,9 @@ function driveRun(run: ReturnType<typeof readBuildRun>): DriveRun | null {
     paused: run.paused === true,
     escalation: run.escalation ?? "",
   };
+  if (run.turnLimited) view.turnLimited = true;
+  if (run.stopReason !== "") view.stopReason = run.stopReason;
+  return view;
 }
 
 function safeDriveError(message: string): string | null {

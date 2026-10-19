@@ -38,6 +38,11 @@ test("queue advances through an end-then-exit prompt that never closes", async (
   }
 });
 
+async function resumeLines(projectDir: string): Promise<number> {
+  const text = await readFile(path.join(projectDir, "spawn-args.txt"), "utf8").catch(() => "");
+  return text.split(/\r?\n/).filter((line) => line.includes("--resume desk044")).length;
+}
+
 function assertOrder(order: string): void {
   const ids = order.split(/\r?\n/).filter((line) => line.trim() !== "");
   expect(ids.slice(0, 4)).toEqual(["001", "002", "003", "004"]);
@@ -53,13 +58,40 @@ async function finishInterview(page: import("@playwright/test").Page, url: strin
   await expect(page.getByRole("link", { name: "Review the Site Brief" })).toBeVisible();
 }
 
-function startDesk(projectDir: string): ChildProcess {
+test("a turn cap fails the row, names the desk cap, and Retry keeps the partial work", async ({ page }) => {
+  test.setTimeout(60_000);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-build-044-"));
+  const child = startDesk(projectDir, true);
+  try {
+    const url = await readUrl(child);
+    const root = url.replace(/\/$/, "");
+    await finishInterview(page, url);
+    await page.goto(`${root}/approve`);
+    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await page.goto(`${root}/hh-dashboard`);
+    await expect(page.locator('[data-id="001"]')).toHaveAttribute("data-status", "failed", { timeout: 30_000 });
+    await expect(page.locator("[data-build-reason]")).toContainText("desk sets no cap");
+    await expect(page.locator("[data-retry-note]")).toHaveText("Partial work is kept.");
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+    await expect.poll(async () => resumeLines(projectDir)).toBe(1);
+    await page.locator('[data-action="retry"][data-prompt="001"]').click();
+    await expect.poll(async () => resumeLines(projectDir)).toBe(2);
+    await expect(page.locator('[data-id="001"]')).toHaveAttribute("data-status", "failed", { timeout: 20_000 });
+    await expect(page.locator('[data-id="002"]')).toHaveAttribute("data-status", "queued");
+  } finally {
+    child.kill();
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+function startDesk(projectDir: string, turnCap = false): ChildProcess {
   const serverFile = path.resolve(here, "../src/server/server.ts");
   return spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", childSource()], {
     env: {
       ...process.env,
       HH_E2E_PROJECT: projectDir,
       HH_E2E_SERVER: pathToFileURL(serverFile).href,
+      HH_E2E_TURN_CAP: turnCap ? "1" : "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -104,6 +136,12 @@ function childSource(): string {
     };
     const buildSpawn = (request) => {
       appendFileSync(path.join(projectDir, "spawn-order.txt"), request.promptId + "\\n");
+      appendFileSync(path.join(projectDir, "spawn-args.txt"), request.args.join(" ") + "\\n");
+      if (process.env.HH_E2E_TURN_CAP === "1") {
+        const stream = '{"type":"max_turns_reached","num_turns":80}\\n{"type":"end","stopReason":"cancelled","num_turns":80,"sessionId":"desk044"}\\n';
+        request.onOutput?.(stream);
+        return { pid: 999999, done: Promise.resolve({ code: 0, stdout: stream, stderr: "", errorCode: null }) };
+      }
       request.onOutput?.('{"type":"end","stopReason":"end_turn"}');
       if (request.promptId === "003") {
         writeFileSync(path.join(projectDir, "logo.svg"), "<svg></svg>\\n");

@@ -244,6 +244,8 @@ export type {
   SiteBuildGate,
   SiteBuildWatch,
 } from "./guide/site-build.ts";
+export { judgeTurnCap, turnLimitReason } from "./guide/site-turn.ts";
+export type { TurnCap, TurnCapInput } from "./guide/site-turn.ts";
 export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
 export {
   GUIDANCE_MARKERS,

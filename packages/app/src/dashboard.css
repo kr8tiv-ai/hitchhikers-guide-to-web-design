@@ -70,6 +70,12 @@
   font-weight: 600;
 }
 
+.hh-drive__status [data-retry-note] {
+  display: block;
+  margin: 0.35rem 0 0;
+  font-weight: 400;
+}
+
 .hh-drive__status--passed {
   color: var(--color-success);
 }

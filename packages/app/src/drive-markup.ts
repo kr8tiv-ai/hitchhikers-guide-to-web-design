@@ -45,6 +45,10 @@ export interface DriveRun {
   paused?: boolean;
   /** Plain escalation. Empty when there is none. */
   escalation?: string;
+  /** Stream stop reason. Empty when the run did not record one. */
+  stopReason?: string;
+  /** True when this row failed because Grok hit a turn cap. */
+  turnLimited?: boolean;
 }
 
 /** Queue-wide pause from queue.json. Absent means the queue is not held. */
@@ -174,7 +178,7 @@ export function queueBodyHtml(
           </div>`;
   }
   const live = items.some((item) => item.status === "running") || run?.status === "running";
-  const rows = items.map((item) => row(item, live)).join("\n");
+  const rows = items.map((item) => row(item, live, run)).join("\n");
   const tail =
     run == null
       ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
@@ -475,14 +479,21 @@ function gateLink(action: "approve" | "elevate" | "deploy", label: string, empty
   return `<a class="hh-btn hh-btn--secondary" href="/approve" data-action="${action}"${locked}>${label}</a>`;
 }
 
-function row(item: DriveItem, live = false): string {
+function keepsPartialWork(item: DriveItem, run?: DriveRun | null): boolean {
+  if (item.status !== "failed" || run == null || run.promptId !== item.id || run.status !== "failed") return false;
+  if (run.turnLimited === true) return true;
+  return /desk sets no cap|Grok stopped after \d+ turns/.test(run.reason);
+}
+
+function row(item: DriveItem, live = false, run?: DriveRun | null): string {
   const id = escapeHtml(item.id);
   const current = item.status === "running" ? ` class="is-current"` : "";
   const passed = item.status === "passed" ? " hh-drive__status--passed" : "";
   const held = live ? ` disabled aria-disabled="true"` : "";
+  const note = keepsPartialWork(item, run) ? `<p class="hh-small" data-retry-note>Partial work is kept.</p>` : "";
   const action =
     item.status === "failed"
-      ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>`
+      ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="retry" data-prompt="${id}">Retry</button>${note}`
       : item.status === "interrupted"
         ? ` <button class="hh-btn hh-btn--secondary" type="button" data-action="resume" data-prompt="${id}"${held}>Resume</button>`
         : "";
