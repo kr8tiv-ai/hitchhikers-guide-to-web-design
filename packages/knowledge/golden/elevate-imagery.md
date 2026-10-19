@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Imagery pass
 
-Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and place the generated concept set. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Rank the changes.
+Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. Replace weak, generic or missing images with art-directed generated ones through the asset step, and improve crop and grade. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. This pass may add a section treatment, an effect, or an image when it serves the art direction. Report the list. Edit {{files}} for {{page}}. Rank the changes.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -22,7 +22,7 @@ No em dashes, no exclamation points.
 
 truths:
 
-- Off-brand images are listed, and missing art stays a named slot.
+- Weak, generic or missing images are replaced through the asset step, and crop and grade match the art direction.
 
 artifacts:
 
@@ -53,12 +53,12 @@ Grade the images so the site feels like one world.
 <task>
 TASK: Imagery pass
 
-Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. For each, write a replacement prompt and place the generated concept set. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. Report the list. Edit {{files}} for {{page}}. Rank the changes.
+Audit every image and video on {{section}} against the visual direction (light, color grade, subject, what never shows up). List anything off-brand, generic or stock-looking. Replace weak, generic or missing images with art-directed generated ones through the asset step, and improve crop and grade. A real person, place, product or listing is never generated. Crop for intent: make sure every image leaves calm space where text sits, and that the hero image reads at phone size. Apply one consistent color treatment so the whole site feels like one world. This pass may add a section treatment, an effect, or an image when it serves the art direction. Report the list. Edit {{files}} for {{page}}. Rank the changes.
 </task>
 
 <must_haves>
 truths:
-- Off-brand images are listed, and missing art stays a named slot.
+- Weak, generic or missing images are replaced through the asset step, and crop and grade match the art direction.
 artifacts:
 - {{files}}
 key_links:

@@ -1175,7 +1175,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Slartibartfast's Fjords",
-      title: "Elevate pass for imagery. Replace weak, generic or missing images with art-directed generated ones.",
+      title: "Elevate pass for imagery. Replace weak, generic or missing images with art-directed generated ones through the asset step, and improve crop and grade.",
       tier: "Forty-Two",
       effort: "xhigh",
       files: ["src/styles/imagery.css", "tests/elevate-imagery.spec.ts"],

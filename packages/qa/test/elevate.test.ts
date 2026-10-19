@@ -7,11 +7,11 @@ import { fileURLToPath } from "node:url";
 import {
   defaultConfig,
   think,
+  validateJson,
   type SpawnLike,
   type ThinkRequest,
 } from "@hitchhiker/engine";
 import {
-  ELEVATE_CAP,
   ELEVATE_PLAN_SCHEMA,
   ELEVATE_PLAN_TASK,
   planElevate,
@@ -66,26 +66,21 @@ test("a note that does not name a file is skipped", () => {
   assert.deepEqual(result.items, [{ file: "src/hero.tsx", change: "open the tracking" }]);
 });
 
-test("nine valid notes yield truncated true and the first eight in order", () => {
+test("nine valid notes stay in order and are not truncated", () => {
   const notes = ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map((name) => line(`src/${name}.tsx`));
   const copy = [...notes];
   const result = planElevate(notes);
   assert.deepEqual(notes, copy);
-  assert.equal(result.truncated, true);
+  assert.equal(result.truncated, false);
   assert.equal(result.skipped, 0);
-  assert.equal(result.items.length, ELEVATE_CAP);
-  assert.equal(ELEVATE_CAP, 8);
+  assert.equal(result.items.length, 9);
   assert.deepEqual(
     result.items.map((item) => item.file),
-    ["a", "b", "c", "d", "e", "f", "g", "h"].map((name) => `src/${name}.tsx`),
-  );
-  assert.equal(
-    result.items.some((item) => item.file === "src/i.tsx"),
-    false,
+    ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map((name) => `src/${name}.tsx`),
   );
 });
 
-test("skips do not take a slot and a ninth accepted note still truncates", () => {
+test("skips do not take a slot and every accepted note is kept", () => {
   const notes = [
     line("src/a.tsx"),
     line("src/b.tsx"),
@@ -100,12 +95,24 @@ test("skips do not take a slot and a ninth accepted note still truncates", () =>
     line("src/k.tsx", "Make the type larger!"),
   ];
   const result = planElevate(notes);
-  assert.equal(result.truncated, true);
+  assert.equal(result.truncated, false);
   assert.equal(result.skipped, 2);
   assert.deepEqual(
     result.items.map((item) => item.file),
-    ["src/a.tsx", "src/b.tsx", "src/d.tsx", "src/e.tsx", "src/f.tsx", "src/g.tsx", "src/h.tsx", "src/i.tsx"],
+    ["src/a.tsx", "src/b.tsx", "src/d.tsx", "src/e.tsx", "src/f.tsx", "src/g.tsx", "src/h.tsx", "src/i.tsx", "src/j.tsx"],
   );
+});
+
+test("the visual schema accepts more than eight ranked upgrades", () => {
+  assert.equal(ELEVATE_PLAN_SCHEMA.properties?.upgrades?.maxItems, undefined);
+  const upgrades = Array.from({ length: 9 }, (_, index) => ({
+    file: `src/s${index}.tsx`,
+    change: "Open the tracking on the display line",
+    pass: "imagery",
+    phone: "poster",
+    reducedMotion: "the same poster",
+  }));
+  assert.deepEqual(validateJson({ upgrades }, ELEVATE_PLAN_SCHEMA), []);
 });
 
 test("magnetic and exclamation changes are skipped and the plan is kept", () => {
@@ -274,7 +281,11 @@ test("planElevateModel replays a recorded cassette and applies nothing", async (
     assert.equal(request.task, "elevate-plan");
     assert.equal(request.effort, "xhigh");
     assert.equal(request.schema, ELEVATE_PLAN_SCHEMA);
-    assert.equal(ELEVATE_PLAN_SCHEMA.properties?.upgrades?.maxItems, 8);
+    assert.equal(ELEVATE_PLAN_SCHEMA.properties?.upgrades?.maxItems, undefined);
+    assert.equal(/at most eight/i.test(request.input), false);
+    assert.equal(/already owns/i.test(request.input), false);
+    assert.equal(/do not invent a photo/i.test(request.input), false);
+    assert.equal(request.input.includes("A visual pass may add a section treatment"), true);
     assert.deepEqual(request.images, read.shots);
     assert.equal(request.input.includes("How could I possibly improve this?"), true);
     assert.equal(request.input.includes("BRAND"), true);

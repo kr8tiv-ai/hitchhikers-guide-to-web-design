@@ -165,6 +165,15 @@ test("a 3-page calm fixture yields 50 to 150 real entries", () => {
   assert.ok(prompts.some((prompt) => prompt.requirements.includes("REQ-LAUNCH")));
   assert.ok(prompts.some((prompt) => prompt.requirements.includes("REQ-JURY")));
   assert.ok(prompts.some((prompt) => prompt.requirements.includes("REQ-ELEVATE-TYPE")));
+  const elevateTitles = prompts
+    .filter((prompt) => prompt.requirements.some((id) => id.startsWith("REQ-ELEVATE")))
+    .map((prompt) => prompt.title);
+  assert.ok(elevateTitles.some((title) => /through the asset step/i.test(title)));
+  for (const title of elevateTitles) {
+    assert.equal(/already owns/i.test(title), false, title);
+    assert.equal(/do not invent a photo/i.test(title), false, title);
+    assert.equal(/at most eight/i.test(title), false, title);
+  }
   assert.ok(prompts.some((prompt) => prompt.requirements.includes("REQ-GATE-LIGHTHOUSE")));
 });
 

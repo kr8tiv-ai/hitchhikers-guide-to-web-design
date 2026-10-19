@@ -284,7 +284,7 @@ A site isn't done when it looks done. It's done when it passes every gate.
 
 Then comes the fun part. Press `/hh-elevate` and Grok 4.7, on extra-high effort, looks at your finished site cold and asks itself one question: **"How could I possibly improve this?"**
 
-It comes back with up to eight upgrades ranked by impact against effort: type and spacing, motion, imagery, copy, or a standout feature. You pick the ones you want, they run through the same reviewed build loop, every gate runs again, and nothing merges if a gate gets worse. Press it again. And again. There's a dedicated detail pass, **Slartibartfast's Fjords**, for the obsessive finishing touches: kerning, optical alignment, hover and focus states, the 404 page, the favicon. Somebody has to care about the fjords.
+It comes back with upgrades ranked by impact against effort: type and spacing, motion, imagery, copy, or a standout feature. A visual pass may add a section treatment, an effect, or an image. You pick the ones you want, they run through the same reviewed build loop, every gate runs again, and nothing merges if a gate gets worse. Press it again. And again. There's a dedicated detail pass, **Slartibartfast's Fjords**, for the obsessive finishing touches: kerning, optical alignment, hover and focus states, the 404 page, the favicon. Somebody has to care about the fjords.
 
 ---
 

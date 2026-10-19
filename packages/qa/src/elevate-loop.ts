@@ -7,7 +7,8 @@
  * full-width shots already on disk are the cold read, so a cassette can run
  * without Chrome.
  *
- * planElevateModel (128) ranks at most eight upgrades at xhigh. Each pick
+ * planElevateModel ranks every accepted upgrade at xhigh. A visual pass may
+ * add a section treatment, an effect, or an image. Each pick
  * becomes one golden prompt (092). runPrompt is the live runner. runElevate
  * (130) refuses a Lighthouse or accessibility BLOCKER. Console, links, and
  * weight use the same rule. A refusal reverts commits made after the pre-pick
@@ -22,7 +23,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hiddenChildOptions, type think } from "@hitchhiker/engine";
 import {
-  ELEVATE_CAP,
   planElevateModel,
   type ElevateColdRead,
   type ElevateItem,
@@ -527,13 +527,12 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   const round = nextRound(root);
   const shots = await coldShots(root);
   const plan = await planElevateModel(coldRead(root, shots), { think: deps.think });
-  const ranked = plan.items.slice(0, ELEVATE_CAP);
+  const ranked = plan.items;
   const pickedRaw = await deps.pick(ranked);
   if (!Array.isArray(pickedRaw)) throw new Error("pick must return a list of upgrades.");
 
   const chosen: ElevateItem[] = [];
   for (const value of pickedRaw) {
-    if (chosen.length >= ELEVATE_CAP) break;
     const item = asItem(value);
     if (item === null) continue;
     if (!ranked.some((planned) => sameItem(planned, item))) continue;

@@ -2,8 +2,9 @@
  * hh elevate, hh elevate detail, and hh elevate copy.
  *
  * The CLI package cannot depend on the QA package, so the round, the detail
- * pass, and the copy cards load by file URL. One round plans at most eight
- * upgrades. A pick runs only when a preview URL is set. Copy is printed as
+ * pass, and the copy cards load by file URL. One round plans ranked upgrades
+ * with no fixed count. A visual pass may add a treatment, an effect, or an
+ * image. A pick runs only when a preview URL is set. Copy is printed as
  * approve or reject cards and is written only when --approve names the ids.
  */
 

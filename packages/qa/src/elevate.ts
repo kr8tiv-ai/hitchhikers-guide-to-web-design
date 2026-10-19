@@ -1,7 +1,7 @@
 /**
  * Elevate planner (prompt 128, v2 §12, v1 §12.2).
  *
- * One round is a plan of at most eight upgrades. Notes are `file: change`.
+ * One round is a ranked plan. Notes are `file: change`.
  * The first colon splits the pair. A Windows drive (`C:\src\hero.tsx: change`)
  * keeps the drive colon and splits on the next one. Later colons stay in the
  * change. Pillar FIX rows are the intended notes. A note with no colon, an
@@ -10,9 +10,9 @@
  *
  * A `..` path segment is skipped. `src/foo..bar.ts` has no such segment and
  * stays. Duplicate file and change pairs are dropped and are not counted in
- * `skipped`. Items stay in input order. More than eight accepted candidates
- * keeps the first eight and sets `truncated`. Empty input is an empty list
- * and `truncated: false`.
+ * `skipped`. Items stay in input order. A visual pass has no count cap:
+ * every accepted note is kept, and `truncated` stays false. Empty input is
+ * an empty list and `truncated: false`.
  *
  * A change is skipped, and the rest of the plan is kept, when it has an
  * exclamation mark or the site anti-slop lint hits (banned words, including
@@ -30,8 +30,6 @@ import path from "node:path";
 import { validateJson, type JsonSchema, type ThinkRequest, type think } from "@hitchhiker/engine";
 import { lintSlop } from "./antislop.ts";
 import { REVIEW_WIDTHS } from "./screenshots.ts";
-
-export const ELEVATE_CAP = 8;
 
 export const ELEVATE_PLAN_TASK = "elevate-plan";
 
@@ -76,7 +74,6 @@ export const ELEVATE_PLAN_SCHEMA: JsonSchema = {
   properties: {
     upgrades: {
       type: "array",
-      maxItems: ELEVATE_CAP,
       items: {
         type: "object",
         required: ["file", "change", "pass", "phone", "reducedMotion"],
@@ -166,7 +163,6 @@ export function planElevate(notes: string[]): ElevatePlan {
   const items: ElevateItem[] = [];
   const seen = new Set<string>();
   let skipped = 0;
-  let accepted = 0;
 
   for (const note of notes) {
     if (typeof note !== "string") {
@@ -181,18 +177,18 @@ export function planElevate(notes: string[]): ElevatePlan {
     const key = `${parsed.file}\0${parsed.change}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    accepted += 1;
-    if (items.length < ELEVATE_CAP) items.push(parsed);
+    items.push(parsed);
   }
 
-  return { items, skipped, truncated: accepted > ELEVATE_CAP };
+  return { items, skipped, truncated: false };
 }
 
 function coldReadInput(read: ElevateColdRead): string {
   const widths = REVIEW_WIDTHS.join(", ");
   return [
     "How could I possibly improve this?",
-    "Rank at most eight upgrades by impact versus effort. Return them best first.",
+    "Rank the upgrades by impact versus effort. Return them best first.",
+    "A visual pass may add a section treatment, an effect, or an image when it serves the art direction.",
     "Tag each by pass: type and spacing, motion, imagery, or copy.",
     "Or tag a standout feature: hero interaction, scroll storytelling, cursor (not magnetic), 3d moment, micro-interactions, sound toggle, transitions, or easter egg.",
     "Each upgrade needs a phone weight and a reduced-motion version.",

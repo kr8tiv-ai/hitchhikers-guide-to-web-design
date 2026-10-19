@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Motion pass
 
-Audit every animation on {{section}}. Remove anything that moves just because it can. For what is left, give each one a job (guide the eye, reveal the story, or give feedback) and say which job in the report. Use one shared set of eases and durations from src/scripts/motion.ts. Stagger related elements, never animate everything at once, animate only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you removed, what you kept and what you added. Edit {{files}} for {{page}}. This example uses {{library}} on {{element}}. Do not also bind this element with another library. Rank the changes.
+Audit every animation on {{section}}. Remove anything that moves just because it can. For what is left, give each one a job (guide the eye, reveal the story, or give feedback) and say which job in the report. Use one shared set of eases and durations from src/scripts/motion.ts. Stagger related elements, never animate everything at once, animate only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you removed, what you kept and what you added. Add the motion the art direction asks for that is still missing, then refine what exists. Edit {{files}} for {{page}}. This example uses {{library}} on {{element}}. Do not also bind this element with another library. This pass may add a section treatment, an effect, or an image when it serves the art direction. Rank the changes.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Keep the motion that has a job, and remove the rest.
 <task>
 TASK: Motion pass
 
-Audit every animation on {{section}}. Remove anything that moves just because it can. For what is left, give each one a job (guide the eye, reveal the story, or give feedback) and say which job in the report. Use one shared set of eases and durations from src/scripts/motion.ts. Stagger related elements, never animate everything at once, animate only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you removed, what you kept and what you added. Edit {{files}} for {{page}}. This example uses {{library}} on {{element}}. Do not also bind this element with another library. Rank the changes.
+Audit every animation on {{section}}. Remove anything that moves just because it can. For what is left, give each one a job (guide the eye, reveal the story, or give feedback) and say which job in the report. Use one shared set of eases and durations from src/scripts/motion.ts. Stagger related elements, never animate everything at once, animate only transform and opacity, and make sure reduced motion gets a calm, complete version. Report what you removed, what you kept and what you added. Add the motion the art direction asks for that is still missing, then refine what exists. Edit {{files}} for {{page}}. This example uses {{library}} on {{element}}. Do not also bind this element with another library. This pass may add a section treatment, an effect, or an image when it serves the art direction. Rank the changes.
 </task>
 
 <must_haves>
