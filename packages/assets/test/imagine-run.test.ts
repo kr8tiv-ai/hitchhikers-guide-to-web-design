@@ -23,7 +23,6 @@ import {
   startVideo,
 } from "../src/imagine-http.ts";
 import { RealSubjectError, planBatch, readSpend, runBatch, type RunBatchDeps } from "../src/imagine-run.ts";
-import { CapExceeded } from "../src/prices.ts";
 import { proposeReplacement, readAssetTable, type AssetSlot } from "../src/slots.ts";
 
 const KEY = "xai-test-key-062-do-not-leak";
@@ -380,57 +379,49 @@ test("a failed or expired video keeps the job id", async () => {
   );
 });
 
-test("planBatch uses the price card and omits the prompt", () => {
-  const quoted = planBatch([still("hero"), still("side")]);
-  assert.equal(quoted.usd, 0.04);
-  assert.equal(quoted.lines[0], "hero: grok-imagine-image at default, count 1, card 2026-09-29");
-  assert.equal(quoted.lines.join("\n").includes(PROMPT), false);
+test("planBatch counts the slots and omits the prompt", () => {
+  const planned = planBatch([still("hero"), still("side")]);
+  assert.equal(planned.count, 2);
+  assert.equal(planned.lines[0], "hero: generate");
+  assert.equal(planned.lines[1], "side: generate");
+  assert.equal("usd" in planned, false);
+  assert.equal(planned.lines.join("\n").includes(PROMPT), false);
 });
 
-test("a batch over the cap is refused before confirm and before fetch", async () => {
+test("a zero cap does not refuse the batch and confirm is not called", async () => {
   const dir = tempDir();
   let confirmed = false;
   let fetched = false;
   const fetchImpl: typeof fetch = async () => {
     fetched = true;
-    throw new Error("fetch must not run");
+    return json(200, { data: [{ b64_json: Buffer.from(PNG).toString("base64") }] });
   };
   try {
-    await assert.rejects(
-      () =>
-        runBatch([still("hero"), still("side")], {
-          ...batchDeps(dir, fetchImpl),
-          cap: 0.03,
-          confirm: async () => {
-            confirmed = true;
-            return true;
-          },
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof CapExceeded);
-        assert.equal(error.usd, 0.04);
-        return true;
+    const result = await runBatch([still("hero"), still("side")], {
+      ...batchDeps(dir, fetchImpl),
+      cap: 0,
+      confirm: async () => {
+        confirmed = true;
+        return false;
       },
-    );
+    });
     assert.equal(confirmed, false);
-    assert.equal(fetched, false);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "ASSETS.md")), false);
+    assert.equal(fetched, true);
+    assert.equal(result.count, 2);
+    assert.equal(result.done[0]?.status, "done");
+    assert.equal(result.done[1]?.status, "done");
   } finally {
     cleanup(dir);
   }
 });
 
-test("declining the confirm spends nothing and leaves ASSETS.md", async () => {
+test("a confirm that returns false does not stop the batch", async () => {
   const dir = tempDir();
-  const assets = path.join(dir, ".hitchhiker", "ASSETS.md");
-  await mkdir(path.dirname(assets), { recursive: true });
-  await writeFile(assets, "KEEP\n");
   let fetched = false;
   let confirms = 0;
   const fetchImpl: typeof fetch = async () => {
     fetched = true;
-    throw new Error("fetch must not run");
+    return json(200, { data: [{ b64_json: Buffer.from(PNG).toString("base64") }] });
   };
   try {
     const result = await runBatch([still("hero"), still("side")], {
@@ -440,11 +431,11 @@ test("declining the confirm spends nothing and leaves ASSETS.md", async () => {
         return false;
       },
     });
-    assert.equal(confirms, 1);
-    assert.equal(fetched, false);
-    assert.equal(result.spent, 0.05);
-    assert.equal(await readFile(assets, "utf8"), "KEEP\n");
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
+    assert.equal(confirms, 0);
+    assert.equal(fetched, true);
+    assert.equal(result.count, 2);
+    assert.equal(result.done[0]?.status, "done");
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", "ASSETS.md")), true);
   } finally {
     cleanup(dir);
   }
@@ -480,7 +471,7 @@ test("stills run in order, record the total, and do not log the key", async () =
         return true;
       },
     });
-    assert.equal(confirms, 1);
+    assert.equal(confirms, 0);
     assert.deepEqual(
       calls.map((call) => call.url),
       [
@@ -643,17 +634,16 @@ test("a paid video resumes with a poll and does not charge again", async () => {
   const slot = video("loop");
   slot.status = "failed";
   slot.jobId = "job123";
-  let quotedUsd = -1;
+  let confirms = 0;
   try {
     const result = await runBatch([slot], {
       ...batchDeps(dir, fetchImpl, { cap: 0, spent: 0.02 }),
-      confirm: async (quote) => {
-        quotedUsd = quote.usd;
-        assert.match(quote.lines.join("\n"), /resume job job123/);
-        return true;
+      confirm: async () => {
+        confirms += 1;
+        return false;
       },
     });
-    assert.equal(quotedUsd, 0);
+    assert.equal(confirms, 0);
     assert.equal(calls.some((call) => call.method === "POST"), false);
     assert.equal(result.spent, 0.02);
     assert.equal(result.done[0]?.status, "done");
@@ -677,18 +667,16 @@ test("a finished slot is left out of the quote and is not fetched", async () => 
   const done = still("hero");
   done.status = "done";
   done.file = "already.png";
-  let lines = "";
+  let confirms = 0;
   try {
     const result = await runBatch([done, still("side")], {
       ...batchDeps(dir, fetchImpl),
-      confirm: async (quote) => {
-        lines = quote.lines.join("\n");
-        assert.equal(quote.usd, 0.02);
-        return true;
+      confirm: async () => {
+        confirms += 1;
+        return false;
       },
     });
-    assert.equal(lines.includes("hero"), false);
-    assert.match(lines, /side:/);
+    assert.equal(confirms, 0);
     assert.equal(calls.length, 1);
     assert.equal(result.done[0]?.file, "already.png");
     assert.equal(result.done[1]?.status, "done");
@@ -730,6 +718,7 @@ test("a real subject is not replaced without a recorded yes", async () => {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "ASSETS.md")), false);
 
     slot.realPersonYes = true;
+    fetched = false;
     let reached = false;
     const allowed = await runBatch([slot], {
       ...batchDeps(dir, fetchImpl),
@@ -738,8 +727,9 @@ test("a real subject is not replaced without a recorded yes", async () => {
         return false;
       },
     });
-    assert.equal(reached, true);
-    assert.equal(fetched, false);
+    assert.equal(reached, false);
+    assert.equal(fetched, true);
+    assert.equal(allowed.done[0]?.status, "failed");
     assert.equal(allowed.spent, 0);
   } finally {
     cleanup(dir);

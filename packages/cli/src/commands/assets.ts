@@ -2,15 +2,14 @@
  * hh assets plan, run, diy, and import.
  *
  * The CLI package cannot depend on the sibling assets package, so these
- * modules load by file URL. One confirm covers a batch. --yes is that
- * confirm in a non-interactive shell. A batch over the cap stops before
- * the key is read and before any request.
+ * modules load by file URL. Generation has no quote, no spend cap, and
+ * no confirm. --yes is accepted and ignored. The xAI API path is billed
+ * per use and runs only when this command is asked to run and a key is set.
  */
 
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadConfig } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
@@ -63,23 +62,16 @@ interface AssetSlot {
   replaces?: string;
 }
 
-interface BatchQuote {
-  usd: number;
+interface BatchPlan {
+  count: number;
   lines: string[];
 }
 
-interface SpendLedger {
-  spentUsd: number;
-  entries: Array<{ slot: string; usd: number; at: string; jobId?: string }>;
-}
-
 interface RunModule {
-  planBatch(slots: readonly AssetSlot[]): BatchQuote;
+  planBatch(slots: readonly AssetSlot[]): BatchPlan;
   runBatch(
     slots: readonly AssetSlot[],
     deps: {
-      confirm: (quote: BatchQuote) => Promise<boolean>;
-      cap: number;
       spent: number;
       client: ImagineClient;
       projectDir: string;
@@ -88,8 +80,8 @@ interface RunModule {
       sleep?: (ms: number) => Promise<void>;
       now?: () => string;
     },
-  ): Promise<{ done: AssetSlot[]; spent: number }>;
-  readSpend(projectDir: string): Promise<SpendLedger>;
+  ): Promise<{ done: AssetSlot[]; spent: number; count: number }>;
+  readSpend(projectDir: string): Promise<{ spentUsd: number }>;
 }
 
 interface HttpModule {
@@ -233,16 +225,12 @@ export function parseAssetsArgs(argv: readonly string[], cwd: string): Parsed {
 
 async function runPlan(api: AssetsApi, projectDir: string): Promise<{ exitCode: number; stdout: string }> {
   const slots = await api.slots.loadSlots(projectDir);
-  const quoted = api.run.planBatch(slots);
-  const spent = (await api.run.readSpend(projectDir)).spentUsd;
-  const cap = loadConfig(projectDir).imagineBudgetUsd;
+  const planned = api.run.planBatch(slots);
   const prompts = slots.map((slot) => slot.prompt);
-  const blocked = capMessage(quoted.usd, cap, spent, quoted.lines);
   const notes = proposalLines(api, slots);
-  if (blocked !== null) {
-    return { exitCode: 1, stdout: redact(`${blocked}${notes}`, "", prompts) };
-  }
-  return { exitCode: 0, stdout: redact(`${formatQuote(cap, spent, quoted)}${notes}`, "", prompts) };
+  const noun = planned.count === 1 ? "image" : "images";
+  const head = `${planned.count} ${noun}. No quote and no confirm.\n${planned.lines.join("\n")}\n`;
+  return { exitCode: 0, stdout: redact(`${head}${notes}`, "", prompts) };
 }
 
 async function runDiy(api: AssetsApi, projectDir: string): Promise<{ exitCode: number; stdout: string }> {
@@ -272,28 +260,13 @@ async function runJobs(
   const slots = await api.slots.loadSlots(parsed.projectDir);
   const prompts = slots.map((slot) => slot.prompt);
   const ledger = await api.run.readSpend(parsed.projectDir);
-  const cap = loadConfig(parsed.projectDir).imagineBudgetUsd;
-  const quoted = quoteForRun(api, slots, ledger);
-  const blocked = capMessage(quoted.usd, cap, ledger.spentUsd, quoted.lines);
-  if (blocked !== null) {
-    return { exitCode: 1, stdout: redact(blocked, "", prompts) };
-  }
-  for (const slot of slots) {
-    if (isFinished(slot)) continue;
+  const pending = slots.filter((slot) => !isFinished(slot));
+  if (pending.length === 0) return { exitCode: 0, stdout: "Nothing left to run.\n" };
+  for (const slot of pending) {
     if (!api.slots.refusesRealReplacement(slot)) continue;
     return {
       exitCode: 1,
       stdout: redact(`Slot ${slot.id} replaces a real subject. A replacement needs a recorded yes.\n`, "", prompts),
-    };
-  }
-  if (quoted.lines.length === 0) {
-    return { exitCode: 0, stdout: "Nothing left to run.\n" };
-  }
-  const quoteText = formatQuote(cap, ledger.spentUsd, quoted);
-  if (!parsed.yes) {
-    return {
-      exitCode: 1,
-      stdout: redact(`${quoteText}Nothing was spent. Pass --yes to confirm this batch.\n`, "", prompts),
     };
   }
 
@@ -304,8 +277,6 @@ async function runJobs(
     if (deps.keychain !== undefined) keyDeps.keychain = deps.keychain;
     key = await api.keys.readApiKey(keyDeps);
     const batch: {
-      confirm: (quote: BatchQuote) => Promise<boolean>;
-      cap: number;
       spent: number;
       client: ImagineClient;
       projectDir: string;
@@ -314,8 +285,6 @@ async function runJobs(
       sleep?: (ms: number) => Promise<void>;
       now?: () => string;
     } = {
-      confirm: async () => true,
-      cap,
       spent: ledger.spentUsd,
       client: api.http.createImagineClient(),
       projectDir: parsed.projectDir,
@@ -325,21 +294,14 @@ async function runJobs(
     if (deps.sleep !== undefined) batch.sleep = deps.sleep;
     if (deps.now !== undefined) batch.now = deps.now;
     const result = await api.run.runBatch(slots, batch);
-    return { exitCode: result.done.some((slot) => slot.status === "failed") ? 1 : 0, stdout: redact(resultText(parsed.projectDir, quoteText, result), key, prompts) };
+    const billed = "Using the xAI API key. This is billed per use by xAI.\n";
+    return {
+      exitCode: result.done.some((slot) => slot.status === "failed") ? 1 : 0,
+      stdout: redact(`${billed}${resultText(parsed.projectDir, result)}`, key, prompts),
+    };
   } catch (error: unknown) {
     return { exitCode: 1, stdout: redact(`${messageOf(error)}\n`, key, prompts) };
   }
-}
-
-function quoteForRun(api: AssetsApi, slots: readonly AssetSlot[], ledger: SpendLedger): BatchQuote {
-  const pending = slots.filter((slot) => !isFinished(slot));
-  const billable = pending.filter((slot) => !isResume(slot, ledger));
-  const quoted = billable.length > 0 ? api.run.planBatch(billable) : { usd: 0, lines: [] as string[] };
-  for (const slot of pending) {
-    if (!isResume(slot, ledger)) continue;
-    quoted.lines.push(`${slot.id}: resume job ${slot.jobId ?? ""}`);
-  }
-  return quoted;
 }
 
 function proposalLines(api: AssetsApi, slots: readonly AssetSlot[]): string {
@@ -361,10 +323,9 @@ function proposalLines(api: AssetsApi, slots: readonly AssetSlot[]): string {
 
 function resultText(
   projectDir: string,
-  quoteText: string,
-  result: { done: AssetSlot[]; spent: number },
+  result: { done: AssetSlot[]; count: number },
 ): string {
-  const lines = [quoteText.trimEnd(), `Spent ${money(result.spent)}.`];
+  const lines = [`Generated ${result.count}.`];
   let pending = false;
   for (const slot of result.done) {
     if (slot.status === "failed") {
@@ -381,41 +342,14 @@ function resultText(
   return `${lines.join("\n")}\n`;
 }
 
-function formatQuote(cap: number, spent: number, quoted: BatchQuote): string {
-  const lines = [`Cap ${money(cap)}. Spent ${money(spent)}. This batch ${money(quoted.usd)}.`, ...quoted.lines];
-  return `${lines.join("\n")}\n`;
-}
-
-function capMessage(usd: number, cap: number, spent: number, lines: readonly string[]): string | null {
-  if (!(usd > 0)) return null;
-  const remaining = cents(cap) - cents(spent);
-  if (remaining >= 0 && cents(usd) <= remaining) return null;
-  const left = Math.max(0, remaining) / 100;
-  const detail = lines.length > 0 ? ` ${lines.join("; ")}` : "";
-  return `Cap exceeded: estimate ${usd.toFixed(2)} is above remaining ${left.toFixed(2)}.${detail}\n`;
-}
-
 function isFinished(slot: AssetSlot): boolean {
   return slot.status === "done" && slot.file !== undefined && slot.file.length > 0;
-}
-
-function isResume(slot: AssetSlot, ledger: SpendLedger): boolean {
-  if (slot.kind !== "video" || slot.status !== "failed" || slot.jobId === undefined) return false;
-  return ledger.entries.some((entry) => entry.slot === slot.id && entry.jobId === slot.jobId);
 }
 
 function showPath(projectDir: string, file: string): string {
   const relative = path.relative(projectDir, file);
   const picked = relative.startsWith("..") || path.isAbsolute(relative) ? file : relative;
   return picked.split(path.sep).join("/");
-}
-
-function money(usd: number): string {
-  return (Math.round(usd * 100) / 100).toFixed(2);
-}
-
-function cents(usd: number): number {
-  return Math.round(usd * 100);
 }
 
 function redact(text: string, key: string, prompts: readonly string[]): string {

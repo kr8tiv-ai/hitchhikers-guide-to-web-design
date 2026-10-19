@@ -54,6 +54,14 @@ export type {
   VideoResolution,
 } from "./imagine-http.ts";
 export { RealSubjectError, planBatch, readSpend, recordSpend, runBatch, spendFile } from "./imagine-run.ts";
+export {
+  browserHandsBackProvider,
+  generateSectionStills,
+  grokCliProvider,
+  readMediaSettings,
+  resolveDeskProvider,
+} from "./section-generate.ts";
+export type { GenerateSectionResult, MediaProvider, MediaSettings } from "./section-generate.ts";
 export type { RunBatchDeps, SpendEntry, SpendLedger } from "./imagine-run.ts";
 export { DIY_SUFFIX, writeDiyPack } from "./diy-pack.ts";
 export { importDiyFiles } from "./diy-import.ts";

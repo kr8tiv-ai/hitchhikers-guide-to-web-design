@@ -882,6 +882,10 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [componentFile(stack, `Section${pascal(slugId(sectionId))}`)],
           requirement: `REQ-IMAGE-${slugId(sectionId)}`,
+          acceptance: [
+            `The generated still for this section is src/assets/generated/${slugId(sectionId)}.webp.`,
+            "Use the supplied image when it fits.",
+          ],
         }),
       );
     });

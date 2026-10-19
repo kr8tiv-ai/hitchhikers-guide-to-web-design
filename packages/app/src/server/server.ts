@@ -8,8 +8,10 @@ import {
   installLiveBuildRunner,
   recoverSiteBuild,
   setProjectBuildRunner,
+  setSectionStillRunner,
   type BuildSpawn,
 } from "@hitchhiker/engine";
+import { attachSectionStills } from "./section-stills-hook.ts";
 import { openBrowser, type BrowserSpawn } from "./open-browser.ts";
 import type { DeskPreflight } from "./card.ts";
 import { createDeskApp, type GuideThink, type TurnHandler } from "./routes.ts";
@@ -186,6 +188,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     close() {
       if (closing === null) {
         clearProjectBuildRunner(projectDir);
+        setSectionStillRunner(projectDir, null);
         app.close();
         closing = closeServer(server);
       }
@@ -207,6 +210,7 @@ function bindBuildRunner(projectDir: string, opts: StartServerOptions): void {
   if (getBuildRunner() === null) installLiveBuildRunner();
   const live = getBuildRunner();
   setProjectBuildRunner(projectDir, live);
+  void attachSectionStills(projectDir);
 }
 
 function sendFixed(

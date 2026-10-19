@@ -58,29 +58,32 @@ test("hh assets without a command exits 2", async () => {
   assert.equal((refused.stderr ?? "").includes("node:"), false);
 });
 
-test("plan prints the quote and not the prompt", async () => {
+test("plan prints the count and not the prompt", async () => {
   const dir = tempDir();
   writeProject(dir, 1);
   try {
     const result = await runCli(["assets", "plan", "--project", dir]);
     assert.equal(result.exitCode, 0);
-    assert.match(result.stdout, /0\.02/);
-    assert.match(result.stdout, /grok-imagine-image at default/);
+    assert.match(result.stdout, /1 image/);
+    assert.match(result.stdout, /No quote and no confirm/);
+    assert.match(result.stdout, /hero: generate/);
     assert.match(result.stdout, /replace it/);
     assert.equal(result.stdout.includes(PROMPT), false);
+    assert.equal(result.stdout.includes("Cap exceeded"), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
   } finally {
     cleanup(dir);
   }
 });
 
-test("plan over the cap exits 1", async () => {
+test("plan with a zero budget still prints the count", async () => {
   const dir = tempDir();
   writeProject(dir, 0);
   try {
     const result = await runCli(["assets", "plan", "--project", dir]);
-    assert.equal(result.exitCode, 1);
-    assert.match(result.stdout, /Cap exceeded/);
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stdout, /1 image/);
+    assert.equal(result.stdout.includes("Cap exceeded"), false);
     assert.equal(result.stdout.includes(PROMPT), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
   } finally {
@@ -104,14 +107,15 @@ test("diy writes the prompt pack", async () => {
   }
 });
 
-test("run without --yes spends nothing", async () => {
+test("run without --yes does not ask for a confirm and does not read a project key", async () => {
   const dir = tempDir();
   writeProject(dir, 1);
   try {
-    const result = await runCli(["assets", "run", "--project", dir]);
+    const result = await runAssetsCommand(["run", "--project", dir], { env: {}, keychain: null });
     assert.equal(result.exitCode, 1);
-    assert.match(result.stdout, /Nothing was spent/);
-    assert.match(result.stdout, /--yes/);
+    assert.match(result.stdout, /No xAI API key/);
+    assert.equal(result.stdout.includes("Nothing was spent"), false);
+    assert.equal(result.stdout.includes("confirm this batch"), false);
     assert.equal(result.stdout.includes(PROMPT), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "ASSETS.md")), false);
@@ -120,7 +124,7 @@ test("run without --yes spends nothing", async () => {
   }
 });
 
-test("run --yes over the cap exits before the key is read", async () => {
+test("run --yes with a zero budget still needs a key and does not fetch", async () => {
   const dir = tempDir();
   writeProject(dir, 0);
   let fetched = false;
@@ -134,8 +138,8 @@ test("run --yes over the cap exits before the key is read", async () => {
       },
     });
     assert.equal(result.exitCode, 1);
-    assert.match(result.stdout, /Cap exceeded/);
-    assert.equal(result.stdout.includes("No xAI API key"), false);
+    assert.match(result.stdout, /No xAI API key/);
+    assert.equal(result.stdout.includes("Cap exceeded"), false);
     assert.equal(fetched, false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "assets", "spend.json")), false);
   } finally {

@@ -33,6 +33,7 @@ import {
   type QueueStatus,
 } from "../queue-file.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
+import { writeSectionStillPlan } from "../spec/section-stills.ts";
 import {
   designLanguageFor,
   knowledgeRoot,
@@ -204,6 +205,7 @@ const projectRunners = new Map<string, BuildSpawn | null>();
 const jobs = new Map<string, Promise<void>>();
 const watchOverrides = new Map<string, SiteBuildWatch>();
 const buildGates = new Map<string, SiteBuildGate>();
+const sectionStillRunners = new Map<string, (projectDir: string) => Promise<void>>();
 
 interface LiveBuild {
   projectDir: string;
@@ -272,10 +274,24 @@ export function setSiteBuildGate(projectDir: string, gate: SiteBuildGate | null)
   else buildGates.set(key, gate);
 }
 
+/**
+ * Desk step for section stills. It runs once, after the last art-direction
+ * prompt passes, and it does not pause the queue or wait for a confirm.
+ */
+export function setSectionStillRunner(
+  projectDir: string,
+  runner: ((projectDir: string) => Promise<void>) | null,
+): void {
+  const key = path.resolve(projectDir);
+  if (runner === null) sectionStillRunners.delete(key);
+  else sectionStillRunners.set(key, runner);
+}
+
 export function resetSiteBuildWatch(projectDir: string): void {
   const key = path.resolve(projectDir);
   watchOverrides.delete(key);
   buildGates.delete(key);
+  sectionStillRunners.delete(key);
   liveBuilds.delete(key);
   rearmWatch();
 }
@@ -570,6 +586,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     return ids;
   }
   const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
+  writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
@@ -937,6 +954,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
           if (gate !== undefined) await gate({ projectDir, promptId: next.id, files: attempt.files });
           const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
           await settleItem(projectDir, next.id, "passed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits);
+          await maybeRunSectionStills(projectDir, next.id);
         } catch (error: unknown) {
           const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
           await settleItem(
@@ -1108,6 +1126,7 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
       const recovered = recoveredReason(run.promptId);
       const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : recovered;
       await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt, outside.hits);
+      await maybeRunSectionStills(projectDir, run.promptId);
       stampRecovery(projectDir, recovered, false);
       return "continue";
     } catch (error: unknown) {
@@ -1592,6 +1611,34 @@ async function setStatus(projectDir: string, id: string, status: QueueStatus): P
 
 async function loadBuildQueue(projectDir: string): Promise<QueueFile | null> {
   return retryLock(() => loadQueue(projectDir));
+}
+
+const ART_REQUIREMENT = /Requirements: [^\n]*\bREQ-ART-/;
+
+/**
+ * After the last art-direction prompt passes, run the desk stills step.
+ * A missing runner is a no-op. A runner error is written for the Drive
+ * and does not pause the queue.
+ */
+async function maybeRunSectionStills(projectDir: string, promptId: string): Promise<void> {
+  const runner = sectionStillRunners.get(path.resolve(projectDir));
+  if (runner === undefined) return;
+  const own = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
+  if (!ART_REQUIREMENT.test(own)) return;
+  const queue = await loadBuildQueue(projectDir);
+  for (const item of queue?.items ?? []) {
+    if (item.id === promptId || item.status !== "queued") continue;
+    const text = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${item.id}.md`));
+    if (ART_REQUIREMENT.test(text)) return;
+  }
+  try {
+    await runner(projectDir);
+  } catch (error: unknown) {
+    const reason = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Section stills did not run.";
+    const dir = path.join(projectDir, ".hitchhiker", "assets");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(path.join(dir, "fallback.md"), `Section stills did not run. ${reason}\n`, "utf8");
+  }
 }
 
 async function saveBuildQueue(projectDir: string, queue: QueueFile): Promise<void> {

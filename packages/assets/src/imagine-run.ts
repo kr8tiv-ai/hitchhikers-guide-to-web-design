@@ -1,16 +1,11 @@
 /**
- * Run a confirmed Imagine batch.
+ * Run an Imagine batch. Generation is included in the user's plan.
+ * There is no quote, no spend cap, and no confirm step.
+ * Jobs run one at a time. Each file is written before the next job starts.
+ * A plain count is kept in .hitchhiker/assets/spend.json.
+ * Files land in .hitchhiker/assets/generated/.
  *
- * Quotes come from prices.ts (card 2026-09-29), not from the flat
- * per-second line on the video model page. A batch that would pass the
- * cap is refused before confirm and before any fetch. One confirm covers
- * the batch. Jobs run one at a time. The running total is
- * .hitchhiker/assets/spend.json. Files land in
- * .hitchhiker/assets/generated/.
- *
- * A started video is counted when the request id comes back, so a poll
- * timeout cannot be followed by more jobs that walk past the cap.
- * The job id stays on the slot so a later run can poll it again.
+ * A started video keeps its job id so a later run can poll it again.
  * A slot that is already done and has a file is left alone.
  */
 
@@ -30,7 +25,7 @@ import {
   type PollDeps,
   type VideoRequest,
 } from "./imagine-http.ts";
-import { CapExceeded, estimateMustFit, quote, quoteJob, type ImagineJob, type StillJob, type VideoJob } from "./prices.ts";
+import { quoteJob, type ImagineJob, type StillJob, type VideoJob } from "./prices.ts";
 import {
   type AssetSlot,
   assertSlotId,
@@ -65,8 +60,10 @@ export interface SpendLedger {
 }
 
 export interface RunBatchDeps {
-  confirm: (quote: { usd: number; lines: string[] }) => Promise<boolean>;
-  cap: number;
+  /** Ignored. Generation does not wait for a confirm. */
+  confirm?: (quote: { usd: number; lines: string[] }) => Promise<boolean>;
+  /** Ignored. There is no spend cap. */
+  cap?: number;
   spent: number;
   client: ImagineClient;
   projectDir: string;
@@ -80,58 +77,39 @@ export function spendFile(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "assets", "spend.json");
 }
 
-/** Quote every slot with the 053 price card. No fetch and no confirm. */
-export function planBatch(slots: readonly AssetSlot[]): { usd: number; lines: string[] } {
+/** Count the slots. No price quote and no fetch. */
+export function planBatch(slots: readonly AssetSlot[]): { count: number; lines: string[] } {
   if (slots.length === 0) throw new Error("An Imagine batch needs at least one slot.");
-  const jobs: ImagineJob[] = [];
+  const lines: string[] = [];
   for (const slot of slots) {
     assertSlotId(slot.id);
-    jobs.push(slotToJob(slot));
+    lines.push(`${slot.id}: generate`);
   }
-  const quoted = quote(jobs);
-  return {
-    usd: quoted.usd,
-    lines: quoted.lines.map((line, index) => `${slots[index]?.id ?? "slot"}: ${line}`),
-  };
+  return { count: slots.length, lines };
 }
 
 export async function runBatch(
   slots: readonly AssetSlot[],
   deps: RunBatchDeps,
-): Promise<{ done: AssetSlot[]; spent: number }> {
+): Promise<{ done: AssetSlot[]; spent: number; count: number }> {
   assertRunDeps(deps);
-  const ledger = await readSpend(deps.projectDir);
   const pending = slots.filter((slot) => !isFinished(slot));
   if (pending.length === 0) {
-    return { done: slots.map((slot) => structuredClone(slot)), spent: deps.spent };
+    return { done: slots.map((slot) => structuredClone(slot)), spent: deps.spent, count: 0 };
   }
   for (const slot of pending) {
     if (refusesRealReplacement(slot)) throw new RealSubjectError(slot.id);
   }
-  const billable = pending.filter((slot) => !isResume(slot, ledger));
-  const quoted = billable.length > 0 ? planBatch(billable) : { usd: 0, lines: [] as string[] };
-  for (const slot of pending) {
-    if (!isResume(slot, ledger)) continue;
-    quoted.lines.push(`${slot.id}: resume job ${slot.jobId ?? ""}`);
-  }
-  const remainingCents = cents(deps.cap) - cents(deps.spent);
-  if (quoted.usd > 0 && (remainingCents < 0 || cents(quoted.usd) > remainingCents)) {
-    throw new CapExceeded(quoted.usd, Math.max(0, remainingCents) / 100, quoted.lines);
-  }
-  if (quoted.usd > 0) estimateMustFit(quoted, deps.cap - deps.spent);
-
-  const accepted = await deps.confirm(quoted);
-  if (!accepted) {
-    return { done: slots.map((slot) => structuredClone(slot)), spent: deps.spent };
-  }
 
   const done = slots.map((slot) => structuredClone(slot));
   let spentCents = cents(deps.spent);
+  let count = 0;
   const http = httpDeps(deps);
   for (const slot of done) {
     if (isFinished(slot)) continue;
     try {
       spentCents = await runSlot(slot, deps, http, spentCents);
+      count += 1;
     } catch (error) {
       markFailed(slot, error, deps.key);
       await updateAssetRows(deps.projectDir, [rowFromSlot(slot, deps.projectDir)]);
@@ -140,7 +118,7 @@ export async function runBatch(
       break;
     }
   }
-  return { done, spent: spentCents / 100 };
+  return { done, spent: spentCents / 100, count };
 }
 
 export async function readSpend(projectDir: string): Promise<SpendLedger> {
@@ -242,7 +220,12 @@ async function charge(
   spentCents: number,
   jobId: string | undefined,
 ): Promise<{ spentCents: number; usd: number }> {
-  const usd = quoteJob(slotToJob(slot)).usd;
+  let usd = 0;
+  try {
+    usd = quoteJob(slotToJob(slot)).usd;
+  } catch {
+    usd = 0;
+  }
   slot.costUsd = usd;
   const entry: SpendEntry = {
     slot: slot.id,
@@ -435,10 +418,6 @@ function pollDeps(deps: RunBatchDeps): PollDeps {
 }
 
 function assertRunDeps(deps: RunBatchDeps): void {
-  if (typeof deps.confirm !== "function") throw new Error("Imagine batch needs a confirm function.");
-  if (!Number.isFinite(deps.cap) || deps.cap < 0) {
-    throw new Error("Imagine cap must be a finite number of dollars, zero or more.");
-  }
   if (!Number.isFinite(deps.spent) || deps.spent < 0) {
     throw new Error("Imagine spent must be a finite number of dollars, zero or more.");
   }

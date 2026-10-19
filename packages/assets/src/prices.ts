@@ -15,6 +15,8 @@
  * grok-imagine-image-quality is published as "from $0.05". That floor is
  * the quote for every resolution token. grok-imagine-video has no 1080p
  * price, so that pair throws.
+ *
+ * Section stills do not use this card. They have no quote, no cap, and no confirm.
  */
 
 export const PRICE_CARD_DATE = "2026-09-29";

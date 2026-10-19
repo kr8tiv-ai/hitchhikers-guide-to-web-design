@@ -188,7 +188,7 @@ export function proposeReplacement(input: ReplacementInput): ReplacementProposal
     slotId: input.id,
     propose: true,
     needsYes: false,
-    reason: `Grade ${measured.score} is under ${WEAK_GRADE_BELOW}.${why} ${door} The batch quote shows the cost.`.replace(
+    reason: `Grade ${measured.score} is under ${WEAK_GRADE_BELOW}.${why} ${door}`.replace(
       /\s+/g,
       " ",
     ),
