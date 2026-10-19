@@ -187,6 +187,14 @@ export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
 export { translateBrief } from "./spec/art-direction.ts";
 export {
+  formatLanguagePack,
+  languageBlockFor,
+  languageQueryFrom,
+  loadLanguagePack,
+  selectLanguageEntries,
+} from "./spec/language-pack.ts";
+export type { LanguageEntry, LanguageQuery } from "./spec/language-pack.ts";
+export {
   SECTION_STILL_MODEL,
   planSectionStills,
   stillPath,

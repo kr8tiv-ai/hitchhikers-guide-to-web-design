@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { styleWorldFrom } from "./art-direction.ts";
 import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
+import { languageBlockFor, languageQueryFrom } from "./language-pack.ts";
 import type { SitePromptSkeleton } from "./site-prompts.ts";
 
 export { styleWorldFrom };
@@ -74,6 +75,7 @@ export function designLanguageFor(
   const gate = gateCard(library.facts, assets);
   const direction = oneLine(artDirection, "Follow the site brief and add one signature idea of your own.");
   const libraryBlock = libraryLines(library, section);
+  const language = languageBlockFor(languageQueryFrom(section, direction, library.styleText));
   return [
     FRAMING,
     "",
@@ -84,6 +86,7 @@ export function designLanguageFor(
     "### Art direction",
     "",
     direction,
+    ...(language === "" ? [] : ["", language]),
     "",
     "### Example",
     "",
