@@ -153,7 +153,19 @@ async function spawnIds(projectDir: string): Promise<string[]> {
   return order.split(/\r?\n/).filter((line) => line.trim() !== "");
 }
 
+async function promptFiles(projectDir: string, id: string): Promise<string[]> {
+  const text = await readFile(path.join(projectDir, ".hitchhiker", "prompts", `${id}.md`), "utf8");
+  const line = text.split(/\r?\n/).find((item) => item.startsWith("Files:"));
+  if (line === undefined) return [];
+  return line
+    .slice("Files:".length)
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "" && item.toLowerCase() !== "none");
+}
+
 async function waitForRunningEnd(projectDir: string): Promise<void> {
+  const expected = await promptFiles(projectDir, "003");
   await waitFor(async () => {
     const queue = await readJson(path.join(projectDir, ".hitchhiker", "queue.json"));
     const run = await readJson(path.join(projectDir, ".hitchhiker", "build-run.json"));
@@ -163,8 +175,8 @@ async function waitForRunningEnd(projectDir: string): Promise<void> {
       item === "running" &&
       recordStatus(run) === "running" &&
       log.includes("end_turn") &&
-      existsSync(path.join(projectDir, "public", "logo.svg")) &&
-      existsSync(path.join(projectDir, "src", "components", "Logo.astro")) &&
+      expected.length > 0 &&
+      expected.every((rel) => existsSync(path.join(projectDir, rel))) &&
       !existsSync(path.join(projectDir, ".hitchhiker", "STATE.md.lock"))
     );
   }, projectDir);
@@ -352,11 +364,14 @@ function childSource(): string {
         if (mode === "end") {
           const logs = path.join(projectDir, ".hitchhiker", "logs");
           mkdirSync(logs, { recursive: true });
-          mkdirSync(path.join(projectDir, "public"), { recursive: true });
-          mkdirSync(path.join(projectDir, "src", "components"), { recursive: true });
           writeFileSync(path.join(logs, "build-003.log"), '{"type":"end","stopReason":"end_turn"}\\n');
-          writeFileSync(path.join(projectDir, "public", "logo.svg"), "<svg></svg>\\n");
-          writeFileSync(path.join(projectDir, "src", "components", "Logo.astro"), "---\\n---\\n");
+          const prompt = readFileSync(path.join(projectDir, ".hitchhiker", "prompts", "003.md"), "utf8");
+          const filesLine = prompt.split("\\n").find((item) => item.startsWith("Files:")) || "";
+          for (const rel of filesLine.slice(6).split(",").map((item) => item.trim()).filter((item) => item && item.toLowerCase() !== "none")) {
+            const abs = path.join(projectDir, rel);
+            mkdirSync(path.dirname(abs), { recursive: true });
+            writeFileSync(abs, "/* e2e */\\n");
+          }
         }
         writeFileSync(path.join(projectDir, "003-hung.txt"), "1\\n");
         return { pid: 999999, done: new Promise(() => {}) };
