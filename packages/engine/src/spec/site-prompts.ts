@@ -16,8 +16,11 @@
  *   --max-turns, so that field is not a run cap.
  * - A 3D effect (three, ogl, theatre) is one Magrathea entry, not a second
  *   motion entry. A desktop 3D gate is added only for those effects.
+ * - Art direction is one Babel Fish entry, then one Deep Thought entry per
+ *   section, before any layout prompt.
  */
 
+import { ART_GUIDANCE } from "./art-direction.ts";
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
 
 export { SITE_RULES } from "./site-rules.ts";
@@ -698,6 +701,17 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     }),
     job(claim, {
       phase: "babel-fish",
+      slice: "The Brand Brain",
+      title:
+        "Write the art direction: one visual concept, mood, light and color grade, type voice, motion character and a signature hero moment, from the brand inputs.",
+      tier: "Heart of Gold",
+      effort: "high",
+      files: ["src/data/art-direction.ts", ".hitchhiker/ART-DIRECTION.md"],
+      requirement: "REQ-ART-DIRECTION",
+      acceptance: [...ART_GUIDANCE],
+    }),
+    job(claim, {
+      phase: "babel-fish",
       slice: "Sens-O-Matic",
       title: "Set color and type tokens from the approved brand.",
       tier: "Cup of Tea",
@@ -741,6 +755,26 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       files: ["src/data/requirements.ts"],
       requirement: "REQ-REQUIREMENTS",
     }),
+  );
+
+  for (const page of pages) {
+    for (const sectionId of page.sections) {
+      drafts.push(
+        job(claim, {
+          phase: "deep-thought",
+          slice: "Infinite Monkeys",
+          title: `Art-direct the ${sectionId} section: layout idea, media, motion, transition in and out.`,
+          tier: "Heart of Gold",
+          effort: "high",
+          files: ["src/data/art-direction.ts", ".hitchhiker/ART-DIRECTION.md"],
+          requirement: `REQ-ART-${slugId(sectionId)}`,
+          acceptance: [...ART_GUIDANCE],
+        }),
+      );
+    }
+  }
+
+  drafts.push(
     job(claim, {
       phase: "improbability-drive",
       slice: "Vogon Constructor Fleet",

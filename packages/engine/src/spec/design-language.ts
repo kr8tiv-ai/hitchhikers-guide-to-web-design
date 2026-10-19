@@ -10,9 +10,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { styleWorldFrom } from "./art-direction.ts";
 import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
 import type { SitePromptSkeleton } from "./site-prompts.ts";
+
+export { styleWorldFrom };
 
 export const DESIGN_PATTERN_TOKEN_CAP = 4_000;
 export const DESIGN_GATE_TOKEN_CAP = 800;
@@ -78,19 +81,16 @@ export function knowledgeRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge");
 }
 
-export function styleWorldFrom(text: string): string {
-  const lower = text.toLowerCase();
-  if (lower.includes("brutal")) return "brutalist";
-  if (/playful|sunny|loud|retail/.test(lower)) return "playful";
-  if (/bold|tech|dark|shader|webgl/.test(lower)) return "3d-world";
-  return "editorial";
-}
-
 export function sectionIdOf(prompt: SitePromptSkeleton): string {
   for (const req of prompt.requirements) {
+    if (req === "REQ-ART-DIRECTION") continue;
+    const art = /^REQ-ART-(.+)$/.exec(req);
+    if (art?.[1] !== undefined && art[1] !== "") return art[1];
     const match = /^REQ-(?:STRUCT|IMAGE|COPY|FX)-(.+)$/.exec(req);
     if (match?.[1] !== undefined && match[1] !== "") return match[1];
   }
+  const directed = /^Art-direct the (.+) section:/i.exec(prompt.title);
+  if (directed?.[1] !== undefined) return slug(directed[1]);
   const layout = /^Build the (.+) layout on /i.exec(prompt.title);
   if (layout?.[1] !== undefined) return slug(layout[1]);
   const image = /^Art-direct and place the image set for ([^:]+):/i.exec(prompt.title);

@@ -3,8 +3,8 @@
  * Paths are repo ids with forward slashes, matching the v1 §10.5 examples.
  * The stack is inferred from those paths. Shared files (styles, scripts,
  * data, tests, public) are allowed once one stack is identified.
- * .hitchhiker/DEPLOY.md, HANDOFF.md, and the once-over note are the spec
- * docs So Long and the final pass write. They are not a second stack.
+ * .hitchhiker/DEPLOY.md, HANDOFF.md, ART-DIRECTION.md, and the once-over
+ * note are spec docs the plan writes. They are not a second stack.
  */
 
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
@@ -73,6 +73,7 @@ const SHARED_PATHS: readonly RegExp[] = [
   /^tests\/[a-z0-9]+(?:-[a-z0-9]+)*\.spec\.ts$/,
   /^\.hitchhiker\/DEPLOY\.md$/,
   /^\.hitchhiker\/HANDOFF\.md$/,
+  /^\.hitchhiker\/ART-DIRECTION\.md$/,
   /^\.hitchhiker\/reviews\/once-over\.md$/,
 ];
 

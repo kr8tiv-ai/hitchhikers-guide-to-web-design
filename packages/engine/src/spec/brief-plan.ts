@@ -4,6 +4,7 @@
  * earlier one-page package. A listed page is never dropped to fit a count.
  */
 
+import { directionAcceptance, sectionAcceptance, translateBrief } from "./art-direction.ts";
 import {
   featureRequirementId,
   generateSkeleton,
@@ -346,5 +347,23 @@ export function generateBriefPlan(
     protectedPaths: [],
   };
   const generated = generateSkeleton(input);
+  const art = translateBrief(
+    briefMarkdown,
+    answers,
+    planned.pages.flatMap((page) => page.sections),
+  );
+  const bySection = new Map(art.sections.map((section) => [section.sectionId, section]));
+  for (const prompt of generated.prompts) {
+    const requirement = prompt.requirements[0] ?? "";
+    if (requirement === "REQ-ART-DIRECTION") {
+      prompt.acceptance = directionAcceptance(art);
+      continue;
+    }
+    if (!requirement.startsWith("REQ-ART-")) continue;
+    const sectionId = requirement.slice("REQ-ART-".length);
+    const section = bySection.get(sectionId);
+    if (section === undefined) continue;
+    prompt.acceptance = sectionAcceptance(section, art);
+  }
   return { ...generated, planned };
 }

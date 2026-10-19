@@ -185,6 +185,7 @@ export {
 } from "./guide/brief-desk.ts";
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
+export { translateBrief } from "./spec/art-direction.ts";
 export type { BriefAnswer, BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
 export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
 export { PlanCoverageError, checkPlanCoverage, planCoverageMessage, planCoverageRows } from "./spec/plan-coverage.ts";

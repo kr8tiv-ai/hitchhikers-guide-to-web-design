@@ -122,7 +122,13 @@ export function goldenName(entry: SitePromptSkeleton): string {
   if (req === "REQ-SCAFFOLD") return "setup";
   if (req === "REQ-FONTS") return "fonts";
   if (req === "REQ-LAYOUT") return "layout";
-  if (req === "REQ-TOKENS" || req === "REQ-LOGO" || req === "REQ-VOICE") return "tokens";
+  if (req === "REQ-TOKENS" || req === "REQ-LOGO" || req === "REQ-VOICE" || req === "REQ-ART-DIRECTION") {
+    return "tokens";
+  }
+  if (req.startsWith("REQ-ART-")) {
+    if (req.endsWith("-hero") || /\bhero\b/.test(title)) return "hero";
+    return "section";
+  }
   if (req === "REQ-ROUTES") return "routes";
   if (req === "REQ-SECTION-REGISTRY" || req === "REQ-REQUIREMENTS" || req.startsWith("REQ-PAGE-")) {
     return "structure";
