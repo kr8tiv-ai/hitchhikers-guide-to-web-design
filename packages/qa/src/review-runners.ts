@@ -11,8 +11,22 @@ import { pathToFileURL } from "node:url";
 import { assertPhoneBudgetBefore3d, type QueueFile } from "@hitchhiker/engine";
 import { AI_CLUSTER_VISION_KEYS, judgeAiCluster, type AiClusterVisionKey } from "./antislop.ts";
 import { applyBeautyRound, judgeBeauty, type BeautyFailure, type BeautyRoundResult, type SectionShot } from "./beauty-gate.ts";
-import { jury, type JuryResult } from "./jury.ts";
+import {
+  readCreditsFile,
+  readDefectsFile,
+  readImageryFile,
+  readJurorFile,
+  readRedesignFile,
+  readVariantsFile,
+} from "./desk-artifacts.ts";
+import { judgeDefectLog, type DefectRecord } from "./defect-log.ts";
+import { checkImageryGrade, type ImagerySample } from "./imagery-grade.ts";
+import { jury, type AwwwardsScores, type JuryResult } from "./jury.ts";
+import { measureJurorFloor, type JurorSample } from "./juror-floor.ts";
+import { auditImageCredits, auditSourcedMedia } from "./licenses.ts";
 import { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
+import { judgeRedesignOrder, type RedesignStepShot } from "./redesign-order.ts";
+import { combineSectionVariants, type ApprovedDirection, type SectionVariant, type VariantPick } from "./variants.ts";
 
 export interface PhonePictureSignals {
   reducedMotion: boolean;
@@ -64,6 +78,18 @@ export interface ReviewProject {
   palette: Parameters<QualityGates["checkPaletteProportion"]>[0];
   self: Parameters<QualityGates["scoreSelf"]>[0];
   scores: { brand: number; craft: number; clarity: number; performance: number };
+  /** Measured image grade. Absent means read `.hitchhiker/review/imagery.json` when it exists. */
+  imagery?: readonly ImagerySample[];
+  /** CREDITS.json. Absent means read the file beside the project when it exists. */
+  credits?: unknown;
+  juror?: JurorSample;
+  defects?: readonly DefectRecord[];
+  redesign?: { namedFamilies: readonly string[]; steps: readonly RedesignStepShot[] };
+  variants?: {
+    approved: ApprovedDirection;
+    variants: readonly SectionVariant[];
+    picks: readonly VariantPick[];
+  };
   queue: QueueFile;
   gateIds: readonly string[];
   round: number;
@@ -162,7 +188,7 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
   };
 
   try {
-    const beauty = await gates.judgeBeauty(project.shots);
+    const beauty = await gates.judgeBeauty(project.shots, rubricFrom(project));
     for (const failure of beauty.failures) {
       if (reasons.includes(failure.reason)) continue;
       reasons.push(failure.reason);
@@ -290,7 +316,82 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
     note(error instanceof Error ? error.message : "The self-score failed.");
   }
 
+  try {
+    const samples = project.imagery ?? readImageryFile(project.root) ?? [];
+    const grade = checkImageryGrade(samples);
+    if (!grade.ok) takeProblems(reasons, failures, project, grade.problems, "The imagery grade is mixed.");
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The imagery grade check failed.");
+  }
+
+  try {
+    const credits = project.credits !== undefined ? project.credits : (readCreditsFile(project.root) ?? { assets: [] });
+    const images = auditImageCredits(project.html, credits);
+    if (!images.ok) takeProblems(reasons, failures, project, images.problems, "An image is missing from CREDITS.json.");
+    const media = auditSourcedMedia(project.html, credits);
+    if (!media.ok) takeProblems(reasons, failures, project, media.problems, "Imagery or footage is missing a credit.");
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The image credit check failed.");
+  }
+
+  try {
+    const juror = project.juror ?? readJurorFile(project.root);
+    if (juror !== null) {
+      const floor = measureJurorFloor(juror);
+      if (!floor.ok) {
+        takeProblems(
+          reasons,
+          failures,
+          project,
+          floor.rows.filter((row) => !row.yes).map((row) => row.evidence),
+          "The juror floor failed.",
+        );
+      }
+    }
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The juror floor failed.");
+  }
+
+  try {
+    const defects = project.defects ?? readDefectsFile(project.root);
+    if (defects !== null) {
+      const judged = judgeDefectLog(defects);
+      if (!judged.ok) takeProblems(reasons, failures, project, judged.problems, "The defect log failed.");
+    }
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The defect log failed.");
+  }
+
+  try {
+    const redesign = project.redesign ?? readRedesignFile(project.root);
+    if (redesign !== null) {
+      const order = judgeRedesignOrder(redesign);
+      if (!order.ok) takeProblems(reasons, failures, project, order.problems, "The redesign order failed.");
+    }
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The redesign order failed.");
+  }
+
+  try {
+    const variants = project.variants ?? readVariantsFile(project.root);
+    if (variants !== null) {
+      const combined = combineSectionVariants(variants);
+      if (!combined.ok) takeProblems(reasons, failures, project, combined.problems, "The section variants did not combine.");
+    }
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The variant combine failed.");
+  }
+
   return failures;
+}
+
+function rubricFrom(project: ReviewProject): AwwwardsScores {
+  return {
+    design: project.scores.brand,
+    usability: project.scores.craft,
+    creativity: project.scores.clarity,
+    content: project.scores.performance,
+  };
 }
 
 async function runReview(

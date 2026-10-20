@@ -31,12 +31,28 @@ import { rankBeautyIssues, writeBeautyRound, type RankedBeautyIssue, type Sectio
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
 import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
-import { retestAfterElevate, type DefectRecord } from "./defect-log.ts";
+import { judgeDefectLog, retestAfterElevate, type DefectRecord } from "./defect-log.ts";
+import {
+  combinedVariantsFile,
+  readDefectsFile,
+  readJurorFile,
+  readLockShots,
+  defectsFile,
+  readRedesignFile,
+  readSectionScope,
+  readVariantsFile,
+  type RedesignArtifact,
+  type VariantArtifact,
+} from "./desk-artifacts.ts";
+import { measureJurorFloor, type JurorSample } from "./juror-floor.ts";
 import { elevatePickPrompt, preserveSentencePresent } from "./preserve-prompt.ts";
 import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
-export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
+import { falseVisualBans } from "./zaphod-vision.ts";
+import { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
+import { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+export { REDESIGN_STEPS, judgeRedesignOrder };
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
-export { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+export { PARALLEL_VARIANT_COUNT, combineSectionVariants };
 
 /**
  * Idea 26. After an Elevate pass, write the retest onto each defect
@@ -91,6 +107,14 @@ export interface ElevateRoundDeps {
   /** When set, the round calls the beauty, recipe, and 241 gates before any pick. */
   review?: ReviewProject;
   qualityGates?: QualityGates;
+  /** Screenshot loop capture. Absent means one clean in-memory shot, so the loop still runs. */
+  captureShots?: (width: number, round: number) => Promise<readonly SectionShot[]>;
+  fixShots?: (issues: readonly RankedBeautyIssue[]) => Promise<void> | void;
+  juror?: JurorSample;
+  redesign?: RedesignArtifact;
+  variants?: VariantArtifact;
+  sectionScope?: SectionEditScope;
+  captureSections?: () => Promise<readonly SectionLockShot[]>;
 }
 
 export interface ElevateRoundResult {
@@ -368,6 +392,7 @@ function gitEnv(): NodeJS.ProcessEnv {
     GIT_AUTHOR_EMAIL: "hh@localhost",
     GIT_COMMITTER_NAME: "Hitchhiker",
     GIT_COMMITTER_EMAIL: "hh@localhost",
+    GIT_TERMINAL_PROMPT: "0",
   };
 }
 
@@ -398,7 +423,13 @@ function git(dir: string, args: readonly string[]): Promise<string> {
     execFile(
       "git",
       full,
-      hiddenChildOptions({ encoding: "utf8", env: gitEnv(), maxBuffer: 8 * 1024 * 1024 }),
+      hiddenChildOptions({
+        encoding: "utf8",
+        env: gitEnv(),
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+      }),
       (error, stdout, stderr) => {
         if (error) {
           const detail = stderr.trim().length > 0 ? stderr.trim() : error.message;
@@ -556,6 +587,68 @@ async function writeRound(
   await writeFile(path.join(dir, `ROUND-${round}.md`), body, "utf8");
 }
 
+function cleanReviewShot(): SectionShot {
+  return {
+    page: "home",
+    section: "hero",
+    screenshot: ".hitchhiker/review/home-hero.png",
+    score: 9,
+    reason: "Layered media and a real type scale.",
+    textOnly: false,
+    todoImage: false,
+    placeholderImage: false,
+    slop: "",
+    ...falseVisualBans(),
+  };
+}
+
+/**
+ * Juror floor, redesign order, and variant combine. A no stops the round
+ * before a model call. An empty redesign still runs the judge.
+ */
+async function artifactRefusals(root: string, deps: ElevateRoundDeps): Promise<string[]> {
+  const reasons: string[] = [];
+  const juror = deps.juror !== undefined ? deps.juror : readJurorFile(root);
+  if (juror !== null && juror !== undefined) {
+    const floor = measureJurorFloor(juror);
+    const guarded = await runElevateAfterJurorFloor(floor, async () => true);
+    if (!guarded.started) {
+      for (const row of floor.rows) {
+        if (!row.yes) reasons.push(row.evidence);
+      }
+    }
+  }
+  const redesign =
+    deps.redesign !== undefined ? deps.redesign : (readRedesignFile(root) ?? { namedFamilies: [], steps: [] });
+  const order = judgeRedesignOrder(redesign);
+  if (redesign.steps.length > 0 && !order.ok) reasons.push(...order.problems);
+  const variants = deps.variants !== undefined ? deps.variants : readVariantsFile(root);
+  if (variants !== null && variants !== undefined) {
+    const combined = combineSectionVariants(variants);
+    if (!combined.ok) reasons.push(...combined.problems);
+    else if (combined.artifact !== null) {
+      const file = combinedVariantsFile(root);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, `${JSON.stringify(combined.artifact, null, 2)}\n`, "utf8");
+    }
+  }
+  return reasons;
+}
+
+/** Attach this round's retest, then judge. A missing log is not a failure. */
+async function settleDefects(root: string, round: number, kept: boolean): Promise<string | null> {
+  const records = readDefectsFile(root);
+  if (records === null) return null;
+  const results: Record<string, "pass" | "fail"> = {};
+  for (const record of records) results[record.id] = kept ? "pass" : "fail";
+  const next = recordElevateDefectRetest(records, `elevate-${round}`, results);
+  const file = defectsFile(root);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  const judged = judgeDefectLog(next);
+  return judged.ok ? null : judged.problems.join(" ");
+}
+
 /**
  * One round. Picks nothing and the log says so. A gate that is BLOCKER
  * after a pick reverts that pick and is listed in `refused`.
@@ -566,6 +659,19 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   }
   if (typeof deps.runPrompt !== "function" || typeof deps.gates !== "function") {
     throw new Error("elevateRound needs think, pick, runPrompt, and gates.");
+  }
+  const root = path.resolve(projectDir);
+  const artifactReasons = await artifactRefusals(root, deps);
+  if (artifactReasons.length > 0) {
+    const blockedRound = nextRound(root);
+    await writeRound(root, blockedRound, [], artifactReasons);
+    return {
+      applied: [],
+      refused: artifactReasons.map((reason, index) => ({
+        id: `g${String(index + 1).padStart(2, "0")}`,
+        reason,
+      })),
+    };
   }
   if (deps.review !== undefined) {
     const reviewed =
@@ -583,7 +689,10 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
       };
     }
   }
-  const root = path.resolve(projectDir);
+  await runScreenshotFixLoop({
+    capture: deps.captureShots ?? (async () => [cleanReviewShot()]),
+    fix: deps.fixShots ?? (() => undefined),
+  });
   const round = nextRound(root);
   const shots = await coldShots(root);
   const plan = await planElevateModel(coldRead(root, shots), { think: deps.think });
@@ -601,8 +710,14 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   }
 
   if (chosen.length === 0) {
-    await writeRound(root, round, ranked, ["No picks. This round changes nothing."]);
-    return { applied: [], refused: [] };
+    const defectProblem = await settleDefects(root, round, false);
+    const lines = ["No picks. This round changes nothing."];
+    if (defectProblem !== null) lines.push(defectProblem);
+    await writeRound(root, round, ranked, lines);
+    return {
+      applied: [],
+      refused: defectProblem === null ? [] : [{ id: `r${round}-defects`, reason: defectProblem }],
+    };
   }
 
   await assertClean(root);
@@ -627,12 +742,34 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     }
     const outcome = await runElevate({
       apply: async () => {
-        await deps.runPrompt(file);
-        await commitPick(root, id);
-        try {
-          next = await deps.gates();
-        } catch (error) {
-          gateError = error instanceof Error ? error.message : "Gate runner failed.";
+        const runBody = async (): Promise<void> => {
+          await deps.runPrompt(file);
+          await commitPick(root, id);
+          try {
+            next = await deps.gates();
+          } catch (error) {
+            gateError = error instanceof Error ? error.message : "Gate runner failed.";
+            next = blockedResult();
+          }
+        };
+        const scope = deps.sectionScope ?? readSectionScope(root);
+        if (scope === null) {
+          const held = judgeSectionLock({ target: "page", lock: [] }, [], []);
+          if (!held.ok) {
+            gateError = held.problems.join(" ");
+            next = blockedResult();
+            return;
+          }
+          await runBody();
+          return;
+        }
+        const locked = await runScopedSectionEdit(scope, {
+          capture: () =>
+            deps.captureSections !== undefined ? deps.captureSections() : Promise.resolve(readLockShots(root, scope)),
+          apply: runBody,
+        });
+        if (!locked.ok) {
+          gateError = locked.problems.join(" ");
           next = blockedResult();
         }
       },
@@ -654,6 +791,8 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     refused.push({ id, reason });
   }
 
+  const defectProblem = await settleDefects(root, round, applied.length > 0);
+  if (defectProblem !== null) refused.push({ id: `r${round}-defects`, reason: defectProblem });
   const outcomeLines = [
     ...applied.map((id) => `${id} kept.`),
     ...refused.map((row) => `${row.id} refused. ${row.reason}`),
