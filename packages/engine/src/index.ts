@@ -506,7 +506,10 @@ export {
   ReferenceExtractError,
   SHORT_QUOTE_WORDS,
   extractReferenceDesign,
+  fetchReferenceTransport,
   longCopyLeak,
+  resolveReferenceTransport,
+  setReferenceTransport,
   tokensFromPublicHtml,
 } from "./brand/reference-system.ts";
 export type {

@@ -32,6 +32,38 @@ export interface ReferenceTransport {
   page(url: string): Promise<{ status: number; body: string }>;
 }
 
+/** A test transport. Null clears it. The desk does not fetch during the test runner. */
+let injectedTransport: ReferenceTransport | null = null;
+
+export function setReferenceTransport(transport: ReferenceTransport | null): void {
+  injectedTransport = transport;
+}
+
+/** Public fetch with a timeout. Tests stay on the injected transport. */
+export function fetchReferenceTransport(timeoutMs = 8000): ReferenceTransport {
+  const headers = { "user-agent": REFERENCE_USER_AGENT };
+  const read = async (url: string): Promise<{ status: number; body: string }> => {
+    const response = await fetch(url, {
+      headers,
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await response.text();
+    return { status: response.status, body: body.slice(0, ROBOTS_MAX_CHARS) };
+  };
+  return { robots: read, page: read };
+}
+
+/**
+ * The transport for one extract. An injected transport wins.
+ * The test runner does not fall through to fetch.
+ */
+export function resolveReferenceTransport(): ReferenceTransport | null {
+  if (injectedTransport !== null) return injectedTransport;
+  if (process.env.NODE_TEST_CONTEXT !== undefined && process.env.NODE_TEST_CONTEXT !== "") return null;
+  return fetchReferenceTransport();
+}
+
 export interface ReferenceColor {
   role: "paper" | "ink" | "accent";
   hex: string;

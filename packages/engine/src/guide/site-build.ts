@@ -34,7 +34,9 @@ import {
   type QueueStatus,
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
+import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
 import { writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
+import { REFERENCE_PHASES, recordPhasePrompt } from "../spec/skills.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
 import { styleWorldFrom } from "../spec/art-direction.ts";
 import { writeSectionStillPlan } from "../spec/section-stills.ts";
@@ -223,6 +225,8 @@ interface LiveBuild {
   lastActivity: number;
   lastScan: number;
   force: (result: BuildSpawnResult) => void;
+  /** Stop the child before the row is settled. Absent when the handle has no stop. */
+  stop?: () => void;
 }
 
 const liveBuilds = new Map<string, LiveBuild>();
@@ -329,6 +333,11 @@ export function runBuildWatchdog(projectDir?: string): void {
     const dead = !pidAlive(job.pid);
     const idle = now - job.lastActivity >= job.idleMs;
     if (!dead && !idle) continue;
+    try {
+      job.stop?.();
+    } catch {
+      // A child that already exited has nothing to stop.
+    }
     job.force(watchResult());
   }
   if (projectDir !== undefined) void recoverSiteBuild(projectDir);
@@ -600,6 +609,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     const ids = existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
+    await writeSweepArtifacts(projectDir, briefMarkdown);
     await mergeBuildQueue(projectDir, ids);
     return ids;
   }
@@ -628,8 +638,92 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     );
     ids.push(prompt.id);
   }
+  await writeSweepArtifacts(projectDir, briefMarkdown);
   await mergeBuildQueue(projectDir, ids);
   return ids;
+}
+
+const REFERENCE_URL_LINE = /^Reference URL:\s*(https?:\/\/\S+)\s*$/im;
+
+interface SectionRenderer {
+  renderReferencedSections: (
+    source: string,
+    propsById: Readonly<Record<string, { words: string; imageCredit: string; display: string; body: string }>>,
+  ) => string;
+}
+
+function isSectionRenderer(value: unknown): value is SectionRenderer {
+  if (typeof value !== "object" || value === null) return false;
+  const render = (value as { renderReferencedSections?: unknown }).renderReferencedSections;
+  return typeof render === "function";
+}
+
+/**
+ * Phase reference logs, the deterministic section library, and an optional
+ * reference-URL extract. A failure here is recorded. It does not stop the queue.
+ * Font licences are not read.
+ */
+async function writeSweepArtifacts(projectDir: string, briefMarkdown: string): Promise<void> {
+  writePhaseReferenceLogs(projectDir);
+  await writeLibrarySections(projectDir, briefMarkdown);
+  await maybeExtractReference(projectDir, briefMarkdown);
+}
+
+function writePhaseReferenceLogs(projectDir: string): void {
+  const dir = path.join(projectDir, ".hitchhiker", "reference-phases");
+  mkdirSync(dir, { recursive: true });
+  for (const phase of REFERENCE_PHASES) {
+    const log = recordPhasePrompt(phase);
+    const body = log.audit.ok ? log.text : `${log.text}\n\n${log.audit.problems.join("\n")}\n`;
+    writeFileSync(path.join(dir, `${phase}.md`), body.endsWith("\n") ? body : `${body}\n`, "utf8");
+  }
+}
+
+async function writeLibrarySections(projectDir: string, briefMarkdown: string): Promise<void> {
+  const outDir = path.join(projectDir, ".hitchhiker", "sections");
+  mkdirSync(outDir, { recursive: true });
+  const outFile = path.join(outDir, "library.html");
+  try {
+    const prompts = path.join(projectDir, ".hitchhiker", "prompts");
+    let source = briefMarkdown;
+    try {
+      for (const name of readdirSync(prompts)) {
+        if (!name.endsWith(".md")) continue;
+        source += `\n${readFileSync(path.join(prompts, name), "utf8")}`;
+      }
+    } catch {
+      // A brief with no prompt files still renders the references it names.
+    }
+    const rendererUrl = new URL("../../../templates/src/section-render.ts", import.meta.url);
+    const loaded: unknown = await import(rendererUrl.href);
+    if (!isSectionRenderer(loaded)) throw new Error("The section renderer did not load.");
+    const html = loaded.renderReferencedSections(source, {});
+    writeFileSync(outFile, html.endsWith("\n") ? html : `${html}\n`, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The section library did not render.";
+    writeFileSync(path.join(outDir, "library-error.txt"), `${message}\n`, "utf8");
+  }
+}
+
+async function maybeExtractReference(projectDir: string, briefMarkdown: string): Promise<void> {
+  const match = REFERENCE_URL_LINE.exec(briefMarkdown);
+  const url = match?.[1];
+  if (url === undefined) return;
+  const noteDir = path.join(projectDir, ".hitchhiker", "brand");
+  mkdirSync(noteDir, { recursive: true });
+  const transport = resolveReferenceTransport();
+  if (transport === null) {
+    writeFileSync(path.join(noteDir, "reference-pending.txt"), `${url}\n`, "utf8");
+    return;
+  }
+  const libraryRoot = path.join(projectDir, ".hitchhiker", "references");
+  try {
+    const result = await extractReferenceDesign({ url, transport, libraryRoot });
+    writeFileSync(path.join(noteDir, "reference-extract.txt"), `${result.id}\n${result.tokenFile}\n`, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The reference extract failed.";
+    writeFileSync(path.join(noteDir, "reference-extract.txt"), `failed\n${message}\n`, "utf8");
+  }
 }
 
 export function ensureSiteBuild(projectDir: string): Promise<void> {
@@ -845,6 +939,13 @@ async function spawnPrompt(
       lastActivity: Date.now(),
       lastScan: Date.now(),
       force: control.force,
+      stop: () => {
+        try {
+          handle.stop?.();
+        } catch {
+          // Stopping a dead child is fine.
+        }
+      },
     });
   }
   feed = (chunk) => {
