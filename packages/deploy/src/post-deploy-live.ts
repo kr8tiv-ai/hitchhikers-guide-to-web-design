@@ -491,3 +491,131 @@ export async function postDeployChecks(
     sitemap: { submitted: false, instructions: sitemapInstructions(url) },
   };
 }
+
+/**
+ * Idea 25. Yes or no launch checklist. Run the same rows on staging,
+ * then on the live domain within an hour. The desk prepares this list
+ * when the user deploys. These functions do not deploy, publish, or
+ * call a host. A live failure is not waived by a staging pass.
+ *
+ * The first eleven ids match the juror floor. Phone and desktop
+ * Lighthouse use the same floor of 90 as the phone gate above.
+ */
+export const LAUNCH_WINDOW_MS = 60 * 60 * 1000;
+
+export const LAUNCH_CHECK_ROWS = [
+  "horizontal-overflow",
+  "control-under-44",
+  "keyboard-trap",
+  "missing-focus",
+  "text-under-16",
+  "contrast-under-floor",
+  "hover-only-control",
+  "video-autoplay-sound",
+  "reduced-motion-hides-content",
+  "empty-heading",
+  "fake-testimonial",
+  "lighthouse-phone",
+  "lighthouse-desktop",
+  "license-file",
+] as const;
+
+export type LaunchCheckRow = (typeof LAUNCH_CHECK_ROWS)[number];
+
+export interface LaunchChecklistRun {
+  url: string;
+  at: string;
+  answers: Readonly<Record<string, boolean>>;
+}
+
+export interface LaunchCheckComparison {
+  id: LaunchCheckRow;
+  staging: boolean;
+  live: boolean;
+}
+
+export interface LaunchChecklistReport {
+  status: "PASS" | "BLOCKER";
+  reopened: boolean;
+  procedureFailed: boolean;
+  /** This checklist never deploys. */
+  deployed: false;
+  deltaMs: number;
+  rows: LaunchCheckComparison[];
+  reasons: string[];
+}
+
+/** Fill the yes or no rows from measured evidence. Does not fetch or deploy. */
+export function prepareLaunchChecklist(input: {
+  url: string;
+  at: string;
+  floor: Readonly<Record<string, boolean>>;
+  phoneLighthouse: unknown;
+  desktopLighthouse: unknown;
+  licenseFilePresent: boolean;
+}): LaunchChecklistRun {
+  const phone = judgePhoneLighthouse(input.phoneLighthouse).status === "PASS";
+  const desktop = judgePhoneLighthouse(input.desktopLighthouse).status === "PASS";
+  const answers: Record<string, boolean> = {};
+  for (const id of LAUNCH_CHECK_ROWS) {
+    if (id === "lighthouse-phone") answers[id] = phone;
+    else if (id === "lighthouse-desktop") answers[id] = desktop;
+    else if (id === "license-file") answers[id] = input.licenseFilePresent === true;
+    else answers[id] = input.floor[id] === true;
+  }
+  return { url: input.url, at: input.at, answers };
+}
+
+/**
+ * Judge the staging run and the live run. A gap over an hour fails the
+ * procedure even when every row is yes. A live no reopens the launch.
+ */
+export function judgeLaunchChecklist(
+  staging: LaunchChecklistRun,
+  live: LaunchChecklistRun,
+): LaunchChecklistReport {
+  const reasons: string[] = [];
+  const rows: LaunchCheckComparison[] = LAUNCH_CHECK_ROWS.map((id) => ({
+    id,
+    staging: staging.answers[id] === true,
+    live: live.answers[id] === true,
+  }));
+  if (staging.url.trim() === "" || live.url.trim() === "") {
+    reasons.push("The checklist needs a staging URL and a live URL.");
+  }
+  const stagingMs = Date.parse(staging.at);
+  const liveMs = Date.parse(live.at);
+  let deltaMs = 0;
+  let procedureFailed = false;
+  if (!Number.isFinite(stagingMs) || !Number.isFinite(liveMs)) {
+    procedureFailed = true;
+    reasons.push("The checklist timestamps are not readable.");
+  } else {
+    deltaMs = liveMs - stagingMs;
+    if (deltaMs < 0) {
+      procedureFailed = true;
+      reasons.push("The live checklist ran before staging.");
+    } else if (deltaMs > LAUNCH_WINDOW_MS) {
+      procedureFailed = true;
+      reasons.push("The live checklist ran more than an hour after staging.");
+    }
+  }
+  const stagingNo = rows.filter((row) => !row.staging).map((row) => row.id);
+  const liveNo = rows.filter((row) => !row.live).map((row) => row.id);
+  if (stagingNo.length > 0) reasons.push(`Staging failed ${stagingNo.join(", ")}.`);
+  const reopened = liveNo.length > 0;
+  if (reopened) {
+    reasons.push(
+      `Live failed ${liveNo.join(", ")}. A staging pass does not waive a live failure.`,
+    );
+  }
+  return {
+    status: reasons.length === 0 ? "PASS" : "BLOCKER",
+    reopened,
+    procedureFailed,
+    deployed: false,
+    deltaMs,
+    rows,
+    reasons,
+  };
+}
