@@ -10,7 +10,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DESIGN_FILE_LINES, saveQueue, type QueueFile } from "@hitchhiker/engine";
-import { jury, type JuryInput } from "./jury.ts";
+import {
+  AWWWARDS_USABILITY_FLOOR,
+  AWWWARDS_WEIGHTS,
+  awwwardsTotal,
+  jury,
+  type AwwwardsScores,
+  type JuryInput,
+} from "./jury.ts";
 import { captureAll, REVIEW_WIDTHS } from "./screenshots.ts";
 import {
   VISUAL_BAN_KEYS,
@@ -61,7 +68,107 @@ export function failureReason(shot: SectionShot): string | null {
   return null;
 }
 
-export function judgeBeauty(shots: readonly SectionShot[]): { pass: boolean; failures: BeautyFailure[] } {
+export interface AwwwardsSubscore {
+  id: "design" | "usability" | "creativity" | "content";
+  score: number;
+  weight: number;
+  points: number;
+}
+
+export interface AwwwardsRubricReport {
+  pass: boolean;
+  enforced: boolean;
+  reasons: string[];
+  total: number;
+  flatAverage: number;
+  subscores: readonly [AwwwardsSubscore, AwwwardsSubscore, AwwwardsSubscore, AwwwardsSubscore];
+}
+
+export interface BeautyJudgement {
+  pass: boolean;
+  failures: BeautyFailure[];
+  rubric: AwwwardsRubricReport;
+}
+
+const RUBRIC_FIELDS = ["design", "usability", "creativity", "content"] as const;
+
+function readRubricScore(name: string, value: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 10) {
+    throw new Error(`${name} is ${String(value)}. Expected a score from 0 to 10.`);
+  }
+  return value;
+}
+
+function derivedRubric(shots: readonly SectionShot[]): AwwwardsScores {
+  let design = 10;
+  for (const shot of shots) {
+    if (shot.score < design) design = shot.score;
+  }
+  return { design, usability: 10, creativity: 10, content: 10 };
+}
+
+function scoreRubric(scores: AwwwardsScores, enforced: boolean): AwwwardsRubricReport {
+  const design = readRubricScore("design", scores.design);
+  const usability = readRubricScore("usability", scores.usability);
+  const creativity = readRubricScore("creativity", scores.creativity);
+  const content = readRubricScore("content", scores.content);
+  const read = { design, usability, creativity, content };
+  const total = awwwardsTotal(read);
+  const flatAverage = (design + usability + creativity + content) / RUBRIC_FIELDS.length;
+  const subscores = [
+    { id: "design", score: design, weight: AWWWARDS_WEIGHTS.design, points: (design * AWWWARDS_WEIGHTS.design) / 10 },
+    {
+      id: "usability",
+      score: usability,
+      weight: AWWWARDS_WEIGHTS.usability,
+      points: (usability * AWWWARDS_WEIGHTS.usability) / 10,
+    },
+    {
+      id: "creativity",
+      score: creativity,
+      weight: AWWWARDS_WEIGHTS.creativity,
+      points: (creativity * AWWWARDS_WEIGHTS.creativity) / 10,
+    },
+    {
+      id: "content",
+      score: content,
+      weight: AWWWARDS_WEIGHTS.content,
+      points: (content * AWWWARDS_WEIGHTS.content) / 10,
+    },
+  ] as const;
+  const reasons: string[] = [];
+  if (enforced && usability < AWWWARDS_USABILITY_FLOOR) {
+    reasons.push(
+      `Usability is ${usability} out of 10. The floor is ${AWWWARDS_USABILITY_FLOOR}. Usability is ${AWWWARDS_WEIGHTS.usability} of 100.`,
+    );
+  }
+  if (enforced && total < 70) {
+    reasons.push(
+      `The weighted total is ${total} out of 100. The floor is 70. Weights are design ${AWWWARDS_WEIGHTS.design}, usability ${AWWWARDS_WEIGHTS.usability}, creativity ${AWWWARDS_WEIGHTS.creativity}, and content ${AWWWARDS_WEIGHTS.content}.`,
+    );
+  }
+  return { pass: reasons.length === 0, enforced, reasons, total, flatAverage, subscores };
+}
+
+function rubricFailure(shots: readonly SectionShot[], reason: string): BeautyFailure {
+  const shot = shots[0];
+  if (shot !== undefined) {
+    return {
+      page: shot.page.trim() || "site",
+      section: shot.section.trim() || "rubric",
+      screenshot: relativeShot(shot.screenshot),
+      reason,
+    };
+  }
+  return {
+    page: "site",
+    section: "rubric",
+    screenshot: ".hitchhiker/review/site-rubric.txt",
+    reason,
+  };
+}
+
+export function judgeBeauty(shots: readonly SectionShot[], rubric?: AwwwardsScores): BeautyJudgement {
   const failures: BeautyFailure[] = [];
   for (const shot of shots) {
     if (!Number.isFinite(shot.score) || shot.score < 0 || shot.score > 10) {
@@ -82,7 +189,12 @@ export function judgeBeauty(shots: readonly SectionShot[]): { pass: boolean; fai
       });
     }
   }
-  return { pass: failures.length === 0, failures };
+  const enforced = rubric !== undefined;
+  const scored = scoreRubric(enforced ? rubric : derivedRubric(shots), enforced);
+  if (enforced) {
+    for (const reason of scored.reasons) failures.push(rubricFailure(shots, reason));
+  }
+  return { pass: failures.length === 0, failures, rubric: scored };
 }
 
 export interface RankedBeautyIssue extends BeautyFailure {

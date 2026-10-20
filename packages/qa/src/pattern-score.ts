@@ -10,7 +10,7 @@
 
 import type { BeautyFailure } from "./beauty-gate.ts";
 import { lintSlop } from "./antislop.ts";
-import { jury, type JuryResult } from "./jury.ts";
+import { juryFromRubric, type JuryResult } from "./jury.ts";
 import { isTemplateClone } from "./visual-bench.ts";
 
 /** Appetite at which a non-text page is expected to compose the advanced patterns. */
@@ -107,13 +107,7 @@ export function scorePatterns(input: PatternInput): PatternScore {
 export function juryWithPatterns(vision: VisionScores, scored: PatternScore): JuryResult {
   const scores = readVision(vision);
   if (!isScore(scored)) throw new Error("Pattern score is missing pass.");
-  return jury({
-    brand: scores.design,
-    craft: scores.usability,
-    clarity: scores.creativity,
-    performance: scores.content,
-    blocked: !scored.pass,
-  });
+  return juryFromRubric(scores, !scored.pass);
 }
 
 /** One remediation record per reason. A pass yields none. Paths stay inside the project. */

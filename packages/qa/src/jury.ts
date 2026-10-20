@@ -35,6 +35,23 @@ export interface JuryResult {
 }
 
 /** Design 40, usability 30, creativity 20, content 10. Do not change these. */
+export const AWWWARDS_WEIGHTS = {
+  design: 40,
+  usability: 30,
+  creativity: 20,
+  content: 10,
+} as const;
+
+/** A usability score under this fails the beauty gate even when the weighted total passes. */
+export const AWWWARDS_USABILITY_FLOOR = 7;
+
+export interface AwwwardsScores {
+  design: number;
+  usability: number;
+  creativity: number;
+  content: number;
+}
+
 const WEIGHTS = {
   brand: 40,
   craft: 30,
@@ -93,7 +110,15 @@ function readInput(value: JuryInput): JuryInput {
   return { ...scores, blocked: readBlocked(value.blocked) };
 }
 
+function assertSameWeights(): void {
+  if (WEIGHTS.brand !== AWWWARDS_WEIGHTS.design) throw new Error("Design weight drifted from 40.");
+  if (WEIGHTS.craft !== AWWWARDS_WEIGHTS.usability) throw new Error("Usability weight drifted from 30.");
+  if (WEIGHTS.clarity !== AWWWARDS_WEIGHTS.creativity) throw new Error("Creativity weight drifted from 20.");
+  if (WEIGHTS.performance !== AWWWARDS_WEIGHTS.content) throw new Error("Content weight drifted from 10.");
+}
+
 function weightedTotal(scores: Pick<JuryInput, (typeof SCORE_FIELDS)[number]>): number {
+  assertSameWeights();
   return (
     (scores.brand * WEIGHTS.brand +
       scores.craft * WEIGHTS.craft +
@@ -103,9 +128,30 @@ function weightedTotal(scores: Pick<JuryInput, (typeof SCORE_FIELDS)[number]>): 
   );
 }
 
+/** The same 40/30/20/10 total the beauty gate and the jury both use. */
+export function awwwardsTotal(scores: AwwwardsScores): number {
+  return weightedTotal({
+    brand: scores.design,
+    craft: scores.usability,
+    clarity: scores.creativity,
+    performance: scores.content,
+  });
+}
+
 export function jury(input: JuryInput): JuryResult {
   const scores = readInput(input);
   const total = weightedTotal(scores);
   const status: JuryResult["status"] = scores.blocked || total < PASS_AT ? "FAIL" : "PASS";
   return { total, status };
+}
+
+/** Vision and self-score rows enter the jury on the shared weights. */
+export function juryFromRubric(scores: AwwwardsScores, blocked: boolean): JuryResult {
+  return jury({
+    brand: scores.design,
+    craft: scores.usability,
+    clarity: scores.creativity,
+    performance: scores.content,
+    blocked,
+  });
 }

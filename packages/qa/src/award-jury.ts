@@ -7,7 +7,7 @@
  */
 
 import type { BeautyFailure } from "./beauty-gate.ts";
-import { jury, type JuryResult } from "./jury.ts";
+import { juryFromRubric, type JuryResult } from "./jury.ts";
 import { scorePatterns, patternPageFailures, type PatternInput, type PatternPage, type PatternScore, type VisionScores } from "./pattern-score.ts";
 import { evaluatePerformance, type PerformanceInput, type PerformanceResult } from "./performance-gate.ts";
 import { checkRecipes, type RecipeFinding } from "./recipe-check.ts";
@@ -38,13 +38,7 @@ export function judgeAward(input: AwardInput): AwardResult {
   ];
   const blocked = !pattern.pass || performance.status === "BLOCKER" || recipes.length > 0;
   return {
-    jury: jury({
-      brand: input.vision.design,
-      craft: input.vision.usability,
-      clarity: input.vision.creativity,
-      performance: input.vision.content,
-      blocked,
-    }),
+    jury: juryFromRubric(input.vision, blocked),
     pattern,
     performance,
     recipes,

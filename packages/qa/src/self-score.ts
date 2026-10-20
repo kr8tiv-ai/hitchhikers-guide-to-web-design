@@ -286,6 +286,10 @@ export async function scoreSelf(input: SelfScoreInput): Promise<SelfScoreReport>
     blocked: hard,
   };
   const judged = jury(juryInput);
+  const weighted = judgeBeauty(input.shots, scores);
+  if (!weighted.rubric.pass) {
+    for (const reason of weighted.rubric.reasons) add(candidates, reason, USABILITY, 10 - scores.usability, false);
+  }
   const mobileLab = perf.lab.mobile;
   const line = labLine(mobileLab);
   const criteria = [
