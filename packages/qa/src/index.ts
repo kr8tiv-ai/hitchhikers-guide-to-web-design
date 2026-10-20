@@ -33,3 +33,14 @@ export type {
   PatternUsage,
   VisionScores,
 } from "./pattern-score.ts";
+export {
+  EMULATION_LIMITS,
+  OPTIONAL_DEVICE_LABS,
+  OPTIONAL_ENGINES,
+  PHONE_CLASS_WIDTHS,
+  buildDeviceMatrix,
+  missingDescriptorMessage,
+  runDeviceMatrix,
+} from "./device-matrix.ts";
+export type { DeviceDescriptor, DeviceMap, DeviceMatrixRun, DeviceProject } from "./device-matrix.ts";
+export { captureLiveDeviceMatrix } from "./device-run.ts";

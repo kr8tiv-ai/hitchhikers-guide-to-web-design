@@ -23,10 +23,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSecureContext } from "node:tls";
 import { hiddenChildOptions } from "@hitchhiker/engine";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, webkit, type Browser, type Page } from "playwright";
+import type { DeviceProject } from "./device-matrix.ts";
 import { REVIEW_WIDTHS } from "./screenshots.ts";
 
 export const CHROME_FIX = "Chromium is missing. Run: pnpm exec playwright install chromium";
+export const WEBKIT_FIX =
+  "WebKit is missing. iOS Safari (WebKit iPhone 15) is the P0 phone. Run: pnpm exec playwright install webkit";
 
 const SCROLL_FRAMES = 8;
 
@@ -50,42 +53,148 @@ function playwrightCli(): string {
   return path.join(path.dirname(pkg), "cli.js");
 }
 
-async function installChromium(): Promise<void> {
+async function installBrowser(name: "chromium" | "webkit"): Promise<void> {
   const cli = playwrightCli();
   const code = await new Promise<number | null>((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, "install", "chromium"], hiddenChildOptions());
+    const child = spawn(process.execPath, [cli, "install", name], hiddenChildOptions());
     child.on("error", reject);
     child.on("close", (status) => resolve(status));
   });
-  if (code !== 0) throw new Error(CHROME_FIX);
+  if (code !== 0) throw new Error(name === "webkit" ? WEBKIT_FIX : CHROME_FIX);
+}
+
+export function assertBrowserEngine(
+  browser: "chromium" | "webkit",
+  executablePath: string,
+  fileExists: boolean,
+): void {
+  if (fileExists && executablePath.length > 0) return;
+  throw new Error(browser === "webkit" ? WEBKIT_FIX : CHROME_FIX);
 }
 
 export async function ensureChromium(): Promise<string> {
   const first = chromium.executablePath();
   if (existsSync(first)) return first;
-  await installChromium();
+  await installBrowser("chromium");
   const second = chromium.executablePath();
-  if (existsSync(second)) return second;
-  throw new Error(CHROME_FIX);
+  assertBrowserEngine("chromium", second, existsSync(second));
+  return second;
 }
+
+export function webkitExecutable(): string {
+  return webkit.executablePath();
+}
+
+export async function ensureWebKit(): Promise<string> {
+  const first = webkit.executablePath();
+  if (existsSync(first)) return first;
+  await installBrowser("webkit");
+  const second = webkit.executablePath();
+  assertBrowserEngine("webkit", second, existsSync(second));
+  return second;
+}
+
+const BROWSER_ARGS = [
+  "--ignore-certificate-errors",
+  "--allow-insecure-localhost",
+  "--no-sandbox",
+  "--disable-dev-shm-usage",
+];
 
 export async function withChromium<T>(run: (browser: Browser) => Promise<T>): Promise<T> {
   const executablePath = await ensureChromium();
   const browser = await chromium.launch({
     headless: true,
     executablePath,
-    args: [
-      "--ignore-certificate-errors",
-      "--allow-insecure-localhost",
-      "--no-sandbox",
-      "--disable-dev-shm-usage",
-    ],
+    args: BROWSER_ARGS,
   });
   try {
     return await run(browser);
   } finally {
     await browser.close();
   }
+}
+
+export async function withWebKit<T>(run: (browser: Browser) => Promise<T>): Promise<T> {
+  const executablePath = await ensureWebKit();
+  const browser = await webkit.launch({
+    headless: true,
+    executablePath,
+  });
+  try {
+    return await run(browser);
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function withProjectBrowser<T>(
+  project: DeviceProject,
+  run: (browser: Browser) => Promise<T>,
+): Promise<T> {
+  return project.browser === "webkit" ? withWebKit(run) : withChromium(run);
+}
+
+function projectContext(project: DeviceProject): {
+  ignoreHTTPSErrors: true;
+  userAgent: string;
+  viewport: { width: number; height: number };
+  deviceScaleFactor: number;
+  isMobile: boolean;
+  hasTouch: boolean;
+} {
+  return {
+    ignoreHTTPSErrors: true,
+    userAgent: project.context.userAgent,
+    viewport: { width: project.context.viewport.width, height: project.context.viewport.height },
+    deviceScaleFactor: project.context.deviceScaleFactor,
+    isMobile: project.context.isMobile,
+    hasTouch: project.context.hasTouch,
+  };
+}
+
+export async function captureDeviceShot(
+  url: string,
+  project: DeviceProject,
+  outDir: string,
+  kind: "full" | "fold",
+): Promise<string> {
+  mkdirSync(outDir, { recursive: true });
+  return withProjectBrowser(project, async (browser) => {
+    const context = await browser.newContext(projectContext(project));
+    try {
+      const page = await context.newPage();
+      await page.goto(url, { waitUntil: "load", timeout: 20_000 });
+      const file = path.join(outDir, `${project.id}-${kind}.png`);
+      await shoot(page, file, kind === "full");
+      await page.close();
+      return file;
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+export async function captureDeviceStrip(
+  url: string,
+  project: DeviceProject,
+  outDir: string,
+  section: string,
+): Promise<string[]> {
+  mkdirSync(outDir, { recursive: true });
+  return withProjectBrowser(project, async (browser) => {
+    const context = await browser.newContext(projectContext(project));
+    const files: string[] = [];
+    try {
+      const page = await context.newPage();
+      await page.goto(url, { waitUntil: "load", timeout: 20_000 });
+      await scrollStrip(page, section, outDir, files, `${project.id}-`);
+      await page.close();
+      return files;
+    } finally {
+      await context.close();
+    }
+  });
 }
 
 function templateRoot(): string {
@@ -475,7 +584,13 @@ async function shoot(page: Page, file: string, fullPage: boolean): Promise<void>
   if (!existsSync(file)) throw new Error(`Screenshot was not written: ${file}`);
 }
 
-async function scrollStrip(page: Page, section: string, outDir: string, into: string[]): Promise<void> {
+async function scrollStrip(
+  page: Page,
+  section: string,
+  outDir: string,
+  into: string[],
+  prefix = "",
+): Promise<void> {
   const locator = page.locator(section);
   if ((await locator.count()) > 0) {
     await locator.first().scrollIntoViewIfNeeded().catch(() => undefined);
@@ -494,7 +609,7 @@ async function scrollStrip(page: Page, section: string, outDir: string, into: st
       const view = globalThis as unknown as { scrollTo: (x: number, y: number) => void };
       view.scrollTo(0, y);
     }, top);
-    const file = path.join(outDir, `scroll-${name}-${frame}.png`);
+    const file = path.join(outDir, `${prefix}scroll-${name}-${frame}.png`);
     await shoot(page, file, false);
     into.push(file);
   }

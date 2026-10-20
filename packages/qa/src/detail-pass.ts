@@ -10,7 +10,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { withChromium } from "./playwright-opener.ts";
 
 export const DETAIL_AREAS = [
@@ -359,48 +359,56 @@ async function measure404(context: BrowserContext, url: string): Promise<DetailC
  */
 export async function detailChecks(url: string): Promise<DetailCheck[]> {
   assertUrl(url);
-  return withChromium(async (browser) => {
-    const context = await browser.newContext({
-      ignoreHTTPSErrors: true,
-      viewport: { width: 1440, height: 900 },
-    });
-    try {
-      const page = await context.newPage();
-      let response;
-      try {
-        response = await page.goto(url, { waitUntil: "load", timeout: 20_000 });
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "The page did not load.";
-        return DETAIL_AREAS.map((area) => row(area, false, detail));
-      }
-      if (response === null || response.status() >= 400) {
-        return DETAIL_AREAS.map((area) => row(area, false, "The page did not load."));
-      }
-      const type = await measureType(page);
-      const hover = await measureHover(page);
-      const focus = await measureFocus(page);
-      const favicon = await measureAsset(page, url, "favicon", "link[rel~='icon']", "A favicon link is missing.");
-      const og = await measureAsset(page, url, "og-image", "meta[property='og:image']", "og:image is missing.");
-      const state = await measureState(page);
-      const print = await measurePrint(page);
-      const missing = await measure404(context, url);
-      const byArea = new Map<string, DetailCheck>([
-        ["kerning", type.kerning],
-        ["optical-alignment", type.optical],
-        ["hover", hover],
-        ["focus", focus],
-        ["404", missing],
-        ["favicon", favicon],
-        ["og-image", og],
-        ["empty", state.empty],
-        ["error", state.error],
-        ["print", print],
-      ]);
-      return DETAIL_AREAS.map((area) => byArea.get(area) ?? row(area, false, "This area was not measured."));
-    } finally {
-      await context.close();
-    }
+  return withChromium((browser) => detailChecksIn(browser, url, { width: 1440, height: 900 }));
+}
+
+/** Detail pass at one device viewport. The caller owns the browser. */
+export async function detailChecksIn(
+  browser: Browser,
+  url: string,
+  viewport: { width: number; height: number },
+): Promise<DetailCheck[]> {
+  assertUrl(url);
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    viewport,
   });
+  try {
+    const page = await context.newPage();
+    let response;
+    try {
+      response = await page.goto(url, { waitUntil: "load", timeout: 20_000 });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The page did not load.";
+      return DETAIL_AREAS.map((area) => row(area, false, detail));
+    }
+    if (response === null || response.status() >= 400) {
+      return DETAIL_AREAS.map((area) => row(area, false, "The page did not load."));
+    }
+    const type = await measureType(page);
+    const hover = await measureHover(page);
+    const focus = await measureFocus(page);
+    const favicon = await measureAsset(page, url, "favicon", "link[rel~='icon']", "A favicon link is missing.");
+    const og = await measureAsset(page, url, "og-image", "meta[property='og:image']", "og:image is missing.");
+    const state = await measureState(page);
+    const print = await measurePrint(page);
+    const missing = await measure404(context, url);
+    const byArea = new Map<string, DetailCheck>([
+      ["kerning", type.kerning],
+      ["optical-alignment", type.optical],
+      ["hover", hover],
+      ["focus", focus],
+      ["404", missing],
+      ["favicon", favicon],
+      ["og-image", og],
+      ["empty", state.empty],
+      ["error", state.error],
+      ["print", print],
+    ]);
+    return DETAIL_AREAS.map((area) => byArea.get(area) ?? row(area, false, "This area was not measured."));
+  } finally {
+    await context.close();
+  }
 }
 
 function promptBody(area: DetailArea): string {
