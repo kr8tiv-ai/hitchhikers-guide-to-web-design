@@ -35,6 +35,19 @@ import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
 export { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+
+/**
+ * Idea 21. Elevate does not start while a juror-floor row is a no.
+ * The caller has already measured the page. This does not launch a browser.
+ */
+export async function runElevateAfterJurorFloor<T>(
+  floor: { ok: boolean },
+  start: () => Promise<T>,
+): Promise<{ started: boolean; value: T | null }> {
+  if (!floor.ok) return { started: false, value: null };
+  const value = await start();
+  return { started: true, value };
+}
 export type {
   ApprovedDirection,
   CombineArtifact,

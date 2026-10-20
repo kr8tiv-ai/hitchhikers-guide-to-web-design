@@ -12,7 +12,9 @@ import { TYPE_LINE_HEIGHT, TYPE_MEASURE_CH, TYPE_MIN_BODY_PX } from "./type-gate
 
 export const TEXT_CHECK_WIDTHS = [375, 390, 430, 1440] as const;
 
-const PRIMARY_MIN = 44;
+/** Primary tap target. The juror floor uses the same 44px bar. */
+export const PRIMARY_TARGET_MIN = 44;
+const PRIMARY_MIN = PRIMARY_TARGET_MIN;
 const INLINE_SPACED_MIN = 24;
 const INSET_SIDES = ["top", "right", "bottom", "left"] as const;
 
@@ -401,4 +403,73 @@ function parseBlocks(css: string): CssBlock[] {
     cursor = end;
   }
   return blocks;
+}
+
+export interface JurorMobileInput {
+  scrollWidth: number;
+  clientWidth: number;
+  controls: readonly { width: number; height: number }[];
+  textPx: readonly number[];
+  hoverOnlyControls: number;
+  videos: readonly { autoplay: boolean; muted: boolean }[];
+}
+
+export interface JurorMobileRow {
+  id: "horizontal-overflow" | "control-under-44" | "text-under-16" | "hover-only-control" | "video-autoplay-sound";
+  yes: boolean;
+  evidence: string;
+}
+
+/** Yes or no rows from mobile measurements. Evidence names Playwright. */
+export function jurorMobileEvidence(input: JurorMobileInput): {
+  overflow: JurorMobileRow;
+  control: JurorMobileRow;
+  text: JurorMobileRow;
+  hover: JurorMobileRow;
+  video: JurorMobileRow;
+} {
+  const overflow = input.scrollWidth > input.clientWidth;
+  const small = input.controls.find(
+    (control) => control.width < PRIMARY_TARGET_MIN || control.height < PRIMARY_TARGET_MIN,
+  );
+  const smallText = input.textPx.find((size) => size < TYPE_MIN_BODY_PX);
+  const hover = input.hoverOnlyControls > 0;
+  const loud = input.videos.find((video) => video.autoplay && !video.muted);
+  return {
+    overflow: {
+      id: "horizontal-overflow",
+      yes: !overflow,
+      evidence: overflow
+        ? `Playwright measured scroll width ${input.scrollWidth} against client width ${input.clientWidth}.`
+        : `Playwright measured no horizontal overflow at client width ${input.clientWidth}.`,
+    },
+    control: {
+      id: "control-under-44",
+      yes: small === undefined,
+      evidence: small === undefined
+        ? `Playwright measured no control under ${PRIMARY_TARGET_MIN}px.`
+        : `Playwright measured a control at ${small.width} by ${small.height}, under ${PRIMARY_TARGET_MIN}px.`,
+    },
+    text: {
+      id: "text-under-16",
+      yes: smallText === undefined,
+      evidence: smallText === undefined
+        ? `Playwright measured no text under ${TYPE_MIN_BODY_PX}px.`
+        : `Playwright measured text at ${smallText}px, under ${TYPE_MIN_BODY_PX}px.`,
+    },
+    hover: {
+      id: "hover-only-control",
+      yes: !hover,
+      evidence: hover
+        ? `Playwright found ${input.hoverOnlyControls} hover-only control.`
+        : "Playwright found no hover-only control.",
+    },
+    video: {
+      id: "video-autoplay-sound",
+      yes: loud === undefined,
+      evidence: loud === undefined
+        ? "Playwright found no video that autoplays with sound."
+        : "Playwright found a video that autoplays with sound.",
+    },
+  };
 }

@@ -627,3 +627,12 @@ export async function writeDetailPrompts(projectDir: string): Promise<string[]> 
   }
   return files;
 }
+
+/** Yes or no for an empty heading. Evidence names Playwright. */
+export function jurorHeadingEvidence(headings: readonly string[]): { yes: boolean; evidence: string } {
+  const empty = headings.some((heading) => heading.trim() === "");
+  return {
+    yes: !empty,
+    evidence: empty ? "Playwright found an empty heading." : "Playwright found no empty heading.",
+  };
+}

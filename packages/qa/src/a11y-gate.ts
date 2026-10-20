@@ -146,3 +146,43 @@ export function evaluateA11y(input: A11yGateInput): A11yGateResult {
     notes: [...blocking, ...minorNotes],
   };
 }
+
+export interface JurorAxeInput {
+  contrastRatio: number;
+  keyboardTrap: boolean;
+  missingFocus: boolean;
+}
+
+export interface JurorEvidenceRow {
+  id: "keyboard-trap" | "missing-focus" | "contrast-under-floor";
+  yes: boolean;
+  evidence: string;
+}
+
+/** Yes or no rows for the juror floor. Evidence names axe. */
+export function jurorAxeEvidence(input: JurorAxeInput): {
+  keyboard: JurorEvidenceRow;
+  focus: JurorEvidenceRow;
+  contrast: JurorEvidenceRow;
+} {
+  const contrastHolds = input.contrastRatio >= BODY_CONTRAST_MIN;
+  return {
+    keyboard: {
+      id: "keyboard-trap",
+      yes: !input.keyboardTrap,
+      evidence: input.keyboardTrap ? "axe found a keyboard trap." : "axe found no keyboard trap.",
+    },
+    focus: {
+      id: "missing-focus",
+      yes: !input.missingFocus,
+      evidence: input.missingFocus
+        ? "axe found a control with no focus style."
+        : "axe found a focus style on the controls.",
+    },
+    contrast: {
+      id: "contrast-under-floor",
+      yes: contrastHolds,
+      evidence: `axe measured contrast ${input.contrastRatio} against the floor of ${BODY_CONTRAST_MIN}.`,
+    },
+  };
+}

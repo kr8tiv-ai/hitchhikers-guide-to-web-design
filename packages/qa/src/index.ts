@@ -74,6 +74,11 @@ export type { CriterionScore, SelfScoreInput, SelfScoreReport, SweepMeasurement 
 export type { PaletteProportionInput, PaletteProportionResult, PaletteShare } from "./palette-proportion.ts";
 export type { NavFooterInput, NavFooterResult, NavTarget } from "./craft-gate.ts";
 export type { MenuScript, MobileDocument, MobileReport, MobileRun, TargetBox, TextSample } from "./mobile-checks.ts";
+export { PRIMARY_TARGET_MIN, jurorMobileEvidence } from "./mobile-checks.ts";
+export { jurorAxeEvidence } from "./a11y-gate.ts";
+export { jurorHeadingEvidence } from "./detail-pass.ts";
+export { JUROR_FLOOR_ROWS, measureJurorFloor } from "./juror-floor.ts";
+export type { JurorFloorReport, JurorFloorRow, JurorRow, JurorSample } from "./juror-floor.ts";
 export {
   OPACITY_KEEP_MS,
   OPACITY_KEEP_NOTE,
@@ -92,6 +97,7 @@ export {
   SCREENSHOT_FIX_MAX_ROUNDS,
   SCREENSHOT_FIX_TOP,
   judgeSectionLock,
+  runElevateAfterJurorFloor,
   runScopedSectionEdit,
   runScreenshotFixLoop,
   screenshotFixWidths,
