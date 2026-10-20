@@ -52,15 +52,19 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await page.goto(`${root}/approve`);
     await expect(page.getByRole("heading", { name: "Goal" })).toBeVisible();
     await expect(page.locator("body")).toContainText("The site helps a visitor book a visit.");
-    await expect(page.locator("[data-plan-coverage]")).toBeVisible();
+    await expect(page.locator("[data-next-action]")).toContainText("Draft the plan");
+    await expect(page.locator("[data-plan-coverage]")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Change something" })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Nothing is waiting for a yes");
     await page.reload();
     await page.getByRole("button", { name: "Approve", exact: true }).click();
-    await expect(page.locator("body")).toContainText("The build is started.");
+    await expect(page.locator("[data-plan-coverage]")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve plan", exact: true })).toBeEnabled();
+    await page.getByRole("button", { name: "Approve plan", exact: true }).click();
+    await expect(page.locator("[data-build-status]")).toContainText("The build is started.");
     await page.reload();
-    await expect(page.locator("body")).toContainText("The build is started.");
+    await expect(page.locator("[data-build-status]")).toContainText("The build is started.");
     await page.goto(`${root}/brand`);
     await expect(page.locator("body")).toContainText("Babel Fish");
     await expect(page.locator("body")).toContainText("The site helps a visitor book a visit.");
@@ -70,7 +74,8 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await expect(page.locator("body")).toContainText("Babel Fish");
     await expect(page.locator('[data-id="001"]')).toHaveCount(1);
     await page.goto(`${root}/approve`);
-    await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Approve plan", exact: true })).toHaveCount(0);
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator('[data-id="001"]')).toHaveCount(1);
   } finally {
@@ -141,7 +146,7 @@ test("an incomplete plan shows the coverage table and keeps Approve off", async 
     await page.goto(`${url.replace(/\/$/, "")}/approve`);
     await expect(page.locator("[data-plan-coverage]")).toBeVisible();
     await expect(page.locator('[data-coverage-id="REQ-PAGE-eco-building-and-food"][data-covered="no"]')).toBeVisible();
-    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Approve plan", exact: true })).toBeDisabled();
     await expect(page.locator("body")).toContainText("Approve stays off until every row is covered.");
   } finally {
     child.kill();

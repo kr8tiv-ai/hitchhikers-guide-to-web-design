@@ -6,6 +6,7 @@ import {
   getBuildRunner,
   holdInterruptedQueue,
   installLiveBuildRunner,
+  isInsideDeskRepo,
   recoverSiteBuild,
   setProjectBuildRunner,
   setBeautyRunner,
@@ -89,12 +90,26 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   if (!existsSync(projectDir) || !statSync(projectDir).isDirectory()) {
     throw new Error(`Project directory does not exist: ${projectDir}`);
   }
-  bindBuildRunner(projectDir, opts);
-  await holdInterruptedQueue(projectDir);
-  void recoverSiteBuild(projectDir);
+  const holding = isInsideDeskRepo(projectDir);
+  let runnerDir: string | null = null;
+  const bindRunner = (dir: string): void => {
+    if (runnerDir !== null && runnerDir !== path.resolve(dir)) {
+      clearProjectBuildRunner(runnerDir);
+      setSectionStillRunner(runnerDir, null);
+      setBeautyRunner(runnerDir, null);
+    }
+    bindBuildRunner(dir, opts);
+    runnerDir = path.resolve(dir);
+  };
+  if (!holding) {
+    bindRunner(projectDir);
+    await holdInterruptedQueue(projectDir);
+    void recoverSiteBuild(projectDir);
+  }
 
   const app = await createDeskApp({
     projectDir,
+    bindRunner,
     ...(opts.turnHandler === undefined ? {} : { turnHandler: opts.turnHandler }),
     ...(opts.cassetteNotice === undefined ? {} : { cassetteNotice: opts.cassetteNotice }),
     ...(opts.guideThink === undefined ? {} : { guideThink: opts.guideThink }),
@@ -138,7 +153,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   try {
     await listen(server, requestedPort);
   } catch (error: unknown) {
-    clearProjectBuildRunner(projectDir);
+    if (runnerDir !== null) clearProjectBuildRunner(runnerDir);
     app.close();
     if (errorCode(error) === "EADDRINUSE") {
       throw new Error(
@@ -150,7 +165,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
 
   const address = server.address();
   if (address === null || typeof address === "string" || address.address !== LOOPBACK) {
-    clearProjectBuildRunner(projectDir);
+    if (runnerDir !== null) clearProjectBuildRunner(runnerDir);
     app.close();
     await closeServer(server);
     throw new Error("The desk did not bind to 127.0.0.1.");
@@ -188,9 +203,11 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
     opened,
     close() {
       if (closing === null) {
-        clearProjectBuildRunner(projectDir);
-        setSectionStillRunner(projectDir, null);
-        setBeautyRunner(projectDir, null);
+        if (runnerDir !== null) {
+          clearProjectBuildRunner(runnerDir);
+          setSectionStillRunner(runnerDir, null);
+          setBeautyRunner(runnerDir, null);
+        }
         app.close();
         closing = closeServer(server);
       }

@@ -5,6 +5,7 @@
  */
 import {
   approveSiteBrief,
+  approveSitePlan,
   draftSiteBrief,
   getBuildRunner,
   hasProjectBuildRunner,
@@ -37,11 +38,12 @@ export async function runBriefCommand(
   }
   try {
     const current = readBriefDesk(project.dir);
-    const desk = approve
+    const drafted = approve
       ? await approveSiteBrief(project.dir, thinkImpl)
       : current.status === "idle"
         ? await draftSiteBrief(project.dir, thinkImpl)
         : current;
+    const desk = approve ? await approveSitePlan(project.dir) : drafted;
     const lines = [
       `status: ${desk.status}`,
       `phase: ${desk.phase}`,

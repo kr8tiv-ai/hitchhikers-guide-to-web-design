@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { DESK_REPO_REFUSAL, isInsideDeskRepo } from "@hitchhiker/engine";
 import { cassetteNotice, cassetteRefusal } from "../cassette-guard.ts";
 import { deskPreflight, spawnCommand, type CommandRunner } from "../doctor.ts";
 
@@ -133,6 +134,9 @@ export async function runApp(
   if (parsed.help) return { exitCode: 0, stdout: HELP, stderr: "" };
   const refusal = cassetteRefusal(env, argv);
   if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
+  if (argv.includes("--project") && isInsideDeskRepo(parsed.projectDir)) {
+    return { exitCode: 1, stdout: "", stderr: `${DESK_REPO_REFUSAL}\n` };
+  }
   const notice = cassetteNotice(env, argv);
 
   const serverFile = path.resolve(import.meta.dirname, "../../../app/src/server/server.ts");

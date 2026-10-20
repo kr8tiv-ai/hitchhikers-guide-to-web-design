@@ -526,6 +526,7 @@ test("Draft saved is one polite line per batch and does not shift the box", asyn
     await expect(status).toHaveAttribute("aria-atomic", "true");
     const box = page.locator("#hh-card-draft");
     await box.scrollIntoViewIfNeeded();
+    await expect(box).toBeVisible();
     const before = await box.boundingBox();
     await page.locator("#hh-card-draft").pressSequentially("Draft one", { delay: 20 });
     await expect(status).toHaveText("Draft saved");

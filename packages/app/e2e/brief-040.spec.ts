@@ -117,6 +117,10 @@ test("a fallback stays labelled, a named change lands, and Approve asks first", 
 
     await page.getByRole("checkbox", { name: "I am approving the interview fallback, not a model draft." }).check();
     await page.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Approve plan", exact: true })).toBeEnabled();
+    await expect(page.locator("body")).not.toContainText("The build is started.");
+    await page.getByRole("checkbox", { name: "I am approving the interview fallback, not a model draft." }).check();
+    await page.getByRole("button", { name: "Approve plan", exact: true }).click();
     await expect(page.locator("[data-build-status]")).toContainText("The build is started.");
     await expect(page.locator("[data-brief-fallback]")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Budget" }).locator("xpath=following-sibling::p[1]")).toContainText(

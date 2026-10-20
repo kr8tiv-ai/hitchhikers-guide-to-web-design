@@ -189,6 +189,90 @@ export function isOverusedFamily(name: string): boolean {
   return OVERUSED_DEFAULTS.some((family) => family.toLowerCase() === key);
 }
 
+export interface FontSampleDeal {
+  adjectives: string;
+  display: string;
+  body: string;
+  pair: string;
+}
+
+/**
+ * Six library pairs for the font card.
+ * An empty mood keeps the six canned lines. Mood words reorder the library.
+ * Overused defaults are never offered.
+ */
+export function dealFontSamples(mood: string): FontSampleDeal[] {
+  const canned = MOOD_TYPE_SAMPLES.map((sample) => sampleFromPair(pickType(sample.adjectives), sample.adjectives));
+  const text = mood.trim();
+  if (text === "") return canned.slice(0, 6);
+  const ranked = rankPairs(text);
+  const dealt: FontSampleDeal[] = [];
+  const seen = new Set<string>();
+  const push = (sample: FontSampleDeal): void => {
+    if (dealt.length >= 6) return;
+    if (isOverusedFamily(sample.display) || isOverusedFamily(sample.body)) return;
+    const key = `${sample.display}\n${sample.body}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    dealt.push(sample);
+  };
+  for (const pairing of ranked) {
+    const label = pairing.industry[0] ?? pairing.tone[0] ?? pairing.worlds[0] ?? "library";
+    push(sampleFromPairing(pairing, label));
+  }
+  for (const sample of canned) push(sample);
+  return dealt;
+}
+
+function sampleFromPair(pair: TypePair, adjectives: string): FontSampleDeal {
+  const display = pair.families[0] ?? "";
+  const body = pair.families[1] ?? display;
+  return {
+    adjectives,
+    display,
+    body,
+    pair: display === body || body === "" ? display : `${display} + ${body}`,
+  };
+}
+
+function sampleFromPairing(pairing: TypePairing, adjectives: string): FontSampleDeal {
+  const display = pairing.display;
+  const body = pairing.body;
+  return {
+    adjectives,
+    display,
+    body,
+    pair: display === body ? display : `${display} + ${body}`,
+  };
+}
+
+function rankPairs(answer: string): TypePairing[] {
+  const adjectives = readAdjectives(answer);
+  const worlds = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "world" && entry.value === value)));
+  const tones = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "tone" && entry.value === value)));
+  const eras = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "era" && entry.value === value)));
+  const industries = new Set(
+    adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "industry" && entry.value === value)),
+  );
+  const oneFamily = adjectives.includes("one family");
+  if (tones.has("swiss")) worlds.add("product");
+  const scored: { pairing: TypePairing; score: number }[] = [];
+  for (const pairing of TYPE_LIBRARY) {
+    if (pairing.deal !== "default") continue;
+    if (isOverusedFamily(pairing.display) || isOverusedFamily(pairing.body)) continue;
+    let score = 0;
+    for (const world of pairing.worlds) if (worlds.has(world)) score += 3;
+    for (const tone of pairing.tone) if (tones.has(tone)) score += 2;
+    for (const era of pairing.era) if (eras.has(era)) score += 2;
+    for (const industry of pairing.industry) if (industries.has(industry)) score += 2;
+    if (oneFamily && pairing.display === pairing.body) score += 4;
+    if (score <= 0) continue;
+    scored.push({ pairing, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.pairing.id - b.pairing.id);
+  return scored.map((row) => row.pairing);
+}
+
 export function pickType(answer: string | null): TypePair {
   const text = answer?.trim() ?? "";
   const adjectives = text.length === 0 ? [] : readAdjectives(text);

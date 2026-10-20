@@ -22,7 +22,7 @@ import { BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "
 import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
 import { PlanCoverageError } from "../spec/plan-coverage.ts";
-import { ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
+import { draftBriefPlan, ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
 
 export const BRIEF_BUILD_ID = "guide-entry";
@@ -69,7 +69,14 @@ interface PendingFile {
 
 const jobs = new Map<string, Promise<BriefDeskView>>();
 const approving = new Map<string, Promise<BriefDeskView>>();
+const planning = new Map<string, Promise<BriefDeskView>>();
+const planApproving = new Map<string, Promise<BriefDeskView>>();
 const revisions = new Map<string, Promise<BriefDeskView>>();
+
+/** True while approving the brief is writing the prompt files. */
+export function planDraftInFlight(projectDir: string): boolean {
+  return planning.has(path.resolve(projectDir));
+}
 
 function pendingPath(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "brief-pending.json");
@@ -276,30 +283,67 @@ async function runApprove(projectDir: string, thinkFn: typeof think, confirmFall
     writePending(projectDir, { status: "approved", draft, buildStarted: false, error: "", fallback });
   }
   const file = readPending(projectDir);
-  if (!file.buildStarted) {
+  if (file.draft !== null) {
+    const key = path.resolve(projectDir);
+    const markdown = renderSiteBrief(file.draft);
+    const drafting = draftBriefPlan(projectDir, markdown).then(() => readBriefDesk(projectDir));
+    planning.set(key, drafting);
     try {
-      await startBuild(projectDir);
+      await drafting;
     } catch (error) {
-      if (error instanceof PlanCoverageError) {
-        writePending(projectDir, {
-          status: "pending",
-          draft: file.draft,
-          buildStarted: false,
-          error: error.message,
-          fallback: file.fallback === true,
-        });
-      }
+      const message = error instanceof Error && error.message.trim() !== "" ? error.message : "The plan did not draft.";
+      writePending(projectDir, {
+        status: "pending",
+        draft: file.draft,
+        buildStarted: false,
+        error: message,
+        fallback: file.fallback === true,
+      });
       throw error;
+    } finally {
+      if (planning.get(key) === drafting) planning.delete(key);
     }
-    writePending(projectDir, {
-      status: "approved",
-      draft: file.draft,
-      buildStarted: true,
-      error: "",
-      fallback: file.fallback === true,
-    });
   }
   return readBriefDesk(projectDir);
+}
+
+async function runPlanApprove(projectDir: string): Promise<BriefDeskView> {
+  const current = readBriefDesk(projectDir);
+  if (current.buildStarted) return current;
+  const file = readPending(projectDir);
+  if (file.draft === null) throw new Error("The brief is not ready to approve.");
+  try {
+    await startBuild(projectDir);
+  } catch (error) {
+    if (error instanceof PlanCoverageError) {
+      writePending(projectDir, {
+        status: file.status === "approved" ? "approved" : "pending",
+        draft: file.draft,
+        buildStarted: false,
+        error: error.message,
+        fallback: file.fallback === true,
+      });
+    }
+    throw error;
+  }
+  writePending(projectDir, {
+    status: "approved",
+    draft: file.draft,
+    buildStarted: true,
+    error: "",
+    fallback: file.fallback === true,
+  });
+  return readBriefDesk(projectDir);
+}
+
+export function approveSitePlan(projectDir: string): Promise<BriefDeskView> {
+  const key = path.resolve(projectDir);
+  const existing = planApproving.get(key);
+  if (existing) return existing;
+  const job = runPlanApprove(projectDir);
+  planApproving.set(key, job);
+  dropJob(planApproving, key, job);
+  return job;
 }
 
 export function approveSiteBrief(

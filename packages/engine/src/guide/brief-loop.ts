@@ -23,6 +23,7 @@ import {
 import { INTERVIEW_MODEL } from "./interview-call.ts";
 import { budgetCardCopy } from "./session-state.ts";
 import { loadFacts } from "./suggest.ts";
+import { loadTree } from "../tree.ts";
 import { briefTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
 
@@ -594,12 +595,30 @@ export function recordedField(
   return { text, sourceIds };
 }
 
+let defaultSurfaceIds: Set<string> | null = null;
+
+/** Questions the desk never asks. DP-6.5 is the stored default that made the count 62. */
+function hiddenQuestionIds(): Set<string> {
+  if (defaultSurfaceIds !== null) return defaultSurfaceIds;
+  defaultSurfaceIds = new Set();
+  try {
+    const file = path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+    for (const question of loadTree(file)) {
+      if (question.surface === "default") defaultSurfaceIds.add(question.id);
+    }
+  } catch {
+    // A missing tree leaves every stored answer in the count.
+  }
+  return defaultSurfaceIds;
+}
+
 function coverageLine(facts: Facts): string {
+  const hidden = hiddenQuestionIds();
   const covered: string[] = [];
   const uncovered: string[] = [];
   const seen = new Set<string>();
   for (const answer of facts.answers) {
-    if (seen.has(answer.id)) continue;
+    if (hidden.has(answer.id) || seen.has(answer.id)) continue;
     seen.add(answer.id);
     if (SKIPPED_STATUS.has(answer.status ?? "")) uncovered.push(answer.id);
     else if (answer.value.trim() !== "") covered.push(answer.id);
@@ -652,7 +671,64 @@ function shapeBrief(brief: SiteBrief, facts: Facts, recorded: SiteBrief): SiteBr
     text = restoreListed(key, text, recorded[key]);
     next[key] = text.trim() === "" ? UNSTATED : text.trim();
   }
-  return dedupeAcross(next);
+  const shaped = dedupeAcross(next);
+  shaped.vibe = settleVibe(shaped.vibe, recorded.vibe);
+  return shaped;
+}
+
+function feelNeverList(raw: string): string[] {
+  return raw
+    .split(/,|\/|\band\b/i)
+    .map((part) => part.replace(/[.]+$/, "").trim())
+    .filter((part) => part !== "");
+}
+
+function oxfordJoin(words: readonly string[], conjunction = "and"): string {
+  if (words.length === 0) return "";
+  if (words.length === 1) return words[0] ?? "";
+  if (words.length === 2) return `${words[0]} ${conjunction} ${words[1]}`;
+  return `${words.slice(0, -1).join(", ")}, ${conjunction} ${words[words.length - 1]}`;
+}
+
+function capitalizeSentence(text: string): string {
+  if (text === "") return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Feel and Never become whole sentences. An empty slot is left out,
+ * so a line never starts with "is the test".
+ * Returns null when the text is not that pair of slots.
+ */
+export function vibeProse(raw: string): string | null {
+  if (!/Feel:|Never:/i.test(raw)) return null;
+  const feel = /Feel:\s*([^.]*)/i.exec(raw);
+  const never = /Never:\s*([^.]*)/i.exec(raw);
+  const feelWords = feel === null ? [] : feelNeverList(feel[1] ?? "");
+  const neverWords = never === null ? [] : feelNeverList(never[1] ?? "");
+  const sentences: string[] = [];
+  if (feelWords.length > 0) {
+    sentences.push(`${capitalizeSentence(oxfordJoin(feelWords))} is the test for the words, the space, and the photos.`);
+  }
+  if (neverWords.length > 0) {
+    sentences.push(`It should never feel ${oxfordJoin(neverWords, "or")}.`);
+  }
+  return sentences.join(" ");
+}
+
+function dropEmptySlotSentences(text: string): string {
+  const kept = splitSentences(text).filter((sentence) => !/^(is|are|was|were)\b/i.test(sentence.trim()));
+  return tidy(kept.join(" "));
+}
+
+function settleVibe(draft: string, recorded: string): string {
+  const fromDraft = vibeProse(draft);
+  if (fromDraft !== null) return fromDraft === "" ? UNSTATED : fromDraft;
+  const broken = /^\s*(is|are|was|were)\b/i.test(draft.trim()) || /\.\s+(is|are|was|were)\b/i.test(draft);
+  const fromRecorded = vibeProse(recorded);
+  if (broken && fromRecorded !== null && fromRecorded !== "") return fromRecorded;
+  const cleaned = dropEmptySlotSentences(draft);
+  return cleaned.trim() === "" ? UNSTATED : cleaned;
 }
 
 const LIST_RESTORE = new Set<BriefKey>(["pages", "features", "limits", "references", "cadence"]);

@@ -14,7 +14,7 @@ export function billingCardError(
   const blob = `${session.transcriptHtml ?? ""}\n${session.statusHtml ?? ""}`;
   return blob.includes(BILLING_CARD) ? BILLING_CARD : null;
 }
-import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState } from "../card.ts";
+import type { AttachChipView, CardAssumption, CardChoiceSet, CardCounts, CardState, FontSampleView } from "../card.ts";
 import {
   ANSWER_HINT,
   PLACEHOLDER_FALLBACK,
@@ -508,6 +508,10 @@ export interface SessionView {
   briefStatus?: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
   /** Set while a Guide job for this desk is still running. Reload reattaches to it. */
   guideJob?: { id: string; status: "running" } | null;
+  /** Last project-file write. The save line paints this without a reload. */
+  saveStatus?: { ok: boolean; savedAt: string | null; place: string; error: string | null } | null;
+  /** Dealt font pairs for the card on screen. */
+  fontSamples?: FontSampleView[];
 }
 
 interface SavedFileView {
@@ -668,6 +672,7 @@ export function parseSession(value: unknown): SessionView | null {
   if (value.pushback !== null && value.pushback !== undefined && typeof value.pushback !== "string") {
     return null;
   }
+  const fontSamples = parseFontSamples(value.fontSamples);
   return {
     question,
     pushback,
@@ -693,7 +698,31 @@ export function parseSession(value: unknown): SessionView | null {
     help: typeof value.help === "string" ? value.help : "",
     briefStatus: parseBriefStatus(value.briefStatus),
     guideJob: parseGuideJob(value.guideJob),
+    saveStatus: parseSaveStatus(value.saveStatus),
+    ...(fontSamples === undefined ? {} : { fontSamples }),
   };
+}
+
+function parseSaveStatus(
+  value: unknown,
+): { ok: boolean; savedAt: string | null; place: string; error: string | null } | null {
+  if (!isRecord(value)) return null;
+  const savedAt = typeof value.savedAt === "string" ? value.savedAt : null;
+  const place = typeof value.place === "string" ? value.place : "";
+  const error = typeof value.error === "string" ? value.error : null;
+  return { ok: value.ok === true, savedAt, place, error };
+}
+
+function parseFontSamples(value: unknown): FontSampleView[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const samples: FontSampleView[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    if (typeof item.adjectives !== "string" || typeof item.display !== "string" || typeof item.pair !== "string") continue;
+    const body = typeof item.body === "string" ? item.body : item.display;
+    samples.push({ adjectives: item.adjectives, display: item.display, body, pair: item.pair });
+  }
+  return samples.length > 0 ? samples : undefined;
 }
 
 function parseGuideJob(value: unknown): { id: string; status: "running" } | null {
@@ -4081,6 +4110,7 @@ export function mountDesk(env: DeskEnv): () => void {
         view.briefStatus === "revising"
           ? { brief: { status: view.briefStatus } }
           : {}),
+        ...(view.fontSamples !== undefined ? { fontSamples: view.fontSamples } : {}),
       };
       const engine = activeEngine();
       const card = reshapeDeskCard(
@@ -4116,6 +4146,8 @@ export function mountDesk(env: DeskEnv): () => void {
       progress.textContent = `Question ${view.counts.index} of ${view.counts.total}`;
     }
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
+    paintSaveStatus(view?.saveStatus ?? null);
+    settleFontSamples();
     applyEdits();
     ensureMotion(env.document, view?.question?.id);
     syncGuideLive();
@@ -4123,6 +4155,64 @@ export function mountDesk(env: DeskEnv): () => void {
     if (returnToDraft) focusField();
     ensureWriter();
     maybeDraftBrief();
+  }
+
+  function formatSavedAt(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    const now = new Date();
+    const hm = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(date);
+    const same =
+      date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate();
+    if (same) return `Today ${hm}`;
+    const day = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+    return `${day} ${hm}`;
+  }
+
+  function paintSaveStatus(status: SessionView["saveStatus"]): void {
+    if (status === null || status === undefined) return;
+    const node = env.document.querySelector("[data-save-status]");
+    if (node === null) return;
+    node.setAttribute("aria-live", "polite");
+    if (status.ok === true && status.savedAt !== null && status.savedAt !== "") {
+      const place = status.place === "" ? "" : ` · ${escapeHtml(status.place)}`;
+      node.innerHTML = `Saved · <time datetime="${escapeHtml(status.savedAt)}" data-local-time>${escapeHtml(formatSavedAt(status.savedAt))}</time>${place}`;
+      return;
+    }
+    if (status.ok !== true && status.error !== null && status.error !== "") {
+      node.textContent = `Not saved · ${status.error}`;
+    }
+  }
+
+  function settleFontSamples(): void {
+    const root = region();
+    if (root === null) return;
+    const host = root as DeskElement & { querySelectorAll?: (selector: string) => ArrayLike<DeskElement> };
+    const list = host.querySelectorAll?.("[data-font-sample]");
+    if (list === undefined) return;
+    const fonts = (env.document as { fonts?: { check?: (font: string) => boolean } }).fonts;
+    for (let index = 0; index < list.length; index += 1) {
+      const button = list[index];
+      if (button === undefined) continue;
+      const display = button.getAttribute("data-display") ?? "";
+      const loaded = display !== "" && fonts?.check?.(`700 16px "${display}"`) === true;
+      if (loaded) {
+        button.setAttribute("data-font-live", "true");
+        button.removeAttribute("data-font-fallback");
+        continue;
+      }
+      button.removeAttribute("data-font-live");
+    }
   }
 
   function speechReady(): boolean {

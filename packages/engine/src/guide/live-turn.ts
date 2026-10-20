@@ -580,7 +580,15 @@ function promptContext(s: GuideSession, question: Question): string {
       state,
       question.id,
     );
-    if (question.id === "DP-5.2") ask = gateQuestion(question, state, questions).ask;
+    if (
+      question.id === "DP-5.2" ||
+      question.id === "DP-1.1" ||
+      question.id === "DP-1.2" ||
+      question.id === "DP-4.3"
+    ) {
+      const gate = gateQuestion(question, state, questions);
+      if (question.id === "DP-5.2" || gate.action === "confirm") ask = gate.ask;
+    }
     return `${sessionBlock(state)}\nQuestion to ask: ${safePromptLine(ask)}`;
   } catch {
     return "";

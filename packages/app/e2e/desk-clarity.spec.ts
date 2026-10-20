@@ -80,7 +80,9 @@ test.describe("desk clarity", () => {
       expect(restart!.y).toBeGreaterThanOrEqual(0);
       expect(restart!.y + restart!.height).toBeLessThanOrEqual(height);
       if (width === 375) {
-        const composer = await page.locator(".hh-qcard__composer").boundingBox();
+        const composerLocator = page.locator(".hh-qcard__composer");
+        await expect(composerLocator).toBeVisible();
+        const composer = await composerLocator.boundingBox();
         expect(composer, "composer at 375").not.toBeNull();
         expect(ask!.y + ask!.height).toBeLessThanOrEqual(composer!.y + 1);
         expect(restart!.y + restart!.height).toBeLessThanOrEqual(composer!.y + 1);

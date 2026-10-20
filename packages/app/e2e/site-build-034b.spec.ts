@@ -145,7 +145,13 @@ function pauseAfter(queue: unknown): string {
 async function approve(page: Page, url: string): Promise<void> {
   const root = rootOf(url);
   await page.goto(`${root}/approve`);
+  const box = page.locator('input[name="confirmFallback"]');
+  if (await box.count()) await box.check();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
+  const plan = page.getByRole("button", { name: "Approve plan", exact: true });
+  await expect(plan).toBeEnabled();
+  if (await box.count()) await box.check();
+  await plan.click();
 }
 
 async function spawnIds(projectDir: string): Promise<string[]> {

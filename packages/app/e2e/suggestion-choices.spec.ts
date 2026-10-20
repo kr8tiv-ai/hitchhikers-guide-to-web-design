@@ -259,7 +259,10 @@ for (const viewport of VIEWPORTS) {
       await expect(notice).toContainText("The suggestion did not save.");
       await expect(notice).not.toHaveAttribute("role", "alert");
       await expect(page.locator('[data-region="question"] .hh-error')).toHaveCount(0);
-      const fieldBox = await page.locator("#hh-card-draft").boundingBox();
+      const field = page.locator("#hh-card-draft");
+      await expect(field).toBeVisible();
+      await expect(notice).toBeVisible();
+      const fieldBox = await field.boundingBox();
       const noticeBox = await notice.boundingBox();
       expect(fieldBox).not.toBeNull();
       expect(noticeBox).not.toBeNull();

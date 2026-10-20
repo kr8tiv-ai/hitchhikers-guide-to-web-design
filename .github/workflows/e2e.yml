@@ -45,10 +45,33 @@ jobs:
       - name: Install Playwright Chromium
         shell: bash
         run: |
-          if pnpm --filter @hitchhiker/app exec playwright --version; then
-            pnpm --filter @hitchhiker/app exec playwright install --with-deps chromium
-          else
+          if ! pnpm --filter @hitchhiker/app exec playwright --version; then
             echo "::warning::Playwright is not installed in @hitchhiker/app yet. Skipping the Chromium download."
+            exit 0
+          fi
+          # A third-party apt source must not fail this job. packages.microsoft.com
+          # has returned 403 during `playwright install --with-deps` and aborted apt.
+          if [ -d /etc/apt/sources.list.d ]; then
+            for list in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+              [ -f "$list" ] || continue
+              if grep -q 'packages.microsoft.com' "$list"; then
+                sudo mv "$list" "${list}.disabled"
+                echo "Disabled apt source ${list} (packages.microsoft.com)."
+              fi
+            done
+          fi
+          ok=0
+          for attempt in 1 2 3; do
+            if pnpm --filter @hitchhiker/app exec playwright install --with-deps chromium; then
+              ok=1
+              break
+            fi
+            echo "Playwright Chromium install attempt ${attempt} failed."
+            sleep $((attempt * 5))
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Playwright Chromium did not install after 3 attempts. A third-party apt source must not be required. Check the install log above."
+            exit 1
           fi
 
       - name: End-to-end tests

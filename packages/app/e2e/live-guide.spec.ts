@@ -123,10 +123,11 @@ async function roundTripGallery(page: Page, width: number, height: number): Prom
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", "/gallery");
   await expect(link).toHaveText("Open the gallery");
-  await link.focus();
-  await expect(link).toBeFocused();
-  const ring = await link.evaluate((node) => getComputedStyle(node).outlineStyle);
-  expect(ring).not.toBe("none");
+  await expect(link).toBeVisible();
+  await expect.poll(async () => {
+    await link.focus();
+    return link.evaluate((node) => (node === document.activeElement ? getComputedStyle(node).outlineStyle : "unfocused"));
+  }).toBe("solid");
   await link.click();
   await expect(page).toHaveURL(/\/gallery$/);
   await page.locator("nav a[href='/']").click();

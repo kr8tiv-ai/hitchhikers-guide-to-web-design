@@ -421,6 +421,20 @@ export function gateQuestion(
     const loved = state.answers.find((answer) => answer.id === "DP-5.1")?.text ?? "";
     return { action: "ask", ask: galleryWalkAsk(loved, question.ask) };
   }
+  if (question.id === "DP-1.1") {
+    const logo = logoProseConfirm(state);
+    if (logo !== null) return logo;
+  }
+  if (question.id === "DP-1.2") {
+    const colors = colorsFromEarlier(state);
+    if (colors !== null) {
+      return { action: "confirm", ask: `You can keep the five from the hero (${colors}). Change?` };
+    }
+  }
+  if (question.id === "DP-4.3") {
+    const blog = blogAlreadyCovered(state);
+    if (blog !== null) return blog;
+  }
   const topic = topicFor(question);
   if (topic === undefined) return { action: "ask", ask: question.ask };
   const decision = state.decided.find((item) => item.topic === topic);
@@ -432,6 +446,53 @@ export function gateQuestion(
     return { action: "confirm", ask: confirmAsk(topic, value) };
   }
   return { action: "skip", ask: question.ask };
+}
+
+/** A logo named in an earlier answer, before a file is in the logo slot. */
+function logoProseConfirm(state: SessionState): GateResult | null {
+  if (state.uploads.some((file) => file.role === "logo")) return null;
+  const blob = state.answers
+    .filter((answer) => answer.id !== "DP-1.1")
+    .map((answer) => answer.text)
+    .join("\n");
+  if (blob.trim() === "") return null;
+  const file = /([\w.-]*logo[\w.-]*\.(?:png|jpe?g|webp|gif|svg|pdf))/i.exec(blob);
+  const denial = /\b(?:no logo|don'?t have a logo|do not have a logo|without a logo)\b/i.test(blob);
+  const yes = /\b(?:logo file|have a logo|logo attached|yes:\s*logo|\blogo,)\b/i.test(blob);
+  if (file !== null && file[1] !== undefined && !(denial && !yes)) {
+    return {
+      action: "confirm",
+      ask: `You said you have a logo (${file[1]}). Drop the file here, or tell us if you want a variant.`,
+    };
+  }
+  if (yes && !denial) {
+    return {
+      action: "confirm",
+      ask: "You said you have a logo. Drop the logo you described, or tell us if you want a variant.",
+    };
+  }
+  return null;
+}
+
+function colorsFromEarlier(state: SessionState): string | null {
+  for (const answer of state.answers) {
+    if (answer.id === "DP-1.2") continue;
+    const match = /colors?\s+from\s+[^:]+:\s*([^.]+)/i.exec(answer.text);
+    const list = match?.[1]?.trim() ?? "";
+    if (list !== "") return list;
+  }
+  return null;
+}
+
+function blogAlreadyCovered(state: SessionState): GateResult | null {
+  const prior = state.answers.find((answer) => answer.id === "DP-3.5");
+  if (prior === undefined || !/\bblog\b/i.test(prior.text)) return null;
+  const flat = prior.text.replace(/\s+/g, " ").trim();
+  const short = flat.length > 120 ? `${flat.slice(0, 117)}...` : flat;
+  return {
+    action: "confirm",
+    ask: `You already covered the blog (${short}). Keep that, or change it?`,
+  };
 }
 
 export function confirmAsk(topic: string, value: string): string {

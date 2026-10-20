@@ -24,13 +24,23 @@ test("DP-9.3 shows the question as the heading and the recap below", async ({ pa
     await page.goto(url);
     await page.locator('[data-region="question"][data-live="true"]').waitFor();
     await expect(page.locator("[data-card-kicker]")).toContainText("DP-9.2");
-    await page.locator("#hh-card-draft").fill("Hostinger, and we already own paradisefound.farm.");
-    await page.locator('[data-region="question"] [data-action="answer"]').click();
+    const answer = page.locator('[data-region="question"] [data-action="answer"]');
+    await expect(answer).toBeVisible();
+    await expect(async () => {
+      const kicker = page.locator("[data-card-kicker]");
+      if ((await kicker.innerText()).includes("DP-9.2")) {
+        await page.locator("#hh-card-draft").fill("Hostinger, and we already own paradisefound.farm.");
+        await answer.click();
+      }
+      await expect(kicker).toContainText("DP-9.3", { timeout: 1_500 });
+    }).toPass({ timeout: 20_000 });
     const heading = page.locator("#hh-card-ask");
     await expect(heading).toHaveText("Who will look after the site once it is live?");
     await expect(page.locator("[data-card-kicker]")).toContainText("DP-9.3");
     const help = page.locator("[data-card-help]");
     await expect(help).toContainText("changes a price");
+    await expect(heading).toBeVisible();
+    await expect(help).toBeVisible();
     const headingBox = await heading.boundingBox();
     const helpBox = await help.boundingBox();
     expect(headingBox).not.toBeNull();

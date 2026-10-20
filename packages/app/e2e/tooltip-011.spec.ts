@@ -92,8 +92,11 @@ async function openSuggestTip(page: Page): Promise<void> {
 }
 
 async function expectNoOverlap(page: Page, selector: string): Promise<void> {
+  const targetLocator = page.locator(selector);
+  await expect(openTip(page)).toBeVisible();
+  await expect(targetLocator).toBeVisible();
   const tip = await openTip(page).boundingBox();
-  const target = await page.locator(selector).boundingBox();
+  const target = await targetLocator.boundingBox();
   expect(tip, selector).not.toBeNull();
   expect(target, selector).not.toBeNull();
   expect(boxesOverlap(tip!, target!), `${selector} overlaps the tooltip`).toBe(false);

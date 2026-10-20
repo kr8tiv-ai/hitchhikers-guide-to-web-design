@@ -36,7 +36,9 @@ async function openAndCheck(page: Page, url: string, viewport: { width: number; 
 }
 
 async function expectQuestionInView(page: Page, height: number): Promise<void> {
-  const box = await page.locator("#hh-card-ask").boundingBox();
+  const heading = page.locator("#hh-card-ask");
+  await expect(heading).toBeVisible();
+  const box = await heading.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y).toBeGreaterThanOrEqual(0);
   expect(box!.y).toBeLessThan(height);

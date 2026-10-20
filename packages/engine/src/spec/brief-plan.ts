@@ -138,12 +138,18 @@ function looksLikeTitle(text: string): boolean {
   return true;
 }
 
+function stripQuotes(value: string): string {
+  return value.replace(/["'“”‘’«»]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function canonicalTitle(raw: string): string | null {
-  const stripped = raw
-    .replace(/^Pages:\s*/i, "")
-    .replace(/^(and|or)\s+/i, "")
-    .trim()
-    .replace(/\.+$/, "");
+  const stripped = stripQuotes(
+    raw
+      .replace(/^Pages:\s*/i, "")
+      .replace(/^(and|or)\s+/i, "")
+      .trim()
+      .replace(/\.+$/, ""),
+  );
   const lower = stripped.toLowerCase();
   if (lower === "a small blog" || lower === "small blog" || lower === "blog") return "Blog";
   if (lower === "privacy" || lower === "privacy policy") return "Privacy";
@@ -229,7 +235,7 @@ function explicitFeatures(body: string): string[] {
   const parts = splitTopLevel(text.replace(/\.$/, ""), sep);
   const names: string[] = [];
   for (const part of parts) {
-    const name = part.replace(/\s+/g, " ").trim().replace(/[.]+$/, "").replace(/\//g, "-");
+    const name = stripQuotes(part.replace(/\s+/g, " ").trim().replace(/[.]+$/, "").replace(/\//g, "-"));
     if (name.length === 0 || name.length > 80) continue;
     if (/^(no|none|not)\b/i.test(name)) continue;
     if (name.includes("!") || name.includes("\\") || name.includes("..")) continue;
@@ -319,8 +325,11 @@ function applyNamedSections(markdown: string, pages: PlannedPage[]): PlannedPage
 }
 
 function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage[]; parsed: boolean } {
-  const lines = [...corpus.matchAll(/Pages:\s*[^\n]+/gi)].map((match) => match[0] ?? "");
-  const sources = lines.length > 0 ? lines : [sectionBody(markdown, "Pages")];
+  // Page names come from the Pages section only. A "Pages:" line in Limits,
+  // Vibe, or an answer is prose, not a page list.
+  const pagesBody = sectionBody(markdown, "Pages");
+  const lines = [...pagesBody.matchAll(/Pages:\s*[^\n]+/gi)].map((match) => match[0] ?? "");
+  const sources = lines.length > 0 ? lines : [pagesBody];
   const found: PlannedPage[] = [];
   for (const source of sources) {
     if (source.trim() === "") continue;
@@ -330,6 +339,7 @@ function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage
     }
   }
   const parsed = found.length > 0;
+  // Named additions, not a comma split of the surrounding prose.
   if (/\bprivacy and terms\b/i.test(corpus)) {
     pushPage(found, "Privacy");
     pushPage(found, "Terms");

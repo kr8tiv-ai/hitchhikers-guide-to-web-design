@@ -573,18 +573,47 @@ export function projectPlanCoverage(projectDir: string, briefMarkdown: string): 
   const answers = briefAnswers(projectDir);
   const planned = planFromBrief(briefMarkdown, answers);
   const existing = readPromptTasks(projectDir);
-  let tasks: CoverageTask[] = existing;
-  if (existing.length === 0) {
-    try {
-      const generated = generateBriefPlan(briefMarkdown, "astro", answers);
-      tasks = generated.prompts.map((prompt) => ({ requirements: prompt.requirements, promptId: prompt.id }));
-    } catch {
-      tasks = [];
-    }
-  }
-  const rows = planCoverageRows(planned.requirements, tasks);
+  // No prompt files yet: the brief is not a plan, so there is nothing to cover.
+  if (existing.length === 0) return { rows: [], ok: false, uncovered: [], message: "" };
+  const rows = planCoverageRows(planned.requirements, existing);
   const uncovered = rows.filter((row) => !row.covered).map((row) => ({ id: row.id, label: row.label }));
   return { rows, ok: uncovered.length === 0, uncovered, message: planCoverageMessage(uncovered) };
+}
+
+/** Write the prompt queue from the brief. Does not start the build and does not write DESIGN.md. */
+export async function draftBriefPlan(projectDir: string, briefMarkdown: string): Promise<string[]> {
+  const existing = readPromptTasks(projectDir);
+  if (existing.length > 0) {
+    return existing
+      .map((task) => task.promptId)
+      .filter((id): id is string => typeof id === "string" && id !== "");
+  }
+  const answers = briefAnswers(projectDir);
+  const planned = planFromBrief(briefMarkdown, answers);
+  const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
+  writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
+  writeBrandKit(projectDir, answers);
+  writeMotionModule(
+    projectDir,
+    briefMarkdown,
+    answers,
+    planned.pages.flatMap((page) => page.sections),
+  );
+  const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
+  const library = await attachDesignSelection(readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
+  const dir = path.join(projectDir, ".hitchhiker", "prompts");
+  mkdirSync(dir, { recursive: true });
+  const ids: string[] = [];
+  for (const prompt of prompts) {
+    writeFileSync(
+      path.join(dir, `${prompt.id}.md`),
+      renderPrompt(prompt, briefMarkdown, packet, projectDir, library),
+      "utf8",
+    );
+    ids.push(prompt.id);
+  }
+  await writeSweepArtifacts(projectDir, briefMarkdown);
+  return ids;
 }
 
 async function mergeBuildQueue(projectDir: string, ids: readonly string[]): Promise<void> {

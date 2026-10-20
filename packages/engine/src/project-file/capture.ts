@@ -7,8 +7,9 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { loadConfig } from "../config.ts";
 import { loadState } from "../state.ts";
-import { questionsForDepth, loadTree, type DepthName } from "../tree.ts";
+import { questionsToAsk, loadTree, type DepthName } from "../tree.ts";
 import { readGitRefs } from "./git-refs.ts";
 import {
   APP_NAME,
@@ -265,7 +266,7 @@ function questionPlace(
 ): { index: number | null; total: number | null; currentQuestionId: string | null } {
   const currentQuestionId = promptId.startsWith("interview:") ? promptId.slice("interview:".length) : null;
   try {
-    const questions = questionsForDepth(loadTree(treePath(projectDir)), readDepth(settings));
+    const questions = questionsToAsk(loadTree(treePath(projectDir)), readDepth(settings));
     const total = questions.length;
     if (currentQuestionId === null) return { index: null, total, currentQuestionId: null };
     if (currentQuestionId === "done") return { index: total, total, currentQuestionId: "done" };
@@ -273,6 +274,28 @@ function questionPlace(
     return { index: at >= 0 ? at + 1 : null, total, currentQuestionId };
   } catch {
     return { index: null, total: null, currentQuestionId };
+  }
+}
+
+/**
+ * The same count the desk card uses (`questionsToAsk`, which drops surface:default).
+ * A stored "question N of 62" from the older depth list is not shown again.
+ */
+export function interviewProgressLabel(projectDir: string): string | null {
+  try {
+    const depth = loadConfig(projectDir).interviewDepth;
+    const questions = questionsToAsk(loadTree(treePath(projectDir)), depth);
+    const total = questions.length;
+    if (total < 1) return null;
+    const promptId = loadState(projectDir)?.promptId ?? "";
+    const current = promptId.startsWith("interview:") ? promptId.slice("interview:".length) : "";
+    if (current === "" ) return `question 1 of ${total}`;
+    if (current === "done") return `question ${total} of ${total}`;
+    const at = questions.findIndex((question) => question.id === current);
+    if (at < 0) return `question 1 of ${total}`;
+    return `question ${at + 1} of ${total}`;
+  } catch {
+    return null;
   }
 }
 

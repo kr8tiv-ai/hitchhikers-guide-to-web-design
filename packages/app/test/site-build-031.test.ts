@@ -80,6 +80,29 @@ function tokenFrom(html: string): string {
   return matched[1];
 }
 
+/** Brief approval drafts the plan. Plan approval is the click that starts the runner. */
+async function approveBriefThenPlan(port: number, token: string): Promise<void> {
+  const drafted = await raw(
+    port,
+    "POST",
+    "/approve",
+    { "content-type": "application/x-www-form-urlencoded" },
+    `csrf=${token}&action=approve`,
+  );
+  assert.equal(drafted.status, 303);
+  const page = await raw(port, "GET", "/approve");
+  assert.match(page.body, /Approve plan/);
+  assert.equal(page.body.includes('value="approve" disabled'), false);
+  const started = await raw(
+    port,
+    "POST",
+    "/approve",
+    { "content-type": "application/x-www-form-urlencoded" },
+    `csrf=${token}&action=approve`,
+  );
+  assert.equal(started.status, 303);
+}
+
 function guideThink(): (req: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>> {
   return async (req) => {
     if (req.task === "brief-draft" || req.task === "brief-revise") {
@@ -118,14 +141,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
     const home = await raw(handle.port, "GET", "/approve");
     const token = tokenFrom(home.body);
-    const yes = await raw(
-      handle.port,
-      "POST",
-      "/approve",
-      { "content-type": "application/x-www-form-urlencoded" },
-      `csrf=${token}&action=approve`,
-    );
-    assert.equal(yes.status, 303);
+    await approveBriefThenPlan(handle.port, token);
     let progress = "";
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const next = await raw(handle.port, "GET", "/api/drive/progress");
@@ -247,14 +263,7 @@ test("a failing stub shows the failure and Retry starts the same prompt again", 
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
     const home = await raw(handle.port, "GET", "/approve");
     const token = tokenFrom(home.body);
-    const yes = await raw(
-      handle.port,
-      "POST",
-      "/approve",
-      { "content-type": "application/x-www-form-urlencoded" },
-      `csrf=${token}&action=approve`,
-    );
-    assert.equal(yes.status, 303);
+    await approveBriefThenPlan(handle.port, token);
     let page = "";
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const next = await raw(handle.port, "GET", "/hh-dashboard");

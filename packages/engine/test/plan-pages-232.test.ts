@@ -50,7 +50,7 @@ const PROJECT4 = `# Site Brief
 
 ## Pages
 
-${CUT_PAGES}
+Pages: Home; Farms (grid plus map, filters, a detail page per farm with gallery, specs, map and prefilled inquiry); Live on the Land (caretaker program with sign-up form); How Buying Works (steps with independent lawyers, glossary: folio real, plano catastrado, escritura, ZMT); Eco-Building and Food; About; Contact; a small blog; privacy; terms.
 
 ## Features
 
@@ -211,8 +211,8 @@ test("an existing plan that misses pages is left on disk", async () => {
       () => prepareSiteBuild(dir, `# Site Brief\n\n## Pages\n\n${CUT_PAGES}\n`),
       (error: unknown) => {
         assert.ok(error instanceof PlanCoverageError);
-        assert.match(error.message, /Eco-Building and Food/);
-        assert.ok(error.uncovered.some((item) => item.id === "REQ-PAGE-blog" || item.label.includes("Eco-Building")));
+        assert.match(error.message, /Farms/);
+        assert.ok(error.uncovered.some((item) => item.id === "REQ-PAGE-farms"));
         return true;
       },
     );

@@ -55,7 +55,7 @@ test("the plan caption and the count line use the same rows", () => {
     { id: "REQ-PAGE-home", label: "Home at /", promptIds: ["001"], covered: true },
     { id: "REQ-FEAT-contact-form", label: "contact form", promptIds: [], covered: false },
   ];
-  const html = approveMain("token", desk(), "", { rows, message: "" });
+  const html = approveMain("token", desk(), "", { rows, message: "" }, "", "", "plan");
   const count = "Plan coverage: 1 of 2 pages and features covered";
   assert.equal(html.split(count).length - 1, 2);
   assert.match(html, new RegExp(`<caption>${count}</caption>`));

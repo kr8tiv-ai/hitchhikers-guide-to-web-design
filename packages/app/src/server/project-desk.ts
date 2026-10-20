@@ -3,13 +3,21 @@
  * The same saveProjectFile call as `hh save`. Remove drops the index row only.
  */
 
+import { existsSync, statSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { escapeHtml } from "../card.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { SAMPLE_LABEL, sampleProjectFile } from "../sample.ts";
+import { formatSavedAt } from "../save-line.ts";
 import {
+  createSiteProject,
+  defaultProjectDir,
   fileExists,
   interviewEffort,
+  interviewProgressLabel,
+  isInsideDeskRepo,
   loadConfig,
   loadProjectFile,
   loadState,
@@ -45,6 +53,7 @@ export type ProjectJsonBody = {
 
 export type ProjectPostResult =
   | { type: "redirect"; location?: string }
+  | { type: "switch"; projectDir: string }
   | { type: "html"; status: number; html: string }
   | { type: "json"; status: number; body: ProjectJsonBody };
 
@@ -85,9 +94,31 @@ function effortControl(projectDir: string): string {
 }
 
 function savedStamp(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return iso;
+  return formatSavedAt(iso);
+}
+
+/** Where new site folders go. End-to-end runs stay inside the temp project. */
+function sitesRoot(): string {
+  const e2e = process.env.HH_E2E_PROJECT?.trim() ?? "";
+  if (e2e !== "") return path.resolve(e2e);
+  return os.homedir();
+}
+
+/**
+ * Home index for a new project.
+ * While the desk is holding its own repo, do not use that repo's test home.
+ */
+function indexHome(projectDir: string): string {
+  const fromEnv = process.env.HH_PROJECT_HOME?.trim() ?? "";
+  if (fromEnv !== "") return path.resolve(fromEnv);
+  if (!isInsideDeskRepo(projectDir)) return projectHome(projectDir);
+  const e2e = process.env.HH_E2E_PROJECT?.trim() ?? "";
+  if (e2e !== "") return path.join(path.resolve(e2e), ".hh-save-home");
+  return os.homedir();
+}
+
+function absoluteInsideRepo(dir: string): boolean {
+  return path.isAbsolute(dir) && isInsideDeskRepo(dir);
 }
 
 function hidden(token: string, name: string, value: string): string {
@@ -144,16 +175,82 @@ function choicePage(token: string, filePath: string): string {
   );
 }
 
-export async function projectChrome(projectDir: string, token: string, firstScreen: boolean): Promise<string> {
-  const home = projectHome(projectDir);
-  const notice = await readSaveNotice(projectDir, home).catch(() => null);
+function rowProgress(row: RecentProject, missing: boolean): string {
+  if (missing) return "Missing";
+  if (path.isAbsolute(row.sourceDir) && existsSync(row.sourceDir)) {
+    const label = interviewProgressLabel(row.sourceDir);
+    if (label !== null) return label;
+  }
+  return row.progress;
+}
+
+function resumeItems(rows: readonly RecentProject[], token: string): string {
+  return rows
+    .map((row) => {
+      const missing = !fileExists(row.filePath);
+      const when = savedStamp(row.savedAt);
+      const state = escapeHtml(rowProgress(row, missing));
+      const remove = missing
+        ? `<form method="post" action="/api/project/remove">${hidden(token, "path", row.filePath)}<button class="hh-btn hh-btn--ghost" type="submit" data-tip="Drops this missing project from the list. The file is already gone.">Remove</button></form>`
+        : "";
+      const open = missing
+        ? `<p class="hh-title">${escapeHtml(row.name)}</p>`
+        : `<form method="post" action="/api/project/open" class="hh-save-open">${hidden(token, "path", row.filePath)}<button class="hh-btn hh-btn--secondary" type="submit" aria-label="Open ${escapeHtml(row.name)}">${escapeHtml(row.name)}</button></form>`;
+      return `<li class="hh-save-resume__row"${missing ? ' data-missing="true"' : ""}>
+        ${open}
+        <p class="hh-small">${escapeHtml(when)} · ${state} · ${escapeHtml(locationLabel(row.filePath))}</p>
+        ${remove}
+      </li>`;
+    })
+    .join("");
+}
+
+function newProjectFields(token: string, openForm: boolean): string {
+  const name = "New site";
+  const folder = defaultProjectDir(name, sitesRoot());
+  const hiddenOpen = openForm ? " open" : "";
+  return `<details class="hh-project__new"${hiddenOpen}>
+      <summary class="hh-btn hh-btn--secondary" role="button" data-tip="Starts a site project in its own folder.">New project</summary>
+      <form method="post" action="/api/project/new" class="hh-save-open" data-new-project>
+        <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+        <label class="hh-small" for="hh-new-name">Project name</label>
+        <input id="hh-new-name" name="name" type="text" value="${escapeHtml(name)}" autocomplete="off" data-tip="The name of the new site project." />
+        <label class="hh-small" for="hh-new-dir">Folder</label>
+        <input id="hh-new-dir" name="dir" type="text" value="${escapeHtml(folder)}" autocomplete="off" data-tip="Where the project folder will be created." />
+        <p class="hh-small" data-new-error hidden></p>
+        <button class="hh-btn hh-btn--secondary" type="submit">Create project</button>
+      </form>
+    </details>`;
+}
+
+function openProjectForm(token: string): string {
+  return `<form method="post" action="/api/project/open" class="hh-save-open" data-open-project>
+      <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
+      <label class="hh-small" for="hh-open-file">Project file path</label>
+      <input id="hh-open-file" name="path" type="text" autocomplete="off" data-tip="Path of a project folder or a project file on this machine." />
+      <p class="hh-small" data-open-error hidden></p>
+      <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Opens a project folder or a project file. The interview switches to that project.">Open project folder</button>
+    </form>`;
+}
+
+export async function projectChrome(
+  projectDir: string,
+  token: string,
+  firstScreen: boolean,
+  flash = "",
+): Promise<string> {
+  const holding = isInsideDeskRepo(projectDir);
+  const home = holding ? indexHome(projectDir) : projectHome(projectDir);
+  const notice = holding ? null : await readSaveNotice(projectDir, home).catch(() => null);
   const rows = await readRecentProjects(home).catch(() => [] as RecentProject[]);
-  const mine = rows.find((row) => row.sourceDir === projectDir);
+  const mine = holding ? undefined : rows.find((row) => row.sourceDir === projectDir);
   const filePath = notice?.filePath ?? mine?.filePath ?? null;
   const savedAt = notice?.ok === true ? notice.savedAt : mine?.savedAt ?? null;
   const statusTip = "Where the desk is right now.";
   let line: string;
-  if (notice !== null && notice.ok === false) {
+  if (holding) {
+    line = `<p class="hh-small" data-save-status data-tip="${statusTip}">No project open yet.</p>`;
+  } else if (notice !== null && notice.ok === false) {
     const reason = notice.reason ?? "The last save did not finish.";
     line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · ${escapeHtml(reason)}</p>`;
   } else if (filePath !== null && savedAt !== null) {
@@ -163,53 +260,40 @@ export async function projectChrome(projectDir: string, token: string, firstScre
   } else {
     line = `<p class="hh-small" data-save-status data-tip="${statusTip}">Not saved · No save yet</p>`;
   }
-  const prompt = mine === undefined ? "" : "";
+  const prompt = "";
   let resumePrompt = "";
-  if (filePath !== null && fileExists(filePath)) {
+  if (!holding && filePath !== null && fileExists(filePath)) {
     const loaded = await loadProjectFile(filePath, { liveDir: projectDir }).catch(() => null);
     const text = loaded?.file?.resumePrompt ?? "";
     if (text.length > 0) {
       resumePrompt = `<button class="hh-btn hh-btn--ghost" type="button" data-copy="${escapeHtml(text)}" data-tip="Copies the resume prompt for this project.">Copy resume prompt</button>`;
     }
   }
-  const saveForm = `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit" data-tip="Writes one project file on this machine. The interview stays where it is.">Save project</button></form>`;
-  const name = `<p class="hh-project__name">${escapeHtml(path.basename(projectDir))}</p>`;
-  const effort = effortControl(projectDir);
-  const bar = `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${effort}${saveForm}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
-  if (!firstScreen) return bar;
-  const items = rows
-    .map((row) => {
-      const missing = !fileExists(row.filePath);
-      const when = savedStamp(row.savedAt);
-      const state = missing ? "Missing" : escapeHtml(row.progress);
-      const remove = missing
-        ? `<form method="post" action="/api/project/remove">${hidden(token, "path", row.filePath)}<button class="hh-btn hh-btn--ghost" type="submit" data-tip="Drops this missing project from the list. The file is already gone.">Remove</button></form>`
-        : "";
-      return `<li class="hh-save-resume__row"${missing ? ' data-missing="true"' : ""}>
-        <p class="hh-title">${escapeHtml(row.name)}</p>
-        <p class="hh-small">${escapeHtml(when)} · ${state} · ${escapeHtml(locationLabel(row.filePath))}</p>
-        ${remove}
-      </li>`;
-    })
-    .join("");
+  const saveForm = holding
+    ? ""
+    : `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit" data-tip="Writes one project file on this machine. The interview stays where it is.">Save project</button></form>`;
+  const name = holding ? "" : `<p class="hh-project__name">${escapeHtml(path.basename(projectDir))}</p>`;
+  const effort = holding ? "" : effortControl(projectDir);
+  const flashLine = flash.trim() === "" ? "" : `<p class="hh-small" data-open-notice role="alert">${escapeHtml(flash.trim())}</p>`;
+  const created = newProjectFields(token, holding);
+  const script = `<script type="module" src="/client/save-status.js"></script>`;
+  if (!firstScreen && !holding) {
+    return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${flashLine}${name}${line}${effort}${saveForm}${created}${resumePrompt}${prompt}${script}</div>`;
+  }
+  const items = resumeItems(rows, token);
   const list =
     items.length === 0
       ? `<p class="hh-small">No saved project yet. A save writes one file you can open later.</p>`
       : `<ul class="hh-save-resume__list">${items}</ul>`;
   const sample = sampleOffer(token, items.length === 0);
-  const open = `<form method="post" action="/api/project/open" class="hh-save-open">
-      <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
-      <label class="hh-small" for="hh-open-file">Project file path</label>
-      <input id="hh-open-file" name="path" type="text" autocomplete="off" data-tip="Path of a project file on this machine." />
-      <button class="hh-btn hh-btn--secondary" type="submit" data-tip="Opens a project file from a path on this machine. The interview switches to that file.">Open project folder</button>
-    </form>`;
+  const open = openProjectForm(token);
   const resume = `<details class="hh-project__resume">
       <summary class="hh-btn hh-btn--secondary" role="button" data-tip="Shows project files saved on this machine.">Resume project</summary>
       <h2 class="hh-title" id="resume-title">Resume a project</h2>
       <p class="hh-small">Pick up a saved project, or open a project file.</p>
       ${list}
     </details>`;
-  return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${name}${line}${effort}${saveForm}${resume}${sample}${open}${resumePrompt}${prompt}<script type="module" src="/client/save-status.js"></script></div>`;
+  return `<div class="hh-save-line hh-project" role="region" aria-label="Project save" data-tour-spot="project">${flashLine}${name}${line}${effort}${saveForm}${created}${resume}${sample}${open}${resumePrompt}${prompt}${script}</div>`;
 }
 
 export function applyProjectChrome(html: string, chrome: string): string {
@@ -305,30 +389,99 @@ export async function runProjectPost(input: ProjectPostInput): Promise<ProjectPo
           ),
         };
       }
-      await removeRecentProject(target, projectHome(input.projectDir));
+      await removeRecentProject(target, indexHome(input.projectDir));
       return { type: "redirect" };
     }
+    if (input.pathname === "/api/project/new") {
+      const name = (form.get("name") ?? "").trim();
+      if (name.length === 0) return { type: "redirect", location: "/?open-error=name" };
+      const requested = (form.get("dir") ?? "").trim();
+      const dir = requested.length > 0 ? requested : defaultProjectDir(name, sitesRoot());
+      try {
+        const created = await createSiteProject({
+          name,
+          dir,
+          homeDir: indexHome(input.projectDir),
+        });
+        return { type: "switch", projectDir: created.dir };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.includes("own source repo")) return { type: "redirect", location: "/?open-error=repo" };
+        if (message.includes("Name the project")) return { type: "redirect", location: "/?open-error=name" };
+        throw error;
+      }
+    }
     if (input.pathname === "/api/project/open") {
-      const target = form.get("path") ?? "";
-      if (target.length === 0) {
-        return {
-          type: "html",
-          status: 400,
-          html: documentPage(
-            "Missing path",
-            renderFriendly({
-              title: "Name a project file",
-              happened: "The open form did not include a path.",
-              next: "Paste the path of a .hhproject file, or use Open the sample on an empty desk.",
-              retryHref: "/",
-              retryLabel: "Back to the desk",
-              copyText: "Open the sample",
-            }),
-          ),
-        };
+      const target = (form.get("path") ?? "").trim();
+      if (target.length === 0) return { type: "redirect", location: "/?open-error=choose" };
+      const resolved = path.resolve(target);
+      let directory = false;
+      try {
+        directory = statSync(resolved).isDirectory();
+      } catch {
+        directory = false;
+      }
+      if (directory) {
+        if (isInsideDeskRepo(resolved)) return { type: "redirect", location: "/?open-error=repo" };
+        return { type: "switch", projectDir: resolved };
+      }
+      const recent = await readRecentProjects(indexHome(input.projectDir)).catch(() => [] as RecentProject[]);
+      const row = recent.find((item) => path.resolve(item.filePath) === resolved);
+      if (row !== undefined && absoluteInsideRepo(row.sourceDir)) {
+        return { type: "redirect", location: "/?open-error=repo" };
       }
       const preferRaw = form.get("prefer");
       const prefer = isPrefer(preferRaw) ? preferRaw : null;
+      if (isInsideDeskRepo(input.projectDir)) {
+        const parked = await loadProjectFile(target);
+        if (parked.readOnly) {
+          return {
+            type: "html",
+            status: 200,
+            html: documentPage(
+              "Read only",
+              `<div class="hh-empty"><h1 class="hh-empty__title">Opened read-only</h1><p>${escapeHtml(parked.message ?? "This project file was written by a newer app. It is open read-only.")}</p><p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="/">Back to the desk</a></p></div>`,
+            ),
+          };
+        }
+        if (parked.file === null) {
+          const raw = parked.message ?? "The project file could not be read.";
+          const split = splitPublicError(raw);
+          return {
+            type: "html",
+            status: 400,
+            html: documentPage(
+              "Unreadable",
+              renderFriendly({
+                title: "That file could not be opened",
+                happened: split.summary,
+                next: "Check the path, or open the sample from the empty desk. A bad file is moved aside and is not deleted.",
+                retryHref: "/",
+                retryLabel: "Back to the desk",
+                copyText: target,
+                detail: split.detail ?? raw,
+              }),
+            ),
+          };
+        }
+        if (absoluteInsideRepo(parked.file.sourceDir)) {
+          return { type: "redirect", location: "/?open-error=repo" };
+        }
+        let dest = "";
+        if (
+          path.isAbsolute(parked.file.sourceDir) &&
+          existsSync(parked.file.sourceDir) &&
+          !isInsideDeskRepo(parked.file.sourceDir)
+        ) {
+          dest = parked.file.sourceDir;
+        } else {
+          dest = defaultProjectDir(parked.file.projectName || "Opened site", sitesRoot());
+          if (isInsideDeskRepo(dest)) return { type: "redirect", location: "/?open-error=repo" };
+          await mkdir(dest, { recursive: true });
+        }
+        await restoreProject(target, { projectDir: dest, prefer: prefer ?? "file" });
+        return { type: "switch", projectDir: dest };
+      }
       const loaded = await loadProjectFile(target, { liveDir: input.projectDir });
       if (loaded.readOnly) {
         return {

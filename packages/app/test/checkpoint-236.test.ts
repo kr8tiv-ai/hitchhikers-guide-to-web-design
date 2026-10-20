@@ -87,14 +87,24 @@ function modelDraft(recorded: SiteBrief): SiteBrief {
   };
 }
 
-function raw(port: number, pathname: string): Promise<{ status: number; body: string }> {
+function raw(port: number, pathname: string, body?: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ hostname: "127.0.0.1", port, path: pathname, method: "GET" }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
-    });
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: pathname,
+        method: body === undefined ? "GET" : "POST",
+        headers: body === undefined ? {} : { "content-type": "application/x-www-form-urlencoded" },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8") }));
+      },
+    );
     req.on("error", reject);
+    if (body !== undefined) req.write(body);
     req.end();
   });
 }
@@ -132,11 +142,18 @@ test("a project4 draft is used, the coverage table is full, and DP-7.2 is a note
         throw new Error(req.task);
       }) as never,
     });
+    const before = await raw(handle.port, "/approve");
+    assert.equal(before.status, 200);
+    assert.equal(before.body.includes("data-brief-fallback"), false);
+    assert.equal(before.body.includes("This brief is filled from the interview"), false);
+    assert.match(before.body, /The published brief promises a calm buying path/);
+    assert.match(before.body, /Draft the plan/);
+    assert.equal(before.body.includes('value="approve" disabled'), false);
+    const token = /<meta name="hh-csrf" content="([0-9a-f]{64})"/.exec(before.body)?.[1] ?? "";
+    assert.notEqual(token, "");
+    const drafted = await raw(handle.port, "/approve", `csrf=${token}&action=approve`);
+    assert.equal(drafted.status, 303);
     const page = await raw(handle.port, "/approve");
-    assert.equal(page.status, 200);
-    assert.equal(page.body.includes("data-brief-fallback"), false);
-    assert.equal(page.body.includes("This brief is filled from the interview"), false);
-    assert.match(page.body, /The published brief promises a calm buying path/);
     const tableAt = page.body.indexOf("data-plan-coverage");
     const tableEnd = page.body.indexOf("</table>", tableAt);
     assert.ok(tableAt >= 0 && tableEnd > tableAt);

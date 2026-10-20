@@ -12,6 +12,7 @@ import { loadDecisions } from "../src/context/index.ts";
 import { defaultConfig } from "../src/config.ts";
 import {
   approveSiteBrief,
+  approveSitePlan,
   draftSiteBrief,
   reviseSiteBrief,
 } from "../src/guide/brief-desk.ts";
@@ -106,9 +107,12 @@ test("approve starts one build and a second approve does not call the model", as
   try {
     const approved = await approveSiteBrief(dir, think as never);
     assert.equal(approved.status, "approved");
-    assert.equal(approved.buildStarted, true);
-    assert.equal(approved.phase, "Babel Fish");
-    assert.equal(approved.nextAction, "The build is started.");
+    assert.equal(approved.buildStarted, false);
+    const started = await approveSitePlan(dir);
+    assert.equal(started.status, "approved");
+    assert.equal(started.buildStarted, true);
+    assert.equal(started.phase, "Babel Fish");
+    assert.equal(started.nextAction, "The build is started.");
     const state = loadState(dir);
     assert.equal(state?.phase, "Babel Fish");
     assert.equal(state?.slice, "Guide Entry");

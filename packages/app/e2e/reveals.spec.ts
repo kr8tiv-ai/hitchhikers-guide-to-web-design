@@ -77,8 +77,10 @@ test("brand and journey reveals settle at 375 and 1440", async ({ page }) => {
 
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
     await page.reload();
-    const moving = await page.locator("[data-reveal-step]").first().evaluate((el) => getComputedStyle(el).animationName);
-    expect(moving).toBe("rv-enter");
+    await expect(page.locator("[data-reveal-step]").first()).toBeVisible();
+    await expect.poll(async () =>
+      page.locator("[data-reveal-step]").first().evaluate((el) => getComputedStyle(el).animationName),
+    ).toBe("rv-enter");
     expect(errors).toEqual([]);
   } finally {
     await rm(projectDir, { recursive: true, force: true });
@@ -232,12 +234,13 @@ async function shoot(page: Page, html: string, name: string): Promise<void> {
     if ((await page.locator("iframe").count()) > 0) {
       await expect(page.frameLocator("iframe").getByText("Northglass preview")).toBeVisible();
     }
-    const motion = await page.locator("[data-reveal-step]").first().evaluate((el) => {
-      const style = getComputedStyle(el);
-      return { name: style.animationName, opacity: style.opacity };
-    });
-    expect(motion.name).toBe("none");
-    expect(motion.opacity).toBe("1");
+    await expect(page.locator("[data-reveal-step]").first()).toBeVisible();
+    await expect.poll(async () =>
+      page.locator("[data-reveal-step]").first().evaluate((el) => {
+        const style = getComputedStyle(el);
+        return `${style.animationName}|${style.opacity}`;
+      }),
+    ).toBe("none|1");
     const overflow = await page.evaluate(() => {
       const root = document.documentElement;
       return root.scrollWidth <= root.clientWidth + 1;

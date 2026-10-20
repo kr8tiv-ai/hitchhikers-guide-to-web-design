@@ -110,6 +110,15 @@ export interface CardState {
    * Omitted, the done card stays a heading with no action.
    */
   brief?: { status: "idle" | "drafting" | "pending" | "approved" | "revising" } | null;
+  /** Dealt type pairs for DP-1.5. Absent, the card uses the six canned moods. */
+  fontSamples?: readonly FontSampleView[];
+}
+
+export interface FontSampleView {
+  adjectives: string;
+  display: string;
+  body: string;
+  pair: string;
 }
 
 /**
@@ -407,22 +416,48 @@ const FONT_EXAMPLES = /pick a style from these examples/i;
  * The browser bundle cannot import the engine, so the names are written here.
  * question-parts-226 checks each label against pickType.
  */
-const FONT_SAMPLES: readonly { readonly adjectives: string; readonly pair: string }[] = [
-  { adjectives: "editorial, quiet, publishing", pair: "Gambetta + Synonym" },
-  { adjectives: "playful food", pair: "Erode + Ranade" },
-  { adjectives: "brutalist poster", pair: "Tanker + Cabinet Grotesk" },
-  { adjectives: "fashion, sharp", pair: "Clash Display + Satoshi" },
-  { adjectives: "product, one family", pair: "Switzer" },
-  { adjectives: "3d-world poster", pair: "Unbounded + Instrument Sans" },
+const FONT_SAMPLES: readonly FontSampleView[] = [
+  { adjectives: "editorial, quiet, publishing", display: "Gambetta", body: "Synonym", pair: "Gambetta + Synonym" },
+  { adjectives: "playful food", display: "Erode", body: "Ranade", pair: "Erode + Ranade" },
+  { adjectives: "brutalist poster", display: "Tanker", body: "Cabinet Grotesk", pair: "Tanker + Cabinet Grotesk" },
+  { adjectives: "fashion, sharp", display: "Clash Display", body: "Satoshi", pair: "Clash Display + Satoshi" },
+  { adjectives: "product, one family", display: "Switzer", body: "Switzer", pair: "Switzer" },
+  { adjectives: "3d-world poster", display: "Unbounded", body: "Instrument Sans", pair: "Unbounded + Instrument Sans" },
 ];
 
-/** Mood words deal a library pair. System stacks stand in so the card does not load a font file. */
-function fontExamplesHtml(ask: string): string {
+const SAMPLE_LINE = "Find your calm";
+
+function specimenSrc(display: string, body: string): string {
+  const title = display === body ? display : `${display} + ${body}`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120" viewBox="0 0 640 120">` +
+    `<rect width="640" height="120" fill="#f4f0e6"/>` +
+    `<text x="24" y="52" fill="#1c1915" font-size="28" font-family="ui-sans-serif,sans-serif">${escapeXml(title)}</text>` +
+    `<text x="24" y="88" fill="#5c564c" font-size="16" font-family="ui-sans-serif,sans-serif">Specimen</text>` +
+    `</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Each sample names a library pair. The live line uses that display face.
+ * Until the face loads, the specimen image is what you see. A system stand-in
+ * is used only with the approximate-preview label.
+ */
+function fontExamplesHtml(ask: string, samples: readonly FontSampleView[] | undefined): string {
   if (!FONT_EXAMPLES.test(ask)) return "";
-  const buttons = FONT_SAMPLES.map((sample, index) => {
-    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(sample.adjectives)}" data-pair="${index}" aria-pressed="false">
-      <span class="hh-type-sample__display">Find your calm</span>
-      <span class="hh-type-sample__text">${escapeHtml(sample.pair)}</span>
+  const list = samples !== undefined && samples.length > 0 ? samples : FONT_SAMPLES;
+  const buttons = list.map((sample) => {
+    const display = sample.display;
+    const body = sample.body === "" ? display : sample.body;
+    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(sample.adjectives)}" data-display="${escapeHtml(display)}" data-body="${escapeHtml(body)}" aria-pressed="false">
+      <span class="hh-type-sample__display" data-display="${escapeHtml(display)}">${SAMPLE_LINE}</span>
+      <img class="hh-type-sample__specimen" alt="Specimen for ${escapeHtml(display)}" src="${specimenSrc(display, body)}" />
+      <span class="hh-type-sample__approx" hidden>approximate preview</span>
+      <span class="hh-type-sample__text" data-body="${escapeHtml(body)}">${escapeHtml(sample.pair)}</span>
       <span class="hh-type-sample__name">${escapeHtml(sample.adjectives)}</span>
     </button>`;
   });
@@ -560,7 +595,7 @@ export function renderCard(state: CardState): string {
     tip !== "" && state.counts?.index === 1
       ? `  <p class="hh-qcard__tip" data-card-tip>${escapeHtml(tip)}</p>\n`
       : "";
-  const fontHtml = fontExamplesHtml(ask);
+  const fontHtml = fontExamplesHtml(ask, state.fontSamples);
   const galleryHtml = galleryOpen(question);
   const resources = question.resources?.map((item) => ({
     ...item,

@@ -106,7 +106,10 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator('[data-region="question"] .hh-error')).toHaveCount(0);
       await expect(page.locator('[data-retry="suggest"]')).toBeVisible();
       await expect(page.locator("#hh-card-ask")).toContainText("Is this website for your own business, or for a client?");
-      const fieldBox = await page.locator("#hh-card-draft").boundingBox();
+      const field = page.locator("#hh-card-draft");
+      await expect(field).toBeVisible();
+      await expect(notice).toBeVisible();
+      const fieldBox = await field.boundingBox();
       const noticeBox = await notice.boundingBox();
       expect(fieldBox).not.toBeNull();
       expect(noticeBox).not.toBeNull();

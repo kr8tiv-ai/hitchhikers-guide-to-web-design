@@ -52,6 +52,18 @@ function coverageTable(coverage: ApproveCoverage | undefined): string {
     ${note}`;
 }
 
+function nextAction(stage: ApproveStage, desk: BriefDeskView): string {
+  if (desk.draft === null || desk.buildStarted) return "";
+  if (stage === "planning") return `<p data-next-action>Drafting the plan</p>`;
+  if (stage === "brief") return `<p data-next-action>Draft the plan</p>`;
+  return "";
+}
+
+function approveDisabled(stage: ApproveStage, coverage: ApproveCoverage | undefined): boolean {
+  if (stage === "planning") return true;
+  return stage === "plan" && coverage !== undefined && coverage.rows.some((row) => !row.covered);
+}
+
 function retryForm(token: string): string {
   return `<form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
@@ -60,6 +72,8 @@ function retryForm(token: string): string {
         </form>`;
 }
 
+export type ApproveStage = "brief" | "planning" | "plan";
+
 export function approveMain(
   token: string,
   desk: BriefDeskView,
@@ -67,6 +81,8 @@ export function approveMain(
   coverage?: ApproveCoverage,
   confirmError = "",
   brandMarkdown = "",
+  stage: ApproveStage = "brief",
+  stageHtml = "",
 ): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
@@ -140,13 +156,15 @@ export function approveMain(
         ${progress}
         ${same}
         ${sections}
-        ${coverageTable(coverage)}
+        ${nextAction(stage, desk)}
+        ${stage === "plan" ? coverageTable(coverage) : ""}
+        ${stageHtml}
         ${brandPanel(brandMarkdown)}
-        <form method="post" action="/approve">
+        ${desk.buildStarted ? "" : `<form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           ${confirm}
-          <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve"${coverage !== undefined && coverage.rows.some((row) => !row.covered) ? " disabled" : ""}>Approve</button>
-        </form>
+          <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve"${approveDisabled(stage, coverage) ? " disabled" : ""}>${stage === "plan" ? "Approve plan" : "Approve"}</button>
+        </form>`}
         <form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           <input type="hidden" name="action" value="change" />
@@ -161,7 +179,7 @@ export function approveMain(
 
 export function brandBriefMain(desk: BriefDeskView): string {
   const goal = escapeHtml(desk.draft?.goal ?? "");
-  if (desk.status === "approved") {
+  if (desk.status === "approved" && desk.buildStarted) {
     return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
         <p class="hh-kicker" id="brand-title">Brand kit</p>
         <h1 class="hh-specimen__display">The brief is in</h1>
@@ -169,6 +187,15 @@ export function brandBriefMain(desk: BriefDeskView): string {
         <p data-build-phase>${escapeHtml(desk.phase)}</p>
         <p><a class="hh-btn hh-btn--primary" href="/hh-dashboard">The build is started.</a></p>
         <p><a class="hh-btn hh-btn--ghost" href="/approve">Review the Site Brief</a></p>
+      </section>`;
+  }
+  if (desk.status === "approved") {
+    return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
+        <p class="hh-kicker" id="brand-title">Brand kit</p>
+        <h1 class="hh-specimen__display">The plan is drafted</h1>
+        <p class="hh-specimen__text" data-brief-goal>${goal}</p>
+        <p data-next-action>Approve the plan</p>
+        <p><a class="hh-btn hh-btn--primary" href="/approve">Approve the plan</a></p>
       </section>`;
   }
   return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
@@ -183,5 +210,8 @@ export function brandBriefMain(desk: BriefDeskView): string {
 export function dashboardBriefNote(desk: BriefDeskView): string {
   if (desk.status !== "approved") return "";
   const goal = escapeHtml(desk.draft?.goal ?? "");
+  if (!desk.buildStarted) {
+    return `<p data-next-action data-brief-goal="${goal}">The plan is drafted. Approve the plan.</p>`;
+  }
   return `<p data-build-phase="${escapeHtml(desk.phase)}" data-brief-goal="${goal}">${escapeHtml(desk.phase)} is the next phase. The build is started.</p>`;
 }

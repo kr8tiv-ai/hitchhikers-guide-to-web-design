@@ -1256,6 +1256,26 @@ p.hh-error__next {
   gap: var(--space-3);
 }
 
+.hh-project__new {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.hh-project__new > summary {
+  list-style: none;
+}
+
+.hh-project__new > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hh-project__new[open] {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--space-3);
+}
+
 .hh-btn--chosen {
   border-color: var(--color-accent);
   color: var(--color-accent);

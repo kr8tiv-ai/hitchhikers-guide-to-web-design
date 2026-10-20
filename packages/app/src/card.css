@@ -358,6 +358,114 @@
 .hh-type-sample__display {
   font-size: var(--type-title);
   line-height: 1.1;
+  font-family: attr(data-display type(<string>));
+}
+
+.hh-type-sample[data-font-live="true"] .hh-type-sample__text {
+  font-family: attr(data-body type(<string>));
+}
+
+@font-face {
+  font-family: "Gambetta";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Gambetta");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+@font-face {
+  font-family: "Erode";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Erode");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+@font-face {
+  font-family: "Tanker";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("Tanker");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+@font-face {
+  font-family: "Clash Display";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Clash Display");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+@font-face {
+  font-family: "Switzer";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Switzer");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+@font-face {
+  font-family: "Unbounded";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: local("Unbounded");
+  unicode-range: U+20, U+46, U+61, U+63-64, U+69, U+6C-6E, U+6F, U+72, U+75, U+79;
+}
+
+.hh-type-sample:not([data-font-live="true"]) .hh-type-sample__display {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.hh-type-sample[data-font-live="true"] .hh-type-sample__display {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+}
+
+.hh-type-sample[data-font-live="true"] .hh-type-sample__specimen {
+  display: none;
+}
+
+.hh-type-sample__specimen {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  height: auto;
+}
+
+.hh-type-sample__approx[hidden] {
+  display: none;
+}
+
+.hh-type-sample[data-font-fallback="approx"] .hh-type-sample__approx {
+  display: inline;
+}
+
+.hh-type-sample[data-font-fallback="approx"] .hh-type-sample__display {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  font-family: var(--font-text);
 }
 
 .hh-type-sample__text {
@@ -373,46 +481,7 @@
   text-transform: uppercase;
 }
 
-.hh-type-sample[data-pair="0"] .hh-type-sample__display {
-  font-family: Impact, "Arial Narrow", sans-serif;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 
-.hh-type-sample[data-pair="0"] .hh-type-sample__text {
-  font-family: "Arial Narrow", Arial, sans-serif;
-}
-
-.hh-type-sample[data-pair="1"] .hh-type-sample__display,
-.hh-type-sample[data-pair="1"] .hh-type-sample__text {
-  font-family: "Segoe UI", "Avenir Next", "Trebuchet MS", sans-serif;
-}
-
-.hh-type-sample[data-pair="2"] .hh-type-sample__display,
-.hh-type-sample[data-pair="2"] .hh-type-sample__text {
-  font-family: Georgia, "Palatino Linotype", Palatino, serif;
-}
-
-.hh-type-sample[data-pair="3"] .hh-type-sample__display {
-  font-family: "Iowan Old Style", Palatino, Georgia, serif;
-}
-
-.hh-type-sample[data-pair="3"] .hh-type-sample__text {
-  font-family: "Segoe UI", "Avenir Next", sans-serif;
-}
-
-.hh-type-sample[data-pair="4"] .hh-type-sample__display {
-  font-family: "Arial Black", "Arial Bold", Impact, sans-serif;
-}
-
-.hh-type-sample[data-pair="4"] .hh-type-sample__text {
-  font-family: Arial, "Segoe UI", sans-serif;
-}
-
-.hh-type-sample[data-pair="5"] .hh-type-sample__display,
-.hh-type-sample[data-pair="5"] .hh-type-sample__text {
-  font-family: "Century Gothic", Futura, "Trebuchet MS", sans-serif;
-}
 
 .hh-mast__line {
   margin: 0;

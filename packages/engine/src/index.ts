@@ -134,6 +134,8 @@ export type {
   DoctorFinding,
   RouterStatus,
 } from "./context/index.ts";
+export { DESK_REPO_REFUSAL, deskPackageRoot, deskRepoRoots, isInsideDeskRepo } from "./desk-repo.ts";
+export { createSiteProject, defaultProjectDir, slugProjectName } from "./new-project.ts";
 export { homeIndexPath, upsertHomeProject } from "./home-index.ts";
 export type { HomeProject } from "./home-index.ts";
 export { TreeError, loadTree, questionsForDepth, questionsToAsk } from "./tree.ts";
@@ -143,6 +145,7 @@ export type { SiteTypeHint } from "./site-types.ts";
 export { missingRequired, renderBrief, requiredIds } from "./required.ts";
 export type { AnswerRecord } from "./required.ts";
 export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
+export { advanceDesignStages } from "./spec/design-stages.ts";
 export type { DesignStageRequest, DesignStageResult, InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
 export { coverageReport, pushbackFor } from "./pushback.ts";
 export {
@@ -185,7 +188,9 @@ export {
   BRIEF_BUILD_ID,
   BRIEF_PROGRESS_STAGE,
   approveSiteBrief,
+  approveSitePlan,
   draftSiteBrief,
+  planDraftInFlight,
   inflightBriefDraft,
   inflightBriefRevision,
   readBriefDesk,
@@ -292,6 +297,7 @@ export {
   continueSiteBuild,
   decideBuildRecovery,
   logHasCleanEnd,
+  draftBriefPlan,
   prepareSiteBuild,
   projectPlanCoverage,
   readBuildRun,
@@ -470,10 +476,11 @@ export {
   TYPE_LICENSE,
   TYPE_PAIRINGS,
   UNMATCHED_PAIR_ID,
+  dealFontSamples,
   isOverusedFamily,
   pickType,
 } from "./brand/tokens.ts";
-export type { TypePair, TypePairing } from "./brand/tokens.ts";
+export type { FontSampleDeal, TypePair, TypePairing } from "./brand/tokens.ts";
 export {
   checkDirectionDeal,
   chooseDirection,
@@ -671,8 +678,10 @@ export {
   parseProjectFile,
   progressLabel,
   projectHome,
+  interviewProgressLabel,
   readRecentProjects,
   readSaveNotice,
+  readSaveNoticeSync,
   recordApprovalYes,
   removeRecentProject,
   renderResumeMd,

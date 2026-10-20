@@ -197,6 +197,17 @@ test("Change something keeps the fallback marker, and Approve requires confirmat
     );
     assert.equal(yes.status, 303);
     assert.equal(yes.location, "/approve");
+    const planned = await raw(handle.port, "GET", "/approve");
+    assert.match(planned.body, /Approve plan|Draft the plan|data-plan-coverage/);
+    const planToken = /<meta name="hh-csrf" content="([0-9a-f]{64})"/.exec(planned.body)?.[1] ?? token;
+    const planYes = await raw(
+      handle.port,
+      "POST",
+      "/approve",
+      { "content-type": "application/x-www-form-urlencoded" },
+      `csrf=${planToken}&action=approve&confirmFallback=yes`,
+    );
+    assert.equal(planYes.status, 303);
     let after = "";
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const next = await raw(handle.port, "GET", "/approve");

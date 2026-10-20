@@ -168,10 +168,79 @@ function takeLastQuestion(text: string): { sentence: string; rest: string } | nu
 function splitSentences(text: string): string[] {
   const flat = text.replace(/\s+/g, " ").trim();
   if (flat === "") return [];
-  return flat
-    .split(/(?<=[.?!])\s+(?=[A-Z(“"'(])/)
-    .map((part) => part.trim())
-    .filter((part) => part !== "");
+  const parts: string[] = [];
+  let start = 0;
+  let single = false;
+  let double = false;
+  let curlyDouble = false;
+  let curlySingle = false;
+  let paren = 0;
+  const quoted = (): boolean => single || double || curlyDouble || curlySingle;
+  const nextSentence = (index: number): number => {
+    let cursor = index + 1;
+    while (cursor < flat.length && flat[cursor] === " ") cursor += 1;
+    if (cursor >= flat.length) return -1;
+    const next = flat[cursor] ?? "";
+    if (!/[A-Z\u201C\u2018"'(]/.test(next)) return -1;
+    return cursor;
+  };
+  const cutAt = (end: number, at: number, index: number): number => {
+    parts.push(flat.slice(start, end).trim());
+    start = at;
+    return at - 1;
+  };
+  for (let i = 0; i < flat.length; i += 1) {
+    const ch = flat[i] ?? "";
+    const prev = i > 0 ? (flat[i - 1] ?? "") : "";
+    const next = i + 1 < flat.length ? (flat[i + 1] ?? "") : "";
+    if (ch === "'" || ch === "\u2019") {
+      if (/[A-Za-z]/.test(prev) && /[A-Za-z]/.test(next)) continue;
+      if (ch === "'") single = !single;
+      else curlySingle = !curlySingle;
+      continue;
+    }
+    if (ch === '"') {
+      const closing = double;
+      double = !double;
+      if (closing && !quoted() && paren === 0 && (prev === "." || prev === "?" || prev === "!")) {
+        const at = nextSentence(i);
+        if (at > 0) i = cutAt(i + 1, at, i);
+      }
+      continue;
+    }
+    if (ch === "\u201C") {
+      curlyDouble = true;
+      continue;
+    }
+    if (ch === "\u201D") {
+      curlyDouble = false;
+      if (!quoted() && paren === 0 && (prev === "." || prev === "?" || prev === "!")) {
+        const at = nextSentence(i);
+        if (at > 0) i = cutAt(i + 1, at, i);
+      }
+      continue;
+    }
+    if (ch === "\u2018") {
+      curlySingle = true;
+      continue;
+    }
+    if (ch === "(") {
+      paren += 1;
+      continue;
+    }
+    if (ch === ")") {
+      paren = Math.max(0, paren - 1);
+      continue;
+    }
+    if (quoted() || paren > 0) continue;
+    if ((ch === "." || ch === "?" || ch === "!") && !quoted() && paren === 0) {
+      const at = nextSentence(i);
+      if (at > 0) i = cutAt(i + 1, at, i);
+    }
+  }
+  const tail = flat.slice(start).trim();
+  if (tail !== "") parts.push(tail);
+  return parts.filter((part) => part !== "");
 }
 
 function join(parts: readonly string[]): string {
@@ -362,6 +431,9 @@ function stripRepeated(text: string, question: string): string {
 function isAssetConfirmation(text: string): boolean {
   const trimmed = text.trim();
   if (/^Using the logo you gave earlier \([^)]+\)\. Change\?$/.test(trimmed)) return true;
+  if (/^You already covered the blog \([\s\S]+\)\. Keep that, or change it\?$/.test(trimmed)) return true;
+  if (/^You said you have a logo(?: \([^)]+\))?\. Drop the (?:file here|logo you described), or tell us if you want a variant\.$/.test(trimmed)) return true;
+  if (/^You can keep the five from the hero \([^)]+\)\. Change\?$/.test(trimmed)) return true;
   const named = /^Using (.+)\. Change\?$/.exec(trimmed);
   if (named === null) return false;
   const name = named[1] ?? "";
@@ -374,9 +446,21 @@ function isAssetConfirmation(text: string): boolean {
  * Heading is only a full question. A fragment or a recap falls back to the tree ask.
  * A lead and a question are never joined with a colon.
  */
+function brokenHeading(question: string): boolean {
+  const trimmed = question.trim();
+  if (trimmed === "") return true;
+  if (/^[a-z]/.test(trimmed)) return true;
+  if (/^[^?]{0,80}["”’]\s+[A-Z]/.test(trimmed)) return true;
+  const first = splitSentences(trimmed)[0] ?? trimmed;
+  if (first.endsWith("?") || trimmed.endsWith("?")) return false;
+  if (isShortImperative(trimmed) || isShortImperative(first)) return false;
+  return true;
+}
+
 export function settleQuestionText(text: string, baseAsk: string): QuestionParts {
   const flat = stripRawMarkdown(text).replace(/\s+/g, " ").trim();
   const base = baseAsk.replace(/\s+/g, " ").trim();
+  if (isAssetConfirmation(flat)) return { lead: "", question: flat, help: "" };
   const unjoined = flat.replace(/([.?!])\s*:\s+/g, "$1 ");
   if (base !== "" && unjoined === base) return { lead: "", question: base, help: "" };
   const peeled = peelGluedLead(splitQuestionText(unjoined));
@@ -393,9 +477,14 @@ export function settleQuestionText(text: string, baseAsk: string): QuestionParts
     return cleanParts({ lead: stripRepeated(blob, question), question, help: "" });
   }
   const lifted = recapBeforeQuestion(peeled, unjoined);
-  return cleanParts({
+  const cleaned = cleanParts({
     lead: stripRepeated(lifted.lead, lifted.question),
     question: lifted.question.trim(),
     help: stripRepeated(lifted.help, lifted.question),
   });
+  if (isAssetConfirmation(cleaned.question)) return cleaned;
+  if (!brokenHeading(cleaned.question)) return cleaned;
+  const question = base !== "" ? base : cleaned.question;
+  const blob = join([cleaned.lead, cleaned.question, cleaned.help]);
+  return cleanParts({ lead: stripRepeated(blob, question), question, help: "" });
 }

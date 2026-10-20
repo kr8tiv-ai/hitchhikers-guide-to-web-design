@@ -143,11 +143,10 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     assert.equal(approve.status, 200);
     assert.match(approve.body, /<h2>Goal<\/h2>/);
     assert.match(approve.body, /The site helps a visitor book a visit/);
-    assert.match(approve.body, />Approve</);
-    assert.match(approve.body, /data-plan-coverage/);
-    assert.match(approve.body, /Plan coverage/);
-    assert.doesNotMatch(approve.body, /data-covered="no"/);
+    assert.match(approve.body, /Draft the plan/);
+    assert.equal(approve.body.includes("data-plan-coverage"), false);
     assert.match(approve.body, /value="approve">Approve</);
+    assert.equal(approve.body.includes('value="approve" disabled'), false);
     assert.match(approve.body, />Change something</);
     assert.doesNotMatch(approve.body, /Nothing is waiting for a yes/);
     const back = await raw(
@@ -159,6 +158,27 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     );
     assert.equal(back.status, 303);
     assert.equal(back.location, "/");
+    const drafted = await raw(
+      handle.port,
+      "POST",
+      "/approve",
+      { "content-type": "application/x-www-form-urlencoded" },
+      `csrf=${token}&action=approve`,
+    );
+    assert.equal(drafted.status, 303);
+    assert.equal(drafted.location, "/approve");
+    let planned = "";
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const next = await raw(handle.port, "GET", "/approve");
+      planned = next.body;
+      if (planned.includes("data-plan-coverage") && planned.includes("Approve plan")) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.match(planned, /data-plan-coverage/);
+    assert.match(planned, /Plan coverage/);
+    assert.doesNotMatch(planned, /data-covered="no"/);
+    assert.match(planned, /value="approve">Approve plan</);
+    assert.equal(planned.includes('value="approve" disabled'), false);
     const yes = await raw(
       handle.port,
       "POST",
@@ -176,7 +196,7 @@ test("draft, review, approve, and a second approve stays one build", async () =>
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.match(afterBody, /The build is started/);
-    assert.match(afterBody, />Approve</);
+    assert.equal(afterBody.includes(">Approve plan<"), false);
     const brand = await raw(handle.port, "GET", "/brand");
     assert.match(brand.body, /Babel Fish/);
     assert.match(brand.body, /The site helps a visitor book a visit/);

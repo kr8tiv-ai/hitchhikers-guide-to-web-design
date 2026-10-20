@@ -66,7 +66,8 @@ test("save stays on question 3 with the draft and a local time", async ({ page }
       }).format(new Date(iso));
       return { formatted, text: node.textContent ?? "" };
     });
-    expect(shown.text).toBe(shown.formatted);
+    expect(shown.text.endsWith(shown.formatted)).toBe(true);
+    expect(shown.text === `Today ${shown.formatted}` || /^\d{1,2} [A-Za-z]{3} \d{4} /.test(shown.text)).toBe(true);
     expect(shown.formatted).toMatch(/^\d{2}:\d{2}$/);
   } finally {
     await stopChild(child);
@@ -155,7 +156,9 @@ async function openDesk(page: Page, url: string): Promise<void> {
 }
 
 async function assertFits(page: Page, selector: string): Promise<void> {
-  const box = await page.locator(selector).boundingBox();
+  const target = page.locator(selector);
+  await expect(target).toBeVisible();
+  const box = await target.boundingBox();
   expect(box).not.toBeNull();
   if (box === null) return;
   expect(box.x).toBeGreaterThanOrEqual(-1);

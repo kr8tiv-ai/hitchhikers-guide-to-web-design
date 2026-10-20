@@ -6,7 +6,7 @@
  */
 
 import { access, mkdir, readFile } from "node:fs/promises";
-import { constants, existsSync } from "node:fs";
+import { constants, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { acquire, release, replaceViaTemp } from "../lock.ts";
@@ -215,14 +215,7 @@ export interface SaveNotice {
   reason: string | null;
 }
 
-export async function readSaveNotice(projectDir: string, homeDir: string = projectHome(projectDir)): Promise<SaveNotice | null> {
-  let raw: string;
-  try {
-    raw = await readFile(saveNoticePath(homeDir), "utf8");
-  } catch (error: unknown) {
-    if (errorCode(error) === "ENOENT") return null;
-    throw error;
-  }
+function noticeFrom(projectDir: string, raw: string): SaveNotice | null {
   let value: unknown;
   try {
     value = JSON.parse(raw);
@@ -240,6 +233,27 @@ export async function readSaveNotice(projectDir: string, homeDir: string = proje
     filePath: typeof row.filePath === "string" ? row.filePath : null,
     reason: typeof row.reason === "string" ? row.reason : null,
   };
+}
+
+/** Sync read for the desk session. The answer route has already finished the write. */
+export function readSaveNoticeSync(projectDir: string, homeDir: string = projectHome(projectDir)): SaveNotice | null {
+  try {
+    return noticeFrom(projectDir, readFileSync(saveNoticePath(homeDir), "utf8"));
+  } catch (error: unknown) {
+    if (errorCode(error) === "ENOENT") return null;
+    return null;
+  }
+}
+
+export async function readSaveNotice(projectDir: string, homeDir: string = projectHome(projectDir)): Promise<SaveNotice | null> {
+  let raw: string;
+  try {
+    raw = await readFile(saveNoticePath(homeDir), "utf8");
+  } catch (error: unknown) {
+    if (errorCode(error) === "ENOENT") return null;
+    throw error;
+  }
+  return noticeFrom(projectDir, raw);
 }
 
 export async function writeSaveNotice(notice: SaveNotice, homeDir: string = projectHome(notice.projectDir)): Promise<void> {

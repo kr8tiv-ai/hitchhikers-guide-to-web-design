@@ -12,7 +12,9 @@ import {
   GrokMissingError,
   isBillingFailure,
   GrokUnavailableError,
+  DESK_REPO_REFUSAL,
   InterviewError,
+  isInsideDeskRepo,
   LockHeld,
   replaceViaTemp,
   ThinkTimeoutError,
@@ -29,6 +31,7 @@ import {
   loadFacts,
   loadSessionState,
   applyGalleryWalk,
+  dealFontSamples,
   gateQuestion,
   assetDisplayName,
   guardLogoText,
@@ -37,10 +40,12 @@ import {
   saveConfig,
   loadGallery,
   loadState,
+  locationLabel,
   loadTree,
   loveCount,
   openInterview,
   readRevisitId,
+  readSaveNoticeSync,
   writeRevisitId,
   GUIDE_FAIL_LINE,
   GUIDE_TIMEOUT_LINE,
@@ -59,13 +64,16 @@ import {
   formatStatusLine,
   inferAssetRole,
   approveSiteBrief,
+  approveSitePlan,
   draftSiteBrief,
+  planDraftInFlight,
   readBriefDesk,
   reviseSiteBrief,
   PlanCoverageError,
   checkPlanCoverage,
   planCoverageMessage,
   projectPlanCoverage,
+  readPromptTasks,
   readSiteBrief,
   renderSiteBrief,
   type CoverageRequirement,
@@ -142,7 +150,8 @@ import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
-import { approveMain, brandBriefMain, dashboardBriefNote } from "./brief-page.ts";
+import { approveMain, brandBriefMain, dashboardBriefNote, type ApproveStage } from "./brief-page.ts";
+import { approveDesignStage, presentDesignStage, renderDesignStagePanel } from "./design-stage-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
 import { blockingNotes, readGuideNotes, renderGuideNotes, upsertGuideNote, type GuideNote } from "./guide-notes.ts";
@@ -262,6 +271,12 @@ export interface DeskSession {
   briefStatus: "idle" | "drafting" | "pending" | "approved" | "revising" | null;
   /** Set while a Guide job for this desk is still running. */
   guideJob?: { id: string; status: "running" } | null;
+  /** The project file write. The card paints this without a reload. */
+  saveStatus?: { ok: boolean; savedAt: string | null; place: string; error: string | null };
+  /** Earlier answers, so a font card can deal from mood words. */
+  typeMood?: string;
+  /** Library pairs for the font card. Absent on every other question. */
+  fontSamples?: { adjectives: string; display: string; body: string; pair: string }[];
 }
 
 export interface DeskApp {
@@ -350,17 +365,14 @@ export async function createDeskApp(opts: {
   /** Replaces plan, run, and recheck. Omitted, the desk uses the real recipes. */
   tools?: ToolRuntime;
   toolNow?: () => number;
+  /** Binds the build runner after New project or Open switches the folder. */
+  bindRunner?: (projectDir: string) => void;
 }): Promise<DeskApp> {
-  const projectDir = path.resolve(opts.projectDir);
-  const depth = loadConfig(projectDir).interviewDepth;
-  if (opts.turnHandler === undefined && depth === "express") {
-    await seedExpressAssumptions(projectDir);
-  }
-  const questions = questionsToAsk(loadTree(treeFile(projectDir)), depth);
-  let interview = await openInterview(projectDir, depth);
-  const reloadInterview = async (): Promise<void> => {
-    interview = await openInterview(projectDir, depth);
-  };
+  let activeDir = path.resolve(opts.projectDir);
+  let holding = isInsideDeskRepo(activeDir);
+  let depth: "express" | "standard" | "deep" = "standard";
+  let questions: Question[] = [];
+  let interview: InterviewSession = idleInterview();
   let overlay: LiveOverlay = emptyOverlay();
   const resetLive = (): void => {
     overlay = emptyOverlay();
@@ -368,13 +380,53 @@ export async function createDeskApp(opts: {
   const token = issueToken();
   const hub = createSseHub();
   const guideThink = opts.guideThink ?? selectGuideThink();
-  const rawTurn =
-    opts.turnHandler ??
-    createLiveTurn(projectDir, depth, () => interview, (next) => {
-      interview = next;
-    }, guideThink, {
-      publish: (name, data) => hub.publish(name, data),
-    });
+  let rawTurn: TurnHandler = async () => {
+    throw new Error("Start a project before answering.");
+  };
+  const reloadInterview = async (): Promise<void> => {
+    if (holding) return;
+    interview = await openInterview(activeDir, depth);
+  };
+  const armTurn = (): void => {
+    rawTurn =
+      opts.turnHandler ??
+      createLiveTurn(
+        activeDir,
+        depth,
+        () => interview,
+        (next) => {
+          interview = next;
+        },
+        guideThink,
+        { publish: (name, data) => hub.publish(name, data) },
+      );
+  };
+  const switchTo = async (dir: string): Promise<void> => {
+    const next = path.resolve(dir);
+    if (isInsideDeskRepo(next)) throw new Error(DESK_REPO_REFUSAL);
+    const previous = activeDir;
+    activeDir = next;
+    holding = false;
+    depth = loadConfig(activeDir).interviewDepth;
+    if (opts.turnHandler === undefined && depth === "express") {
+      await seedExpressAssumptions(activeDir);
+    }
+    questions = questionsToAsk(loadTree(treeFile(activeDir)), depth);
+    interview = await openInterview(activeDir, depth);
+    overlay = emptyOverlay();
+    armTurn();
+    opts.bindRunner?.(activeDir);
+    if (previous !== activeDir) forgetGuideJobs(previous);
+  };
+  if (!holding) {
+    depth = loadConfig(activeDir).interviewDepth;
+    if (opts.turnHandler === undefined && depth === "express") {
+      await seedExpressAssumptions(activeDir);
+    }
+    questions = questionsToAsk(loadTree(treeFile(activeDir)), depth);
+    interview = await openInterview(activeDir, depth);
+    armTurn();
+  }
   const turn: TurnHandler = async (input) => {
     const output = await rawTurn(input);
     if (output.live !== undefined) overlay = output.live;
@@ -394,11 +446,14 @@ export async function createDeskApp(opts: {
   const notice = opts.cassetteNotice ?? null;
   let preflight = opts.preflight ?? null;
   const view = (): DeskSession => {
-    const session = buildSession(projectDir, interview, questions, overlay, notice, preflight, depth);
-    return { ...session, guideJob: guideJobsFor(projectDir).running() };
+    if (holding) return holdingView();
+    const session = buildSession(activeDir, interview, questions, overlay, notice, preflight, depth);
+    return { ...session, guideJob: guideJobsFor(activeDir).running() };
   };
   const toolOptions: ToolDeskOptions = {
-    projectDir,
+    get projectDir() {
+      return activeDir;
+    },
     getPreflight: () => preflight,
     setPreflight(next) {
       preflight = next;
@@ -414,7 +469,7 @@ export async function createDeskApp(opts: {
     token,
     close() {
       hub.close();
-      forgetGuideJobs(projectDir);
+      forgetGuideJobs(activeDir);
     },
     async handle(req, res) {
       const method = req.method ?? "GET";
@@ -448,7 +503,14 @@ export async function createDeskApp(opts: {
         sendJson(req, res, 405, { error: "That method is not used here." });
         return;
       }
+      const projectDir = activeDir;
       if (method === "POST") {
+        if (holding && !pathname.startsWith("/api/project/")) {
+          sendJson(req, res, 409, {
+            error: "Start a project first. The desk will not write into its own source folder.",
+          });
+          return;
+        }
         await handlePost(
           req,
           res,
@@ -464,6 +526,8 @@ export async function createDeskApp(opts: {
           handleTools,
           resetLive,
           guideThink,
+          switchTo,
+          holding,
         );
         return;
       }
@@ -479,8 +543,56 @@ export async function createDeskApp(opts: {
         req.url ?? "/",
         notice,
         () => preflight,
+        holding,
       );
     },
+  };
+}
+
+function idleInterview(): InterviewSession {
+  return {
+    next: () => null,
+    command: () => Promise.reject(new InterviewError("command", "Start a project before answering.")),
+    coverage: () => ({ answered: 0, suggested: 0, skipped: 0, soft: 0, imported: 0 }),
+    lastPushback: null,
+  };
+}
+
+function holdingView(): DeskSession {
+  return {
+    question: null,
+    pushback: null,
+    done: false,
+    progress: {
+      answered: 0,
+      suggested: 0,
+      skipped: 0,
+      soft: 0,
+      imported: 0,
+      phase: "Don't Panic",
+      promptId: "",
+      nextAction: "Name a project.",
+    },
+    counts: null,
+    assumption: null,
+    required: false,
+    mastCompact: false,
+    mastLine: "",
+    mapHtml: "",
+    guideHtml: "",
+    transcriptHtml: "",
+    statusHtml: "",
+    cardHtml: "",
+    choices: null,
+    projectKey: "",
+    draft: null,
+    savedFiles: [],
+    draftsClearedAt: null,
+    answerDraft: null,
+    logoFile: null,
+    lead: "",
+    help: "",
+    briefStatus: null,
   };
 }
 
@@ -859,6 +971,8 @@ async function handlePost(
   handleTools: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void>,
   resetLive: () => void,
   guideThink: GuideThink,
+  switchProject: (dir: string) => Promise<void> = async () => undefined,
+  holding = false,
 ): Promise<void> {
   if (pathname === "/settings") {
     await handleSettingsPost(req, res, token, projectDir, enqueue, notice);
@@ -875,9 +989,10 @@ async function handlePost(
   if (
     pathname === "/api/project/save" ||
     pathname === "/api/project/open" ||
+    pathname === "/api/project/new" ||
     pathname === "/api/project/remove"
   ) {
-    await handleProjectRoute(req, res, pathname, token, projectDir, reloadInterview);
+    await handleProjectRoute(req, res, pathname, token, projectDir, reloadInterview, switchProject, holding);
     return;
   }
   if (pathname === "/api/interview/restart") {
@@ -992,6 +1107,8 @@ async function handleProjectRoute(
   token: string,
   projectDir: string,
   reloadInterview: () => Promise<void>,
+  switchProject: (dir: string) => Promise<void>,
+  holding: boolean,
 ): Promise<void> {
   if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
     sendJson(req, res, 413, { error: "That request is too large." });
@@ -1014,9 +1131,26 @@ async function handleProjectRoute(
     accept: headerOne(req.headers.accept),
     tokensMatch,
   });
+  if (result.type === "switch") {
+    try {
+      await switchProject(result.projectDir);
+      if (!holding) await reloadInterview();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "";
+      const location = message.includes("own source repo") ? "/?open-error=repo" : "/?open-error=name";
+      res.writeHead(303, { location });
+      res.end();
+      return;
+    }
+    res.writeHead(303, { location: "/" });
+    res.end();
+    return;
+  }
   if (result.type === "redirect") {
-    if (pathname === "/api/project/open") await reloadInterview();
-    res.writeHead(303, { location: result.location ?? "/" });
+    const location = result.location ?? "/";
+    const opened = pathname === "/api/project/open" && !location.includes("open-error") && !holding;
+    if (opened) await reloadInterview();
+    res.writeHead(303, { location });
     res.end();
     return;
   }
@@ -1662,6 +1796,18 @@ function briefPayload(desk: BriefDeskView): {
   };
 }
 
+async function approvePlanWhenFree(projectDir: string): Promise<void> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await approveSitePlan(projectDir);
+      return;
+    } catch (error: unknown) {
+      if (!(error instanceof LockHeld) || attempt === 7) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
+
 async function approveBriefWhenFree(
   projectDir: string,
   guideThink: GuideThink,
@@ -1738,12 +1884,38 @@ async function handleApproveForm(
         return;
       }
       const markdown = desk.draft !== null ? renderSiteBrief(desk.draft) : (readSiteBrief(projectDir) ?? "");
-      if (markdown.trim() !== "") {
-        const coverage = projectPlanCoverage(projectDir, markdown);
-        if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+      if (readPromptTasks(projectDir).length === 0) {
+        await approveBriefWhenFree(projectDir, guideThink, confirmFallback);
+      } else {
+        if (markdown.trim() !== "") {
+          const coverage = projectPlanCoverage(projectDir, markdown);
+          if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+        }
+        await approvePlanWhenFree(projectDir);
       }
-      // The next page reads buildStarted. Redirecting first paints the pending brief.
-      await approveBriefWhenFree(projectDir, guideThink, confirmFallback);
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "stage") {
+      const params = mime === "application/json" ? null : new URLSearchParams(raw);
+      const stage = params?.get("stage") ?? "";
+      const typed = (params?.get("approval") ?? "").trim();
+      const commit = params?.get("commit") ?? "approve";
+      const text = typed !== "" ? typed : commit === "approve" ? "Approved." : "";
+      if ((stage !== "sitemap" && stage !== "wireframe") || text === "") {
+        const brief = readBriefDesk(projectDir);
+        const message = text === "" ? "Write the change." : "That stage is not on the desk.";
+        if (mime === "application/json") {
+          sendJson(req, res, 400, { error: message });
+          return;
+        }
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, message, projectDir), projectDir, token, false);
+        return;
+      }
+      const brief = readBriefDesk(projectDir);
+      const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
+      await approveDesignStage(projectDir, markdown, stage, text);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
@@ -1943,8 +2115,30 @@ async function handleGet(
   rawUrl: string,
   notice: string | null = null,
   getPreflight: () => DeskPreflight | null = () => null,
+  holding = false,
 ): Promise<void> {
+  if (
+    holding &&
+    pathname !== "/" &&
+    !pathname.startsWith("/src/") &&
+    !pathname.startsWith("/public/") &&
+    !pathname.startsWith("/client/") &&
+    !pathname.startsWith("/vendor")
+  ) {
+    if (pathname.startsWith("/api/")) {
+      sendJson(req, res, 409, { error: "Start a project first. The desk will not write into its own source folder." });
+      return;
+    }
+    res.writeHead(303, { location: "/" });
+    res.end();
+    return;
+  }
   if (pathname === "/") {
+    const openNotice = openErrorNotice(rawUrl);
+    if (holding) {
+      await deliverHtml(req, res, 200, renderFirstRun(token), projectDir, token, true, undefined, openNotice);
+      return;
+    }
     const session = view();
     const flags = await enqueue(() => readVoiceDeskFlags(projectDir));
     let showTour = true;
@@ -1968,6 +2162,7 @@ async function handleGet(
       token,
       !stay,
       foldStyleHeaders(),
+      openNotice,
     );
     return;
   }
@@ -2069,6 +2264,10 @@ async function handleGet(
   }
   if (pathname === "/approve") {
     const brief = readBriefDesk(projectDir);
+    if (brief.buildStarted) {
+      const markdown = briefMarkdown(projectDir, brief);
+      if (markdown.trim() !== "") await presentDesignStage(projectDir, markdown);
+    }
     const html =
       brief.status === "idle" && !brief.buildStarted
         ? renderApprove(token, notice, view().question?.id ?? null)
@@ -2464,10 +2663,31 @@ function buildSession(
     lead = walked.lead;
     if (walked.locked) help = "";
   }
+  if (
+    question !== null &&
+    projectDir !== "" &&
+    (question.id === "DP-1.1" || question.id === "DP-1.2" || question.id === "DP-4.3")
+  ) {
+    const gate = gateQuestion(question, loadSessionState(projectDir, questions), questions);
+    if (gate.action === "confirm") {
+      question = { ...question, ask: gate.ask };
+      lead = "";
+      help = "";
+    }
+  }
   if (question === null) {
     lead = "";
     help = "";
   }
+  const typeMood = answers
+    .map((answer) => answer.value)
+    .filter((value) => value.trim() !== "")
+    .join(" ");
+  const saveStatus = sessionSaveStatus(projectDir);
+  const fontSamples =
+    question !== null && /pick a style from these examples/i.test(question.ask)
+      ? dealFontSamples(typeMood)
+      : undefined;
   const card: CardState = {
     question,
     draft: "",
@@ -2480,6 +2700,7 @@ function buildSession(
     required,
     enterHint: true,
     choices,
+    ...(fontSamples !== undefined ? { fontSamples } : {}),
     ...(savedFiles.length > 0 ? { attach: chipsFromSaved(savedFiles) } : {}),
     ...(lead !== "" ? { lead } : {}),
     ...(help !== "" ? { help } : {}),
@@ -2559,7 +2780,34 @@ function buildSession(
     lead,
     help,
     briefStatus,
+    saveStatus,
+    ...(typeMood !== "" ? { typeMood } : {}),
+    ...(fontSamples !== undefined ? { fontSamples } : {}),
   };
+}
+
+function sessionSaveStatus(projectDir: string): NonNullable<DeskSession["saveStatus"]> {
+  if (projectDir === "") return { ok: false, savedAt: null, place: "", error: null };
+  try {
+    const notice = readSaveNoticeSync(projectDir);
+    if (notice === null) return { ok: false, savedAt: null, place: "", error: null };
+    if (!notice.ok) {
+      return {
+        ok: false,
+        savedAt: notice.savedAt,
+        place: "",
+        error: notice.reason ?? "The last save did not finish.",
+      };
+    }
+    return {
+      ok: true,
+      savedAt: notice.savedAt,
+      place: notice.filePath === null ? "" : locationLabel(notice.filePath),
+      error: null,
+    };
+  } catch {
+    return { ok: false, savedAt: null, place: "", error: null };
+  }
 }
 
 function filterLogoChoices(
@@ -3103,16 +3351,23 @@ function renderApproveBrief(
         : desk.status === "revising"
           ? "Revising the Site Brief"
           : "The Site Brief is ready for a yes.";
+  const stage: ApproveStage =
+    projectDir !== "" && planDraftInFlight(projectDir)
+      ? "planning"
+      : projectDir !== "" && readPromptTasks(projectDir).length > 0
+        ? "plan"
+        : "brief";
   let coverage: { rows: readonly { id: string; label: string; promptIds: string[]; covered: boolean }[]; message: string } | undefined;
-  if (desk.draft !== null && projectDir !== "") {
+  if (stage === "plan" && desk.draft !== null && projectDir !== "") {
     try {
       const report = projectPlanCoverage(projectDir, renderSiteBrief(desk.draft));
-      coverage = { rows: report.rows, message: report.message };
+      if (report.rows.length > 0) coverage = { rows: report.rows, message: report.message };
     } catch {
       coverage = undefined;
     }
   }
-  return renderPanel({
+  const stageHtml = desk.buildStarted && projectDir !== "" ? renderDesignStagePanel(projectDir, token) : "";
+  let html = renderPanel({
     notice,
     token,
     title: "Approvals",
@@ -3120,9 +3375,13 @@ function renderApproveBrief(
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir)),
+    main: approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir), stage, stageHtml),
     script: "/client/brief-change.js",
   });
+  if (html.includes("data-pick-direction") && !html.includes("/client/direction.js")) {
+    html = html.replace("</body>", `    <script type="module" src="/client/direction.js"></script>\n  </body>`);
+  }
+  return html;
 }
 
 function renderApprove(token: string, notice: string | null = null, questionId: string | null = null): string {
@@ -4607,9 +4866,46 @@ async function deliverHtml(
   token: string,
   first: boolean,
   headers?: Record<string, string>,
+  notice = "",
 ): Promise<void> {
-  const chrome = await projectChrome(projectDir, token, first);
+  const chrome = await projectChrome(projectDir, token, first, notice);
   sendHtml(req, res, status, applyProjectChrome(html, chrome), headers);
+}
+
+function openErrorNotice(rawUrl: string): string {
+  try {
+    const code = new URL(rawUrl, "http://localhost").searchParams.get("open-error");
+    if (code === "choose") return "Choose a project folder or .hhproject file";
+    if (code === "repo") return DESK_REPO_REFUSAL;
+    if (code === "name") return "Name the project.";
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function renderFirstRun(token: string): string {
+  let html = renderShell();
+  html = html.replace(
+    '<meta charset="utf-8" />',
+    `<meta charset="utf-8" />\n    <meta name="hh-csrf" content="${escapeHtml(token)}" />`,
+  );
+  html = html.replace(
+    `<div class="hh-interview" data-interview>
+            <div class="hh-interview__head" data-interview-head></div>
+            <section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">
+              <article class="hh-qcard">
+                <p class="hh-qcard__title">No question yet.</p>
+                <p class="hh-qcard__why">One card will sit here when the interview starts.</p>
+              </article>
+            </section>
+          </div>`,
+    `<section data-first-run>
+            <h2>Start a project</h2>
+            <p>The desk will not interview inside its own source folder. Name a project, or open one you already have.</p>
+          </section>`,
+  );
+  return html;
 }
 
 function sendHtml(

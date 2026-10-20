@@ -132,7 +132,7 @@ test("an uncovered page disables Approve and the server names it", async () => {
   }
 });
 
-test("a complete plan is accepted and Approve stays on", async () => {
+test("brief Approve is on with no plan, then the plan Approve follows coverage", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-approve-232-ok-"));
   seed(dir, "Pages: Home.", null);
   let handle: ServerHandle | undefined;
@@ -140,26 +140,41 @@ test("a complete plan is accepted and Approve stays on", async () => {
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink as never });
     const page = await raw(handle.port, "GET", "/approve");
     assert.equal(page.status, 200);
-    assert.match(page.body, /data-plan-coverage/);
-    assert.match(page.body, /data-coverage-id="REQ-PAGE-home" data-covered="yes"/);
-    assert.doesNotMatch(page.body, /data-covered="no"/);
+    assert.equal(page.body.includes("data-plan-coverage"), false);
+    assert.match(page.body, /Draft the plan/);
     assert.match(page.body, /value="approve">Approve</);
+    assert.equal(page.body.includes('value="approve" disabled'), false);
     const token = tokenFrom(page.body);
-    const accepted = await raw(
+    const drafted = await raw(
       handle.port,
       "POST",
       "/approve",
       { "content-type": "application/x-www-form-urlencoded" },
       `csrf=${token}&action=approve`,
     );
-    assert.equal(accepted.status, 303);
+    assert.equal(drafted.status, 303);
     const prompts = path.join(dir, ".hitchhiker", "prompts");
     const written = readdirSync(prompts)
       .filter((name) => name.endsWith(".md"))
       .map((name) => readFileSync(path.join(prompts, name), "utf8"))
       .find((text) => text.includes("Add the Home route"));
     assert.ok(written, "the home route prompt is written");
-    assert.match(written, /Add the Home route/);
+    const planned = await raw(handle.port, "GET", "/approve");
+    assert.match(planned.body, /data-coverage-id="REQ-PAGE-home" data-covered="yes"/);
+    assert.doesNotMatch(planned.body, /data-covered="no"/);
+    assert.match(planned.body, /Approve plan/);
+    assert.equal(planned.body.includes('value="approve" disabled'), false);
+    const token2 = tokenFrom(planned.body);
+    const accepted = await raw(
+      handle.port,
+      "POST",
+      "/approve",
+      { "content-type": "application/x-www-form-urlencoded" },
+      `csrf=${token2}&action=approve`,
+    );
+    assert.equal(accepted.status, 303);
+    const built = await raw(handle.port, "GET", "/approve");
+    assert.match(built.body, /The build is started/);
   } finally {
     if (handle !== undefined) await handle.close();
     rmSync(dir, { recursive: true, force: true });

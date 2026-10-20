@@ -1,5 +1,5 @@
 export { autosaveProject } from "./autosave.ts";
-export { captureProject, type CaptureOptions } from "./capture.ts";
+export { captureProject, interviewProgressLabel, type CaptureOptions } from "./capture.ts";
 export { gitMismatch, readGitRefs } from "./git-refs.ts";
 export {
   loadProjectFile,
@@ -16,6 +16,7 @@ export {
   projectHome,
   readRecentProjects,
   readSaveNotice,
+  readSaveNoticeSync,
   recentIndexPath,
   removeRecentProject,
   saveNoticePath,

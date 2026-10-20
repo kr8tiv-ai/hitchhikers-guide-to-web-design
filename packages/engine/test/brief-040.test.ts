@@ -10,7 +10,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
-import { approveSiteBrief, draftSiteBrief, readBriefDesk, reviseSiteBrief } from "../src/guide/brief-desk.ts";
+import { approveSiteBrief, approveSitePlan, draftSiteBrief, readBriefDesk, reviseSiteBrief } from "../src/guide/brief-desk.ts";
 import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { BRIEF_KEYS, briefFieldTarget, type Facts, type SiteBrief } from "../src/guide/schemas.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
@@ -37,7 +37,7 @@ function splitIds(facts: Facts): { covered: string[]; uncovered: string[] } {
   const uncovered: string[] = [];
   const seen = new Set<string>();
   for (const answer of facts.answers) {
-    if (seen.has(answer.id)) continue;
+    if (answer.id === "DP-6.5" || seen.has(answer.id)) continue;
     seen.add(answer.id);
     if (SKIPPED.has(answer.status ?? "")) uncovered.push(answer.id);
     else if (answer.value.trim() !== "") covered.push(answer.id);
@@ -310,7 +310,9 @@ test("confirming a small fallback approves it and keeps the marker", async () =>
     const approved = await approveSiteBrief(dir, think as never, { confirmFallback: true });
     assert.equal(approved.status, "approved");
     assert.equal(approved.fallback, true);
-    assert.equal(approved.buildStarted, true);
+    assert.equal(approved.buildStarted, false);
+    const started = await approveSitePlan(dir);
+    assert.equal(started.buildStarted, true);
     assert.equal(approved.error, "");
     assert.match(approved.draft?.budget ?? "", /Not applicable/);
     const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "brief-pending.json"), "utf8")) as {

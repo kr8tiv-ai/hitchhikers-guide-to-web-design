@@ -23,14 +23,26 @@ function escapeText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function localTime(iso: string): string {
+/** Same clock as save-line.ts formatSavedAt. This file has no imports. */
+function localTime(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
+  const hm = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   }).format(date);
+  const same =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  if (same) return `Today ${hm}`;
+  const day = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+  return `${day} ${hm}`;
 }
 
 function paintTimes(root: ParentNode): void {
@@ -125,8 +137,41 @@ function bindEffort(): void {
   });
 }
 
+function showInline(form: HTMLFormElement, selector: string, message: string): void {
+  const slot = form.querySelector(selector);
+  if (!(slot instanceof HTMLElement)) return;
+  slot.hidden = false;
+  slot.textContent = message;
+}
+
+function bindOpen(): void {
+  const form = document.querySelector("form[data-open-project]");
+  if (!(form instanceof HTMLFormElement)) return;
+  form.addEventListener("submit", (event) => {
+    const field = form.querySelector("#hh-open-file");
+    const value = field instanceof HTMLInputElement ? field.value.trim() : "";
+    if (value !== "") return;
+    event.preventDefault();
+    showInline(form, "[data-open-error]", "Choose a project folder or .hhproject file");
+  });
+}
+
+function bindNew(): void {
+  const form = document.querySelector("form[data-new-project]");
+  if (!(form instanceof HTMLFormElement)) return;
+  form.addEventListener("submit", (event) => {
+    const field = form.querySelector("#hh-new-name");
+    const value = field instanceof HTMLInputElement ? field.value.trim() : "";
+    if (value !== "") return;
+    event.preventDefault();
+    showInline(form, "[data-new-error]", "Name the project.");
+  });
+}
+
 const buttons = document.querySelectorAll("[data-copy]");
 for (const button of buttons) mark(button);
 paintTimes(document);
 bindSave();
 bindEffort();
+bindOpen();
+bindNew();

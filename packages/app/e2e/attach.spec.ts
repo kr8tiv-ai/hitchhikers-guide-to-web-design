@@ -142,7 +142,9 @@ test("drop, attach, paste, and a failed upload keep the draft", async ({ page })
     await page.unroute("**/api/attach/**");
 
     await page.setViewportSize({ width: 390, height: 800 });
-    const box = await page.locator("[data-attach-button]").boundingBox();
+    const attachButton = page.locator("[data-attach-button]");
+    await expect(attachButton).toBeVisible();
+    const box = await attachButton.boundingBox();
     expect(box).not.toBeNull();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
