@@ -41,3 +41,18 @@ The planner adds the lines from the brand's motion score, the style world, and t
 ## DESIGN.md and motion.ts
 
 The brand step writes `DESIGN.md` at the site project root: tokens, type scale, color, spacing, component rules, motion principles with exact durations, eases and distances, and signature techniques. The plan step writes `src/scripts/motion.ts`: typed GSAP, Lenis, and Three constants (scrub, damping, bloom, easings, durations, staggers, scroll scenes, and a reduced-motion map). Every build prompt names both paths. A page that animates without those constants is flagged. The numbers are a starting point. Any appropriate library may carry the work.
+
+## Recipe checker
+
+`checkRecipes` in `@hitchhiker/qa` reads a built page and reports:
+
+- Lenis together with a CSS scroll timeline (two scroll owners)
+- Lenis without `ScrollTrigger.update`, `gsap.ticker`, and `lagSmoothing(0)`
+- a tween of width, height, top, left, margin, padding, or a similar layout property
+- ScrollTrigger with no `refresh()` after fonts and images
+- a horizontal `xPercent` track whose ease is not `"none"`
+- ScrollToPlugin while Lenis is the scroll owner
+- animation with no `prefers-reduced-motion` branch
+- more than one WebGL context
+
+`checkRecipeDir` walks a site and skips markdown, `node_modules`, and `.hitchhiker`. A clean pattern is not a ban on any library.
