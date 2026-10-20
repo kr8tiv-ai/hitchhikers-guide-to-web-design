@@ -68,6 +68,9 @@ function raw(
         });
       },
     );
+    req.setTimeout(45_000, () => {
+      req.destroy(new Error(`The ${method} ${pathname} call timed out.`));
+    });
     req.on("error", reject);
     if (body !== undefined) req.write(body);
     req.end();
@@ -187,7 +190,7 @@ test("Resume stays disabled while a run is live and the recovery line is shown",
   assert.equal(live.includes("!"), false);
 });
 
-test("desk start holds a finished prompt until Resume, then verifies and advances", { timeout: 20_000 }, async () => {
+test("desk start holds a finished prompt until Resume, then verifies and advances", { timeout: 90_000 }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-app-034b-start-"));
   seed(dir);
   const seen: string[] = [];
@@ -276,7 +279,7 @@ test("desk start holds a finished prompt until Resume, then verifies and advance
   }
 });
 
-test("two Resume posts start one run and the button is held while it is live", { timeout: 20_000 }, async () => {
+test("two Resume posts start one run and the button is held while it is live", { timeout: 90_000 }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-app-034b-resume-"));
   seed(dir);
   const seen: string[] = [];

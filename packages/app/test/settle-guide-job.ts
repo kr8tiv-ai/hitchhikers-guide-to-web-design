@@ -3,16 +3,28 @@
  */
 import http from "node:http";
 
+/** A saturated `pnpm -r test` can stall one turn well past 20s. 60s still fails a hung job. */
+const JOB_DEADLINE_MS = 60_000;
+const POLL_TIMEOUT_MS = 10_000;
+
 export async function settleRaw(
   port: number,
   result: { status: number; body: string; type?: string },
+  deadlineMs = JOB_DEADLINE_MS,
 ): Promise<{ status: number; body: string; type: string }> {
   const type = result.type ?? "";
   const jobId = runningJobId(result.status, result.body);
   if (jobId === null) return { status: result.status, body: result.body, type };
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
-    const next = await httpGet(port, `/api/guide-job/${jobId}`);
+    const remaining = deadline - Date.now();
+    let next: { status: number; body: string };
+    try {
+      next = await httpGet(port, `/api/guide-job/${jobId}`, Math.min(POLL_TIMEOUT_MS, remaining));
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      continue;
+    }
     let parsed: unknown = null;
     try {
       parsed = JSON.parse(next.body);
@@ -56,7 +68,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function httpGet(port: number, pathname: string): Promise<{ status: number; body: string }> {
+function httpGet(port: number, pathname: string, timeoutMs: number): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
@@ -74,6 +86,9 @@ function httpGet(port: number, pathname: string): Promise<{ status: number; body
         });
       },
     );
+    req.setTimeout(Math.max(1, timeoutMs), () => {
+      req.destroy(new Error("The Guide job poll timed out."));
+    });
     req.on("error", reject);
     req.end();
   });

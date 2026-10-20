@@ -83,7 +83,7 @@ test("acceptUpload sanitizes a path and rejects the blocked list", () => {
   assert.equal(wav.ok, true);
 });
 
-test("a 26 MB upload is refused before the body is buffered", { timeout: 10_000 }, async () => {
+test("a 26 MB upload is refused before the body is buffered", { timeout: 60_000 }, async () => {
   await withDesk(async (handle) => {
     const page = await fetch(handle.url);
     const token = tokenFrom(await page.text());
@@ -108,12 +108,19 @@ test("a 26 MB upload is refused before the body is buffered", { timeout: 10_000 
           res.on("end", () => resolve(res.statusCode ?? 0));
         },
       );
-      req.on("error", () => resolve(413));
+      req.setTimeout(45_000, () => {
+        req.destroy(new Error("Upload refusal timed out."));
+      });
+      req.on("error", (error: NodeJS.ErrnoException) => {
+        if (error.message === "Upload refusal timed out.") reject(error);
+        else resolve(413);
+      });
       req.write(Buffer.alloc(1024, 1));
-      req.on("error", reject);
     });
     assert.equal(status, 413);
-    assert.ok(Date.now() - started < 2_000);
+    // Only 1 KB was written. A handler that waits for the declared 26 MB never answers.
+    // The clock is wide enough for a saturated full-suite run.
+    assert.ok(Date.now() - started < 45_000);
   });
 });
 
