@@ -190,6 +190,110 @@ export function expandSkillIncludes(
   return { text, unknown, inlined, referenced };
 }
 
+/**
+ * Idea 22. Phase prompts load knowledge packs through the @skill line.
+ * WebGL packs load in the WebGL phase. Motion packs load in the motion
+ * phase. A copy prompt that names Three fails. A sitemap prompt that
+ * names motion fails.
+ */
+export const REFERENCE_PHASES = [
+  "sitemap",
+  "copy",
+  "type",
+  "color",
+  "frame",
+  "states",
+  "components",
+  "motion",
+  "webgl",
+] as const;
+
+export type ReferencePhase = (typeof REFERENCE_PHASES)[number];
+
+export const WEBGL_REFERENCE_PACKS = ["drei", "glsl", "r3f", "three"] as const;
+export const MOTION_REFERENCE_PACKS = ["gsap", "lenis", "motion", "motion-lib"] as const;
+
+/** 240a spatial skills count as WebGL references. Scroll choreography counts as motion. */
+const WEBGL_SKILLS = ["object-showcase", "post-processing", "shader-recipes"] as const;
+const MOTION_SKILLS = ["scroll-choreography"] as const;
+
+const PHASE_PACKS: Record<ReferencePhase, readonly string[]> = {
+  sitemap: ["brand-frameworks", "seo", "ux-conversion"],
+  copy: ["anti-slop", "copywriting", "sales-psychology"],
+  type: ["typography"],
+  color: ["color"],
+  frame: ["a11y", "ux-conversion"],
+  states: ["a11y"],
+  components: ["a11y", "vanilla"],
+  motion: MOTION_REFERENCE_PACKS,
+  webgl: WEBGL_REFERENCE_PACKS,
+};
+
+export function phaseReferenceText(phase: ReferencePhase): string {
+  return PHASE_PACKS[phase]
+    .map((name) => `@skill:${name}\nRead on demand: packages/knowledge/packs/${name}/SKILL.md`)
+    .join("\n");
+}
+
+const REFERENCE_MENTION = /@skill:([a-z0-9-]+)|@pack:([a-z0-9-]+)|packages\/knowledge\/packs\/([a-z0-9-]+)/g;
+
+export function mentionedReferences(prompt: string): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const match of prompt.matchAll(REFERENCE_MENTION)) {
+    const name = match[1] ?? match[2] ?? match[3] ?? "";
+    if (name === "" || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+function isWebglReference(name: string): boolean {
+  return (WEBGL_REFERENCE_PACKS as readonly string[]).includes(name)
+    || (WEBGL_SKILLS as readonly string[]).includes(name);
+}
+
+function isMotionReference(name: string): boolean {
+  return (MOTION_REFERENCE_PACKS as readonly string[]).includes(name)
+    || (MOTION_SKILLS as readonly string[]).includes(name);
+}
+
+export interface PhaseReferenceAudit {
+  ok: boolean;
+  problems: string[];
+}
+
+/** Fail when a phase prompt loads a reference that phase does not need. */
+export function auditPhaseReferences(phase: ReferencePhase, prompt: string): PhaseReferenceAudit {
+  const problems: string[] = [];
+  const names = mentionedReferences(prompt);
+  for (const name of names) {
+    if (isWebglReference(name) && phase !== "webgl") {
+      problems.push(`WebGL reference ${name} is in the ${phase} phase.`);
+    }
+    if (isMotionReference(name) && phase !== "motion") {
+      problems.push(`Motion reference ${name} is in the ${phase} phase.`);
+    }
+  }
+  if (phase === "webgl" && !names.includes("three")) {
+    problems.push("The WebGL phase does not include the Three pack.");
+  }
+  return { ok: problems.length === 0, problems };
+}
+
+export interface PhasePromptLog {
+  phase: ReferencePhase;
+  text: string;
+  audit: PhaseReferenceAudit;
+}
+
+/** The prompt log for one phase. The text is the reference list, not a model call. */
+export function recordPhasePrompt(phase: ReferencePhase): PhasePromptLog {
+  const text = phaseReferenceText(phase);
+  return { phase, text, audit: auditPhaseReferences(phase, text) };
+}
+
 function appetiteFits(band: string, appetite: number): boolean {
   if (band === "any") return true;
   if (band === "low") return appetite <= 4;

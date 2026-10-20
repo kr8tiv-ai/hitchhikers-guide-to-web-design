@@ -226,16 +226,30 @@ export {
 } from "./spec/language-pack.ts";
 export type { LanguageEntry, LanguageQuery } from "./spec/language-pack.ts";
 export {
+  MOTION_REFERENCE_PACKS,
+  REFERENCE_PHASES,
   SKILL_INCLUDE_TOKEN_BUDGET,
+  WEBGL_REFERENCE_PACKS,
+  auditPhaseReferences,
   expandSkillIncludes,
   loadSkillPacks,
+  mentionedReferences,
   parseSkillPack,
+  phaseReferenceText,
   planSkillLines,
+  recordPhasePrompt,
   selectSkillPacks,
   siteTypeForWorld,
   skillVersionMentions,
 } from "./spec/skills.ts";
-export type { SkillExpansion, SkillPack, SkillQuery } from "./spec/skills.ts";
+export type {
+  PhasePromptLog,
+  PhaseReferenceAudit,
+  ReferencePhase,
+  SkillExpansion,
+  SkillPack,
+  SkillQuery,
+} from "./spec/skills.ts";
 export {
   buildMarkupFromReferences,
   expandIngredientIncludes,
