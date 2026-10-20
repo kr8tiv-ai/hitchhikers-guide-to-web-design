@@ -7,7 +7,7 @@
  */
 
 import type { BeautyFailure } from "./beauty-gate.ts";
-import { juryFromRubric, type JuryResult } from "./jury.ts";
+import { jury, juryFromRubric, type JuryResult } from "./jury.ts";
 import { scorePatterns, patternPageFailures, type PatternInput, type PatternPage, type PatternScore, type VisionScores } from "./pattern-score.ts";
 import { evaluatePerformance, type PerformanceInput, type PerformanceResult } from "./performance-gate.ts";
 import { checkRecipes, type RecipeFinding } from "./recipe-check.ts";
@@ -38,13 +38,29 @@ export function judgeAward(input: AwardInput): AwardResult {
   ];
   const blocked = !pattern.pass || performance.status === "BLOCKER" || recipes.length > 0;
   return {
-    jury: juryFromRubric(input.vision, blocked),
+    jury: awardJury(input.vision, blocked),
     pattern,
     performance,
     recipes,
     failures,
     developer: Math.max(0, pattern.dimensions.developer - recipes.length * 2),
   };
+}
+
+/** The award path keeps the four-part jury and the 40/30/20/10 rubric on the same total. */
+function awardJury(vision: VisionScores, blocked: boolean): JuryResult {
+  const rubric = juryFromRubric(vision, blocked);
+  const parts = jury({
+    brand: vision.design,
+    craft: vision.usability,
+    clarity: vision.creativity,
+    performance: vision.content,
+    blocked,
+  });
+  if (rubric.total !== parts.total || rubric.status !== parts.status) {
+    throw new Error("The Awwwards rubric and the four-part jury disagree.");
+  }
+  return parts;
 }
 
 function patternInput(input: AwardInput): PatternInput {
