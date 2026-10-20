@@ -702,3 +702,11 @@ export {
   type WhisperModelPin,
 } from "./tool-install/index.ts";
 export { InstallCancelled } from "./tool-install/index.ts";
+export {
+  OPACITY_KEEP_MS,
+  OPACITY_KEEP_NOTE,
+  classifyMotion,
+  posesMatch,
+  stillIsArtDirected,
+} from "./tier-zero-still.ts";
+export type { MotionClass, TierZeroCamera, TierZeroGrade, TierZeroLighting, TierZeroStill } from "./tier-zero-still.ts";
