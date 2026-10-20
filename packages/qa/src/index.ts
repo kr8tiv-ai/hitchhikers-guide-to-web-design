@@ -67,6 +67,8 @@ export { stateSweepProjects } from "./device-matrix.ts";
 export { UI_STATES, ZOOM_PERCENT, evaluateStateSweeps, stateFixture } from "./state-sweep.ts";
 export type { StateFixture, SweepReport, UiState, ZoomSample } from "./state-sweep.ts";
 export { TEXT_CHECK_WIDTHS, evaluateMobile, runMobileChecks } from "./mobile-checks.ts";
+export { evaluateNavFooter } from "./craft-gate.ts";
+export type { NavFooterInput, NavFooterResult, NavTarget } from "./craft-gate.ts";
 export type { MenuScript, MobileDocument, MobileReport, MobileRun, TargetBox, TextSample } from "./mobile-checks.ts";
 export {
   OPACITY_KEEP_MS,
