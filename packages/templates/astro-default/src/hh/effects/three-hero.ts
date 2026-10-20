@@ -3,7 +3,7 @@
  * The renderer uses the shared WebGL2 context and the shared ticker.
  */
 
-import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, HERO_POSE, posterImageFrom } from "../webgl.ts";
+import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, teardownScene, HERO_POSE, posterImageFrom } from "../webgl.ts";
 
 interface TickerLike {
   add: (fn: () => void) => void;
@@ -26,7 +26,9 @@ export async function mountThreeHero(canvas: HTMLCanvasElement, poster: HTMLElem
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 20);
   camera.position.z = 4;
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xc8c2b4 }));
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const material = new THREE.MeshStandardMaterial({ color: 0xc8c2b4 });
+  const mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
   scene.add(new THREE.DirectionalLight(0xffffff, 2));
   let running = true;
@@ -56,6 +58,6 @@ export async function mountThreeHero(canvas: HTMLCanvasElement, poster: HTMLElem
     stopWatch();
     stopLoss();
     gsapMod.default.ticker.remove(tick);
-    renderer.dispose();
+    teardownScene({ geometries: [geometry], materials: [material], textures: [], renderer });
   };
 }

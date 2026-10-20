@@ -4,7 +4,7 @@
  * The clock is gsap.ticker.
  */
 
-import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, HERO_POSE, posterImageFrom } from "../webgl.ts";
+import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, teardownScene, HERO_POSE, posterImageFrom, type DisposableResource } from "../webgl.ts";
 
 const VERT = "attribute vec2 position; void main(){ gl_Position = vec4(position, 0.0, 1.0); }";
 const FRAG = "precision highp float; uniform float uTime; void main(){ float shade = 0.45 + 0.15 * sin(uTime); gl_FragColor = vec4(shade, 0.32, 0.18, 1.0); }";
@@ -84,5 +84,18 @@ export async function mountShader(canvas: HTMLCanvasElement, poster: HTMLElement
     stopWatch();
     stopLoss();
     gsapMod.default.ticker.remove(tick);
+    teardownScene({
+      geometries: disposableOf(geometry),
+      materials: disposableOf(program),
+      textures: [],
+      renderer: disposableOf(renderer)[0] ?? null,
+    });
   };
+}
+
+function disposableOf(value: unknown): DisposableResource[] {
+  if (value === null || typeof value !== "object") return [];
+  const dispose = (value as { dispose?: unknown }).dispose;
+  if (typeof dispose !== "function") return [];
+  return [{ dispose: () => { dispose.call(value); } }];
 }

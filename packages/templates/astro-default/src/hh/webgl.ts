@@ -546,6 +546,79 @@ function quantize(value: number): number {
   return Math.round(value * 4) / 4;
 }
 
+export interface HeroLayerCss {
+  hero: string;
+  poster: string;
+  canvas: string;
+}
+
+export interface DomDriveInput {
+  scrollY: number;
+  maxScroll: number;
+  pointerX: number;
+  pointerY: number;
+  width: number;
+  height: number;
+}
+
+export interface DomDrive {
+  scroll: number;
+  pointerX: number;
+  pointerY: number;
+}
+
+export interface DisposableResource {
+  dispose: () => void;
+}
+
+export interface SceneTeardown {
+  geometries: readonly DisposableResource[];
+  materials: readonly DisposableResource[];
+  textures: readonly DisposableResource[];
+  renderer: DisposableResource | null;
+}
+
+/** Poster stays in flow. The canvas is absolute over that hero. */
+export function heroLayerCss(): HeroLayerCss {
+  return {
+    hero: "position:relative",
+    poster: "position:relative;display:block;width:100%;height:auto",
+    canvas: "position:absolute;inset:0;width:100%;height:100%",
+  };
+}
+
+/** Scroll is 0 to 1. Pointer is -1 to 1 across the hero. */
+export function driveFromDom(input: DomDriveInput): DomDrive {
+  return {
+    scroll: input.maxScroll <= 0 ? 0 : clampUnit(input.scrollY / input.maxScroll),
+    pointerX: input.width <= 0 ? 0 : clampSigned(input.pointerX / input.width),
+    pointerY: input.height <= 0 ? 0 : clampSigned(input.pointerY / input.height),
+  };
+}
+
+export async function refreshAfterFonts(refresh: () => void, fontsReady: Promise<unknown>): Promise<void> {
+  await fontsReady;
+  refresh();
+}
+
+export function teardownScene(scene: SceneTeardown): void {
+  for (const geometry of scene.geometries) geometry.dispose();
+  for (const material of scene.materials) material.dispose();
+  for (const texture of scene.textures) texture.dispose();
+  scene.renderer?.dispose();
+  resetSharedContext();
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(1, Math.max(0, value));
+}
+
+function clampSigned(unit: number): number {
+  if (!Number.isFinite(unit)) return 0;
+  return Math.min(1, Math.max(-1, unit * 2 - 1));
+}
+
 function close(left: number, right: number, epsilon: number): boolean {
   return Math.abs(left - right) <= epsilon;
 }
