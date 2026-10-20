@@ -11,20 +11,57 @@ export interface GitText {
 export type GitRunner = (cwd: string, args: readonly string[]) => GitText;
 
 const HEX_COMMIT = /^[0-9a-f]{40}$/;
+const GIT_LOCK_ATTEMPTS = 10;
 
-/** Spawn git only after the supervisor whitelist accepts the arguments. */
-export function runSupervisorGit(cwd: string, args: readonly string[]): GitText {
-  assertSupervisorGit(args);
+/** A Windows lock on a loose object. A rejected ref is not this. */
+export function gitTextIsFileLock(text: string): boolean {
+  return /permission denied|unable to write file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i.test(
+    text,
+  );
+}
+
+export function gitLockDelayMs(attempt: number): number {
+  return Math.min(2_000, 250 * 2 ** attempt);
+}
+
+function waitMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Retry only a file lock. A rejected push, a hook, and a bad ref return on the first result.
+ */
+export function retryGitText(run: () => GitText, wait: (ms: number) => void = waitMs): GitText {
+  let last: GitText = { status: 1, stdout: "", stderr: "git produced no result" };
+  for (let attempt = 0; attempt < GIT_LOCK_ATTEMPTS; attempt += 1) {
+    last = run();
+    if ((last.status ?? 1) === 0) return last;
+    const locked = gitTextIsFileLock(`${last.stderr}\n${last.stdout}`);
+    if (!locked || attempt === GIT_LOCK_ATTEMPTS - 1) return last;
+    wait(gitLockDelayMs(attempt));
+  }
+  return last;
+}
+
+function spawnGit(cwd: string, args: readonly string[]): GitText {
   const result = spawnSync("git", [...args], hiddenChildOptions({
     cwd,
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     encoding: "utf8" as const,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+    timeout: 60_000,
+    killSignal: "SIGKILL",
   }));
   const stdout = typeof result.stdout === "string" ? result.stdout.replace(/\r\n/g, "\n") : "";
   let stderr = typeof result.stderr === "string" ? result.stderr.replace(/\r\n/g, "\n") : "";
   if (result.error !== undefined && stderr.length === 0) stderr = result.error.message;
   return { status: result.status, stdout, stderr };
+}
+
+/** Spawn git only after the supervisor whitelist accepts the arguments. */
+export function runSupervisorGit(cwd: string, args: readonly string[]): GitText {
+  assertSupervisorGit(args);
+  return retryGitText(() => spawnGit(cwd, args));
 }
 
 export interface PushCheck {

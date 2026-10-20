@@ -17,7 +17,7 @@ import {
   type AgentRunResult,
 } from "../src/improve/agents.ts";
 import { openBugCountFromDisk } from "../src/improve/evaluate.ts";
-import { runSupervisorGit, verifyKeptCommit, type GitText } from "../src/improve/pushcheck.ts";
+import { gitLockDelayMs, gitTextIsFileLock, runSupervisorGit, verifyKeptCommit, type GitText } from "../src/improve/pushcheck.ts";
 import { runSupervise } from "../src/improve/supervisor.ts";
 import { baselineProblem } from "../src/improve/baseline.ts";
 import { exitNote, failureHint } from "../src/improve/session.ts";
@@ -69,18 +69,25 @@ const PROTECTED = JSON.stringify({
 });
 
 function git(cwd: string, args: readonly string[]): string {
-  const result = spawnSync("git", [...args], {
-    cwd,
-    encoding: "utf8",
-    shell: false,
-    windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) {
-    const detail = `${result.stderr ?? ""}${result.stdout ?? ""}`.trim();
-    throw new Error(detail.length > 0 ? detail : `git ${args.join(" ")} failed`);
+  let detail = "";
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const result = spawnSync("git", [...args], {
+      cwd,
+      encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 60_000,
+      killSignal: "SIGKILL",
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
+    if (result.status === 0) return (result.stdout ?? "").replace(/\r\n/g, "\n");
+    detail = `${result.stderr ?? ""}${result.stdout ?? ""}`.trim();
+    if (detail === "" && result.error instanceof Error) detail = result.error.message;
+    if (!gitTextIsFileLock(detail) || attempt === 9) break;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, gitLockDelayMs(attempt));
   }
-  return (result.stdout ?? "").replace(/\r\n/g, "\n");
+  throw new Error(detail.length > 0 ? detail : `git ${args.join(" ")} failed`);
 }
 
 function initRepo(branch: string): string {
