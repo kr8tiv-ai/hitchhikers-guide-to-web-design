@@ -60,7 +60,7 @@ pnpm -r run --if-present e2e
 
 ### Licence audit
 
-Job `licence` installs the workspace, then runs one Node script.
+Job `licence` installs the workspace, then runs one Node script. The licence job checks package licences. It does not check font licenses.
 
 - When `packages/qa/src/licenses.ts` exists, the script imports `auditDeps` from that module (the licence audit prompt 156 completes) and passes the packages from `pnpm licenses list --json`. A result other than `{ ok: true }` fails the job.
 - Until that file exists, the same JSON fails the job when a licence matches GPL or AGPL.

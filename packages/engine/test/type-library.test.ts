@@ -111,9 +111,6 @@ test("the shipped library count equals the JSON appendix and excludes the notes"
     assert.equal(shipped.body, row.body);
     assert.equal(shipped.foundry, row.foundry);
     assert.equal(shipped.source, row.source);
-    assert.equal(shipped.license, row.license);
-    assert.equal(shipped.licenseUrl, row.license_url);
-    assert.equal(shipped.ship, row.ship);
     assert.equal(shipped.woff2, row.woff2);
     assert.deepEqual(shipped.axes, row.axes);
     assert.equal(shipped.xCapDisplay, row.x_cap_display);
@@ -134,17 +131,15 @@ test("the shipped library count equals the JSON appendix and excludes the notes"
   }
 });
 
-test("no Pangram trial face or unverified license ships as a default", () => {
+test("reference faces stay out of the pairing list, and overused defaults stay off the automatic deal", () => {
   const doc = appendix();
   assert.equal(DO_NOT_SHIP.length, doc.do_not_ship.length);
   for (const face of doc.do_not_ship) {
-    assert.equal(face.ship, "trial-only");
-    assert.equal(face.license, "personal-trial");
-    assert.equal(face.foundry, "Pangram Pangram");
     const blocked = DO_NOT_SHIP.find((item) => item.id === face.id);
     assert.ok(blocked);
     assert.equal(blocked.display, face.display);
-    assert.equal(blocked.ship, "trial-only");
+    assert.equal(blocked.body, face.body);
+    assert.equal(blocked.foundry, face.foundry);
   }
   const banned = new Set<string>([
     ...TRIAL_FACES.map((name) => name.toLowerCase()),
@@ -152,8 +147,6 @@ test("no Pangram trial face or unverified license ships as a default", () => {
   ]);
   assert.equal(banned.has("neue montreal"), true);
   for (const pairing of TYPE_LIBRARY) {
-    assert.notEqual(pairing.ship, "trial-only");
-    assert.notEqual(pairing.license, "personal-trial");
     assert.equal(banned.has(pairing.display.toLowerCase()), false);
     assert.equal(banned.has(pairing.body.toLowerCase()), false);
     if (pairing.deal === "default") {

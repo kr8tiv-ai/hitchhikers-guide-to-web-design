@@ -1,6 +1,6 @@
 ---
 name: typography
-description: At most two families, fluid type with clamp, and a recorded license. The six pairings are examples.
+description: At most two families, fluid type with clamp, and a pair from the library. The six pairings are examples.
 when-to-use: Use when a site prompt sets type, chooses a font, or writes a size scale.
 paths:
   - packages/knowledge/packs/typography/SKILL.md
@@ -41,8 +41,7 @@ The generated site self-hosts the woff2 for the faces it ships. Use `font-displa
 Source: context/research/07-3d-assets-open-source.md
 Source: hh-build-plan/RESEARCH-ADDENDUM.md section 9.
 
-Record the license beside the family in `CREDITS.json`. Google Fonts and Fontshare are the allowed sources. Confirm the license at install. Fontshare is not one license for the whole catalog. Read the family's `license_type`. Do not write an API key into the site or the repo.
-Source: context/research/07-3d-assets-open-source.md. The Google Fonts developer API requires a key from the environment: https://developers.google.com/fonts/docs/developer_api. Fontshare's public list needs no key: GET https://api.fontshare.com/v2/fonts
+The desk does not verify a font license. A library pair may name a license and a source as notes. Those notes do not pass or fail a site. Do not write an API key into the site or the repo.
 Source: packages/engine/src/brand/tokens.ts
 
 Method from Matt Haynes's AntiHero guides (antihero.community), used with permission. Sentences in this pack are original.

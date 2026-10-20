@@ -1,8 +1,9 @@
 /**
  * Pairing library from the JSON appendix in hh-build-plan/research/240r-fonts.md.
- * Climate Crisis stays in the library and out of the automatic deal until its
- * OFL.txt and axes are confirmed. Pangram trial faces are not in this list.
+ * Climate Crisis stays in the library and out of the automatic deal.
+ * Pangram trial faces are not in this list.
  * This module does not download font files.
+ * License and source fields are notes. Nothing in this module checks them.
  */
 
 export type TypeDeal = "default" | "on-request" | "unverified";

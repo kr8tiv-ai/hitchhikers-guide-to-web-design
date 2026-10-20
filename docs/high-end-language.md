@@ -40,7 +40,7 @@ The planner adds the lines from the brand's motion score, the style world, and t
 
 ## DESIGN.md and motion.ts
 
-The brand step writes `DESIGN.md` at the site project root: tokens, type scale, color, spacing, component rules, motion principles with exact durations, eases and distances, and signature techniques. The plan step writes `src/scripts/motion.ts`: typed GSAP, Lenis, and Three constants (scrub, damping, bloom, easings, durations, staggers, scroll scenes, and a reduced-motion map). Every build prompt names both paths. A page that animates without those constants is flagged. The numbers are a starting point. Any appropriate library may carry the work.
+The brand step writes `DESIGN.md` at the site project root: tokens, type scale, color, spacing, component rules, motion principles with exact durations, eases and distances, and signature techniques. The brand type comes from the pairing library. The desk does not verify a font license. License and source notes on a pair are information only. The plan step writes `src/scripts/motion.ts`: typed GSAP, Lenis, and Three constants (scrub, damping, bloom, easings, durations, staggers, scroll scenes, and a reduced-motion map). Every build prompt names both paths. A page that animates without those constants is flagged. The numbers are a starting point. Any appropriate library may carry the work.
 
 ## Recipe checker
 
