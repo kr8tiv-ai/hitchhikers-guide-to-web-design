@@ -5,6 +5,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { dealDirections, renderDirectionBlock } from "./directions.ts";
 import { familiesSentence } from "./type-scale.ts";
 import { pickType, proposePalettes } from "./tokens.ts";
 
@@ -122,6 +123,7 @@ export function brandKitFromAnswers(answers: readonly BrandAnswer[]): { markdown
     "",
     `Named by the owner, as names only: ${references}`,
     "",
+    renderDirectionBlock(dealDirections()),
   ].join("\n");
   const moduleSource = [
     "/** Brand values from the interview. */",

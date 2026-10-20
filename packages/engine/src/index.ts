@@ -443,6 +443,15 @@ export {
 } from "./brand/tokens.ts";
 export type { TypePair, TypePairing } from "./brand/tokens.ts";
 export {
+  checkDirectionDeal,
+  dealDirections,
+  designLibraryRoot,
+  loadStudiedPages,
+  pickDirection,
+  renderDirectionBlock,
+} from "./brand/directions.ts";
+export type { Direction, DirectionCheck, DirectionDeal, StudiedPage } from "./brand/directions.ts";
+export {
   brandKitFromAnswers,
   contrastRatio,
   defaultPalette,
