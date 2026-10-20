@@ -191,8 +191,11 @@ questions:
     ask: "Do you have fonts you use? If not, pick a style from these examples."
     why: "Two families are enough: one for headlines, one for text. The pairing has to survive a real sentence."
     input: [text, voice, upload]
-    skip_default: "No type yet. Show the six pairings."
-    suggest: "Send screenshots, or set your headline in one of these six pairings: Bebas Neue + Barlow, Space Grotesk + Inter, DM Serif Display + DM Sans, Fraunces + Work Sans, Archivo Black + Archivo, Clash Display + Satoshi."
+    skip_default: "No type yet. Show a quiet pairing with one clear size jump."
+    suggest: "Send screenshots, or name a mood in plain words, such as editorial, quiet, publishing, playful, brutalist, fashion, product, or civic. A family you name is the one you get."
+    levels:
+      beginner: explain
+      pro: terse
     follow_ups:
       - id: DP-1.5a
 

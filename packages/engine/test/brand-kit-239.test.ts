@@ -34,6 +34,40 @@ test("a fixture interview with no logo and four references yields a complete kit
   assert.match(kit.moduleSource, /export const brand/);
 });
 
+test("editorial, quiet, publishing selects an editorial pair and records the adjectives", () => {
+  const kit = brandKitFromAnswers([{ id: "DP-1.5", value: "editorial, quiet, publishing" }]);
+  assert.match(kit.markdown, /Dealt families: Gambetta and Synonym\./);
+  assert.match(kit.markdown, /Adjectives: editorial, quiet, publishing\./);
+  assert.match(kit.markdown, /License: ffl-owner-download\./);
+  assert.match(kit.markdown, /editorial, quiet, publishing/);
+  assert.doesNotMatch(kit.markdown, /\bInter\b/);
+  assert.doesNotMatch(kit.markdown, /Bebas Neue/);
+  assert.match(kit.markdown, /palette follows the mood words/);
+  assert.equal(passesBodyContrast(kit.palette.ink, kit.palette.paper), true);
+  assert.equal(passesBodyContrast(kit.palette.muted, kit.palette.paper), true);
+  assert.equal(passesLargeContrast(kit.palette.accent, kit.palette.paper), true);
+});
+
+test("an answer that names Inter keeps Inter", () => {
+  const kit = brandKitFromAnswers([{ id: "DP-1.5", value: "Use Inter" }]);
+  assert.match(kit.markdown, /Use Inter/);
+  assert.match(kit.markdown, /Dealt families: Inter\./);
+  assert.match(kit.markdown, /confirm-at-install/);
+});
+
+test("a type skip sentence does not deal a pair and does not receive Inter", () => {
+  const kit = brandKitFromAnswers([
+    { id: "DP-1.5", value: "No type yet. Show a quiet pairing with one clear size jump." },
+  ]);
+  assert.match(kit.markdown, /Dealt families: Switzer\./);
+  assert.doesNotMatch(kit.markdown, /\bInter\b/);
+  assert.doesNotMatch(kit.markdown, /Bespoke/);
+  const palette = defaultPalette();
+  assert.equal(kit.palette.paper, palette.paper);
+  assert.equal(kit.palette.ink, palette.ink);
+  assert.equal(kit.palette.accent, palette.accent);
+});
+
 test("a skipped colour answer uses a default palette that passes contrast", () => {
   const kit = brandKitFromAnswers([{ id: "DP-1.2", value: "neon", status: "SKIPPED" }]);
   const palette = defaultPalette();

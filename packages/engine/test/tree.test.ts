@@ -32,14 +32,7 @@ const FORD = [
   "DP-1.9",
 ] as const;
 
-const PAIRINGS = [
-  "Bebas Neue + Barlow",
-  "Space Grotesk + Inter",
-  "DM Serif Display + DM Sans",
-  "Fraunces + Work Sans",
-  "Archivo Black + Archivo",
-  "Clash Display + Satoshi",
-] as const;
+const MOOD_WORDS = ["editorial", "quiet", "publishing", "playful", "brutalist", "fashion", "product", "civic"] as const;
 
 const EM_DASH = "\u2014";
 
@@ -159,11 +152,18 @@ test("DP-0.3 asks how hands-on the person is, with four options and plain help",
   assert.deepEqual(question.levels, { beginner: "explain", pro: "terse" });
 });
 
-test("DP-1.5 suggest names the six font pairings", () => {
-  const suggest = byId(loadTree(treeFile), "DP-1.5").suggest ?? "";
-  for (const pairing of PAIRINGS) {
-    assert.ok(suggest.includes(pairing), pairing);
+test("DP-1.5 suggest names mood words and does not deal Inter or Bebas", () => {
+  const question = byId(loadTree(treeFile), "DP-1.5");
+  const suggest = question.suggest ?? "";
+  for (const word of MOOD_WORDS) {
+    assert.match(suggest, new RegExp(`\\b${word}\\b`, "i"), word);
   }
+  assert.doesNotMatch(suggest, /\bInter\b/);
+  assert.doesNotMatch(suggest, /Bebas Neue/);
+  assert.deepEqual(question.levels, { beginner: "explain", pro: "terse" });
+  assert.equal(question.ask.includes("!"), false);
+  assert.equal(suggest.includes("!"), false);
+  assert.equal(suggest.includes(EM_DASH), false);
 });
 
 test("DP-1.2 why treats color psychology as mixed research", () => {
