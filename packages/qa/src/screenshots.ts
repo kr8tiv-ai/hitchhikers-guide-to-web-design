@@ -51,3 +51,10 @@ export function sectionBuffersDiffer(before: Buffer, after: Buffer): boolean {
   if (before.length === 0 || after.length === 0) return true;
   return !before.equals(after);
 }
+
+/** Which side of a before / after pair is missing. Null when both hold bytes. */
+export function shotPairGap(before: Buffer, after: Buffer): "before" | "after" | null {
+  if (!Buffer.isBuffer(before) || before.length === 0) return "before";
+  if (!Buffer.isBuffer(after) || after.length === 0) return "after";
+  return null;
+}

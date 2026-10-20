@@ -103,7 +103,9 @@ export type {
   SectionLockResult,
   SectionLockShot,
 } from "./elevate-loop.ts";
-export { REVIEW_WIDTHS, captureAll, sectionBuffersDiffer } from "./screenshots.ts";
+export { REVIEW_WIDTHS, captureAll, sectionBuffersDiffer, shotPairGap } from "./screenshots.ts";
+export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
+export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";
