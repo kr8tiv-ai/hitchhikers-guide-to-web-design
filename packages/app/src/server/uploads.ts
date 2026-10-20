@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { lstat, mkdir, open, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { renameReplacing, withExclusiveFile } from "@hitchhiker/engine";
 import {
   MAX_ATTACH_FILES,
   MAX_ATTACH_REQUEST_BYTES,
@@ -451,17 +452,19 @@ async function writeUnique(folder: string, name: string, data: Buffer): Promise<
 
 async function appendManifest(folder: string, row: ManifestRow): Promise<void> {
   const file = path.join(folder, "manifest.json");
-  const rows = await readManifest(file);
-  rows.push(row);
-  manifestTmp += 1;
-  const tmp = path.join(folder, `.manifest-${process.pid}-${Date.now()}-${manifestTmp}.tmp`);
-  try {
-    await writeFile(tmp, `${JSON.stringify(rows)}\n`, { flag: "wx" });
-    await rename(tmp, file);
-  } catch (error: unknown) {
-    await unlink(tmp).catch(() => undefined);
-    throw error;
-  }
+  await withExclusiveFile(file, async () => {
+    const rows = await readManifest(file);
+    rows.push(row);
+    manifestTmp += 1;
+    const tmp = path.join(folder, `.manifest-${process.pid}-${Date.now()}-${manifestTmp}.tmp`);
+    try {
+      await writeFile(tmp, `${JSON.stringify(rows)}\n`, { flag: "wx" });
+      await renameReplacing(tmp, file);
+    } catch (error: unknown) {
+      await unlink(tmp).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 async function manifestCount(folder: string): Promise<number> {

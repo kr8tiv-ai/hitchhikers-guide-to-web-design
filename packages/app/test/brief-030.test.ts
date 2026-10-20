@@ -7,7 +7,13 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { loadDecisions, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import {
+  inflightBriefDraft,
+  inflightBriefRevision,
+  loadDecisions,
+  type ThinkRequest,
+  type ThinkResult,
+} from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 
 const LINE = "The site helps a visitor book a visit.";
@@ -84,13 +90,10 @@ test("two change requests start one revise and return while it is still running"
     const home = await raw(handle.port, "GET", "/");
     const token = tokenFrom(home.body);
     await raw(handle.port, "POST", "/api/brief/draft", { "content-type": "application/json", "x-hh-csrf": token }, "{}");
-    let pending = false;
-    for (let attempt = 0; attempt < 40 && !pending; attempt += 1) {
-      const next = await raw(handle.port, "GET", "/api/brief");
-      pending = next.body.includes('"status":"pending"');
-      if (!pending) await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(pending, true);
+    const drafting = inflightBriefDraft(dir);
+    if (drafting !== null) await drafting;
+    const drafted = await raw(handle.port, "GET", "/api/brief");
+    assert.equal(drafted.body.includes('"status":"pending"'), true);
     const started = Date.now();
     const headers = { "content-type": "application/json", "x-hh-csrf": token };
     const body = JSON.stringify({ correction: "The goal should name a tour." });
@@ -103,22 +106,17 @@ test("two change requests start one revise and return while it is still running"
     assert.equal(second.status, 200);
     assert.match(first.body, /"status":"revising"/);
     assert.equal(revises, 1);
+    const running = inflightBriefRevision(dir);
+    assert.ok(running);
     release();
-    let updated = "";
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const next = await raw(handle.port, "GET", "/api/brief");
-      updated = next.body;
-      if (updated.includes(NEXT)) break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.match(updated, /book a tour/);
+    await running;
+    const updated = await raw(handle.port, "GET", "/api/brief");
+    assert.match(updated.body, /book a tour/);
     assert.equal(revises, 1);
-    let stored = false;
-    for (let attempt = 0; attempt < 40 && !stored; attempt += 1) {
-      stored = loadDecisions(dir).some((item) => item.questionId === "DP-2.1" && item.source === "brief-correction");
-      if (!stored) await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(stored, true);
+    assert.equal(
+      loadDecisions(dir).some((item) => item.questionId === "DP-2.1" && item.source === "brief-correction"),
+      true,
+    );
   } finally {
     release();
     if (handle !== undefined) await handle.close();

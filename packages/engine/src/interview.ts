@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { renameReplacing, withExclusiveFile, writeClosedTemp } from "./atomic-rename.ts";
 import { materializeNotApplicable } from "./guide/session-state.ts";
 import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
@@ -598,26 +599,30 @@ async function persistPair(
     const state = mergeState(loadState(projectDir), promptId, clock().toISOString(), nextQuestion);
     const answersTemp = tempSibling(answersPath);
     const stateTemp = tempSibling(stateFile);
-    await writeFile(answersTemp, renderInterview(answers, cursor, pushedIds), "utf8");
-    try {
-      await writeFile(stateTemp, renderState(state), "utf8");
-    } catch (error) {
-      await unlink(answersTemp).catch(() => undefined);
-      throw error;
-    }
-    try {
-      await rename(answersTemp, answersPath);
-    } catch (error) {
-      await unlink(answersTemp).catch(() => undefined);
-      await unlink(stateTemp).catch(() => undefined);
-      throw error;
-    }
-    try {
-      await rename(stateTemp, stateFile);
-    } catch (error) {
-      await unlink(stateTemp).catch(() => undefined);
-      throw error;
-    }
+    await withExclusiveFile(answersPath, () =>
+      withExclusiveFile(stateFile, async () => {
+        await writeClosedTemp(answersTemp, renderInterview(answers, cursor, pushedIds));
+        try {
+          await writeClosedTemp(stateTemp, renderState(state));
+        } catch (error) {
+          await unlink(answersTemp).catch(() => undefined);
+          throw error;
+        }
+        try {
+          await renameReplacing(answersTemp, answersPath);
+        } catch (error) {
+          await unlink(answersTemp).catch(() => undefined);
+          await unlink(stateTemp).catch(() => undefined);
+          throw error;
+        }
+        try {
+          await renameReplacing(stateTemp, stateFile);
+        } catch (error) {
+          await unlink(stateTemp).catch(() => undefined);
+          throw error;
+        }
+      }),
+    );
   });
 }
 

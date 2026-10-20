@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { renameReplacing, withExclusiveFile, writeClosedTemp } from "./atomic-rename.ts";
 
 export interface LockInfo {
   pid: number;
@@ -251,31 +252,25 @@ export interface ReplaceOptions {
  * Write `body` to a temp file in the same directory, flush it, then rename it over `targetPath`.
  * The temp file stays in place until the rename, including when the target already exists.
  * `sync` pushes the bytes to disk before the rename so a kill mid-write leaves the previous file.
+ * Writers of one target queue. The handle is closed before the rename, which retries a Windows lock.
  */
 export async function replaceViaTemp(
   targetPath: string,
   body: string,
   options?: ReplaceOptions,
 ): Promise<void> {
-  const tempPath = path.join(
-    path.dirname(targetPath),
-    `${path.basename(targetPath)}.tmp-${process.pid}`,
-  );
-  const handle = await open(tempPath, "w");
-  try {
-    await handle.writeFile(body, "utf8");
-    await handle.sync();
-  } catch (error) {
-    await handle.close();
-    await unlink(tempPath).catch(() => undefined);
-    throw error;
-  }
-  await handle.close();
-  if (options?.beforeRename !== undefined) await options.beforeRename();
-  try {
-    await rename(tempPath, targetPath);
-  } catch (error) {
-    await unlink(tempPath).catch(() => undefined);
-    throw error;
-  }
+  await withExclusiveFile(targetPath, async () => {
+    const tempPath = path.join(
+      path.dirname(targetPath),
+      `${path.basename(targetPath)}.tmp-${process.pid}`,
+    );
+    await writeClosedTemp(tempPath, body);
+    if (options?.beforeRename !== undefined) await options.beforeRename();
+    try {
+      await renameReplacing(tempPath, targetPath);
+    } catch (error) {
+      await unlink(tempPath).catch(() => undefined);
+      throw error;
+    }
+  });
 }

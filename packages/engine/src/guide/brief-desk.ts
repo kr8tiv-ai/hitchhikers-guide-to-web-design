@@ -316,6 +316,16 @@ export function approveSiteBrief(
   return job;
 }
 
+/** Draft still running for this project. Null once that job has left the map. */
+export function inflightBriefDraft(projectDir: string): Promise<BriefDeskView> | null {
+  return jobs.get(path.resolve(projectDir)) ?? null;
+}
+
+/** Revise still running for this project. Null once that job has left the map. */
+export function inflightBriefRevision(projectDir: string): Promise<BriefDeskView> | null {
+  return revisions.get(path.resolve(projectDir)) ?? null;
+}
+
 export function reviseSiteBrief(
   projectDir: string,
   correction: string,

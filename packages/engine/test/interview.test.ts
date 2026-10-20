@@ -525,12 +525,12 @@ test("the interview module saves under the lock and does not call the network", 
   assert.match(source, /loadTree/);
   assert.match(source, /withStateLock/);
   assert.match(source, /AnswerRecord/);
-  const answersRename = source.indexOf("await rename(answersTemp, answersPath)");
-  const stateRename = source.indexOf("await rename(stateTemp, stateFile)");
+  const answersRename = source.indexOf("await renameReplacing(answersTemp, answersPath)");
+  const stateRename = source.indexOf("await renameReplacing(stateTemp, stateFile)");
   assert.ok(answersRename > 0);
   assert.ok(stateRename > answersRename);
-  const answersWrite = source.indexOf("writeFile(answersTemp");
-  const stateWrite = source.indexOf("writeFile(stateTemp");
+  const answersWrite = source.indexOf("writeClosedTemp(answersTemp");
+  const stateWrite = source.indexOf("writeClosedTemp(stateTemp");
   assert.ok(answersWrite > 0);
   assert.ok(stateWrite > answersWrite);
   assert.ok(answersRename > stateWrite);

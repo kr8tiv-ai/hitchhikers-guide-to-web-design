@@ -73,6 +73,11 @@ export type {
   ThinkResult,
 } from "./ai/index.ts";
 export {
+  renameReplacing,
+  withExclusiveFile,
+} from "./atomic-rename.ts";
+export type { RenameReplacingOptions } from "./atomic-rename.ts";
+export {
   LockHeld,
   STALE_LOCK_MS,
   STATE_LOCK_NAME,
@@ -181,6 +186,8 @@ export {
   BRIEF_PROGRESS_STAGE,
   approveSiteBrief,
   draftSiteBrief,
+  inflightBriefDraft,
+  inflightBriefRevision,
   readBriefDesk,
   reviseSiteBrief,
 } from "./guide/brief-desk.ts";
