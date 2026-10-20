@@ -8,7 +8,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
-import { typeScaleFor } from "../brand/type-scale.ts";
+import { typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
+import { lintDesignMd } from "./design-md-lint.ts";
 
 export const DESIGN_MD_PATH = "DESIGN.md";
 export const MOTION_TS_PATH = "src/scripts/motion.ts";
@@ -78,16 +79,37 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
   const palette = brandKitFromAnswers(answers).palette;
   const scale = typeScaleFor(documentText(brief, answers));
   const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
-  return [
+  const families = typeChoiceFor(documentText(brief, answers)).families;
+  const markdown = [
+    frontMatter(palette, scale, families),
     "# Design",
     "",
     "These tokens are a starting point. Remix them. Any appropriate library may carry a technique.",
     "",
-    "## Tokens",
+    "## Overview",
     "",
-    `Color tokens: paper ${palette.paper}, ink ${palette.ink}, accent ${palette.accent}, muted ${palette.muted}.`,
-    "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
-    "Motion tokens live in src/scripts/motion.ts.",
+    "These tokens are a starting point. Remix them. Any appropriate library may carry a technique.",
+    "",
+    "## Colors",
+    "",
+    `Paper ${palette.paper} carries ink ${palette.ink}.`,
+    `Accent ${palette.accent} is for large text and marks.`,
+    `Muted ${palette.muted} is for secondary text.`,
+    `Grade: ${art.colorGrade} Light: ${art.light}`,
+    "",
+    "## Color",
+    "",
+    `Paper ${palette.paper} carries ink ${palette.ink}.`,
+    `Accent ${palette.accent} is for large text and marks.`,
+    `Muted ${palette.muted} is for secondary text.`,
+    `Grade: ${art.colorGrade} Light: ${art.light}`,
+    "",
+    "## Typography",
+    "",
+    scale.familiesLine,
+    `Ratio: ${scale.ratio} (${scale.ratioName}).`,
+    `World: ${scale.world}.`,
+    `Display over body minimum: ${scale.minimum}.`,
     "",
     "## Type scale",
     "",
@@ -103,12 +125,9 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     `- body: ${scale.body}, line-height ${scale.bodyLineHeight}`,
     `- caption: ${scale.caption}, line-height 1.4`,
     "",
-    "## Color",
+    "## Layout",
     "",
-    `Paper ${palette.paper} carries ink ${palette.ink}.`,
-    `Accent ${palette.accent} is for large text and marks.`,
-    `Muted ${palette.muted} is for secondary text.`,
-    `Grade: ${art.colorGrade} Light: ${art.light}`,
+    "The page keeps an equal inset and a clear first frame.",
     "",
     "## Spacing",
     "",
@@ -121,12 +140,30 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "- space-7: 64px",
     "- space-8: 96px",
     "",
+    "## Elevation",
+    "",
+    "Cards sit on a 1px muted border. A drop shadow is optional.",
+    "",
+    "## Shapes",
+    "",
+    "Buttons and cards use a 4px corner.",
+    "",
     "## Components",
     "",
     "Buttons use the accent on paper, padding 12px 20px, and a minimum height of 44px.",
     "Links use ink with a 3px underline offset.",
     "Cards use 24px padding and a 1px muted border.",
     "A component may use another library when that serves the section.",
+    "",
+    "## Do's and Don'ts",
+    "",
+    "Remix the tokens. Any appropriate library may carry a technique.",
+    "",
+    "## Tokens",
+    "",
+    `Color tokens: paper ${palette.paper}, ink ${palette.ink}, accent ${palette.accent}, muted ${palette.muted}.`,
+    "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
+    "Motion tokens live in src/scripts/motion.ts.",
     "",
     "## Motion principles",
     "",
@@ -146,6 +183,65 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "Any appropriate library may carry a technique. GSAP, Lenis, Three.js, Motion, anime.js, and CSS are all open.",
     "",
   ].join("\n");
+  const lint = lintDesignMd(markdown);
+  if (!lint.ok) {
+    throw new Error(`DESIGN.md failed lint: ${lint.errors.map((error) => error.message).join(" ")}`);
+  }
+  return markdown;
+}
+
+function frontMatter(
+  palette: { paper: string; ink: string; accent: string; muted: string },
+  scale: { display: string; body: string; bodyLineHeight: number },
+  families: readonly string[],
+): string {
+  const display = families[0] ?? "Switzer";
+  const body = families[1] ?? display;
+  return [
+    "---",
+    "version: alpha",
+    "name: Site",
+    "colors:",
+    `  paper: ${yamlScalar(palette.paper)}`,
+    `  ink: ${yamlScalar(palette.ink)}`,
+    `  accent: ${yamlScalar(palette.accent)}`,
+    `  muted: ${yamlScalar(palette.muted)}`,
+    `  primary: ${yamlScalar(palette.ink)}`,
+    "typography:",
+    "  display:",
+    `    fontFamily: ${yamlScalar(display)}`,
+    `    fontSize: ${yamlScalar(scale.display)}`,
+    "    lineHeight: \"0.95\"",
+    "    letterSpacing: \"-0.03em\"",
+    "  body:",
+    `    fontFamily: ${yamlScalar(body)}`,
+    `    fontSize: ${yamlScalar(scale.body)}`,
+    `    lineHeight: ${yamlScalar(String(scale.bodyLineHeight))}`,
+    "rounded:",
+    "  sm: \"4px\"",
+    "  md: \"8px\"",
+    "spacing:",
+    "  space-1: \"4px\"",
+    "  space-2: \"8px\"",
+    "  space-3: \"12px\"",
+    "  space-4: \"16px\"",
+    "  space-5: \"24px\"",
+    "  space-6: \"40px\"",
+    "  space-7: \"64px\"",
+    "  space-8: \"96px\"",
+    "components:",
+    "  button:",
+    "    backgroundColor: \"{colors.accent}\"",
+    "    textColor: \"{colors.paper}\"",
+    "    padding: \"12px\"",
+    "    rounded: \"{rounded.sm}\"",
+    "---",
+    "",
+  ].join("\n");
+}
+
+function yamlScalar(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
 }
 
 export function renderMotionModule(

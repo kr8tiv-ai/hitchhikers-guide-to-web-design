@@ -203,6 +203,8 @@ export {
   writeDesignMd,
   writeMotionModule,
 } from "./spec/design-outputs.ts";
+export { DESIGN_SECTION_ORDER, lintDesignMd } from "./spec/design-md-lint.ts";
+export type { DesignLintError, DesignLintReport } from "./spec/design-md-lint.ts";
 export type { MotionTokenHit } from "./spec/design-outputs.ts";
 export {
   PlanCritiqueError,
