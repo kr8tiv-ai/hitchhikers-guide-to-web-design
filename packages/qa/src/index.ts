@@ -106,6 +106,15 @@ export type {
 export { REVIEW_WIDTHS, captureAll, sectionBuffersDiffer, shotPairGap } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
+export { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+export type {
+  ApprovedDirection,
+  CombineArtifact,
+  CombineRegion,
+  CombineResult,
+  SectionVariant,
+  VariantPick,
+} from "./variants.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";

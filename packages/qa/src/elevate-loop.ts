@@ -34,6 +34,15 @@ import { runElevateReview, type QualityGates, type ReviewProject } from "./revie
 import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
+export { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+export type {
+  ApprovedDirection,
+  CombineArtifact,
+  CombineRegion,
+  CombineResult,
+  SectionVariant,
+  VariantPick,
+} from "./variants.ts";
 
 export type GateStatus = "PASS" | "BLOCKER";
 
