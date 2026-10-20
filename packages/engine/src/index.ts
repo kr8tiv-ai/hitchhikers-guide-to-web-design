@@ -486,6 +486,22 @@ export {
 } from "./brand/kit-from-interview.ts";
 export type { BrandAnswer, BrandPalette } from "./brand/kit-from-interview.ts";
 export {
+  REFERENCE_USER_AGENT,
+  ReferenceExtractError,
+  SHORT_QUOTE_WORDS,
+  extractReferenceDesign,
+  longCopyLeak,
+  tokensFromPublicHtml,
+} from "./brand/reference-system.ts";
+export type {
+  ReferenceColor,
+  ReferenceExtractRequest,
+  ReferenceExtractResult,
+  ReferenceTokens,
+  ReferenceTransport,
+  ReferenceTypeRole,
+} from "./brand/reference-system.ts";
+export {
   FILM_CREDIT,
   ambientSoundMarkup,
   artCallsForFilm,
