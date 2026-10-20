@@ -27,8 +27,10 @@ import {
   type ElevateColdRead,
   type ElevateItem,
 } from "./elevate.ts";
+import { writeBeautyRound } from "./beauty-gate.ts";
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
+import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
 import { REVIEW_WIDTHS } from "./screenshots.ts";
 
 export type GateStatus = "PASS" | "BLOCKER";
@@ -47,6 +49,9 @@ export interface ElevateRoundDeps {
   pick: (items: ElevateItem[]) => Promise<ElevateItem[]>;
   runPrompt: (file: string) => Promise<void>;
   gates: () => Promise<GateResult>;
+  /** When set, the round calls the beauty, recipe, and 241 gates before any pick. */
+  review?: ReviewProject;
+  qualityGates?: QualityGates;
 }
 
 export interface ElevateRoundResult {
@@ -522,6 +527,22 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   }
   if (typeof deps.runPrompt !== "function" || typeof deps.gates !== "function") {
     throw new Error("elevateRound needs think, pick, runPrompt, and gates.");
+  }
+  if (deps.review !== undefined) {
+    const reviewed =
+      deps.qualityGates === undefined
+        ? await runElevateReview(deps.review)
+        : await runElevateReview(deps.review, deps.qualityGates);
+    if (reviewed.blocked) {
+      await writeBeautyRound(deps.review.root, reviewed.remediation);
+      return {
+        applied: [],
+        refused: reviewed.failures.map((failure, index) => ({
+          id: `q${String(index + 1).padStart(2, "0")}`,
+          reason: failure.reason,
+        })),
+      };
+    }
   }
   const root = path.resolve(projectDir);
   const round = nextRound(root);

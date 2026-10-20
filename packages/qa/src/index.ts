@@ -84,3 +84,5 @@ export {
   stillIsArtDirected,
 } from "./reduced-motion.ts";
 export type { LenisMotion, MotionSection, ReducedReport, ReducedRun, ReducedSample, TierZeroStill } from "./reduced-motion.ts";
+export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
+export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";

@@ -19,6 +19,7 @@ import {
 import { lintSlop } from "./antislop.ts";
 import { checkTruths, type TruthCheck } from "./goal-backward.ts";
 import { summarizePillars, type PillarName, type PillarStatus } from "./pillars.ts";
+import type { QualityGates, ReviewProject } from "./review-runners.ts";
 import { decideReview } from "./verdict.ts";
 
 export interface SitePrompt {
@@ -316,6 +317,8 @@ export async function zaphodReview(
     phoneBlocked?: boolean;
     /** When set, vision also scores each section and the call is grok-4.7-build-fast at xhigh. */
     askSections?: readonly { page: string; section: string }[];
+    /** When set, the verdict runner calls the beauty, recipe, and 241 gates. */
+    quality?: { project: ReviewProject; gates?: QualityGates };
   },
   deps: { think: typeof think },
 ): Promise<ReviewVerdict> {
@@ -354,6 +357,9 @@ export async function zaphodReview(
     boots: model.boots,
   });
   let fixes: string[] = [];
+  let verdict = decision.verdict;
+  let reasons = decision.reasons;
+  let juryBlocked = decision.verdict === "ESCALATE";
   if (decision.verdict === "FIX") {
     fixes = model.fixes.slice(0, 3);
     if (fixes.length === 0) {
@@ -361,12 +367,29 @@ export async function zaphodReview(
       fixes = [reason];
     }
   }
+  if (input.quality !== undefined) {
+    const { runVerdictReview } = await import("./review-runners.ts");
+    const reviewed =
+      input.quality.gates === undefined
+        ? await runVerdictReview(input.quality.project)
+        : await runVerdictReview(input.quality.project, input.quality.gates);
+    if (reviewed.blocked) {
+      const extra = reviewed.failures.map((failure) => failure.reason);
+      reasons = [...reasons, ...extra];
+      if (verdict === "PASS" || verdict === "PASS_WITH_KNOWN_ISSUES") verdict = reviewed.verdict;
+      if (verdict === "FIX") {
+        const lines = extra.slice(0, 3);
+        if (lines.length > 0) fixes = lines;
+      }
+      juryBlocked = true;
+    }
+  }
   return {
-    verdict: decision.verdict,
-    reasons: decision.reasons,
+    verdict,
+    reasons,
     truths: checks,
     pillars: rollup,
-    jury: { ...model.jury, blocked: decision.verdict === "ESCALATE" },
+    jury: { ...model.jury, blocked: juryBlocked },
     slopHits,
     fixRound,
     boots: model.boots,
