@@ -58,7 +58,8 @@ export type ProjectRole =
   | "ipad"
   | "android-tablet"
   | "desktop"
-  | "width";
+  | "width"
+  | "se-sweep";
 
 export interface DeviceProject {
   id: string;
@@ -156,6 +157,21 @@ const ROWS: readonly DeviceRow[] = [
 
 export function missingDescriptorMessage(key: string): string {
   return `Device descriptor "${key}" is missing from the installed Playwright device list. The matrix spreads that descriptor and does not invent a viewport.`;
+}
+
+const SE_ROW: DeviceRow = {
+  id: "iphone-se",
+  key: "iPhone SE",
+  priority: "required",
+  role: "se-sweep",
+  browser: "webkit",
+  p0Phone: false,
+};
+
+export function stateSweepProjects(devices: DeviceMap, observe?: (key: string) => void): DeviceProject[] {
+  const projects = buildDeviceMatrix(devices, observe);
+  projects.push(projectFromRow(devices, SE_ROW, observe));
+  return projects;
 }
 
 export function buildDeviceMatrix(devices: DeviceMap, observe?: (key: string) => void): DeviceProject[] {

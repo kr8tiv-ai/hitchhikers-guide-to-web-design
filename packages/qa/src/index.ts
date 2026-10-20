@@ -44,3 +44,6 @@ export {
 } from "./device-matrix.ts";
 export type { DeviceDescriptor, DeviceMap, DeviceMatrixRun, DeviceProject } from "./device-matrix.ts";
 export { captureLiveDeviceMatrix } from "./device-run.ts";
+export { stateSweepProjects } from "./device-matrix.ts";
+export { UI_STATES, ZOOM_PERCENT, evaluateStateSweeps, stateFixture } from "./state-sweep.ts";
+export type { StateFixture, SweepReport, UiState, ZoomSample } from "./state-sweep.ts";
