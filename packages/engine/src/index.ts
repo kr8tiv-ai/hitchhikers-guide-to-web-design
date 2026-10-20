@@ -137,8 +137,8 @@ export { SITE_TYPES } from "./site-types.ts";
 export type { SiteTypeHint } from "./site-types.ts";
 export { missingRequired, renderBrief, requiredIds } from "./required.ts";
 export type { AnswerRecord } from "./required.ts";
-export { InterviewError, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
-export type { InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
+export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
+export type { DesignStageRequest, DesignStageResult, InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
 export { coverageReport, pushbackFor } from "./pushback.ts";
 export {
   BRAND_GUIDE_SCHEMA,

@@ -5,6 +5,7 @@ import { materializeNotApplicable } from "./guide/session-state.ts";
 import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
+import { advanceDesignStages, type DesignStageRequest, type DesignStageResult } from "./spec/design-stages.ts";
 import { loadState, type GuideState } from "./state.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
@@ -44,6 +45,15 @@ export interface InterviewSession {
     imported: number;
   };
   readonly lastPushback: string | null;
+  /** Present when this open advanced the sitemap, wireframe, or style guide. */
+  stages?: DesignStageResult;
+}
+
+export type { DesignStageRequest, DesignStageResult };
+
+/** One staged design step. The next artifact waits for a recorded approval. */
+export function emitDesignStages(projectDir: string, input: DesignStageRequest): Promise<DesignStageResult> {
+  return Promise.resolve(advanceDesignStages(projectDir, input));
 }
 
 export type InterviewErrorCode =
@@ -95,6 +105,7 @@ export async function openInterview(
   projectDir: string,
   depth: "express" | "standard" | "deep",
   clock: () => Date = () => new Date(),
+  stages?: DesignStageRequest,
 ): Promise<InterviewSession> {
   const dir = path.join(projectDir, ".hitchhiker");
   await mkdir(dir, { recursive: true });
@@ -113,7 +124,7 @@ export async function openInterview(
     cursor,
     clock,
   );
-  return {
+  const session: InterviewSession = {
     next: () => run.next(),
     command: (input) => run.command(input),
     coverage: () => run.coverage(),
@@ -121,6 +132,8 @@ export async function openInterview(
       return run.lastPushback;
     },
   };
+  if (stages !== undefined) session.stages = advanceDesignStages(projectDir, stages);
+  return session;
 }
 
 class InterviewRun {
