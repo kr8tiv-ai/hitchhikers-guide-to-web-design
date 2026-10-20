@@ -46,6 +46,10 @@ function wantsWebglHero(art: ArtDirection): boolean {
   );
 }
 
+export function artAsksForWebglHero(art: ArtDirection): boolean {
+  return wantsWebglHero(art);
+}
+
 export function visualMotionRequests(pages: readonly VisualPage[], art: ArtDirection): EffectRequest[] {
   const quiet = art.motion.score <= 3;
   const first = pages.find((page) => page.sections.length > 0);

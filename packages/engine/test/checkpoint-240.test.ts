@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { phonePerformanceBudget } from "../src/spec/phone-budget.ts";
 import { designLanguageFor, type DesignLibrary } from "../src/spec/design-language.ts";
 import { libraryBanHits } from "../src/spec/prompt-bans.ts";
 import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
@@ -65,6 +66,8 @@ The motion score is 9.
 ## Pages
 
 Pages: Home.
+
+${phonePerformanceBudget()}
 `;
   const { prompts } = generateBriefPlan(brief);
   const heroPrompt = prompts.find((item) => item.requirements.includes("REQ-ART-hero"));

@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { phonePerformanceBudget } from "../src/spec/phone-budget.ts";
 import {
   DESIGN_MD_PATH,
   MOTION_TS_PATH,
@@ -41,6 +42,8 @@ const CINEMATIC = [
   "## Pages",
   "",
   "Home (hero, story)",
+  "",
+  phonePerformanceBudget(),
   "",
 ].join("\n");
 

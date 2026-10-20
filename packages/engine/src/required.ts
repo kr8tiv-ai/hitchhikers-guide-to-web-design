@@ -6,6 +6,8 @@
  * Appetite (DP-6.2) is a weight ceiling. It does not remove a library.
  */
 
+import { briefAsksForWebglHero, phonePerformanceBudget } from "./spec/phone-budget.ts";
+
 export interface AnswerRecord {
   id: string;
   status: "ANSWERED" | "SUGGESTED" | "SKIPPED" | "SOFT" | "IMPORTED";
@@ -62,6 +64,9 @@ export function renderBrief(answers: AnswerRecord[]): string {
   const lines: string[] = ["# Site Brief", ""];
   for (const section of BRIEF_SECTIONS) {
     lines.push(`## ${section.heading}`, "", fieldBody(latest.get(section.id)), "");
+  }
+  if (briefAsksForWebglHero(lines.join("\n"))) {
+    lines.push(phonePerformanceBudget(), "");
   }
   lines.push(coverageLine(answers));
   return lines.join("\n");

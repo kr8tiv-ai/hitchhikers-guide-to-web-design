@@ -10,6 +10,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { writeBack } from "../src/phases/write-back.ts";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { phonePerformanceBudget } from "../src/spec/phone-budget.ts";
 import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
 
 const PARADISE = `# Site Brief
@@ -52,6 +53,8 @@ Bold, tech, dark. The motion score is 8.
 ## Pages
 
 Pages: Home.
+
+${phonePerformanceBudget()}
 `;
 
 const QUIET = `# Site Brief
@@ -121,7 +124,9 @@ test("a WebGL hero adds the desktop 3D gate, and a quiet score stays on CSS scro
     prompt.requirements.some((id) => id.startsWith("REQ-GATE-DESKTOP-3D")),
   );
   assert.equal(gates.length, webgl.length);
-  assert.match(blob(webgl[0]!), /phone path uses a still fallback/i);
+  assert.match(blob(webgl[0]!), /The phone keeps the scene after the poster at a GPU tier/);
+  assert.match(blob(webgl[0]!), /One WebGL context on the page/);
+  assert.doesNotMatch(blob(webgl[0]!), /no webgl on phones/i);
 
   const quiet = generateBriefPlan(QUIET);
   const quietFx = effects(quiet.prompts);

@@ -649,7 +649,7 @@ function effectAcceptance(effect: CleanEffect): string[] {
   const clause = motionClause(effect.id, effect.sectionId);
   const lines = [clause === "" ? "Scroll-driven motion for this section." : clause];
   if (effect.library === "three" || effect.library === "ogl" || effect.library === "theatre") {
-    lines.push("The phone path uses a still fallback. One WebGL context on the page.");
+    lines.push("The phone keeps the scene after the poster at a GPU tier. One WebGL context on the page.");
   }
   lines.push("Reduced motion stays visible and complete.");
   lines.push(

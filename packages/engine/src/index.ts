@@ -187,6 +187,13 @@ export {
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
 export {
+  PhoneBudgetError,
+  assertPhoneBudgetBefore3d,
+  briefAsksForWebglHero,
+  briefHasPhoneBudget,
+  phonePerformanceBudget,
+} from "./spec/phone-budget.ts";
+export {
   DESIGN_FILE_LINES,
   DESIGN_MD_PATH,
   MOTION_TS_PATH,

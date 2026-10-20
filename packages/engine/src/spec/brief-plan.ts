@@ -5,6 +5,7 @@
  */
 
 import { directionAcceptance, sectionAcceptance, translateBrief, type ArtDirection } from "./art-direction.ts";
+import { assertPhoneBudgetBefore3d } from "./phone-budget.ts";
 import { DESIGN_FILE_LINES } from "./design-outputs.ts";
 import { planSkillLines, siteTypeForWorld } from "./skills.ts";
 import { planMotion } from "./motion.ts";
@@ -415,9 +416,14 @@ export function generateBriefPlan(
     answers,
     planned.pages.flatMap((page) => page.sections),
   );
+  const effects = effectsFromArt(planned.pages, art, stack);
+  assertPhoneBudgetBefore3d(
+    briefMarkdown,
+    effects.some((effect) => effect.library === "three" || effect.library === "ogl" || effect.library === "theatre"),
+  );
   const input: SiteSkeletonInput = {
     pages: planned.pages,
-    effects: effectsFromArt(planned.pages, art, stack),
+    effects,
     features: planned.features,
     integrations: [],
     seoItems: [],
