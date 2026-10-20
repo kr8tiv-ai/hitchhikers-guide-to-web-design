@@ -10,6 +10,7 @@ import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
 import { typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
+import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
 import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
 
@@ -357,7 +358,9 @@ export function renderMotionModule(
 export function writeDesignMd(projectDir: string, brief: string, answers: readonly BrandAnswer[] = []): string {
   const file = path.join(projectDir, DESIGN_MD_PATH);
   mkdirSync(projectDir, { recursive: true });
-  writeFileSync(file, renderDesignMd(brief, answers), "utf8");
+  const markdown = renderDesignMd(brief, answers);
+  writeFileSync(file, markdown, "utf8");
+  writeDesignExports(projectDir, markdown);
   return file;
 }
 

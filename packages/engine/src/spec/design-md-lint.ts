@@ -38,7 +38,9 @@ export interface DesignLintReport {
   errors: DesignLintError[];
 }
 
-type YamlNode = string | { [key: string]: YamlNode };
+export type DesignTokenNode = string | { [key: string]: DesignTokenNode };
+
+type YamlNode = DesignTokenNode;
 
 const REF_PATTERN = /\{([A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)+)\}/g;
 
@@ -82,6 +84,11 @@ export function lintDesignMd(markdown: string): DesignLintReport {
     });
   }
   return { ok: errors.length === 0, errors };
+}
+
+/** The YAML token tree lintDesignMd already parsed. Export reads this tree. */
+export function designTokenTree(markdown: string): { [key: string]: DesignTokenNode } {
+  return parseYamlMap(splitFrontMatter(markdown).yaml).root;
 }
 
 function splitFrontMatter(markdown: string): { yaml: string; body: string } {
@@ -144,7 +151,7 @@ function resolves(root: { [key: string]: YamlNode }, ref: string): boolean {
   let current: YamlNode = root;
   for (const part of ref.split(".")) {
     if (typeof current === "string") return false;
-    const next = current[part];
+    const next: YamlNode | undefined = current[part];
     if (next === undefined) return false;
     current = next;
   }
