@@ -29,6 +29,7 @@
 import path from "node:path";
 import { validateJson, type JsonSchema, type ThinkRequest, type think } from "@hitchhiker/engine";
 import { lintSlop } from "./antislop.ts";
+import { callModelIfPreserved, withPreservePrompt } from "./preserve-prompt.ts";
 import { REVIEW_WIDTHS } from "./screenshots.ts";
 
 export const ELEVATE_PLAN_TASK = "elevate-plan";
@@ -271,14 +272,19 @@ export async function planElevateModel(
   deps: { think: typeof think },
 ): Promise<ElevatePlan> {
   assertColdRead(read);
+  const input = withPreservePrompt(coldReadInput(read), []);
   const request: ThinkRequest<unknown> = {
     task: ELEVATE_PLAN_TASK,
     schema: ELEVATE_PLAN_SCHEMA,
     effort: "xhigh",
-    input: coldReadInput(read),
+    input,
     images: read.shots,
   };
-  const result = await deps.think(request);
+  const guarded = await callModelIfPreserved(input, () => deps.think(request));
+  if (guarded.called === false) {
+    throw new Error("The elevate prompt omitted the preserve sentence, so the model was not called.");
+  }
+  const result = guarded.value;
   const errors = validateJson(result.value, ELEVATE_PLAN_SCHEMA);
   if (errors.length > 0) {
     throw new Error(`elevate-plan schema failed: ${errors.join("; ")}`);

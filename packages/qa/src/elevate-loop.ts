@@ -32,6 +32,7 @@ import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
 import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
 import { retestAfterElevate, type DefectRecord } from "./defect-log.ts";
+import { elevatePickPrompt, preserveSentencePresent } from "./preserve-prompt.ts";
 import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
@@ -356,7 +357,7 @@ async function writePickPrompt(projectDir: string, id: string, item: ElevateItem
   const dir = path.join(projectDir, ".hitchhiker", "prompts", "elevate");
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, `${id}.md`);
-  await writeFile(file, `${body.trim()}\n${extra}`, "utf8");
+  await writeFile(file, elevatePickPrompt(section, `${body.trim()}\n${extra}`), "utf8");
   return file;
 }
 
@@ -616,9 +617,14 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     const headBefore = await headOf(root);
     const untracked = untrackedFiles(await git(root, ["status", "--porcelain"]));
     const file = await writePickPrompt(root, id, item);
+    const promptText = readFileSync(file, "utf8");
     let next = prior;
     let gateError = "";
     const rollback = (): Promise<void> => revertTo(root, headBefore, untracked);
+    if (!preserveSentencePresent(promptText)) {
+      refused.push({ id, reason: "The prompt omitted the preserve sentence, so the model was not called." });
+      continue;
+    }
     const outcome = await runElevate({
       apply: async () => {
         await deps.runPrompt(file);

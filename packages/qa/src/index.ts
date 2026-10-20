@@ -123,6 +123,14 @@ export type {
   VariantPick,
 } from "./variants.ts";
 export { closeDefect, judgeDefectLog, retestAfterElevate } from "./defect-log.ts";
+export {
+  PRESERVE_FUNCTIONALITY,
+  callModelIfPreserved,
+  elevatePickPrompt,
+  redesignPrompt,
+  runRedesignPrompt,
+  withPreservePrompt,
+} from "./preserve-prompt.ts";
 export type { DefectClose, DefectLogJudgement, DefectRecord, DefectRetest, DefectSeverity } from "./defect-log.ts";
 export { renderDefectLog } from "./report.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
