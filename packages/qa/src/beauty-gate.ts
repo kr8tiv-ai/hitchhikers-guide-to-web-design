@@ -85,6 +85,39 @@ export function judgeBeauty(shots: readonly SectionShot[]): { pass: boolean; fai
   return { pass: failures.length === 0, failures };
 }
 
+export interface RankedBeautyIssue extends BeautyFailure {
+  id: string;
+  score: number;
+}
+
+/** Worst score first. One issue per page and section. The first reason is kept. */
+export function rankBeautyIssues(shots: readonly SectionShot[]): { pass: boolean; issues: RankedBeautyIssue[] } {
+  const judged = judgeBeauty(shots);
+  const worst = new Map<string, number>();
+  for (const shot of shots) {
+    const id = `${shot.page.trim()}::${shot.section.trim()}`;
+    const prev = worst.get(id);
+    if (prev === undefined || shot.score < prev) worst.set(id, shot.score);
+  }
+  const seen = new Set<string>();
+  const issues: RankedBeautyIssue[] = [];
+  for (const failure of judged.failures) {
+    const id = `${failure.page}::${failure.section}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    issues.push({
+      id,
+      page: failure.page,
+      section: failure.section,
+      screenshot: failure.screenshot,
+      reason: failure.reason,
+      score: worst.get(id) ?? 10,
+    });
+  }
+  issues.sort((left, right) => left.score - right.score || left.id.localeCompare(right.id));
+  return { pass: judged.pass, issues };
+}
+
 /** A section failure blocks the jury even when the weighted total would pass. */
 export function juryWithBeauty(
   scores: Omit<JuryInput, "blocked">,

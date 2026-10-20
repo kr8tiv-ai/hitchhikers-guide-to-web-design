@@ -84,5 +84,14 @@ export {
   stillIsArtDirected,
 } from "./reduced-motion.ts";
 export type { LenisMotion, MotionSection, ReducedReport, ReducedRun, ReducedSample, TierZeroStill } from "./reduced-motion.ts";
+export { rankBeautyIssues } from "./beauty-gate.ts";
+export type { RankedBeautyIssue } from "./beauty-gate.ts";
+export {
+  SCREENSHOT_FIX_MAX_ROUNDS,
+  SCREENSHOT_FIX_TOP,
+  runScreenshotFixLoop,
+  screenshotFixWidths,
+} from "./elevate-loop.ts";
+export type { ScreenshotFixCapture, ScreenshotFixReport } from "./elevate-loop.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";

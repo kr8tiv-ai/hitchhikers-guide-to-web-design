@@ -27,7 +27,7 @@ import {
   type ElevateColdRead,
   type ElevateItem,
 } from "./elevate.ts";
-import { writeBeautyRound } from "./beauty-gate.ts";
+import { rankBeautyIssues, writeBeautyRound, type RankedBeautyIssue, type SectionShot } from "./beauty-gate.ts";
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
 import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
@@ -617,4 +617,64 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   if (applied.length === 0) outcomeLines.push("Nothing was kept.");
   await writeRound(root, round, ranked, outcomeLines);
   return { applied, refused };
+}
+
+/** Widths inside the three-round screenshot cap. 1920 stays on the device matrix. */
+export function screenshotFixWidths(): readonly number[] {
+  return REVIEW_WIDTHS.filter((width) => width !== 1920);
+}
+
+export const SCREENSHOT_FIX_MAX_ROUNDS = 3;
+export const SCREENSHOT_FIX_TOP = 3;
+
+export interface ScreenshotFixCapture {
+  round: number;
+  width: number;
+}
+
+export interface ScreenshotFixReport {
+  rounds: number;
+  stopped: "clean" | "cap";
+  widths: readonly number[];
+  captures: readonly ScreenshotFixCapture[];
+  fixed: readonly string[];
+  untouched: readonly string[];
+}
+
+/**
+ * Capture at three widths, take the worst three beauty failures, and fix only
+ * those. Three rounds is the cap. A clean read stops on round one.
+ */
+export async function runScreenshotFixLoop(deps: {
+  capture: (width: number, round: number) => Promise<readonly SectionShot[]>;
+  fix: (issues: readonly RankedBeautyIssue[]) => Promise<void> | void;
+}): Promise<ScreenshotFixReport> {
+  const widths = screenshotFixWidths();
+  const captures: ScreenshotFixCapture[] = [];
+  const fixed: string[] = [];
+  const fixedSet = new Set<string>();
+  for (let round = 1; round <= SCREENSHOT_FIX_MAX_ROUNDS; round += 1) {
+    const shots: SectionShot[] = [];
+    for (const width of widths) {
+      captures.push({ round, width });
+      const batch = await deps.capture(width, round);
+      for (const shot of batch) shots.push(shot);
+    }
+    const ranked = rankBeautyIssues(shots);
+    if (ranked.pass) {
+      return { rounds: round, stopped: "clean", widths, captures, fixed, untouched: [] };
+    }
+    const top = ranked.issues.slice(0, SCREENSHOT_FIX_TOP);
+    await deps.fix(top);
+    for (const issue of top) {
+      if (fixedSet.has(issue.id)) continue;
+      fixedSet.add(issue.id);
+      fixed.push(issue.id);
+    }
+    if (round === SCREENSHOT_FIX_MAX_ROUNDS) {
+      const untouched = ranked.issues.map((issue) => issue.id).filter((id) => !fixedSet.has(id));
+      return { rounds: round, stopped: "cap", widths, captures, fixed, untouched };
+    }
+  }
+  return { rounds: SCREENSHOT_FIX_MAX_ROUNDS, stopped: "cap", widths, captures, fixed, untouched: [] };
 }
