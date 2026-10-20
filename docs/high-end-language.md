@@ -20,7 +20,7 @@ Files live in `packages/knowledge/skills/`.
 | Pack | What it is for |
 | --- | --- |
 | `object-showcase` | Product or hero 3D: camera, light, materials, post |
-| `scroll-choreography` | Pin and scrub, horizontal tracks, SplitText, shared elements, Lenis |
+| `scroll-choreography` | Pin and scrub, horizontal tracks, SplitText, snap, Lenis scrollTo, Three progress with maath damp, shared elements |
 | `shader-recipes` | Transmission, dispersion, iridescence, grain, caustics |
 | `post-processing` | EffectComposer chains |
 | `locked-versions` | Library versions known to work together, with import lines |

@@ -4,7 +4,7 @@ site-types: editorial, marketing, product, portfolio
 motion-appetite: high
 section-kinds: story, gallery, horizontal
 techniques: pin, scrub, split-text, shared-element, horizontal
-versions: gsap@3.15.0, lenis@1.3.27
+versions: gsap@3.15.0, lenis@1.3.27, maath@0.10.8, three@0.186.1
 ---
 
 # Scroll choreography
@@ -90,13 +90,174 @@ gsap.ticker.lagSmoothing(0);
 
 Lenis 1.3.26 and newer jumps immediately when the visitor asks for reduced motion. Leave that behavior on.
 
+## Snap and velocity
+
+Snap to the timeline labels when a section should settle. Duration stays between 0.2 and 0.8 seconds, with a short delay. `self.getVelocity()` is there when a later effect should react to how fast the section is passing.
+
+```ts
+scrollTrigger: {
+  snap: {
+    snapTo: "labelsDirectional",
+    duration: { min: 0.2, max: 0.8 },
+    delay: 0.1,
+    ease: "power1.inOut",
+  },
+  onUpdate: (self) => {
+    const velocity = self.getVelocity();
+    return velocity;
+  },
+}
+```
+
+## Advanced pinning
+
+`anticipatePin` takes the jump out of the pin. `pinSpacing: false` leaves the layout to you. The same element can pin again at a later range. `endTrigger` sets the far end when the trigger itself is not the end of the story.
+
+```ts
+ScrollTrigger.create({
+  trigger: ".story",
+  start: "top top",
+  end: "+=80%",
+  pin: true,
+  pinSpacing: false,
+  anticipatePin: 1,
+  invalidateOnRefresh: true,
+});
+ScrollTrigger.create({
+  trigger: ".story",
+  start: "center center",
+  endTrigger: ".story-end",
+  end: "bottom bottom",
+  pin: true,
+  pinSpacing: false,
+  anticipatePin: 1,
+  invalidateOnRefresh: true,
+});
+```
+
+## Three from scroll progress
+
+Drive the camera from `self.progress`. `damp3` follows with a smoothTime in the 0.12-0.18 window. A numeric scrub on the trigger is the scroll link. The damp is the camera's own follow.
+
+```ts
+import * as THREE from "three"; // three@0.186.1
+import { damp3 } from "maath/easing"; // maath@0.10.8
+
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const target = new THREE.Vector3();
+ScrollTrigger.create({
+  trigger: ".scene",
+  start: "top top",
+  end: "+=200%",
+  scrub: 1,
+  onUpdate: (self) => {
+    const progress = self.progress;
+    target.set(progress * 2, 0.2, 4 - progress);
+    damp3(camera.position, target, 0.15, 1 / 60);
+    camera.lookAt(0, 0.2, 0);
+  },
+});
+```
+
+## Performance
+
+Animate transform and opacity. Call `ScrollTrigger.refresh()` after fonts, images, and layout changes. `gsap.matchMedia()` holds the reduced-motion query and the phone layout. `ScrollTrigger.batch()` covers a long list of similar elements without one trigger each.
+
+```ts
+const refresh = () => {
+  ScrollTrigger.refresh();
+};
+document.fonts.ready.then(refresh);
+for (const image of Array.from(document.images)) {
+  if (image.complete) continue;
+  image.addEventListener("load", refresh, { once: true });
+}
+
+const media = gsap.matchMedia();
+media.add("(prefers-reduced-motion: reduce)", () => {
+  gsap.set(".headline", { yPercent: 0, opacity: 1 });
+});
+media.add("(max-width: 767px)", () => {
+  gsap.set(".track", { xPercent: 0 });
+});
+
+ScrollTrigger.batch(".card", {
+  onEnter: (batch) => {
+    gsap.from(batch, { yPercent: 100, opacity: 0, stagger: 0.08, ease: "expo.out" });
+  },
+});
+```
+
 ## Scroll to a target
 
-lenis.scrollTo accepts a pixel value, a selector, "top", "bottom", or an element. Useful options: offset for a fixed header, duration, easing, lerp (about 0.08-0.12 for a calm move, and lerp wins over duration when both are set), immediate, lock, force, onStart, onComplete. anchors: true can catch in-page links, with an offset when the header is fixed.
+When Lenis drives scroll, `lenis.scrollTo` is the call. The target is a pixel value, a selector, `"top"`, `"bottom"`, or an element. `lerp` in the 0.08-0.12 window is the premium feel, and it takes priority over duration and easing when both are set. Leave `lerp` off when you want a timed ease. Lenis 1.3.26 and newer jumps immediately when the visitor asks for reduced motion. `immediate: true` is that same jump for a call you make yourself.
 
-When Lenis is active, lenis.scrollTo is the direct call. ScrollToPlugin can still move the window when Lenis is not the owner: offsetY for a header, autoKill so a user scroll cancels the tween. A pin does not add its spacing into that target. Resolve it with ScrollTrigger.getById and use trigger.start, or a scroll lookup.
+`anchors: true` catches in-page links. A fixed header uses an offset.
 
-GSAP has no lerp setting of its own. The stand-ins are a numeric scrub, gsap.utils.interpolate inside the ticker, or maath damp for a value that should keep following.
+```ts
+const lenis = new Lenis({ autoRaf: false, anchors: true });
+new Lenis({
+  autoRaf: false,
+  anchors: { offset: -80, duration: 1.2 },
+});
+
+const target = "#about";
+lenis.scrollTo(target, {
+  offset: -80,
+  duration: 1.4,
+  easing: (t: number) => 1 - Math.pow(1 - t, 3),
+  lerp: 0.1,
+  immediate: false,
+  lock: false,
+  force: false,
+  onStart: () => {},
+  onComplete: () => {},
+  userData: { source: "nav" },
+});
+lenis.scrollTo(0, { immediate: true });
+```
+
+ScrollToPlugin moves the window when Lenis is not the scroll owner. `offsetY` clears a fixed header. `autoKill: true` lets a user scroll cancel the tween. `"max"` scrolls to the end of the page. A pin does not add its spacing into that target. Resolve it with `ScrollTrigger.getById(id).start`, or with GreenSock's `getScrollLookup` helper.
+
+```ts
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
+
+gsap.registerPlugin(ScrollToPlugin);
+gsap.to(window, { duration: 1.2, scrollTo: { y: "#about", offsetY: 80 }, ease: "power2.inOut" });
+gsap.to(window, { duration: 1, scrollTo: { y: "max", autoKill: true } });
+
+const about = ScrollTrigger.getById("about");
+if (about) {
+  gsap.to(window, {
+    duration: 1.2,
+    scrollTo: { y: about.start, autoKill: true },
+    ease: "power2.inOut",
+  });
+}
+const lookup = getScrollLookup(".section", "top top");
+gsap.to(window, { duration: 1.2, scrollTo: { y: lookup("#about"), autoKill: true }, ease: "power2.inOut" });
+```
+
+## Smoothing
+
+GSAP has no lerp option. A numeric `scrub` smooths scroll-linked tweens. `gsap.utils.interpolate(current, target, 0.1)` inside the ticker eases a number toward a goal. `damp` from maath is the critically damped follow. A normal tween with an ease is the one-shot.
+
+```ts
+import { damp } from "maath/easing"; // maath@0.10.8
+
+let current = 0;
+let target = 1;
+gsap.ticker.add(() => {
+  current = gsap.utils.interpolate(current, target, 0.1);
+});
+
+let damped = 0;
+gsap.ticker.add((_time, deltaMs) => {
+  damped = damp(damped, target, 0.15, deltaMs / 1000);
+});
+
+gsap.to(".headline", { yPercent: 0, duration: 1.2, ease: "expo.out" });
+```
 
 ## Shared element
 
@@ -106,4 +267,4 @@ Flip can move one frame from a card to a detail view. A view transition can do t
 
 gsap.matchMedia gives the reduced-motion query a static column. Pins release, tracks stack, headlines stay whole, and Lenis stays on the native scroller.
 
-Source: ScrollTrigger, SplitText, and ScrollToPlugin options follow https://gsap.com/docs/v3/. Lenis scrollTo options follow https://github.com/darkroomengineering/lenis.
+Source: ScrollTrigger, SplitText, ScrollToPlugin, and getScrollLookup follow https://gsap.com/docs/v3/. Lenis scrollTo options follow https://github.com/darkroomengineering/lenis. damp and damp3 follow https://github.com/pmndrs/maath. PerspectiveCamera follows https://threejs.org/docs/.
