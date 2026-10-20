@@ -34,6 +34,7 @@ import {
   type QueueStatus,
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
+import { writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
 import { styleWorldFrom } from "../spec/art-direction.ts";
 import { writeSectionStillPlan } from "../spec/section-stills.ts";
@@ -605,6 +606,13 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);
+  writeDesignMd(projectDir, briefMarkdown, answers);
+  writeMotionModule(
+    projectDir,
+    briefMarkdown,
+    answers,
+    planned.pages.flatMap((page) => page.sections),
+  );
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));

@@ -185,6 +185,17 @@ export {
 } from "./guide/brief-desk.ts";
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
+export {
+  DESIGN_FILE_LINES,
+  DESIGN_MD_PATH,
+  MOTION_TS_PATH,
+  flagIgnoredMotionTokens,
+  renderDesignMd,
+  renderMotionModule,
+  writeDesignMd,
+  writeMotionModule,
+} from "./spec/design-outputs.ts";
+export type { MotionTokenHit } from "./spec/design-outputs.ts";
 export { translateBrief } from "./spec/art-direction.ts";
 export {
   formatLanguagePack,

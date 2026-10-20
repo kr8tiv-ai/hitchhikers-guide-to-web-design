@@ -5,6 +5,7 @@
  */
 
 import { directionAcceptance, sectionAcceptance, translateBrief, type ArtDirection } from "./art-direction.ts";
+import { DESIGN_FILE_LINES } from "./design-outputs.ts";
 import { planSkillLines, siteTypeForWorld } from "./skills.ts";
 import { planMotion } from "./motion.ts";
 import { sectionForMotion, visualMotionRequests } from "./visual-motion.ts";
@@ -443,6 +444,11 @@ export function generateBriefPlan(
       artDirection: `${section.layout} ${section.media} ${section.motion}`,
     });
     if (skills !== "") prompt.acceptance = [...prompt.acceptance, ...skills.split("\n")];
+  }
+  for (const prompt of generated.prompts) {
+    const acceptance = prompt.acceptance ?? [];
+    const missing = DESIGN_FILE_LINES.filter((line) => !acceptance.includes(line));
+    if (missing.length > 0) prompt.acceptance = [...acceptance, ...missing];
   }
   return { ...generated, planned };
 }

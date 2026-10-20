@@ -9,7 +9,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { saveQueue, type QueueFile } from "@hitchhiker/engine";
+import { DESIGN_FILE_LINES, saveQueue, type QueueFile } from "@hitchhiker/engine";
 import { jury, type JuryInput } from "./jury.ts";
 import { captureAll, REVIEW_WIDTHS } from "./screenshots.ts";
 import { zaphodReviewSections, type VisualSectionScore } from "./zaphod-vision.ts";
@@ -218,6 +218,10 @@ function remediationBody(
     "## Design language",
     "",
     designLanguage.trim(),
+    "",
+    "## Design files",
+    "",
+    ...DESIGN_FILE_LINES,
     "",
     `Requirements: ${requirement}`,
     "",
