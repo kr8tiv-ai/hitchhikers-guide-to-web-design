@@ -18,6 +18,7 @@
  */
 
 import type { StackPick } from "./stack.ts";
+import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
 
 export type MotionLib =
   | "gsap"
@@ -529,4 +530,87 @@ export function planMotion(input: {
   }));
   const markdown = renderMotionMd({ appetite, stack, scrollOwner, warnings, rows });
   return { scrollOwner, assignments, warnings, markdown };
+}
+
+export interface MotionLintReport {
+  ok: boolean;
+  reasons: readonly string[];
+}
+
+const BOLD_EXPORT = /export\s+const\s+boldThing\s*=\s*"((?:\\.|[^"\\])*)"/g;
+const MOMENT_EXPORT = /export\s+const\s+orchestratedMoment\s*=\s*\{[^}]*\bkind\s*:\s*"timeline"/g;
+const TIMELINE_CALL = /\bgsap\.timeline\s*\(/g;
+const SCROLL_TRIGGER = /\bscrollTrigger\b/g;
+const TWEEN_CALL = /\bgsap\.(fromTo|from|to)\s*\(/g;
+
+function stripMotionComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function callBlock(source: string, openParen: number): string {
+  let depth = 0;
+  for (let index = openParen; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return source.slice(openParen, index + 1);
+    }
+  }
+  return source.slice(openParen);
+}
+
+function durationSeconds(block: string): number | undefined {
+  const match = /\bduration\s*:\s*(-?\d+(?:\.\d+)?)/.exec(block);
+  if (match?.[1] === undefined) return undefined;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return undefined;
+  return value > 1 ? value / 1000 : value;
+}
+
+/** Exactly one bold visual decision and one orchestrated timeline. */
+export function lintMotionSource(source: string): MotionLintReport {
+  const text = stripMotionComments(source);
+  const reasons: string[] = [];
+  const bold = [...text.matchAll(BOLD_EXPORT)]
+    .map((match) => (match[1] ?? "").replace(/\\"/g, "\"").replace(/\\\\/g, "\\").trim())
+    .filter((value) => value.length > 0);
+  if (bold.length !== 1) {
+    reasons.push(
+      bold.length === 0
+        ? "The motion file names zero bold visual decisions. Name exactly one."
+        : `The motion file names ${bold.length} bold visual decisions. Name exactly one.`,
+    );
+  }
+  const timelineCount = [...text.matchAll(MOMENT_EXPORT)].length + [...text.matchAll(TIMELINE_CALL)].length;
+  if (timelineCount !== 1) {
+    reasons.push(
+      timelineCount === 0
+        ? "The motion file names zero orchestrated timelines. Name exactly one."
+        : `The motion file names ${timelineCount} orchestrated timelines. Name exactly one.`,
+    );
+  }
+  const scrolls = [...text.matchAll(SCROLL_TRIGGER)].length;
+  if (scrolls >= 5 && timelineCount !== 1) {
+    reasons.push("Five unrelated scroll effects have no single orchestrated timeline.");
+  }
+  const ceiling = OPACITY_KEEP_MS / 1000;
+  for (const match of text.matchAll(TWEEN_CALL)) {
+    const open = (match.index ?? 0) + match[0].length - 1;
+    const block = callBlock(text, open);
+    const seconds = durationSeconds(block);
+    const opacity = /\bopacity\b/.test(block);
+    if (!opacity || seconds === undefined || seconds > ceiling) {
+      reasons.push(
+        `An extra moment is allowed only as opacity at or under ${OPACITY_KEEP_MS} ms. This tween is outside that heuristic.`,
+      );
+    }
+  }
+  if (!/\bopacity\s*:\s*1\b/.test(text) || !/\byPercent\s*:\s*0\b/.test(text)) {
+    reasons.push("Reduced motion must keep opacity at 1 and yPercent at 0 so the page stays complete.");
+  }
+  if (/display\s*:\s*["']?none["']?/i.test(text) || /visibility\s*:\s*["']?hidden["']?/i.test(text)) {
+    reasons.push("Reduced motion must not set display to none or visibility to hidden. The page stays complete.");
+  }
+  return { ok: reasons.length === 0, reasons };
 }

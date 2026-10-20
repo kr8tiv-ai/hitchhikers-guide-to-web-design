@@ -10,6 +10,8 @@ import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
 import { typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
+import { lintMotionSource } from "./motion.ts";
+import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
 
 export const DESIGN_MD_PATH = "DESIGN.md";
 export const MOTION_TS_PATH = "src/scripts/motion.ts";
@@ -269,7 +271,7 @@ export function renderMotionModule(
       ].join("\n");
     })
     .join("\n");
-  return [
+  const source = [
     "/** Typed motion constants for this site. A starting point to remix. */",
     "",
     "export interface ScrollScene {",
@@ -337,11 +339,19 @@ export function renderMotionModule(
     "  opacity: 1,",
     "  yPercent: 0,",
     "} as const satisfies ReducedMotionMap;",
+    `export const boldThing = ${JSON.stringify(art.signatureHero)} as const;`,
+    `export const orchestratedMoment = { id: ${JSON.stringify(ids[0] ?? "hero")}, kind: "timeline" } as const;`,
+    `export const reducedOpacityMs = ${OPACITY_KEEP_MS} as const;`,
     "export const motionScenes: readonly ScrollScene[] = [",
     scenes,
     "];",
     "",
   ].join("\n");
+  const motionLint = lintMotionSource(source);
+  if (!motionLint.ok) {
+    throw new Error(`motion.ts failed the one-bold-thing rule: ${motionLint.reasons.join(" ")}`);
+  }
+  return source;
 }
 
 export function writeDesignMd(projectDir: string, brief: string, answers: readonly BrandAnswer[] = []): string {
