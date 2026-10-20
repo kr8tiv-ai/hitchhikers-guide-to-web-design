@@ -4,8 +4,7 @@
  * The clock is gsap.ticker.
  */
 
-import { prefersReducedMotion } from "../motion.ts";
-import { getContext, pauseOffscreen, readPowerSignals, shouldUsePoster, showPoster } from "../webgl.ts";
+import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, HERO_POSE, posterImageFrom } from "../webgl.ts";
 
 const VERT = "attribute vec2 position; void main(){ gl_Position = vec4(position, 0.0, 1.0); }";
 const FRAG = "precision highp float; uniform float uTime; void main(){ float shade = 0.45 + 0.15 * sin(uTime); gl_FragColor = vec4(shade, 0.32, 0.18, 1.0); }";
@@ -35,12 +34,9 @@ interface OglModule {
 }
 
 export async function mountShader(canvas: HTMLCanvasElement, poster: HTMLElement): Promise<() => void> {
-  const signals = readPowerSignals();
-  if (prefersReducedMotion() || shouldUsePoster(signals)) {
-    showPoster(poster, "Still.");
-    return () => {};
-  }
-  const gl = getContext(canvas);
+  const opened = beginScene(canvas, poster, readPowerSignals());
+  if (opened.mode === "still") return () => {};
+  const gl = opened.gl;
   const ogl = (await import("ogl")) as unknown as OglModule;
   const gsapMod = (await import("gsap")) as unknown as { default: { ticker: TickerLike } };
   const renderer = new ogl.Renderer({
@@ -48,7 +44,7 @@ export async function mountShader(canvas: HTMLCanvasElement, poster: HTMLElement
     context: gl,
     webgl: 2,
     alpha: true,
-    dpr: Math.min(window.devicePixelRatio, 2),
+    dpr: capDpr(opened.settings.dprCap, window.devicePixelRatio),
   });
   const camera = new ogl.Camera(renderer.gl);
   camera.position.z = 1;
@@ -68,12 +64,25 @@ export async function mountShader(canvas: HTMLCanvasElement, poster: HTMLElement
     renderer.render({ scene: mesh, camera });
   };
   gsapMod.default.ticker.add(tick);
+  const guard = createContextGuard();
+  const stopLoss = bindContextLoss(
+    canvas,
+    guard,
+    () => {
+      running = false;
+      showArtDirectedStill(poster, HERO_POSE, HERO_POSE, posterImageFrom(poster));
+    },
+    () => {
+      running = true;
+    },
+  );
   const stopWatch = pauseOffscreen(canvas, (state) => {
     running = state === "resume";
   });
   return () => {
     running = false;
     stopWatch();
+    stopLoss();
     gsapMod.default.ticker.remove(tick);
   };
 }

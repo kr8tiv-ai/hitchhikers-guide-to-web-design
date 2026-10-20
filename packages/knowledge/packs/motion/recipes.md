@@ -160,8 +160,7 @@ const FRAG = "precision highp float; uniform float uTime; void main(){ float sha
 
 export function mountShader(canvas: HTMLCanvasElement): () => void {
   const quiet = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const phone = window.matchMedia("(max-width: 430px)").matches;
-  if (quiet || phone) return () => {};
+  if (quiet) return () => {};
   const renderer = new Renderer({
     canvas,
     webgl: 2,
@@ -200,10 +199,9 @@ import gsap from "gsap";
 
 export async function mountHero(canvas: HTMLCanvasElement): Promise<() => void> {
   const quiet = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const phone = window.matchMedia("(max-width: 430px)").matches;
-  if (quiet || phone) return () => {};
+  if (quiet) return () => {};
   const THREE = await import("three");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 20);
@@ -238,8 +236,7 @@ import gsap from "gsap";
 
 export function playScene(state: object): () => void {
   const quiet = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const phone = window.matchMedia("(max-width: 430px)").matches;
-  if (quiet || phone) return () => {};
+  if (quiet) return () => {};
   const driver = createRafDriver({ name: "gsap.ticker" });
   const tick = (time: number): void => {
     driver.tick(time * 1000);
@@ -287,7 +284,7 @@ export function fadeOnView(node: HTMLElement): () => void {
 
 This section is not a library. `planMotion` does not assign it.
 
-When `prefers-reduced-motion: reduce` matches, leave smooth scroll unstarted, skip scrub and autoplay, and keep the content visible. A phone at level 6 and above uses the calm path: a still, not the heavy scene.
+When `prefers-reduced-motion: reduce` matches, leave smooth scroll unstarted, skip scrub and autoplay, and keep the content visible. A phone keeps the scene. Width does not select a still.
 
 ```css
 @media (prefers-reduced-motion: reduce) {

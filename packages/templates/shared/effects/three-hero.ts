@@ -3,8 +3,7 @@
  * The renderer uses the shared WebGL2 context and the shared ticker.
  */
 
-import { prefersReducedMotion } from "../motion.ts";
-import { getContext, pauseOffscreen, readPowerSignals, shouldUsePoster, showPoster } from "../webgl.ts";
+import { beginScene, bindContextLoss, capDpr, createContextGuard, pauseOffscreen, readPowerSignals, showArtDirectedStill, HERO_POSE, posterImageFrom } from "../webgl.ts";
 
 interface TickerLike {
   add: (fn: () => void) => void;
@@ -12,12 +11,9 @@ interface TickerLike {
 }
 
 export async function mountThreeHero(canvas: HTMLCanvasElement, poster: HTMLElement): Promise<() => void> {
-  const signals = readPowerSignals();
-  if (prefersReducedMotion() || shouldUsePoster(signals)) {
-    showPoster(poster, "Still.");
-    return () => {};
-  }
-  const gl = getContext(canvas);
+  const opened = beginScene(canvas, poster, readPowerSignals());
+  if (opened.mode === "still") return () => {};
+  const gl = opened.gl;
   const THREE = await import("three");
   const gsapMod = (await import("gsap")) as unknown as { default: { ticker: TickerLike } };
   const renderer = new THREE.WebGLRenderer({
@@ -26,7 +22,7 @@ export async function mountThreeHero(canvas: HTMLCanvasElement, poster: HTMLElem
     antialias: false,
     alpha: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(capDpr(opened.settings.dprCap, window.devicePixelRatio));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 20);
   camera.position.z = 4;
@@ -40,12 +36,25 @@ export async function mountThreeHero(canvas: HTMLCanvasElement, poster: HTMLElem
     renderer.render(scene, camera);
   };
   gsapMod.default.ticker.add(tick);
+  const guard = createContextGuard();
+  const stopLoss = bindContextLoss(
+    canvas,
+    guard,
+    () => {
+      running = false;
+      showArtDirectedStill(poster, HERO_POSE, HERO_POSE, posterImageFrom(poster));
+    },
+    () => {
+      running = true;
+    },
+  );
   const stopWatch = pauseOffscreen(canvas, (state) => {
     running = state === "resume";
   });
   return () => {
     running = false;
     stopWatch();
+    stopLoss();
     gsapMod.default.ticker.remove(tick);
     renderer.dispose();
   };

@@ -49,7 +49,7 @@ export async function fetchState(url: string): Promise<object> {
 
 /**
  * Pins playback to the shared ticker.
- * Reduced motion and the phone path return a no-op.
+ * Reduced motion returns a no-op. A phone width does not.
  */
 export function playState(
   state: object,
@@ -57,7 +57,7 @@ export function playState(
   ticker: Ticker,
   options: PlayOptions = {},
 ): () => void {
-  if (options.reducedMotion === true || options.phone === true) return () => {};
+  if (options.reducedMotion === true) return () => {};
   const driver = core.createRafDriver({ name: "gsap.ticker" });
   const tick = (time: number): void => {
     driver.tick(time * 1000);

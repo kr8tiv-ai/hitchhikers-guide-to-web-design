@@ -233,10 +233,12 @@ test("installed devices include a WebKit reduced-motion project", () => {
   assert.equal(ios.p0Phone, true);
 });
 
-test("the width poster cutoff stays until the tier-0 spec replaces it", () => {
+test("width and core count do not select the tier-0 still", () => {
   const webgl = readFileSync(path.join(here, "..", "..", "templates", "shared", "webgl.ts"), "utf8");
-  assert.match(webgl, /viewportWidth <= 430/);
-  assert.match(webgl, /cores <= 4/);
+  assert.doesNotMatch(webgl, /viewportWidth\s*<=\s*430/);
+  assert.doesNotMatch(webgl, /cores\s*<=\s*4/);
+  assert.match(webgl, /contextLosses/);
+  assert.match(webgl, /tierOverride/);
   const index = readFileSync(path.join(here, "..", "src", "index.ts"), "utf8");
   assert.match(index, /evaluateReducedMotion/);
   assert.match(index, /posesMatch/);

@@ -409,9 +409,10 @@ function renderMotionModule(plan: MotionPlan): string {
   if (hasHeavy(plan)) {
     lines.push(
       "// Calm phone path. Heavy effects must call calmPhonePath.",
+      "// Width does not select the still. The GPU tier table does.",
       "export function calmPhonePath(effectId: string): boolean {",
       "  if (effectId.length === 0) return true;",
-      '  return window.matchMedia("(max-width: 430px)").matches;',
+      "  return false;",
       "}",
       "",
     );

@@ -3,13 +3,12 @@
  * State is the checked-in JSON at /theatre/home.json.
  */
 
-import { prefersReducedMotion, type Ticker } from "../motion.ts";
+import { type Ticker } from "../motion.ts";
 import { fetchState, playState, type TheatreCoreLike } from "../theatre-loader.ts";
-import { readPowerSignals, shouldUsePoster } from "../webgl.ts";
+import { readPowerSignals, shouldStartLoop } from "../webgl.ts";
 
 export async function playCheckedInScene(url = "/theatre/home.json"): Promise<() => void> {
-  const signals = readPowerSignals();
-  if (prefersReducedMotion() || shouldUsePoster(signals)) return () => {};
+  if (!shouldStartLoop(readPowerSignals())) return () => {};
   const state = await fetchState(url);
   const core = (await import("@theatre/core")) as unknown as TheatreCoreLike;
   const gsapMod = (await import("gsap")) as unknown as {

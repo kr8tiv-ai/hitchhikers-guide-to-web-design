@@ -145,9 +145,9 @@ test("one WebGL canvas id is claimed and a second id throws", () => {
   assert.equal(claimCanvas(null, "hh-canvas"), "hh-canvas");
   assert.equal(claimCanvas("hh-canvas", "hh-canvas"), "hh-canvas");
   assert.throws(() => claimCanvas("hh-canvas", "other"), /one context per page/);
-  assert.equal(shouldUsePoster({ reducedMotion: false, viewportWidth: 390, saveData: false, cores: 8 }), true);
-  assert.equal(shouldUsePoster({ reducedMotion: false, viewportWidth: 1440, saveData: true, cores: 8 }), true);
-  assert.equal(shouldUsePoster({ reducedMotion: false, viewportWidth: 1440, saveData: false, cores: 8 }), false);
+  assert.equal(shouldUsePoster({ reducedMotion: false, viewportWidth: 390, saveData: false, cores: 8, tierOverride: 3 }), false);
+  assert.equal(shouldUsePoster({ reducedMotion: false, viewportWidth: 1440, saveData: true, cores: 8, tierOverride: 3 }), false);
+  assert.equal(shouldUsePoster({ reducedMotion: true, viewportWidth: 1440, saveData: false, cores: 8, tierOverride: 3 }), true);
   assert.equal(pauseCommand(false), "pause");
   assert.equal(pauseCommand(true), "resume");
   assert.equal(fadeTargetOpacity(true, false), "1");
