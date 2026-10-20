@@ -314,3 +314,114 @@ function isNoticeId(id: string): boolean {
   if (value === "blueoak-1.0.0" || value === "cc0-1.0") return true;
   return value === "lgpl" || value.startsWith("lgpl-") || value.startsWith("lgpl+");
 }
+
+/**
+ * Audit 13. Every img URL in the built page has a row in CREDITS.json.
+ * The licence string on that row is information. This check does not
+ * decide whether the licence is allowed. 241z removed that gate.
+ */
+export interface ImageCreditAudit {
+  ok: boolean;
+  problems: string[];
+}
+
+const CREDIT_REF_KEYS = ["file", "url", "link", "source", "name", "src"] as const;
+
+function isCreditRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function creditRows(value: unknown): Record<string, unknown>[] | null {
+  if (Array.isArray(value)) return value.filter(isCreditRecord);
+  if (!isCreditRecord(value)) return null;
+  if (Array.isArray(value.assets)) return value.assets.filter(isCreditRecord);
+  if (Array.isArray(value.entries)) return value.entries.filter(isCreditRecord);
+  return null;
+}
+
+function parseCredits(credits: unknown): { rows: Record<string, unknown>[] } | { error: string } {
+  let value = credits;
+  if (typeof credits === "string") {
+    try {
+      value = JSON.parse(credits) as unknown;
+    } catch {
+      return { error: "CREDITS.json is not valid JSON." };
+    }
+  }
+  const rows = creditRows(value);
+  if (rows === null) {
+    return { error: "CREDITS.json needs an assets array, an entries array, or a top-level array." };
+  }
+  return { rows };
+}
+
+/** img src and srcset URLs, in document order. */
+export function imageUrlsIn(html: string): string[] {
+  const urls: string[] = [];
+  const tags = html.match(/<img\b[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const src = tagAttr(tag, "src");
+    if (src !== "") urls.push(src);
+    const srcset = tagAttr(tag, "srcset");
+    for (const part of srcset.split(",")) {
+      const url = part.trim().split(/\s+/)[0] ?? "";
+      if (url !== "") urls.push(url);
+    }
+  }
+  return urls;
+}
+
+function tagAttr(tag: string, name: string): string {
+  const match = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+  return (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim();
+}
+
+function normaliseRef(value: string): string {
+  const trimmed = value.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      const pathName = decodeURIComponent(url.pathname).replace(/\/+$/u, "");
+      return pathName === "" ? "/" : pathName;
+    } catch {
+      // Fall through to the path form.
+    }
+  }
+  const pathOnly = trimmed.split(/[?#]/u)[0] ?? trimmed;
+  const slashed = pathOnly.replaceAll("\\", "/");
+  if (slashed.startsWith("./")) return slashed.slice(1);
+  return slashed;
+}
+
+function sameAsset(src: string, credit: string): boolean {
+  const left = normaliseRef(src);
+  const right = normaliseRef(credit);
+  if (left === "" || right === "") return false;
+  const a = left.startsWith("/") ? left : `/${left}`;
+  const b = right.startsWith("/") ? right : `/${right}`;
+  return a === b || a.endsWith(b) || b.endsWith(a);
+}
+
+function rowMentions(row: Record<string, unknown>, src: string): boolean {
+  for (const key of CREDIT_REF_KEYS) {
+    const raw = row[key];
+    if (typeof raw === "string" && sameAsset(src, raw)) return true;
+  }
+  return false;
+}
+
+/** Fail when a page image has no CREDITS.json row. */
+export function auditImageCredits(html: string, credits: unknown): ImageCreditAudit {
+  const parsed = parseCredits(credits);
+  if ("error" in parsed) return { ok: false, problems: [parsed.error] };
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const src of imageUrlsIn(html)) {
+    const key = normaliseRef(src);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const found = parsed.rows.some((row) => rowMentions(row, src));
+    if (!found) problems.push(`Image ${src} is missing from CREDITS.json.`);
+  }
+  return { ok: problems.length === 0, problems };
+}

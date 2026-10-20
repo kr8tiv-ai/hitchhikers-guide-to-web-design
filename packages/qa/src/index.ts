@@ -97,3 +97,7 @@ export {
 export type { ScreenshotFixCapture, ScreenshotFixReport } from "./elevate-loop.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
+export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";
+export type { ImageryGradeResult, ImagerySample } from "./imagery-grade.ts";
+export { auditImageCredits, imageUrlsIn } from "./licenses.ts";
+export type { ImageCreditAudit } from "./licenses.ts";
