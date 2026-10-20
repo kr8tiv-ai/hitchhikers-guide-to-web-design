@@ -16,11 +16,14 @@
  * rejects a floor below 90, so the phone floor cannot be lowered to 70.
  * `desktopFpsMin` is a different gate and is ignored here.
  *
- * `phone: null` is a BLOCKER, including when `heavy` is false. Desktop scores
- * are reported and never change the status. They do not waive a missing or
- * failing phone run. When `heavy` is true, the phone scores are the calm path
- * `motion.ts` keeps for a heavy scene (a phone still or prerender). That path
- * is what the phone got.
+ * `phone: null` is a BLOCKER, including when `heavy` is false. A desktop
+ * score passed beside the phone run never waives a missing or failing phone
+ * run. Desktop performance uses the same floor as the phone. A miss changes
+ * status (241d). Accessibility, best practices, and SEO on that side score
+ * stay recorded. LCP, CLS, the tablet preset, and the poster image are
+ * `evaluateDeviceLh` and the performance gate. When `heavy` is true, the
+ * phone scores are the calm path `motion.ts` keeps for a heavy scene (a
+ * phone still or prerender). That path is what the phone got.
  */
 
 import type { GuideConfig } from "@hitchhiker/engine";
@@ -163,12 +166,23 @@ function phoneFailures(phone: NormalizedScores, floors: LhFloors): string[] {
   return failures;
 }
 
+function desktopPerformanceFailure(desktop: NormalizedScores, floor: number): string | null {
+  if (desktop.performance < floor) {
+    return (
+      `Desktop performance is ${formatScore(desktop.performance)}, below the floor of ${floor}. ` +
+      `A desktop run does not waive the phone.`
+    );
+  }
+  return null;
+}
+
 function desktopNote(desktop: NormalizedScores): string {
   return (
-    `Desktop is informational: performance ${formatScore(desktop.performance)}, ` +
-    `accessibility ${formatScore(desktop.accessibility)}, ` +
+    `Desktop performance is ${formatScore(desktop.performance)}. ` +
+    `Accessibility ${formatScore(desktop.accessibility)}, ` +
     `best practices ${formatScore(desktop.bestPractices)}, ` +
-    `SEO ${formatScore(desktop.seo)}. A desktop run does not waive the phone.`
+    `and SEO ${formatScore(desktop.seo)} are recorded. ` +
+    `A desktop run does not waive the phone.`
   );
 }
 
@@ -208,7 +222,10 @@ export function evaluateLh(input: {
   }
 
   if (input.desktop !== undefined && input.desktop !== null) {
-    notes.push(desktopNote(readScores(input.desktop, "desktop")));
+    const desktop = readScores(input.desktop, "desktop");
+    const failure = desktopPerformanceFailure(desktop, floors.phonePerfMin);
+    if (failure !== null) failures.push(failure);
+    else notes.push(desktopNote(desktop));
   }
 
   return {
@@ -290,5 +307,202 @@ export function fromLhci(json: unknown): LhScores {
     accessibility: readCategoryScore(categories, "accessibility"),
     bestPractices: readBestPractices(categories),
     seo: readCategoryScore(categories, "seo"),
+  };
+}
+
+export interface LhViewport {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+}
+
+export interface DeviceSlot {
+  scores: LhScores | null;
+  formFactor: "mobile" | "desktop";
+  viewport: LhViewport;
+}
+
+export interface DeviceRecord {
+  id: "mobile" | "desktop" | "tablet";
+  formFactor: "mobile" | "desktop";
+  viewport: LhViewport;
+}
+
+export interface DeviceLhResult {
+  status: "PASS" | "BLOCKER";
+  reasons: string[];
+  notes: string[];
+  recorded: DeviceRecord[];
+}
+
+const SLOT_EXPECTATION = {
+  mobile: "mobile",
+  desktop: "desktop",
+  tablet: "desktop",
+} as const;
+
+/**
+ * Three presets. Mobile gates all four categories. Desktop and tablet gate
+ * performance on the same floor. The recorded row keeps form factor and
+ * viewport so a miss names which layout failed. Tablet must be desktop
+ * scoring. A missing preset does not waive the phone.
+ */
+export function evaluateDeviceLh(input: {
+  heavy: boolean;
+  floors: LhFloors;
+  mobile: DeviceSlot;
+  desktop: DeviceSlot;
+  tablet: DeviceSlot;
+}): DeviceLhResult {
+  if (!isRecord(input)) {
+    throw new Error(`evaluateDeviceLh input is ${label(input)}. Expected an object.`);
+  }
+  const floors = readFloors(input.floors);
+  if (typeof input.heavy !== "boolean") {
+    throw new Error(`heavy is ${label(input.heavy)}. Expected true or false.`);
+  }
+  const mobile = readSlot(input.mobile, "mobile");
+  const desktop = readSlot(input.desktop, "desktop");
+  const tablet = readSlot(input.tablet, "tablet");
+  const failures: string[] = [];
+  const notes: string[] = [];
+  failures.push(...formFactorProblems(mobile));
+  failures.push(...formFactorProblems(desktop));
+  failures.push(...formFactorProblems(tablet));
+
+  const phone = evaluateLh({ phone: mobile.scores, heavy: input.heavy, floors });
+  for (const line of phone.reasons) {
+    if (line.startsWith("The mobile run measures")) notes.push(line);
+    else if (phone.status === "BLOCKER") failures.push(line);
+    else notes.push(line);
+  }
+  failures.push(...presetPerformance("Desktop", desktop, floors.phonePerfMin));
+  failures.push(...presetPerformance("Tablet", tablet, floors.phonePerfMin));
+
+  return {
+    status: failures.length > 0 ? "BLOCKER" : "PASS",
+    reasons: failures,
+    notes,
+    recorded: [recordOf(mobile), recordOf(desktop), recordOf(tablet)],
+  };
+}
+
+/**
+ * The WebGL LCP element is a poster image in the HTML, ahead of the canvas,
+ * with fetchpriority high and explicit width and height. A canvas draw is
+ * not the LCP node.
+ */
+export function webglLcpIsPoster(html: string): { ok: boolean; reasons: string[] } {
+  if (typeof html !== "string" || html.trim() === "") {
+    return { ok: false, reasons: ["The WebGL page has no markup to score."] };
+  }
+  const canvasAt = html.search(/<canvas\b/i);
+  if (canvasAt < 0) {
+    return { ok: false, reasons: ["The WebGL page has no canvas, so the poster cannot be the LCP element."] };
+  }
+  const tags = [...html.matchAll(/<img\b[^>]*>/gi)];
+  const poster = tags
+    .map((match) => ({ tag: match[0], index: match.index ?? -1, attrs: imgAttrs(match[0]) }))
+    .find((item) => item.attrs.fetchPriority === "high");
+  if (poster === undefined) {
+    return { ok: false, reasons: ["The poster image is missing fetchpriority high."] };
+  }
+  const reasons: string[] = [];
+  if (poster.attrs.loading === "lazy") {
+    reasons.push("The poster image is lazy. It cannot be the LCP element.");
+  }
+  if (poster.attrs.width === null || poster.attrs.height === null) {
+    reasons.push("The poster image is missing width and height.");
+  }
+  if (poster.index > canvasAt) {
+    reasons.push("The poster image is after the canvas.");
+  }
+  if (reasons.length === 0) return { ok: true, reasons: [] };
+  return { ok: false, reasons };
+}
+
+function recordOf(slot: ReadSlot): DeviceRecord {
+  return { id: slot.id, formFactor: slot.formFactor, viewport: slot.viewport };
+}
+
+function presetPerformance(scope: "Desktop" | "Tablet", slot: ReadSlot, floor: number): string[] {
+  if (slot.scores === null) {
+    return [
+      `A real ${slot.id} run is required. Viewport ${slot.viewport.width} by ${slot.viewport.height} at scale ${slot.viewport.deviceScaleFactor} is recorded and does not waive the phone.`,
+    ];
+  }
+  const scores = readScores(slot.scores, slot.id);
+  if (scores.performance < floor) {
+    return [
+      `${scope} performance is ${formatScore(scores.performance)}, below the floor of ${floor}. ` +
+        `Viewport ${slot.viewport.width} by ${slot.viewport.height} at scale ${slot.viewport.deviceScaleFactor}. ` +
+        `A desktop run does not waive the phone.`,
+    ];
+  }
+  return [];
+}
+
+interface ReadSlot {
+  id: "mobile" | "desktop" | "tablet";
+  scores: LhScores | null;
+  formFactor: "mobile" | "desktop";
+  viewport: LhViewport;
+}
+
+function readSlot(value: unknown, id: "mobile" | "desktop" | "tablet"): ReadSlot {
+  if (!isRecord(value)) throw new Error(`${id} preset is ${label(value)}. Expected scores, formFactor, and viewport.`);
+  const formFactor = value.formFactor;
+  if (formFactor !== "mobile" && formFactor !== "desktop") {
+    throw new Error(`${id} formFactor is ${label(formFactor)}. Expected mobile or desktop.`);
+  }
+  let scores: LhScores | null = null;
+  if (value.scores !== null && value.scores !== undefined) {
+    if (!isRecord(value.scores)) {
+      throw new Error(`${id} scores are ${label(value.scores)}. Expected category scores or null.`);
+    }
+    scores = value.scores as unknown as LhScores;
+  }
+  return { id, scores, formFactor, viewport: readViewport(value.viewport, id) };
+}
+
+function readViewport(value: unknown, scope: string): LhViewport {
+  if (!isRecord(value)) throw new Error(`${scope} viewport is ${label(value)}. Expected width, height, and deviceScaleFactor.`);
+  const width = readPositive(value.width, `${scope} viewport width`);
+  const height = readPositive(value.height, `${scope} viewport height`);
+  const deviceScaleFactor = readPositive(value.deviceScaleFactor, `${scope} viewport deviceScaleFactor`);
+  return { width, height, deviceScaleFactor };
+}
+
+function readPositive(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${field} is ${label(value)}. Expected a number above 0.`);
+  }
+  return value;
+}
+
+function formFactorProblems(slot: ReadSlot): string[] {
+  const expected = SLOT_EXPECTATION[slot.id];
+  if (slot.formFactor === expected) return [];
+  const why =
+    slot.id === "tablet"
+      ? "Tablet scoring uses the desktop preset."
+      : `${slot.id === "mobile" ? "The phone preset" : "The desktop preset"} uses formFactor ${expected}.`;
+  return [
+    `${slot.id} formFactor is ${slot.formFactor}. ${why} Viewport ${slot.viewport.width} by ${slot.viewport.height} at scale ${slot.viewport.deviceScaleFactor}.`,
+  ];
+}
+
+function imgAttrs(tag: string): { fetchPriority: string; loading: string; width: number | null; height: number | null } {
+  const attr = (name: string): string => {
+    const match = new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag);
+    return match?.[1]?.trim().toLowerCase() ?? "";
+  };
+  const width = Number(attr("width"));
+  const height = Number(attr("height"));
+  return {
+    fetchPriority: attr("fetchpriority"),
+    loading: attr("loading"),
+    width: Number.isFinite(width) && width > 0 ? width : null,
+    height: Number.isFinite(height) && height > 0 ? height : null,
   };
 }

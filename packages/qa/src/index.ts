@@ -18,11 +18,30 @@ export {
   GLB_BUDGET_BYTES,
   INP_MAX_MS,
   LCP_MAX_MS,
+  TBT_PROXY_MS,
   VIDEO_BUDGET_BYTES,
   WEBGL_CONTEXT_MAX,
+  evaluateDevicePerformance,
   evaluatePerformance,
 } from "./performance-gate.ts";
-export type { PerformanceInput, PerformanceResult } from "./performance-gate.ts";
+export type {
+  DeviceLab,
+  DevicePerformanceInput,
+  DevicePerformanceResult,
+  DeviceRunInput,
+  PerformanceInput,
+  PerformanceResult,
+} from "./performance-gate.ts";
+export { evaluateDeviceLh, webglLcpIsPoster } from "./lighthouse-gate.ts";
+export type { DeviceLhResult, DeviceRecord, DeviceSlot, LhViewport } from "./lighthouse-gate.ts";
+export {
+  REAL_DEVICE_EMULATION,
+  TABLET_VIEWPORT,
+  installedTbtP10,
+  loadInstalledPresets,
+  printDesktopThrottling,
+} from "./lighthouse-preset.ts";
+export type { LhPreset, ScreenEmulation, ThrottlingProfile } from "./lighthouse-preset.ts";
 export { judgeAward } from "./award-jury.ts";
 export type { AwardInput, AwardResult } from "./award-jury.ts";
 export type {

@@ -130,30 +130,31 @@ test("a ratio under 0.9 fails the matching phone category", () => {
   assert.deepEqual(result.reasons, ["Phone performance is 89, below the floor of 90."]);
 });
 
-test("desktop performance 40 does not fail a passing phone run and is informational", () => {
+test("desktop performance 40 fails a passing phone run and does not waive it", () => {
   const result = evaluateLh({
     phone: scores({ performance: 92, accessibility: 95, bestPractices: 96, seo: 97 }),
     desktop: scores({ performance: 40, accessibility: 91, bestPractices: 92, seo: 93 }),
     heavy: false,
     floors: floors(),
   });
-  assert.equal(result.status, "PASS");
+  assert.equal(result.status, "BLOCKER");
   assert.deepEqual(result.reasons, [
-    "Desktop is informational: performance 40, accessibility 91, best practices 92, SEO 93. A desktop run does not waive the phone.",
+    "Desktop performance is 40, below the floor of 90. A desktop run does not waive the phone.",
   ]);
 });
 
 test("a low desktop accessibility score does not waive or fail the phone", () => {
   const result = evaluateLh({
     phone: scores(),
-    desktop: scores({ performance: 40, accessibility: 40, bestPractices: 40, seo: 40 }),
+    desktop: scores({ performance: 95, accessibility: 40, bestPractices: 40, seo: 40 }),
     heavy: true,
     floors: floors(),
   });
   assert.equal(result.status, "PASS");
   const text = result.reasons.join("\n");
-  assert.match(text, /performance 40/);
-  assert.match(text, /informational/);
+  assert.match(text, /Desktop performance is 95/);
+  assert.match(text, /are recorded/);
+  assert.doesNotMatch(text, /below the floor/);
   assert.match(text, /does not waive the phone/);
   assert.match(text, /phone fallback/);
 });
@@ -179,7 +180,7 @@ test("heavy false and phone null is still a blocker", () => {
   assert.equal(result.status, "BLOCKER");
   assert.deepEqual(result.reasons, [
     "A real mobile run is required.",
-    "Desktop is informational: performance 100, accessibility 100, best practices 100, SEO 100. A desktop run does not waive the phone.",
+    "Desktop performance is 100. Accessibility 100, best practices 100, and SEO 100 are recorded. A desktop run does not waive the phone.",
   ]);
 });
 
@@ -217,7 +218,7 @@ test("every failing phone category is listed", () => {
     "Phone accessibility is 88, below the floor of 90.",
     "Phone best practices is 87, below the floor of 90.",
     "Phone SEO is 86, below the floor of 90.",
-    "Desktop is informational: performance 40, accessibility 90, best practices 90, SEO 90. A desktop run does not waive the phone.",
+    "Desktop performance is 40, below the floor of 90. A desktop run does not waive the phone.",
   ]);
 });
 
