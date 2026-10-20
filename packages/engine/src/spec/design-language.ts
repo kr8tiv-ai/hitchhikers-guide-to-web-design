@@ -15,6 +15,7 @@ import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
 import { languageBlockFor, languageQueryFrom } from "./language-pack.ts";
 import type { SitePromptSkeleton } from "./site-prompts.ts";
+import { expandIngredientIncludes } from "./section-refs.ts";
 import { expandSkillIncludes, loadSkillPacks, planSkillLines, siteTypeForWorld } from "./skills.ts";
 
 export { styleWorldFrom };
@@ -79,6 +80,7 @@ export function designLanguageFor(
   const languageQuery = languageQueryFrom(section, direction, library.styleText);
   const language = languageBlockFor(languageQuery);
   const skills = section === "" ? "" : skillBlock(section, direction, languageQuery.appetite, library.styleText);
+  const ingredients = ingredientBlock(prompt);
   return [
     FRAMING,
     "",
@@ -91,6 +93,7 @@ export function designLanguageFor(
     direction,
     ...(language === "" ? [] : ["", language]),
     ...(skills === "" ? [] : ["", skills]),
+    ...(ingredients === "" ? [] : ["", ingredients]),
     "",
     "### Example",
     "",
@@ -127,6 +130,13 @@ export function sectionIdOf(prompt: SitePromptSkeleton): string {
   const image = /^Art-direct and place the image set for ([^:]+):/i.exec(prompt.title);
   if (image?.[1] !== undefined) return slug(image[1]);
   return "";
+}
+
+function ingredientBlock(prompt: SitePromptSkeleton): string {
+  const corpus = [prompt.title, ...(prompt.acceptance ?? [])].join("\n");
+  if (!/@section:|@template:/.test(corpus)) return "";
+  const expanded = expandIngredientIncludes(corpus);
+  return ["### Ingredients", "", expanded.text].join("\n");
 }
 
 function skillBlock(section: string, artDirection: string, appetite: number, styleText: string): string {

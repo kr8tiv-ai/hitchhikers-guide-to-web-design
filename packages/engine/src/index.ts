@@ -233,6 +233,13 @@ export {
 } from "./spec/skills.ts";
 export type { SkillExpansion, SkillPack, SkillQuery } from "./spec/skills.ts";
 export {
+  buildMarkupFromReferences,
+  expandIngredientIncludes,
+  landmarkSequence,
+  sectionFixtureRoot,
+} from "./spec/section-refs.ts";
+export type { IngredientExpansion, MarkupBuild } from "./spec/section-refs.ts";
+export {
   SECTION_STILL_MODEL,
   planSectionStills,
   stillPath,
