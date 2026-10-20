@@ -12,3 +12,12 @@ export {
 export type { BriefComparison, PageScore, PairVote } from "./visual-bench.ts";
 export { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
 export type { RecipeFinding, RecipeRule } from "./recipe-check.ts";
+export { juryWithPatterns, patternPageFailures, scorePatterns } from "./pattern-score.ts";
+export type {
+  PatternDimensions,
+  PatternInput,
+  PatternPage,
+  PatternScore,
+  PatternUsage,
+  VisionScores,
+} from "./pattern-score.ts";
