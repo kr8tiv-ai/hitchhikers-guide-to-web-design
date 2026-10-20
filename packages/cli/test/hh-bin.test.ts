@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -22,6 +22,7 @@ test("pnpm exec hh doctor runs the workspace bin and not Windows HTML Help", () 
     writeFileSync(logPath, "", "utf8");
     writeStubs(stubDir);
     const env = commandEnv(binDir, stubDir, logPath);
+    assertStubScripts(stubDir, env, work);
     const resolved = resolveHh(env);
     assert.ok(resolved, "pnpm exec would not find an hh shim ahead of Windows HTML Help");
     assert.equal(HTML_HELP.test(resolved), false);
@@ -127,103 +128,85 @@ function text(value: string | Buffer | null | undefined): string {
   return "";
 }
 
+function assertStubScripts(
+  stubDir: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): void {
+  const names = readdirSync(stubDir);
+  assert.equal(names.some((name) => name.toLowerCase().endsWith(".exe")), false);
+  const grok = runStub(stubDir, "grok", ["--version"], env, cwd);
+  assert.equal(grok.status, 0, grok.stderr);
+  assert.match(grok.stdout, /grok 0\.0\.0-test/);
+  const git = runStub(stubDir, "git", ["--version"], env, cwd);
+  assert.equal(git.status, 0, git.stderr);
+  assert.match(git.stdout, /git version 2\.49\.0/);
+  const pdf = runStub(stubDir, "pdftotext", ["-v"], env, cwd);
+  assert.equal(pdf.status, 0, pdf.stderr);
+  assert.match(pdf.stdout, /stub-ok/);
+}
+
+function runStub(
+  stubDir: string,
+  name: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): { status: number | null; stdout: string; stderr: string } {
+  const file = process.platform === "win32" ? path.join(stubDir, `${name}.cmd`) : path.join(stubDir, name);
+  return runResolved(file, args, env, cwd);
+}
+
 function writeStubs(dir: string): void {
+  mkdirSync(dir);
+  writeFileSync(path.join(dir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  const stub = path.join(dir, "stub.mjs");
+  writeFileSync(stub, stubSource(), "utf8");
   if (process.platform === "win32") {
-    writeWindowsExe(dir);
+    const body = `@echo off\r\n"${process.execPath}" "${stub}" %~n0 %*\r\n`;
+    for (const tool of TOOLS) writeFileSync(path.join(dir, `${tool}.cmd`), body, "utf8");
     return;
   }
-  const script = [
-    "#!/bin/sh",
-    "printf '%s\\n' \"$(basename \"$0\") $*\" >> \"$STUB_LOG\"",
-    "name=$(basename \"$0\")",
-    "if [ \"$name\" = \"grok\" ]; then",
-    "  if [ \"$1\" = \"--version\" ]; then",
-    "    printf '%s\\n' \"grok 0.0.0-test\"",
-    "    exit 0",
-    "  fi",
-    "  if [ \"$1\" = \"--help\" ]; then",
-    "    printf '%s\\n' \"-s, --session-id <UUID>\" \"Use a UUID for a new session.\"",
-    "    exit 0",
-    "  fi",
-    "  printf '%s\\n' \"grok stub refused $*\" >&2",
-    "  exit 2",
-    "fi",
-    "if [ \"$name\" = \"git\" ]; then",
-    "  printf '%s\\n' \"git version 2.49.0\"",
-    "  exit 0",
-    "fi",
-    "printf '%s\\n' \"stub-ok\"",
-    "exit 0",
+  const launcher = "#!/usr/bin/env node\nimport \"./stub.mjs\";\n";
+  for (const tool of TOOLS) {
+    writeFileSync(path.join(dir, tool), launcher, { encoding: "utf8", mode: 0o755 });
+  }
+}
+
+function stubSource(): string {
+  return [
+    'import { appendFileSync } from "node:fs";',
+    'import path from "node:path";',
+    'const entry = path.basename(process.argv[1] ?? "");',
+    'const viaStub = entry === "stub.mjs";',
+    "const name = (viaStub ? process.argv[2] ?? \"\" : entry).toLowerCase();",
+    "const args = viaStub ? process.argv.slice(3) : process.argv.slice(2);",
+    "const log = process.env.STUB_LOG;",
+    "if (typeof log === \"string\" && log.length > 0) {",
+    "  appendFileSync(log, name + \" \" + args.join(\" \") + \"\\n\");",
+    "}",
+    "function say(text) {",
+    "  process.stdout.write(text + \"\\n\");",
+    "}",
+    "if (name === \"grok\") {",
+    "  if (args[0] === \"--version\") {",
+    "    say(\"grok 0.0.0-test\");",
+    "    process.exit(0);",
+    "  }",
+    "  if (args[0] === \"--help\") {",
+    "    say(\"-s, --session-id <UUID>\");",
+    "    say(\"Use a UUID for a new session.\");",
+    "    process.exit(0);",
+    "  }",
+    "  process.stderr.write(\"grok stub refused\\n\");",
+    "  process.exit(2);",
+    "}",
+    "if (name === \"git\") {",
+    "  say(\"git version 2.49.0\");",
+    "  process.exit(0);",
+    "}",
+    "say(\"stub-ok\");",
+    "process.exit(0);",
     "",
   ].join("\n");
-  mkdirSync(dir);
-  for (const tool of TOOLS) {
-    // spawn with shell off runs the shebang only when the file is executable.
-    writeFileSync(path.join(dir, tool), script, { encoding: "utf8", mode: 0o755 });
-  }
-}
-
-function writeWindowsExe(dir: string): void {
-  mkdirSync(dir);
-  const source = path.join(dir, "stub.cs");
-  const built = path.join(dir, "stub.exe");
-  writeFileSync(source, windowsStubSource(), "utf8");
-  const csc = findCsc();
-  const compiled = spawnSync(csc, ["/nologo", "/t:exe", `/out:${built}`, source], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 30_000,
-  });
-  assert.equal(compiled.status, 0, `csc failed\n${text(compiled.stdout)}\n${text(compiled.stderr)}`);
-  for (const tool of TOOLS) {
-    copyFileSync(built, path.join(dir, `${tool}.exe`));
-  }
-}
-
-function findCsc(): string {
-  const windir = process.env.WINDIR ?? "C:\\Windows";
-  const candidates = [
-    path.join(windir, "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe"),
-    path.join(windir, "Microsoft.NET", "Framework", "v4.0.30319", "csc.exe"),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  throw new Error("csc.exe is missing. The Windows bin test uses it to stub grok.exe.");
-}
-
-function windowsStubSource(): string {
-  return [
-    "using System;",
-    "using System.IO;",
-    "class Stub {",
-    "  static int Main(string[] args) {",
-    "    string name = Path.GetFileNameWithoutExtension(Environment.GetCommandLineArgs()[0]).ToLowerInvariant();",
-    "    string log = Environment.GetEnvironmentVariable(\"STUB_LOG\");",
-    "    if (!string.IsNullOrEmpty(log)) {",
-    "      File.AppendAllText(log, name + \" \" + string.Join(\" \", args) + \"\\n\");",
-    "    }",
-    "    if (name == \"grok\") {",
-    "      if (args.Length > 0 && args[0] == \"--version\") {",
-    "        Console.WriteLine(\"grok 0.0.0-test\");",
-    "        return 0;",
-    "      }",
-    "      if (args.Length > 0 && args[0] == \"--help\") {",
-    "        Console.WriteLine(\"-s, --session-id <UUID>\");",
-    "        Console.WriteLine(\"Use a UUID for a new session.\");",
-    "        return 0;",
-    "      }",
-    "      Console.Error.WriteLine(\"grok stub refused\");",
-    "      return 2;",
-    "    }",
-    "    if (name == \"git\") {",
-    "      Console.WriteLine(\"git version 2.49.0\");",
-    "      return 0;",
-    "    }",
-    "    Console.WriteLine(\"stub-ok\");",
-    "    return 0;",
-    "  }",
-    "}",
-    "",
-  ].join("\r\n");
 }

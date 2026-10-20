@@ -442,9 +442,8 @@ test("the default timeout is 60 seconds", () => {
 test("resolveWhisperPaths reads the env vars and then PATH", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "hh-voice-path-"));
   try {
-    const exe = process.platform === "win32" ? ".exe" : "";
-    const cli = path.join(dir, `whisper-cli${exe}`);
-    const mainBin = path.join(dir, `main${exe}`);
+    const cli = path.join(dir, "whisper-cli");
+    const mainBin = path.join(dir, "main");
     const model = path.join(dir, "m.bin");
     writeFileSync(cli, "");
     writeFileSync(mainBin, "");

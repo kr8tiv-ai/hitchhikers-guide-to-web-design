@@ -45,13 +45,14 @@ test("windows batch shims launch through cmd.exe and other platforms stay direct
   }
 });
 
-test("win32 resolve returns the host shim path and PATHEXT lists EXE before CMD", () => {
+test("win32 resolve returns the host shim path and PATHEXT lists earlier extensions first", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "hh-pathext-"));
   try {
+    // COM before CMD is the same walk that lists EXE before CMD. No executable is written.
     writeFileSync(path.join(dir, "tool.CMD"), "");
-    writeFileSync(path.join(dir, "tool.EXE"), "");
+    writeFileSync(path.join(dir, "tool.COM"), "");
     const exeFirst = resolveOnPath("tool", { PATH: dir, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
-    assert.equal(exeFirst, path.join(dir, "tool.EXE"));
+    assert.equal(exeFirst, path.join(dir, "tool.COM"));
     const cmdFirst = resolveOnPath("tool", { PATH: dir, PATHEXT: ".CMD;.EXE" });
     assert.equal(cmdFirst, path.join(dir, "tool.CMD"));
 
@@ -99,7 +100,7 @@ test("registry PATH merges after the current directories and whisper env is rest
 
   const dir = mkdtempSync(path.join(os.tmpdir(), "hh-whisper-"));
   try {
-    const exe = path.join(dir, "whisper.exe");
+    const exe = path.join(dir, "whisper-cli");
     const model = path.join(dir, "ggml-tiny.bin");
     writeFileSync(exe, "");
     writeFileSync(model, "");

@@ -56,6 +56,7 @@ export {
   flagsFromHelp,
   promptOffCmdLine,
   redact,
+  grokExeBeside,
   resolveGrokCommand,
   spawnGrok,
   think,

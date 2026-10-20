@@ -254,7 +254,7 @@ test("browser speech and a missing engine do not fetch", async () => {
 
 test("local whisper is detected only when both files exist outside packages", () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "hh-whisper-detect-"));
-  const bin = path.join(dir, process.platform === "win32" ? "whisper-cli.exe" : "whisper-cli");
+  const bin = path.join(dir, "whisper-cli");
   const model = path.join(dir, "model.bin");
   writeFileSync(bin, "");
   writeFileSync(model, "weight");

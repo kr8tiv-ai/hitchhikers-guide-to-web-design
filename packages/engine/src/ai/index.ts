@@ -23,6 +23,7 @@ export {
   planGrokCall,
   promptOffCmdLine,
   resolveEffort,
+  grokExeBeside,
   resolveGrokCommand,
   spawnGrok,
 } from "./grok-cli.ts";

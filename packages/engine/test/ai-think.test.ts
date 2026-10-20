@@ -11,6 +11,7 @@ import {
   buildGrokArgv,
   defaultConfig,
   flagsFromHelp,
+  grokExeBeside,
   parseConfig,
   promptOffCmdLine,
   redact,
@@ -428,15 +429,18 @@ test("headless flags suppress the alt screen when help lists them", () => {
 });
 
 test("a cmd shim beside grok.exe resolves to the exe", () => {
-  const dir = tempDir();
+  const dir = process.platform === "win32" ? "C:\\tools" : "/tools";
+  const cmd = path.join(dir, "grok.cmd");
+  assert.equal(grokExeBeside(cmd, ["grok.cmd", "grok.exe"]), path.join(dir, "grok.exe"));
+  assert.equal(grokExeBeside(cmd, ["grok.cmd"]), cmd);
+  if (process.platform !== "win32") return;
+  const work = tempDir();
   try {
-    if (process.platform !== "win32") return;
-    writeFileSync(path.join(dir, "grok.cmd"), "@echo off\r\n");
-    writeFileSync(path.join(dir, "grok.exe"), "");
-    const resolved = resolveGrokCommand({ PATH: dir, PATHEXT: ".CMD;.BAT" });
-    assert.equal(resolved, path.join(dir, "grok.exe"));
+    writeFileSync(path.join(work, "grok.cmd"), "@echo off\r\n");
+    const resolved = resolveGrokCommand({ PATH: work, PATHEXT: ".CMD;.BAT" });
+    assert.equal(resolved, path.join(work, "grok.cmd"));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(work, { recursive: true, force: true });
   }
 });
 
@@ -467,10 +471,10 @@ test("resolveGrokCommand walks PATH and prefers the PATHEXT order", () => {
   try {
     if (process.platform === "win32") {
       writeFileSync(path.join(dir, "grok.cmd"), "@echo off\r\n");
-      writeFileSync(path.join(dir, "grok.exe"), "");
+      writeFileSync(path.join(dir, "grok.com"), "");
       const resolved = resolveGrokCommand({ PATH: dir, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
-      assert.equal(resolved, path.join(dir, "grok.exe"));
-      rmSync(path.join(dir, "grok.exe"));
+      assert.equal(resolved, path.join(dir, "grok.com"));
+      rmSync(path.join(dir, "grok.com"));
       const cmd = resolveGrokCommand({ PATH: dir, PATHEXT: ".CMD" });
       assert.equal(cmd, path.join(dir, "grok.cmd"));
     } else {

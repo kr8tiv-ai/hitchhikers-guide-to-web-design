@@ -138,14 +138,23 @@ export function resolveGrokCommand(env: NodeJS.ProcessEnv): string {
  * When `grok.exe` sits beside the shim, spawn the exe. PATH order is unchanged
  * until that upgrade: an exe earlier on PATH is already returned above.
  */
-function preferSiblingGrokExe(command: string): string {
-  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) return command;
-  const entries = directoryEntries(path.dirname(command));
-  if (entries === undefined) return command;
+/**
+ * When `command` is a batch shim, return a sibling `grok.exe` named in `entries`.
+ * The list is names only, so a caller can decide without creating a file.
+ * A shim with no sibling exe is returned unchanged.
+ */
+export function grokExeBeside(command: string, entries: readonly string[]): string {
+  if (!/\.(?:cmd|bat)$/i.test(command)) return command;
   const exeName = entries.find((entry) => entry.toLowerCase() === "grok.exe");
   if (exeName === undefined) return command;
-  const exe = path.join(path.dirname(command), exeName);
-  return isFile(exe) ? exe : command;
+  return path.join(path.dirname(command), exeName);
+}
+
+function preferSiblingGrokExe(command: string): string {
+  if (process.platform !== "win32") return command;
+  const picked = grokExeBeside(command, directoryEntries(path.dirname(command)) ?? []);
+  if (picked === command) return command;
+  return isFile(picked) ? picked : command;
 }
 
 /** Flags named in `grok --help`. This is the same probe hh doctor runs. */
