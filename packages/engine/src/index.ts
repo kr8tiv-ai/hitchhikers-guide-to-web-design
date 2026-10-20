@@ -477,6 +477,15 @@ export {
 } from "./brand/directions.ts";
 export type { Direction, DirectionCheck, DirectionDeal, StudiedPage } from "./brand/directions.ts";
 export {
+  DecisionLogError,
+  decisionLogPath,
+  notePhaseFinished,
+  readDecisionLog,
+  recordDirectionChoice,
+  rejectedDirectionNames,
+} from "./brand/decision-canvas.ts";
+export type { DecisionEntry } from "./brand/decision-canvas.ts";
+export {
   brandKitFromAnswers,
   contrastRatio,
   defaultPalette,
