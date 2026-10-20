@@ -91,10 +91,19 @@ export type { RankedBeautyIssue } from "./beauty-gate.ts";
 export {
   SCREENSHOT_FIX_MAX_ROUNDS,
   SCREENSHOT_FIX_TOP,
+  judgeSectionLock,
+  runScopedSectionEdit,
   runScreenshotFixLoop,
   screenshotFixWidths,
 } from "./elevate-loop.ts";
-export type { ScreenshotFixCapture, ScreenshotFixReport } from "./elevate-loop.ts";
+export type {
+  ScreenshotFixCapture,
+  ScreenshotFixReport,
+  SectionEditScope,
+  SectionLockResult,
+  SectionLockShot,
+} from "./elevate-loop.ts";
+export { REVIEW_WIDTHS, captureAll, sectionBuffersDiffer } from "./screenshots.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";

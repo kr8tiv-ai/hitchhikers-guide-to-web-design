@@ -13,7 +13,8 @@ export const REVIEW_WIDTHS: readonly [375, 768, 1440, 1920] = [375, 768, 1440, 1
  * The injected opener owns the shot for that width: full page, above the
  * fold, and a short scroll strip for sections MOTION.md marks as motion-led.
  * The Playwright opener is wired later. This module does not launch a
- * browser, read pixels, or compare baselines.
+ * browser, read pixels, or compare a saved baseline. A section lock
+ * compares two buffers the caller already captured.
  *
  * Callers that record an environment pass Node `os.platform()` strings into
  * the visual policy. This function does not read the operating system.
@@ -39,4 +40,14 @@ export async function captureAll(
     shots[width] = buffer;
   }
   return shots;
+}
+
+/**
+ * True when two section screenshots are not the same bytes.
+ * An empty buffer cannot prove the section stayed put.
+ */
+export function sectionBuffersDiffer(before: Buffer, after: Buffer): boolean {
+  if (!Buffer.isBuffer(before) || !Buffer.isBuffer(after)) return true;
+  if (before.length === 0 || after.length === 0) return true;
+  return !before.equals(after);
 }

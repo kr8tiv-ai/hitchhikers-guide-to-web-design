@@ -31,7 +31,7 @@ import { rankBeautyIssues, writeBeautyRound, type RankedBeautyIssue, type Sectio
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
 import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
-import { REVIEW_WIDTHS } from "./screenshots.ts";
+import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
 
 export type GateStatus = "PASS" | "BLOCKER";
 
@@ -677,4 +677,87 @@ export async function runScreenshotFixLoop(deps: {
     }
   }
   return { rounds: SCREENSHOT_FIX_MAX_ROUNDS, stopped: "cap", widths, captures, fixed, untouched: [] };
+}
+
+export interface SectionLockShot {
+  id: string;
+  png: Buffer;
+}
+
+/** The one section an Elevate edit may change, and the sections it must not. */
+export interface SectionEditScope {
+  target: string;
+  lock: readonly string[];
+}
+
+export interface SectionLockResult {
+  ok: boolean;
+  changedLocked: string[];
+  problems: string[];
+}
+
+function shotById(shots: readonly SectionLockShot[], id: string): SectionLockShot | undefined {
+  return shots.find((shot) => shot.id === id);
+}
+
+/**
+ * Idea 11. Compare locked section screenshots. A change outside the
+ * target fails the edit. Idea 33 is the prompt sentence. This is the lock.
+ */
+export function judgeSectionLock(
+  scope: SectionEditScope,
+  before: readonly SectionLockShot[],
+  after: readonly SectionLockShot[],
+): SectionLockResult {
+  const target = scope.target.trim();
+  const problems: string[] = [];
+  const changedLocked: string[] = [];
+  if (target === "") problems.push("The edit names no target section.");
+  const seen = new Set<string>();
+  for (const raw of scope.lock) {
+    const id = raw.trim();
+    if (id === "" || seen.has(id)) continue;
+    seen.add(id);
+    if (id === target) {
+      problems.push(`${target} is both the target and a lock.`);
+      continue;
+    }
+    const earlier = shotById(before, id);
+    const later = shotById(after, id);
+    if (earlier === undefined) {
+      changedLocked.push(id);
+      problems.push(`Locked section ${id} has no before screenshot.`);
+      continue;
+    }
+    if (later === undefined) {
+      changedLocked.push(id);
+      problems.push(`Locked section ${id} has no after screenshot.`);
+      continue;
+    }
+    if (sectionBuffersDiffer(earlier.png, later.png)) {
+      changedLocked.push(id);
+      problems.push(`Locked section ${id} changed.`);
+    }
+  }
+  return { ok: problems.length === 0, changedLocked, problems };
+}
+
+/**
+ * Capture, apply the edit, capture again, and fail when a lock moves.
+ * A blank target does not apply.
+ */
+export async function runScopedSectionEdit(
+  scope: SectionEditScope,
+  deps: {
+    capture: () => Promise<readonly SectionLockShot[]>;
+    apply: () => Promise<void>;
+  },
+): Promise<SectionLockResult> {
+  if (scope.target.trim() === "") {
+    return judgeSectionLock(scope, [], []);
+  }
+  const before = await deps.capture();
+  await deps.apply();
+  const after = await deps.capture();
+  return judgeSectionLock(scope, before, after);
 }
