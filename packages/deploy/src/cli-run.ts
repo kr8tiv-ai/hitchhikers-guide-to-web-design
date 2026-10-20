@@ -22,6 +22,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { recordApprovalYes, type SpawnLike } from "@hitchhiker/engine";
 import { deployCloudflare } from "./cloudflare.ts";
+import { judgeLaunchChecklist, prepareLaunchChecklist } from "./post-deploy-live.ts";
 import {
   loadHostingerSite,
   postNodeBuild,
@@ -367,7 +368,7 @@ export async function deploy(
 
   const decision = await readSiteShape(projectDir);
   if (target === "hostinger") {
-    return deployToHostinger(projectDir, decision, deps);
+    return finishDeploy(projectDir, await deployToHostinger(projectDir, decision, deps));
   }
 
   if (decision.shape === "node") {
@@ -383,7 +384,7 @@ export async function deploy(
           url,
           via: "vercel deploy --prebuilt",
         });
-        return { url, record };
+        return finishDeploy(projectDir, { url, record });
       }
       throw error;
     }
@@ -400,5 +401,68 @@ export async function deploy(
     url,
     via: `${plan.command} ${plan.args.join(" ")}`,
   });
-  return { url, record };
+  return finishDeploy(projectDir, { url, record });
+}
+
+interface LaunchEvidence {
+  floor?: Record<string, boolean>;
+  phoneLighthouse?: unknown;
+  desktopLighthouse?: unknown;
+  licenseFilePresent?: boolean;
+  live?: { url?: string; at?: string };
+}
+
+/**
+ * Idea 25. Record the launch checklist after a URL exists.
+ * The report never deploys. A checklist bug does not change the deploy result.
+ * license-file is presence only. Font licences are not verified.
+ */
+async function finishDeploy(
+  projectDir: string,
+  outcome: { url: string; record: string },
+): Promise<{ url: string; record: string }> {
+  try {
+    await writeLaunchChecklist(projectDir, outcome.url);
+  } catch {
+    // A checklist bug must not flip a finished deploy.
+  }
+  return outcome;
+}
+
+async function writeLaunchChecklist(projectDir: string, url: string): Promise<void> {
+  const evidencePath = path.join(projectDir, ".hitchhiker", "deploy", "launch-evidence.json");
+  let evidence: LaunchEvidence = {};
+  if (existsSync(evidencePath)) {
+    const parsed: unknown = JSON.parse(await readFile(evidencePath, "utf8"));
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      evidence = parsed as LaunchEvidence;
+    }
+  }
+  const at = new Date().toISOString();
+  const floor = evidence.floor ?? {};
+  const phoneLighthouse = evidence.phoneLighthouse ?? null;
+  const desktopLighthouse = evidence.desktopLighthouse ?? null;
+  const licenseFilePresent = evidence.licenseFilePresent === true;
+  const staging = prepareLaunchChecklist({
+    url,
+    at,
+    floor,
+    phoneLighthouse,
+    desktopLighthouse,
+    licenseFilePresent,
+  });
+  const liveUrl = typeof evidence.live?.url === "string" ? evidence.live.url : "";
+  const liveAt = typeof evidence.live?.at === "string" ? evidence.live.at : at;
+  const live = prepareLaunchChecklist({
+    url: liveUrl,
+    at: liveAt,
+    floor,
+    phoneLighthouse,
+    desktopLighthouse,
+    licenseFilePresent,
+  });
+  const report = judgeLaunchChecklist(staging, live);
+  const file = path.join(projectDir, ".hitchhiker", "deploy", "launch-checklist.json");
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 }
