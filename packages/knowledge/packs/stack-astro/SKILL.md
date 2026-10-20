@@ -42,7 +42,7 @@ If the page uses Astro view transitions, refresh ScrollTrigger after navigation.
 
 Multi-page sites can use ClientRouter and transition:name on an element that continues across pages. Picture can ask for avif and webp. Islands stay the exception named above.
 
-Import only the libraries the motion plan assigned. GSAP, including ScrollTrigger and SplitText, is the base engine when the plan uses it. Motion, anime.js, OGL or raw WebGL, and vanilla effects stay on the elements the plan named.
+The motion plan names the libraries to start from. Add another library when the shot needs a technique the plan did not list. GSAP, including ScrollTrigger and SplitText, is the base engine when the plan uses it. Motion, anime.js, OGL or raw WebGL, and vanilla effects stay on the elements the plan named.
 
 ## Alternatives
 

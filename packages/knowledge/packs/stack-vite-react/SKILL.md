@@ -28,7 +28,7 @@ Set `document.documentElement.dataset.page` to the page name in `MOTION.md` so o
 
 Theatre runtime is `@theatre/core` only. Do not import `@theatre/studio`.
 
-Import only the libraries the motion plan assigned. GSAP, including ScrollTrigger and SplitText, is the base engine when the plan uses it. A level 10 page still keeps a calm phone path for heavy effects through `calmPhonePath`.
+The motion plan names the libraries to start from. Add another library when the shot needs a technique the plan did not list. GSAP, including ScrollTrigger and SplitText, is the base engine when the plan uses it. A level 10 page still keeps a calm phone path for heavy effects through `calmPhonePath`.
 
 ## React and Three
 
