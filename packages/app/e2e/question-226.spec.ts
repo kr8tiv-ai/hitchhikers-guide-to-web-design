@@ -86,13 +86,14 @@ test("DP-1.5 shows the six font examples", async ({ page }) => {
     await expect(page.locator("[data-card-kicker]")).toContainText("DP-1.5");
     const samples = page.locator("[data-font-sample]");
     await expect(samples).toHaveCount(6);
-    await expect(samples.nth(0)).toContainText("Bebas Neue + Barlow");
+    await expect(samples.nth(0)).toContainText("Gambetta + Synonym");
     await expect(samples.nth(0)).toContainText("Find your calm");
+    await expect(samples.nth(0)).toContainText("editorial, quiet, publishing");
     await expect(page.locator("#hh-card-ask")).toContainText("pick a style from these examples");
     const heading = await page.locator("#hh-card-ask").innerText();
     expect(heading.includes(" : ")).toBe(false);
     await samples.nth(2).click();
-    await expect(page.locator("#hh-card-draft")).toHaveValue("DM Serif Display + DM Sans");
+    await expect(page.locator("#hh-card-draft")).toHaveValue("brutalist poster");
   } finally {
     await stopChild(child);
     await rm(projectDir, { recursive: true, force: true });

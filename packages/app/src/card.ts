@@ -402,25 +402,28 @@ function galleryOpen(question: Question): string {
 
 const FONT_EXAMPLES = /pick a style from these examples/i;
 
-/** Same six pairings as engine TYPE_PAIRINGS, in tree order. System stacks, no font files. */
-const FONT_PAIRS: readonly (readonly [string, string])[] = [
-  ["Bebas Neue", "Barlow"],
-  ["Space Grotesk", "Inter"],
-  ["DM Serif Display", "DM Sans"],
-  ["Fraunces", "Work Sans"],
-  ["Archivo Black", "Archivo"],
-  ["Clash Display", "Satoshi"],
+/**
+ * Six moods from the pairing library. Labels are the dealt families.
+ * The browser bundle cannot import the engine, so the names are written here.
+ * question-parts-226 checks each label against pickType.
+ */
+const FONT_SAMPLES: readonly { readonly adjectives: string; readonly pair: string }[] = [
+  { adjectives: "editorial, quiet, publishing", pair: "Gambetta + Synonym" },
+  { adjectives: "playful food", pair: "Erode + Ranade" },
+  { adjectives: "brutalist poster", pair: "Tanker + Cabinet Grotesk" },
+  { adjectives: "fashion, sharp", pair: "Clash Display + Satoshi" },
+  { adjectives: "product, one family", pair: "Switzer" },
+  { adjectives: "3d-world poster", pair: "Unbounded + Instrument Sans" },
 ];
 
-/** Rendered type samples. System stacks stand in so the card does not load a font file. */
+/** Mood words deal a library pair. System stacks stand in so the card does not load a font file. */
 function fontExamplesHtml(ask: string): string {
   if (!FONT_EXAMPLES.test(ask)) return "";
-  const buttons = FONT_PAIRS.map((pair, index) => {
-    const label = `${pair[0]} + ${pair[1]}`;
-    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(label)}" data-pair="${index}" aria-pressed="false">
+  const buttons = FONT_SAMPLES.map((sample, index) => {
+    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(sample.adjectives)}" data-pair="${index}" aria-pressed="false">
       <span class="hh-type-sample__display">Find your calm</span>
-      <span class="hh-type-sample__text">A quiet line for the page.</span>
-      <span class="hh-type-sample__name">${escapeHtml(label)}</span>
+      <span class="hh-type-sample__text">${escapeHtml(sample.pair)}</span>
+      <span class="hh-type-sample__name">${escapeHtml(sample.adjectives)}</span>
     </button>`;
   });
   return `  <div class="hh-type-samples" role="group" aria-label="Font examples">

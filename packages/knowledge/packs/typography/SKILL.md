@@ -14,7 +14,7 @@ Read the type section of `BRAND.md` before you choose a face. If that section na
 
 Use at most two families. One family in two weights counts as one family and stays inside that cap. A third family is a miss. One face is for headlines. The other is for text.
 
-The six pairings below are examples, not mandates.
+The six pairings below are examples, not mandates. They are not the automatic deal. The desk deals from the pairing library unless the person names a family, including one of these.
 
 - Bebas Neue with Barlow
 - Space Grotesk with Inter

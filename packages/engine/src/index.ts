@@ -413,7 +413,19 @@ export {
   redoSection,
 } from "./brand/approve.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
-export { TYPE_PAIRINGS } from "./brand/tokens.ts";
+export {
+  DO_NOT_SHIP,
+  MOOD_TYPE_SAMPLES,
+  OVERUSED_DEFAULTS,
+  TRIAL_FACES,
+  TYPE_LIBRARY,
+  TYPE_LICENSE,
+  TYPE_PAIRINGS,
+  UNMATCHED_PAIR_ID,
+  isOverusedFamily,
+  pickType,
+} from "./brand/tokens.ts";
+export type { TypePair, TypePairing } from "./brand/tokens.ts";
 export {
   brandKitFromAnswers,
   contrastRatio,

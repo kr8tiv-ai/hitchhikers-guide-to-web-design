@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { GUIDANCE_MARKERS as ENGINE_MARKERS, TYPE_PAIRINGS, loadTree, type Question } from "@hitchhiker/engine";
+import { GUIDANCE_MARKERS as ENGINE_MARKERS, MOOD_TYPE_SAMPLES, loadTree, pickType, type Question } from "@hitchhiker/engine";
 import { GUIDANCE_MARKERS } from "../src/question-parts.ts";
 import { renderCard, type CardState } from "../src/card.ts";
 import { isFullQuestion, settleQuestionText } from "../src/question-parts.ts";
@@ -141,17 +141,20 @@ test("DP-1.5 renders six font examples and other cards do not", () => {
   assert.ok(offer);
   const fontCard = card({ question: fonts });
   assert.equal(fontCard.split("data-font-sample=").length - 1, 6);
-  assert.match(fontCard, /Bebas Neue \+ Barlow/);
-  assert.match(fontCard, /DM Serif Display \+ DM Sans/);
-  assert.match(fontCard, /Clash Display \+ Satoshi/);
   assert.match(fontCard, /aria-label="Font examples"/);
   assert.match(fontCard, /Find your calm/);
+  const samples = fontCard.match(/<div class="hh-type-samples"[\s\S]*?<\/div>/)?.[0] ?? "";
+  assert.notEqual(samples, "");
   assert.equal(fontCard.includes("fonts.googleapis"), false);
   assert.equal(fontCard.includes("fontshare"), false);
+  assert.equal(/\bInter\b/.test(samples), false);
+  assert.equal(/\bBebas Neue\b/.test(samples), false);
   assert.deepEqual(GUIDANCE_MARKERS, ENGINE_MARKERS);
-  for (const pair of TYPE_PAIRINGS) {
-    assert.match(fontCard, new RegExp(pair[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(fontCard, new RegExp(pair[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const sample of MOOD_TYPE_SAMPLES) {
+    const dealt = pickType(sample.adjectives);
+    assert.match(fontCard, new RegExp(`data-font-sample="${escape(sample.adjectives)}"`));
+    assert.match(fontCard, new RegExp(escape(dealt.families.join(" + "))));
   }
   const offerCard = card({ question: offer });
   assert.equal(offerCard.includes("data-font-sample"), false);

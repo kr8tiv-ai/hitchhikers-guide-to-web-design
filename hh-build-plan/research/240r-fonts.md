@@ -171,7 +171,7 @@ Each rationale is the reason the two faces work together, not a slogan. Source U
 
 **50. Boxing / Switzer.** https://www.fontshare.com/fonts/boxing. ITF FFL. No axis. x/cap 0.695. A display with a lower x-height than Switzer's 0.781, so the poster face looks denser and the UI looks lighter. Mood: brutalist, sport.
 
-The prose numbers 1–48 match the JSON ids. Pairs 49 and 50 are described below and left out of the JSON on purpose. The JSON array is the count that matters.
+The prose numbers 1–48 match the JSON ids. Pairs 49 and 50 are described below and left out of the JSON on purpose. There is no item 51. Item 52 is a note that Outfit is not given a pair, not a pair. Pangram P1–P3 live in `do_not_ship`. The JSON `pairs` array is the count that matters, and that count is 48. The summary's 48-pair line is this count.
 
 **52. Outfit is not given a pair.** It is Fontshare `sil_ofl` (x/cap 0.684) and it is everywhere in the 2024 geometric wave. Watch list, with Plus Jakarta Sans.
 

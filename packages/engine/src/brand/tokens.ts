@@ -2,8 +2,22 @@
  * Sens-O-Matic tokens. Palettes are 60-30-10: paper, ink, signal.
  * Ink on paper must clear WCAG 2.2 body contrast (4.5). A miss is dropped.
  * A seed that fails as body text stays a signal swatch, never the ink.
- * Type is one family or a pair from DP-1.5. This module does not download fonts.
+ * Type is one family or a pair from the appendix. This module does not download fonts.
  */
+
+import {
+  TYPE_LIBRARY,
+  UNMATCHED_PAIR_ID,
+  type TypePairing,
+} from "./type-library.ts";
+
+export {
+  DO_NOT_SHIP,
+  TRIAL_FACES,
+  TYPE_LIBRARY,
+  UNMATCHED_PAIR_ID,
+} from "./type-library.ts";
+export type { TrialFace, TypeDeal, TypePairing, TypeShip } from "./type-library.ts";
 
 export class TokenError extends Error {
   constructor(message: string) {
@@ -24,22 +38,57 @@ export interface TypePair {
   families: [string, string] | [string];
   source: "user" | "list";
   warnings: string[];
+  /** Ship rule for a library pair, or confirm-at-install when the person named an unknown face. */
   license: string;
+  /** Mood, era, tone, and industry words that selected a list pair. Empty when none matched. */
+  adjectives: readonly string[];
+  /** Appendix id when the families are one library pair. Null for a free name. */
+  pairId: number | null;
 }
 
 /** Tailwind indigo-600 and violet-600. Never propose these, alone or as a pair. */
 export const DENY_HEX = ["#4f46e5", "#7c3aed"] as const;
 
-export const TYPE_LICENSE = "Google Fonts or Fontshare. Confirm the license at install.";
+/** Fallback when the person names a face that is not in the library. */
+export const TYPE_LICENSE = "confirm-at-install";
 
-/** Six DP-1.5 pairings, in tree order. At most two families. */
-export const TYPE_PAIRINGS: readonly (readonly [string, string])[] = [
-  ["Bebas Neue", "Barlow"],
-  ["Space Grotesk", "Inter"],
-  ["DM Serif Display", "DM Sans"],
-  ["Fraunces", "Work Sans"],
-  ["Archivo Black", "Archivo"],
-  ["Clash Display", "Satoshi"],
+/**
+ * Refused as an automatic brand face unless the person typed the name.
+ * Arial, Helvetica, and system-ui are refused as the display face on the same rule.
+ * Order is the 240r summary row.
+ */
+export const OVERUSED_DEFAULTS: readonly string[] = [
+  "Inter",
+  "Poppins",
+  "Roboto",
+  "Open Sans",
+  "Montserrat",
+  "Lato",
+  "Nunito",
+  "Raleway",
+  "Playfair Display",
+  "Bebas Neue",
+  "Plus Jakarta Sans",
+  "JetBrains Mono",
+  "Arial",
+  "Helvetica",
+  "system-ui",
+];
+
+/** Appendix order. Index 0 is Boska / General Sans, and it is not the unmatched fallback. */
+export const TYPE_PAIRINGS: readonly (readonly [string, string])[] = TYPE_LIBRARY.map((pairing) => [
+  pairing.display,
+  pairing.body,
+]);
+
+/** Plain-language samples for the font question. Six moods, not six overused faces. */
+export const MOOD_TYPE_SAMPLES: readonly { readonly adjectives: string }[] = [
+  { adjectives: "editorial, quiet, publishing" },
+  { adjectives: "playful food" },
+  { adjectives: "brutalist poster" },
+  { adjectives: "fashion, sharp" },
+  { adjectives: "product, one family" },
+  { adjectives: "3d-world poster" },
 ];
 
 const BODY_MIN = 4.5;
@@ -64,15 +113,6 @@ interface Draft {
   signal: string;
   ratioBody: number;
 }
-
-const MOODS: readonly RegExp[] = [
-  /\b(condensed|poster|impact|caps)\b/i,
-  /\b(tech|geometric|grotesk|startup|interface)\b/i,
-  /\b(elegant|editorial|literary|classic|serif)\b/i,
-  /\b(warm|quirky|craft|food|soft)\b/i,
-  /\b(swiss|grotesque|neutral|single-family|one family)\b/i,
-  /\b(fashion|sharp)\b/i,
-];
 
 const GLUE =
   /^(?:i|a|an|the|and|or|for|with|please|use|using|font|fonts|like|want|my|set|in|on|to|of|our|we|headlines?|body|text|pairing|pair|family|families|something|really|just|maybe)$/i;
@@ -144,19 +184,35 @@ export function renderCssVars(palette: Palette): string {
   return css;
 }
 
+export function isOverusedFamily(name: string): boolean {
+  const key = name.trim().toLowerCase();
+  return OVERUSED_DEFAULTS.some((family) => family.toLowerCase() === key);
+}
+
 export function pickType(answer: string | null): TypePair {
   const text = answer?.trim() ?? "";
-  if (text.length === 0) return listChoice(0);
+  const adjectives = text.length === 0 ? [] : readAdjectives(text);
+  if (text.length === 0) return listChoice(unmatchedPair(), adjectives);
   const found = uniqueMentions(collectMentions(text));
   const first = found[0];
-  if (!first) return listChoice(moodIndex(text));
+  if (!first) return dealFromMood(text, adjectives);
   const second = found[1];
   if (!second) {
-    if (first.pairIndex !== null) return userChoice(pairingAt(first.pairIndex), []);
-    return userChoice([first.name], []);
+    if (first.pairId !== null) {
+      const pairing = pairingById(first.pairId);
+      if (pairing) return userFromPair(pairing, adjectives);
+    }
+    return userChoice([first.name], [], adjectives, null, TYPE_LICENSE);
   }
   const warnings = found.length > 2 ? ["dropped extra family"] : [];
-  return userChoice([first.name, second.name], warnings);
+  const shared = sharedPair(first, second);
+  return userChoice(
+    [first.name, second.name],
+    warnings,
+    adjectives,
+    shared?.id ?? null,
+    shared?.ship ?? TYPE_LICENSE,
+  );
 }
 
 function parseHex(input: string): Rgb {
@@ -317,51 +373,190 @@ function nameDrafts(drafts: readonly Draft[]): Palette[] {
 interface Mention {
   name: string;
   index: number;
-  pairIndex: number | null;
+  pairId: number | null;
 }
 
-function pairingAt(index: number): [string, string] {
-  const pair = TYPE_PAIRINGS[index];
-  if (!pair) throw new TokenError("Missing type pairing.");
-  return [pair[0], pair[1]];
+interface TagHit {
+  index: number;
+  value: string;
+  kind: "world" | "tone" | "era" | "industry" | "flag";
 }
 
-function listChoice(index: number): TypePair {
+const LEXICON: readonly { readonly pattern: RegExp; readonly kind: TagHit["kind"]; readonly value: string }[] = [
+  { pattern: /\beditorial\b/i, kind: "world", value: "editorial" },
+  { pattern: /\bliterary\b/i, kind: "world", value: "editorial" },
+  { pattern: /\bserif\b/i, kind: "world", value: "editorial" },
+  { pattern: /\bplayful\b/i, kind: "world", value: "playful" },
+  { pattern: /\bbrutal(?:ist)?\b/i, kind: "world", value: "brutalist" },
+  { pattern: /\b3d(?:-|\s)?world\b/i, kind: "world", value: "3d-world" },
+  { pattern: /\b(?:webgl|shader)\b/i, kind: "world", value: "3d-world" },
+  { pattern: /\bfashion\b/i, kind: "world", value: "fashion" },
+  { pattern: /\b(?:product|interface|startup|tech|saas)\b/i, kind: "world", value: "product" },
+  { pattern: /\bcivic\b/i, kind: "world", value: "civic" },
+  { pattern: /\bswiss\b/i, kind: "tone", value: "swiss" },
+  { pattern: /\bquiet\b/i, kind: "tone", value: "quiet" },
+  { pattern: /\bwarm\b/i, kind: "tone", value: "warm" },
+  { pattern: /\bsharp\b/i, kind: "tone", value: "sharp" },
+  { pattern: /\bmagazine\b/i, kind: "tone", value: "magazine" },
+  { pattern: /\bgallery\b/i, kind: "tone", value: "gallery" },
+  { pattern: /\bprecise\b/i, kind: "tone", value: "precise" },
+  { pattern: /\bconstructed\b/i, kind: "tone", value: "constructed" },
+  { pattern: /\bposter\b/i, kind: "tone", value: "poster" },
+  { pattern: /\bbookish\b/i, kind: "era", value: "bookish" },
+  { pattern: /\bbook\b/i, kind: "era", value: "book" },
+  { pattern: /\bpublishing\b/i, kind: "industry", value: "publishing" },
+  { pattern: /\bfood\b/i, kind: "industry", value: "food" },
+  { pattern: /\bcraft\b/i, kind: "industry", value: "craft" },
+  { pattern: /\bhospitality\b/i, kind: "industry", value: "hospitality" },
+  { pattern: /\bfilm\b/i, kind: "industry", value: "film" },
+  { pattern: /\bmusic\b/i, kind: "industry", value: "music" },
+  { pattern: /\beducation\b/i, kind: "industry", value: "education" },
+  { pattern: /\bclimate\b/i, kind: "industry", value: "climate" },
+  { pattern: /\bretail\b/i, kind: "industry", value: "retail" },
+  { pattern: /\bsport\b/i, kind: "industry", value: "sport" },
+  { pattern: /\bstudio\b/i, kind: "industry", value: "studio" },
+  { pattern: /\bprint\b/i, kind: "industry", value: "print" },
+  { pattern: /\bmanufacturing\b/i, kind: "industry", value: "manufacturing" },
+  { pattern: /\bcoffee\b/i, kind: "industry", value: "coffee" },
+  { pattern: /\btools\b/i, kind: "industry", value: "tools" },
+  { pattern: /\bhome\b/i, kind: "industry", value: "home" },
+  { pattern: /\bone family\b|\bsingle[- ]family\b/i, kind: "flag", value: "one family" },
+];
+
+function pairingById(id: number): TypePairing | undefined {
+  return TYPE_LIBRARY.find((pairing) => pairing.id === id);
+}
+
+function unmatchedPair(): TypePairing {
+  const pairing = pairingById(UNMATCHED_PAIR_ID);
+  if (!pairing) throw new TokenError("Missing unmatched type pairing.");
+  if (TYPE_LIBRARY[0]?.id === pairing.id) throw new TokenError("Unmatched type pairing must not be index 0.");
+  return pairing;
+}
+
+function familiesOf(pairing: TypePairing): [string, string] | [string] {
+  if (pairing.display === pairing.body) return [pairing.display];
+  return [pairing.display, pairing.body];
+}
+
+function listChoice(pairing: TypePairing, adjectives: readonly string[]): TypePair {
   return {
-    families: pairingAt(index),
+    families: familiesOf(pairing),
     source: "list",
     warnings: [],
-    license: TYPE_LICENSE,
+    license: pairing.ship,
+    adjectives,
+    pairId: pairing.id,
   };
 }
 
-function userChoice(families: [string, string] | [string], warnings: string[]): TypePair {
+function userFromPair(pairing: TypePairing, adjectives: readonly string[]): TypePair {
+  return {
+    families: familiesOf(pairing),
+    source: "user",
+    warnings: [],
+    license: pairing.ship,
+    adjectives,
+    pairId: pairing.id,
+  };
+}
+
+function userChoice(
+  families: [string, string] | [string],
+  warnings: string[],
+  adjectives: readonly string[],
+  pairId: number | null,
+  license: string,
+): TypePair {
   return {
     families,
     source: "user",
     warnings,
-    license: TYPE_LICENSE,
+    license,
+    adjectives,
+    pairId,
   };
 }
 
-function moodIndex(answer: string): number {
-  for (let index = 0; index < MOODS.length; index += 1) {
-    const mood = MOODS[index];
-    if (mood?.test(answer)) return index;
+function readAdjectives(answer: string): string[] {
+  const hits: TagHit[] = [];
+  for (const entry of LEXICON) {
+    const pattern = new RegExp(entry.pattern.source, "gi");
+    for (const match of answer.matchAll(pattern)) {
+      hits.push({ index: match.index ?? 0, kind: entry.kind, value: entry.value });
+    }
   }
-  return 0;
+  hits.sort((a, b) => a.index - b.index);
+  const adjectives: string[] = [];
+  const seen = new Set<string>();
+  for (const hit of hits) {
+    if (seen.has(hit.value)) continue;
+    seen.add(hit.value);
+    adjectives.push(hit.value);
+  }
+  return adjectives;
 }
 
-function knownCatalog(): { name: string; pairIndex: number }[] {
-  const catalog: { name: string; pairIndex: number }[] = [];
-  for (let index = 0; index < TYPE_PAIRINGS.length; index += 1) {
-    const pair = TYPE_PAIRINGS[index];
-    if (!pair) continue;
-    catalog.push({ name: pair[0], pairIndex: index });
-    catalog.push({ name: pair[1], pairIndex: index });
+function dealFromMood(answer: string, adjectives: readonly string[]): TypePair {
+  const worlds = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "world" && entry.value === value)));
+  const tones = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "tone" && entry.value === value)));
+  const eras = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "era" && entry.value === value)));
+  const industries = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "industry" && entry.value === value)));
+  const oneFamily = adjectives.includes("one family");
+  if (tones.has("swiss")) worlds.add("product");
+  let best: TypePairing | null = null;
+  let bestScore = 0;
+  for (const pairing of TYPE_LIBRARY) {
+    if (pairing.deal !== "default") continue;
+    if (isOverusedFamily(pairing.display) || isOverusedFamily(pairing.body)) continue;
+    let score = 0;
+    for (const world of pairing.worlds) if (worlds.has(world)) score += 3;
+    for (const tone of pairing.tone) if (tones.has(tone)) score += 2;
+    for (const era of pairing.era) if (eras.has(era)) score += 2;
+    for (const industry of pairing.industry) if (industries.has(industry)) score += 2;
+    if (oneFamily && pairing.display === pairing.body) score += 4;
+    if (score <= 0) continue;
+    if (best === null || score > bestScore || (score === bestScore && pairing.id < best.id)) {
+      best = pairing;
+      bestScore = score;
+    }
+  }
+  if (best === null) return listChoice(unmatchedPair(), adjectives);
+  return listChoice(best, adjectives);
+}
+
+interface CatalogName {
+  name: string;
+  pairId: number | null;
+}
+
+function knownCatalog(): CatalogName[] {
+  const byName = new Map<string, { name: string; ids: number[] }>();
+  const add = (name: string, id: number | null) => {
+    const key = name.toLowerCase();
+    const current = byName.get(key);
+    if (!current) {
+      byName.set(key, { name, ids: id === null ? [] : [id] });
+      return;
+    }
+    if (id !== null && !current.ids.includes(id)) current.ids.push(id);
+  };
+  for (const pairing of TYPE_LIBRARY) {
+    add(pairing.display, pairing.id);
+    add(pairing.body, pairing.id);
+  }
+  for (const name of OVERUSED_DEFAULTS) add(name, null);
+  const catalog: CatalogName[] = [];
+  for (const entry of byName.values()) {
+    catalog.push({ name: entry.name, pairId: entry.ids.length === 1 ? (entry.ids[0] ?? null) : null });
   }
   catalog.sort((a, b) => b.name.length - a.name.length);
   return catalog;
+}
+
+function isKnownName(name: string): boolean {
+  const key = name.toLowerCase();
+  return knownCatalog().some((entry) => entry.name.toLowerCase() === key);
 }
 
 function bounded(text: string, start: number, length: number): boolean {
@@ -381,7 +576,7 @@ function findKnown(answer: string): Mention[] {
       const at = lower.indexOf(needle, from);
       if (at < 0) break;
       if (bounded(lower, at, needle.length)) {
-        hits.push({ name: family.name, index: at, pairIndex: family.pairIndex });
+        hits.push({ name: family.name, index: at, pairId: family.pairId });
       }
       from = at + Math.max(needle.length, 1);
     }
@@ -391,10 +586,38 @@ function findKnown(answer: string): Mention[] {
   let coveredUntil = -1;
   for (const hit of hits) {
     if (hit.index < coveredUntil) continue;
-    kept.push(hit);
-    coveredUntil = hit.index + hit.name.length;
+    const extended = extendKnown(answer, hit);
+    kept.push(extended);
+    coveredUntil = extended.index + extended.name.length;
   }
   return kept;
+}
+
+/** "Archivo Black" is one name the person typed, not the shorter library face plus a stray word. */
+function extendKnown(answer: string, hit: Mention): Mention {
+  const end = hit.index + hit.name.length;
+  const extra = /^(\s+)([A-Z][A-Za-z0-9]*)/.exec(answer.slice(end));
+  const word = extra?.[2];
+  const gap = extra?.[1];
+  if (!word || !gap || GLUE.test(word) || isKnownName(word)) return hit;
+  return {
+    name: answer.slice(hit.index, end + gap.length + word.length),
+    index: hit.index,
+    pairId: null,
+  };
+}
+
+function sharedPair(first: Mention, second: Mention): TypePairing | null {
+  if (first.pairId !== null && first.pairId === second.pairId) return pairingById(first.pairId) ?? null;
+  const left = first.name.toLowerCase();
+  const right = second.name.toLowerCase();
+  return (
+    TYPE_LIBRARY.find((pairing) => {
+      const display = pairing.display.toLowerCase();
+      const body = pairing.body.toLowerCase();
+      return (display === left && body === right) || (display === right && body === left);
+    }) ?? null
+  );
 }
 
 function findUnknown(answer: string, known: readonly Mention[]): Mention[] {
@@ -408,7 +631,7 @@ function findUnknown(answer: string, known: readonly Mention[]): Mention[] {
     if (spans.some((span) => index < span.end && end > span.start)) continue;
     const words = raw.split(/\s+/).filter((word) => !GLUE.test(word));
     if (words.length === 0) continue;
-    found.push({ name: words.join(" "), index, pairIndex: null });
+    found.push({ name: words.join(" "), index, pairId: null });
   }
   return found;
 }

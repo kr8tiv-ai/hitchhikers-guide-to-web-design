@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   DENY_HEX,
+  TYPE_LIBRARY,
   TYPE_LICENSE,
   TYPE_PAIRINGS,
   TokenError,
@@ -18,7 +19,9 @@ import type { Palette } from "../src/brand/tokens.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.resolve(here, "..", "src", "brand", "tokens.ts");
+const libraryPath = path.resolve(here, "..", "src", "brand", "type-library.ts");
 const source = readFileSync(sourcePath, "utf8");
+const librarySource = readFileSync(libraryPath, "utf8");
 
 const SEEDS = [
   "#777777",
@@ -175,9 +178,10 @@ test("pickType keeps at most two families and warns when a third is named", () =
   assert.deepEqual(three.warnings, ["dropped extra family"]);
   assert.equal(three.source, "user");
   assert.equal(three.license, TYPE_LICENSE);
+  assert.equal(three.pairId, null);
 
   const shouted = pickType("bebas neue, BARLOW, and inter");
-  assert.deepEqual(shouted.families, ["Bebas Neue", "Barlow"]);
+  assert.deepEqual(shouted.families, ["Bebas Neue", "BARLOW"]);
   assert.deepEqual(shouted.warnings, ["dropped extra family"]);
 
   const custom = pickType("Helvetica, Garamond, and Futura");
@@ -191,45 +195,88 @@ test("pickType keeps at most two families and warns when a third is named", () =
   assert.deepEqual(one.warnings, []);
 
   const listed = pickType("I want Fraunces headlines");
-  assert.deepEqual(listed.families, ["Fraunces", "Work Sans"]);
+  assert.deepEqual(listed.families, ["Fraunces", "Instrument Sans"]);
   assert.equal(listed.source, "user");
+  assert.equal(listed.pairId, 11);
+  assert.equal(listed.license, "ofl-bundle");
 
   const archivo = pickType("Archivo Black");
-  assert.deepEqual(archivo.families, ["Archivo Black", "Archivo"]);
-  assert.equal(archivo.families.length, 2);
+  assert.deepEqual(archivo.families, ["Archivo Black"]);
+  assert.equal(archivo.families.length, 1);
+  assert.equal(archivo.pairId, null);
+  assert.equal(archivo.source, "user");
+
+  const named = pickType("Use Inter");
+  assert.deepEqual(named.families, ["Inter"]);
+  assert.equal(named.source, "user");
+
+  const space = pickType("Space Grotesk");
+  assert.deepEqual(space.families, ["Space Grotesk", "Archivo"]);
+  assert.equal(space.source, "user");
+  assert.equal(space.pairId, 26);
+  assert.equal(space.license, "ofl-bundle");
 });
 
-test("an unnamed answer chooses one of the six pairings and does not fetch fonts", () => {
+test("an unnamed answer chooses a library pair for the mood and does not fetch fonts", () => {
   const empty = pickType(null);
   assert.equal(empty.source, "list");
-  assert.deepEqual(empty.families, ["Bebas Neue", "Barlow"]);
+  assert.deepEqual(empty.families, ["Switzer"]);
+  assert.equal(empty.pairId, 22);
   assert.deepEqual(empty.warnings, []);
-  assert.equal(empty.license, "Google Fonts or Fontshare. Confirm the license at install.");
+  assert.equal(empty.license, "ffl-owner-download");
+  assert.notEqual(empty.pairId, TYPE_LIBRARY[0]?.id);
 
   const warm = pickType("something warm and craft");
   assert.equal(warm.source, "list");
-  assert.deepEqual(warm.families, ["Fraunces", "Work Sans"]);
+  assert.deepEqual(warm.families, ["Gambarino", "Author"]);
+  assert.equal(warm.pairId, 5);
 
+  const publishing = pickType("editorial, quiet, publishing");
+  assert.deepEqual(publishing.families, ["Gambetta", "Synonym"]);
+  assert.equal(publishing.pairId, 3);
+  assert.equal(publishing.families.includes("Inter"), false);
+
+  const food = pickType("playful food");
+  assert.deepEqual(food.families, ["Erode", "Ranade"]);
+  const poster = pickType("brutalist poster");
+  assert.deepEqual(poster.families, ["Tanker", "Cabinet Grotesk"]);
+  assert.equal(poster.families.includes("Climate Crisis"), false);
+  const fashion = pickType("fashion, sharp");
+  assert.deepEqual(fashion.families, ["Clash Display", "Satoshi"]);
+  const product = pickType("product, one family");
+  assert.deepEqual(product.families, ["Switzer"]);
+  const world = pickType("3d-world poster");
+  assert.deepEqual(world.families, ["Unbounded", "Instrument Sans"]);
+  const startup = pickType("tech startup");
+  assert.deepEqual(startup.families, ["Instrument Serif", "Instrument Sans"]);
+  assert.equal(startup.pairId, 19);
   const prose = pickType("an interesting editorial serif");
   assert.equal(prose.source, "list");
-  assert.deepEqual(prose.families, ["DM Serif Display", "DM Sans"]);
+  assert.deepEqual(prose.families, ["Boska", "General Sans"]);
   assert.equal(prose.families.includes("Inter"), false);
 
   for (const answer of [null, "", "tech startup", "one family", "fashion"]) {
     const choice = pickType(answer);
     assert.ok(choice.families.length === 1 || choice.families.length === 2);
-    assert.equal(choice.license, TYPE_LICENSE);
+    assert.notEqual(choice.license, "Google Fonts or Fontshare. Confirm the license at install.");
     if (choice.source === "list") {
       assert.ok(
-        TYPE_PAIRINGS.some(
-          (pair) => pair[0] === choice.families[0] && pair[1] === choice.families[1],
-        ),
+        TYPE_PAIRINGS.some((pair) => {
+          const first = choice.families[0];
+          const second = choice.families[1] ?? first;
+          return pair[0] === first && pair[1] === second;
+        }),
       );
+      assert.equal(choice.families.includes("Inter"), false);
     }
   }
 
+  const both = `${source}\n${librarySource}`;
   assert.equal(source.includes("fetch("), false);
-  assert.equal(/fonts\.googleapis|fonts\.gstatic|fontshare\.com|https?:\/\//.test(source), false);
-  assert.equal(/\.(?:woff2?|ttf|otf)\b/.test(source), false);
+  assert.equal(librarySource.includes("fetch("), false);
+  assert.equal(/fonts\.googleapis|fonts\.gstatic|cdn\.fontshare/.test(both), false);
+  assert.equal(/\.(?:woff2?|ttf|otf)\b/.test(both), false);
+  assert.equal(/https?:\/\//.test(source), false);
+  assert.match(librarySource, /https:\/\/www\.fontshare\.com\/licenses\//);
   assert.equal(source.includes(TYPE_LICENSE), true);
 });
