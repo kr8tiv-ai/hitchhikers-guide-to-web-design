@@ -23,6 +23,8 @@ export {
   evaluatePerformance,
 } from "./performance-gate.ts";
 export type { PerformanceInput, PerformanceResult } from "./performance-gate.ts";
+export { judgeAward } from "./award-jury.ts";
+export type { AwardInput, AwardResult } from "./award-jury.ts";
 export type {
   PatternDimensions,
   PatternInput,

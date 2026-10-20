@@ -56,3 +56,15 @@ The brand step writes `DESIGN.md` at the site project root: tokens, type scale, 
 - more than one WebGL context
 
 `checkRecipeDir` walks a site and skips markdown, `node_modules`, and `.hitchhiker`. A clean pattern is not a ban on any library.
+
+## Pattern gate
+
+`scorePatterns` reads the built DOM and scripts. It scores pin and scrub density, material sophistication, post-processing, text reveals, camera choreography, and a reduced-motion branch. A high appetite that is not text-led has to compose a pin, a scrub, a sophisticated material, and a post pass. Importing a library without those patterns fails. A text-led page, and any appetite under 7, is not failed for missing them. Slop and a template clone fail at every appetite. The developer line sits beside the jury. It is not folded into the 40, 30, 20, and 10 weights.
+
+## Performance gate
+
+`evaluatePerformance` takes a stubbed or real mobile Lighthouse result. The phone categories stay at or above 90. LCP is at most 2.5 s, INP at most 200 ms, and CLS at most 0.1. A page keeps one WebGL context. A 3D file stays at or under 5 MB and a video at or under 4 MB. A page that carries 3D, video, or WebGL also needs a mobile still. An animating page needs a complete reduced-motion branch. A missing mobile run is a blocker.
+
+## Award jury
+
+`judgeAward` runs `scorePatterns`, `evaluatePerformance`, and `checkRecipes`, then the existing jury. Any failure blocks that jury and becomes a remediation prompt on the beauty loop. The weighted total stays the vision scores. Design remains 40, usability 30, creativity 20, and content 10.
