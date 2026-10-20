@@ -8,6 +8,8 @@ export { renderSocial } from "./social.ts";
 export type { SocialFrame, SocialInput } from "./social.ts";
 export { MotionContractError, renderMotionModule, renderWebglModule } from "./motion-contract.ts";
 export type { MotionAssignment, MotionLib, MotionPlan, ScrollOwner } from "./motion-contract.ts";
+export { renderLibrarySection, renderReferencedSections, sectionMarkupBytes } from "./section-render.ts";
+export type { LibrarySectionProps } from "./section-render.ts";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
