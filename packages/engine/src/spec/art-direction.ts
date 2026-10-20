@@ -6,6 +6,8 @@
  * It never means the absence of motion.
  */
 
+import { familiesSentence, typeChoiceFor } from "../brand/type-scale.ts";
+
 export type StyleWorld = "editorial" | "3d-world" | "playful" | "brutalist";
 
 export interface ArtAnswer {
@@ -161,11 +163,12 @@ function conceptFor(world: StyleWorld): string {
   return "One visual concept: a slow editorial visit, calm and warm, with generous whitespace.";
 }
 
-function typeVoiceFor(world: StyleWorld): string {
-  if (world === "3d-world") return "A geometric sans display. The exact scale is yours to set.";
-  if (world === "playful") return "A rounded display with an easy reading size. The exact scale is yours to set.";
-  if (world === "brutalist") return "A raw grotesque display. The exact scale is yours to set.";
-  return "A large serif display scale, with generous whitespace. The exact scale is yours to set.";
+function typeVoiceFor(world: StyleWorld, text: string): string {
+  const families = familiesSentence(typeChoiceFor(text).families);
+  if (world === "3d-world") return `A geometric sans display. The exact scale is yours to set. ${families}`;
+  if (world === "playful") return `A rounded display with an easy reading size. The exact scale is yours to set. ${families}`;
+  if (world === "brutalist") return `A raw grotesque display. The exact scale is yours to set. ${families}`;
+  return `A large serif display scale, with generous whitespace. The exact scale is yours to set. ${families}`;
 }
 
 function lightFor(world: StyleWorld): { light: string; colorGrade: string } {
@@ -283,7 +286,7 @@ export function translateBrief(
     mood: moodSource === "" ? conceptFor(styleWorld) : moodSource,
     light: grade.light,
     colorGrade: grade.colorGrade,
-    typeVoice: typeVoiceFor(styleWorld),
+    typeVoice: typeVoiceFor(styleWorld, corpus),
     motionCharacter: characterFor(styleWorld, motion),
     signatureHero,
     scroll: scrollFor(styleWorld, motion),

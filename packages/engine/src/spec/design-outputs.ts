@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
+import { typeScaleFor } from "../brand/type-scale.ts";
 
 export const DESIGN_MD_PATH = "DESIGN.md";
 export const MOTION_TS_PATH = "src/scripts/motion.ts";
@@ -75,6 +76,7 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
   const art = translateBrief(brief, answers as readonly ArtAnswer[]);
   const band = bandFor(art.motion.score);
   const palette = brandKitFromAnswers(answers).palette;
+  const scale = typeScaleFor(documentText(brief, answers));
   const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
   return [
     "# Design",
@@ -89,11 +91,17 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "",
     "## Type scale",
     "",
-    "- display: 4.75rem, line-height 0.95, tracking -0.03em",
-    "- heading: 2.5rem, line-height 1.05, tracking -0.02em",
-    "- title: 1.5rem, line-height 1.2",
-    "- body: 1.125rem, line-height 1.6",
-    "- caption: 0.875rem, line-height 1.4",
+    scale.familiesLine,
+    `Ratio: ${scale.ratio} (${scale.ratioName}).`,
+    `World: ${scale.world}.`,
+    `Display over body minimum: ${scale.minimum}.`,
+    "Body floor: 16px. Preferred body: 18px.",
+    "",
+    `- display: ${scale.display}, line-height 0.95, tracking -0.03em`,
+    `- heading: ${scale.heading}, line-height 1.05, tracking -0.02em`,
+    `- title: ${scale.title}, line-height 1.2`,
+    `- body: ${scale.body}, line-height ${scale.bodyLineHeight}`,
+    `- caption: ${scale.caption}, line-height 1.4`,
     "",
     "## Color",
     "",
@@ -277,6 +285,16 @@ export function flagIgnoredMotionTokens(files: readonly { path: string; source: 
     });
   }
   return hits;
+}
+
+function documentText(brief: string, answers: readonly BrandAnswer[]): string {
+  const parts = [brief];
+  for (const answer of answers) {
+    if (answer.status === "SKIPPED" || answer.status === "NOT_APPLICABLE" || answer.status === "UNANSWERED") continue;
+    const value = answer.value.trim();
+    if (value !== "") parts.push(value);
+  }
+  return parts.join("\n");
 }
 
 function bandFor(score: number): Band {
