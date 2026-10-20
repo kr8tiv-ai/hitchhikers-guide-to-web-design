@@ -204,6 +204,14 @@ export {
   writeMotionModule,
 } from "./spec/design-outputs.ts";
 export type { MotionTokenHit } from "./spec/design-outputs.ts";
+export {
+  PlanCritiqueError,
+  critiquePlan,
+  draftPlan,
+  planSwapKey,
+  plansSwapWithoutEdit,
+} from "./spec/plan-critique.ts";
+export type { PlanCritique, PlanDraft, PlanTokens } from "./spec/plan-critique.ts";
 export { translateBrief } from "./spec/art-direction.ts";
 export {
   formatLanguagePack,

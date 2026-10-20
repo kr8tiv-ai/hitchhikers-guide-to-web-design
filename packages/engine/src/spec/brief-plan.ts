@@ -7,6 +7,7 @@
 import { directionAcceptance, sectionAcceptance, translateBrief, type ArtDirection } from "./art-direction.ts";
 import { assertPhoneBudgetBefore3d } from "./phone-budget.ts";
 import { DESIGN_FILE_LINES } from "./design-outputs.ts";
+import { PlanCritiqueError, critiquePlan, draftPlan } from "./plan-critique.ts";
 import { planSkillLines, siteTypeForWorld } from "./skills.ts";
 import { planMotion } from "./motion.ts";
 import { sectionForMotion, visualMotionRequests } from "./visual-motion.ts";
@@ -410,6 +411,9 @@ export function generateBriefPlan(
   stack: SiteStack = "astro",
   answers: readonly BriefAnswer[] = [],
 ): { prompts: SitePromptSkeleton[]; warnings: string[]; planned: BriefPlan } {
+  const corpus = [briefMarkdown, answerCorpus(answers)].filter((part) => part.trim() !== "").join("\n");
+  const critique = critiquePlan(draftPlan(corpus));
+  if (!critique.pass) throw new PlanCritiqueError(critique.failure);
   const planned = planFromBrief(briefMarkdown, answers);
   const art = translateBrief(
     briefMarkdown,
