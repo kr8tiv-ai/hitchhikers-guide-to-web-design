@@ -540,6 +540,7 @@ test("shared modules are copied into each starter and the blank page does not im
   const copies = [
     ["motion.ts", path.join("src", "hh", "motion.ts")],
     ["webgl.ts", path.join("src", "hh", "webgl.ts")],
+    ["preloader.ts", path.join("src", "hh", "preloader.ts")],
     ["theatre-loader.ts", path.join("src", "hh", "theatre-loader.ts")],
     ["css-scroll.ts", path.join("src", "hh", "css-scroll.ts")],
     ["anime.ts", path.join("src", "hh", "anime.ts")],
