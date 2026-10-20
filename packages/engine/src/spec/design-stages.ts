@@ -6,9 +6,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { chooseDirection } from "../brand/directions.ts";
+import type { BrandAnswer } from "../brand/kit-from-interview.ts";
 import { planFromBrief, type BriefAnswer } from "./brief-plan.ts";
 import { writeDesignMd } from "./design-outputs.ts";
-import type { BrandAnswer } from "../brand/kit-from-interview.ts";
 
 export const SITEMAP_REL = ".hitchhiker/sitemap.md";
 export const WIREFRAME_REL = ".hitchhiker/wireframe.md";
@@ -20,6 +21,8 @@ export interface DesignStageRequest {
   brief: string;
   answers?: readonly BrandAnswer[];
   approval?: { stage: DesignStageName; text: string };
+  /** Set only when the person picked a dealt direction. Blank is not a choice. */
+  direction?: { id: string; reason: string; at?: string };
 }
 
 export interface DesignStageResult {
@@ -35,6 +38,7 @@ interface StageApprovals {
 }
 
 export function advanceDesignStages(projectDir: string, input: DesignStageRequest): DesignStageResult {
+  recordChosenDirection(projectDir, input.direction);
   const brief = input.brief;
   const answers = input.answers ?? [];
   const sitemapPath = path.join(projectDir, SITEMAP_REL);
@@ -78,6 +82,15 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
     return result("style-guide", projectDir);
   }
   return result("none", projectDir);
+}
+
+function recordChosenDirection(projectDir: string, direction: DesignStageRequest["direction"]): void {
+  if (direction === undefined) return;
+  const id = direction.id.trim();
+  const reason = direction.reason.trim();
+  if (id === "" || reason === "") return;
+  if (direction.at === undefined) chooseDirection(projectDir, id, reason);
+  else chooseDirection(projectDir, id, reason, direction.at);
 }
 
 function result(wrote: DesignStageResult["wrote"], projectDir: string): DesignStageResult {

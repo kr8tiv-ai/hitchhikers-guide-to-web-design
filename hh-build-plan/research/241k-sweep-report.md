@@ -65,12 +65,12 @@ A built `index.html` still needs the model to run the prompts. This sweep does n
 | Idea 27 Mood to type (7) | `pickType` from the interview kit | yes | Same path as audit 1. |
 | Idea 28 Reference URL (8) | `extractReferenceDesign` | yes | `prepareSiteBuild` calls it only when the brief matches `Reference URL: http(s)://...`. Tests inject a transport. Outside tests the fetch uses `AbortSignal.timeout(8000)`. No transport writes `reference-pending.txt` and the build continues. The committed design library is not modified. |
 | Idea 29 DESIGN.md export (8) | `writeDesignExports` | yes | `writeDesignMd` calls it after lint. `exportDesignMd` returns null when lint fails. |
-| Idea 31 Decision log (7) | `recordDirectionChoice` / `notePhaseFinished` | no | The functions and `rejectedDirectionNames` are exported and tested in `decision-canvas-241i.test.ts`. No runner, interview step, or `prepareSiteBuild` path calls them. `pickDirection` is also test-only. |
+| Idea 31 Decision log (7) | `recordDirectionChoice` / `chooseDirection` | yes | `writeBrandKit` saves the dealt set in `.hitchhiker/directions.json` and does not write the log. `advanceDesignStages` and `POST /api/direction` call `chooseDirection` only when the person supplies an id and a reason. `dealDirections` skips `rejectedDirectionNames` for that project. `decision-caller-241l.test.ts` covers the choice, the exclusion, and the absent log. |
 | Idea 32 Deterministic sections (7) | `renderReferencedSections` | yes | `prepareSiteBuild` loads it dynamically and writes `library.html`. The model callback is not called. The E2E brief's `@section:asymmetric-editorial-grid` renders `data-landmark="asymmetric-editorial-grid"`. |
 | Idea 33 Preserve-functionality prompt (7) | `PRESERVE_FUNCTIONALITY` / `elevatePickPrompt` | yes | `elevateRound` refuses before the model when the sentence is missing. The sentence has no exclamation mark and no em dash. |
 | Idea 34 WebGL recipe (7) | `shouldUsePoster`, `shouldStartLoop`, `tierSettings` | yes | The review runner calls `shouldUsePoster`. Template tests cover tier, context loss, and the phone flag. |
 
-`hh elevate` still does not pass a `ReviewProject`, so `gateProblems` does not run on that command unless a caller sets `deps.review`. Artifact guards inside `elevateRound` (screenshot loop, section lock, juror floor, redesign order, variants, defect retest) do run on that command. `runJuryReview` has no production caller by name. It shares `gateProblems` with elevate and verdict. The desk clears `setBeautyRunner` on close and never installs a live runner.
+`hh elevate` builds a `ReviewProject` from `index.html` and `.hitchhiker/review/lab.json` and passes it to `elevateRound`, so `gateProblems` runs. A missing `index.html` or lab is refused before the round. The CLI names each gap and how to produce it. The loader does not invent a page or a lab measurement. `packages/cli/test/elevate-review-241l.test.ts` asserts the gate calls on a built fixture and the refusal on an unbuilt project. Artifact guards inside `elevateRound` (screenshot loop, section lock, juror floor, redesign order, variants, defect retest) still run on that command when the review is not refused. `runJuryReview` has no production caller by name. It shares `gateProblems` with elevate and verdict. The desk clears `setBeautyRunner` on close and never installs a live runner.
 
 ### Offline brief
 
@@ -85,7 +85,7 @@ Result:
 - Gates, in order, for elevate, then verdict, then jury: `judgeBeauty`, `checkRecipes`, `checkRecipeDir`, `auditBuiltType`, `runDeviceMatrix`, `runMobileChecks`, `runReducedMotion`, `evaluateStateSweeps`, `assertPhoneBudgetBefore3d`, `auditHandoffMarkup`, `shouldUsePoster`, `evaluateDevicePerformance`, `evaluateNavFooter`, `checkPaletteProportion`, `scoreSelf`.
 - Stubbed, and asserted called: `runDeviceMatrix`, `runMobileChecks`, `runReducedMotion`, `evaluateStateSweeps`.
 - All three reviews: `blocked` true, verdict `FIX`, reasons `index.html is missing.`, `heavy must be true or false.`, `currentMark must be color, aria, or text.`, `creativity is undefined. Expected a score from 0 to 10.`
-- Elevate with no review attached: `applied` empty, `refused` empty, `captures` 3.
+- Elevate with no review attached: `applied` empty, `refused` empty, `captures` 3. 241l changed that command. `hh elevate` now attaches a `ReviewProject`. This bullet is the record of the 241k run, which did not.
 
 Beauty, recipes, the phone budget, the poster check, palette, and imagery/credits are not in that failure list. They ran and passed on this unbuilt page. The four failures are the real gates refusing a project that has prompts and no built page, no device lab input, no nav sample, and no self-score. That is the correct closed failure. It is not patched with a fake `index.html`.
 
@@ -120,7 +120,7 @@ Counts on run 3, and the same fail 0 on runs 1 and 2: crawler 80, voice 59, grok
 
 ## 3. What to add
 
-Scores are absolute usefulness toward section 1. 7 or higher was implemented. Below 7 was left.
+Scores are absolute usefulness toward section 1. 7 or higher was implemented. Below 7 was left. Two of those deferred rows were closed in 241l. The rest stay deferred.
 
 | Score | Status | Improvement | Why |
 | --- | --- | --- | --- |
@@ -143,14 +143,14 @@ Scores are absolute usefulness toward section 1. 7 or higher was implemented. Be
 | 7 | implemented | Section lock on every elevate pick, and redesign order before think | A locked section or a skipped type step was not refused on the real round. |
 | 7 | implemented | Combine variants when a variant file is present | The combine function never saw a real elevate round. |
 | 6 | deferred | Install a live beauty or jury runner on the desk | `setBeautyRunner` is cleared on close. Installing one would launch Playwright from the desk. |
-| 6 | deferred | Pass a `ReviewProject` from `hh elevate` | A project with no `index.html` and no lab input fails closed, so every current elevate would be refused. |
+| 6 | closed in 241l | Pass a `ReviewProject` from `hh elevate` | The round builds the review from `index.html` and `.hitchhiker/review/lab.json` and passes it to `elevateRound`. A project with no built page or no lab is refused before the gates, and the CLI lists each gap and how to produce it. The loader does not invent those inputs. |
 | 6 | deferred | Run real device, Lighthouse, and state-sweep browsers on the offline brief | Those gates are wired and stubbed here. A real run needs a built page and a browser, and it can hang. |
 | 6 | deferred | Emit `index.html` without the model | The E2E stops at prompts on purpose. A fake page would pass gates without a site. |
 | 6 | deferred | Replace the inline HTML in `designLanguageFor` with the section renderer | Idea 5's stability depends on that inline path. |
 | 6 | deferred | Timeout `playwright-opener.ts` `installBrowser` | The spawn has no timeout. It is off the offline brief path. |
 | 5 | deferred | Ask a model for four section variants | Combine is wired. Generation is a paid call and can hang. |
 | 5 | deferred | Scan every knowledge pack for ban sentences | The three stacks that contained the sentence are fixed. Generated prompts are already scanned. |
-| 4 | deferred | Record a synthetic direction pick during `prepareSiteBuild` | Idea 31 has no production caller. Inventing a pick would mark directions the person did not reject, and no later prompt reads `rejectedDirectionNames`. |
+| 4 | closed in 241l | Record a direction pick when the person chooses | A synthetic pick during `prepareSiteBuild` stays out. `writeBrandKit` only saves the dealt set. `advanceDesignStages` and `POST /api/direction` call `chooseDirection` when the person supplies an id and a reason. The next `dealDirections` call skips `rejectedDirectionNames` for that project. |
 | 4 | deferred | Utopia fluid type | The modular ratios are already the type scale. |
 | 3 | deferred | Re-run the launch checklist against a live domain | That fetches a published site. The checklist stays `deployed: false`. |
 

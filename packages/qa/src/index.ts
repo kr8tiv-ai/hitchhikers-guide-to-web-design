@@ -133,6 +133,8 @@ export {
 } from "./preserve-prompt.ts";
 export type { DefectClose, DefectLogJudgement, DefectRecord, DefectRetest, DefectSeverity } from "./defect-log.ts";
 export { renderDefectLog } from "./report.ts";
+export { loadElevateReview } from "./review-project.ts";
+export type { ElevateReviewGap, ElevateReviewLoad } from "./review-project.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";

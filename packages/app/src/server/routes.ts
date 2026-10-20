@@ -141,6 +141,7 @@ import { renderShell } from "../shell.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
+import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
 import { approveMain, brandBriefMain, dashboardBriefNote } from "./brief-page.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
@@ -275,6 +276,7 @@ const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const QUESTION_PARTS_SOURCE = path.resolve(SRC_ROOT, "question-parts.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
+const DIRECTION_SOURCE = path.resolve(SRC_ROOT, "client", "direction.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
 const DRAFT_STORE_SOURCE = path.resolve(SRC_ROOT, "client", "draft-store.ts");
@@ -972,6 +974,10 @@ async function handlePost(
     await handleBrandPost(req, res, projectDir);
     return;
   }
+  if (pathname === "/api/direction") {
+    await handleDirectionPost(req, res, projectDir);
+    return;
+  }
   if (pathname.startsWith("/api/tools")) {
     await handleTools(req, res, pathname);
     return;
@@ -1109,6 +1115,22 @@ async function handleBrandPost(
     return;
   }
   const result = await postBrandDecision(projectDir, capped.body.toString("utf8"));
+  sendJson(req, res, result.status, result.body);
+}
+
+async function handleDirectionPost(req: IncomingMessage, res: ServerResponse, projectDir: string): Promise<void> {
+  if (contentLengthExceeds(req.headers["content-length"], JSON_LIMIT)) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const capped = await readCapped(req, JSON_LIMIT);
+  if (!capped.ok) {
+    sendJson(req, res, 413, { error: "That request is too large." });
+    dropRequest(req);
+    return;
+  }
+  const result = postDirectionChoice(projectDir, capped.body.toString("utf8"));
   sendJson(req, res, result.status, result.body);
 }
 
@@ -2021,7 +2043,7 @@ async function handleGet(
           : raster
             ? renderBrand(token, notice, questionId, intake, ["/src/brand-kit.css"])
             : renderBrand(token, notice, questionId, intake);
-      await deliverHtml(req, res, 200, html, projectDir, token, false);
+      await deliverHtml(req, res, 200, withDirectionDesk(html, projectDir), projectDir, token, false);
       return;
     }
     const nav = `${deskMenu(token)}\n        ${routeNav("/brand")}`;
@@ -2029,7 +2051,16 @@ async function handleGet(
       await deliverHtml(req, res, 500, renderBrandKitError(token, nav), projectDir, token, false);
       return;
     }
-    await deliverHtml(req, res, 200, injectBrandLogo(dressBrandKit(loaded.html, token, nav), intake), projectDir, token, false, brandKitHeaders());
+    await deliverHtml(
+      req,
+      res,
+      200,
+      withDirectionDesk(injectBrandLogo(dressBrandKit(loaded.html, token, nav), intake), projectDir),
+      projectDir,
+      token,
+      false,
+      brandKitHeaders(),
+    );
     return;
   }
   if (pathname === "/brand/logo") {
@@ -2168,6 +2199,10 @@ async function handleGet(
   }
   if (pathname === "/client/brand.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(BRAND_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/direction.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DIRECTION_SOURCE)));
     return;
   }
   if (pathname === "/client/approve-cards.js") {
@@ -2820,10 +2855,11 @@ function renderDesk(
   );
   const guideLive = escapeHtml(guideTurnText(session.question?.ask ?? null, session.done));
   const logo = logoOnPage(projectDir);
+  const directionPicker = projectDir.trim() === "" ? "" : renderDirectionPicker(projectDir);
   html = replaceBlock(
     html,
     /<section class="hh-rise hh-rise--3" data-region="question" aria-label="Question">[\s\S]*?<\/section>/,
-    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question, logoStatusNote(projectDir), logo)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}`,
+    `<section class="hh-rise hh-rise--3" data-region="question" data-tour-spot="question" data-hh-ready data-xai-setting="${voiceFlags.xaiSetting ? "true" : "false"}" data-rate-accepted="${voiceFlags.rateAccepted ? "true" : "false"}" data-local-whisper="${voiceFlags.localWhisper ? "true" : "false"}" aria-label="Question">\n            ${withInterviewExtras(reshapeDeskCard(session.cardHtml, engine === "web-speech", chrome), session.question, logoStatusNote(projectDir), logo)}\n          </section>\n          <p class="hh-guide-live" data-guide-live aria-live="polite">${guideLive}</p>\n          ${projectDir === "" ? `<div data-guide-notes></div>` : renderGuideNotes(readGuideNotes(projectDir))}${directionPicker === "" ? "" : `\n          ${directionPicker}`}`,
     "question",
   );
   html = mustReplace(
@@ -2848,6 +2884,9 @@ function renderDesk(
     session.question?.id.startsWith("DP-6.") === true
       ? `    <script type="module" src="/client/motion.js"></script>\n`
       : "";
+  const directionScript = html.includes("data-pick-direction")
+    ? `    <script type="module" src="/client/direction.js"></script>\n`
+    : "";
   if (showTour) {
     html = html.replace(
       '<section class="hh-log hh-rise hh-rise--2" id="transcript"',
@@ -2856,7 +2895,7 @@ function renderDesk(
   }
   return html.replace(
     "</body>",
-    `    <script type="module" src="/client/tooltip.js"></script>\n    <script type="module" src="/client/desk.js"></script>\n${motion}  </body>`,
+    `    <script type="module" src="/client/tooltip.js"></script>\n    <script type="module" src="/client/desk.js"></script>\n${motion}${directionScript}  </body>`,
   );
 }
 
@@ -2972,6 +3011,16 @@ async function handleContextPost(
   }
   res.writeHead(303, { location: "/context" });
   res.end();
+}
+
+function withDirectionDesk(html: string, projectDir: string): string {
+  const picker = renderDirectionPicker(projectDir);
+  if (picker === "") return html;
+  let next = html.includes("data-direction-desk") ? html : html.replace("</main>", `${picker}\n        </main>`);
+  if (next.includes("data-pick-direction") && !next.includes("/client/direction.js")) {
+    next = next.replace("</body>", `    <script type="module" src="/client/direction.js"></script>\n  </body>`);
+  }
+  return next;
 }
 
 function routerLine(projectDir: string): string {

@@ -92,6 +92,8 @@ type Parsed =
 export interface ElevateCommandDeps {
   cwd?: string;
   think?: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>;
+  /** Test double for gateProblems. Omitted on a real round, so the full gates run. */
+  qualityGates?: object;
 }
 
 /** `hh elevate`. */
@@ -108,7 +110,7 @@ export async function runElevateCommand(
   try {
     if (parsed.mode === "detail") return await runDetail(parsed);
     if (parsed.mode === "copy") return await runCopy(parsed, model);
-    return await runRound(parsed, model);
+    return await runRound(parsed, model, deps.qualityGates);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Elevate failed.";
     return { exitCode: 1, stdout: `${message.replaceAll("!", ".")}\n` };
@@ -190,7 +192,10 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
 async function runRound(
   parsed: ParsedRound,
   model: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>,
+  qualityGates?: object,
 ): Promise<{ exitCode: number; stdout: string }> {
+  const review = await loadReview(parsed.projectDir);
+  if (!review.ok) return { exitCode: 1, stdout: `${review.message}\n` };
   if (parsed.url !== null) {
     const file = path.join(parsed.projectDir, ".hitchhiker", "elevate", "preview-url");
     await mkdir(path.dirname(file), { recursive: true });
@@ -198,9 +203,9 @@ async function runRound(
   }
   const api = await loadLoop();
   const lines: string[] = [];
-  const result = await api.elevateRound(parsed.projectDir, {
+  const roundDeps = {
     think: model,
-    pick: async (items) => {
+    pick: async (items: Item[]) => {
       if (items.length === 0) lines.push("No upgrades this round.");
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
@@ -209,9 +214,12 @@ async function runRound(
       }
       return choose(parsed.pick, items);
     },
-    runPrompt: (file) => runLive(parsed.projectDir, file),
+    runPrompt: (file: string) => runLive(parsed.projectDir, file),
     gates: () => loadGates(parsed.projectDir, parsed.url),
-  });
+    review: review.project,
+    ...(qualityGates === undefined ? {} : { qualityGates }),
+  };
+  const result = await api.elevateRound(parsed.projectDir, roundDeps);
   for (const id of result.applied) lines.push(`Applied: ${id}`);
   for (const row of result.refused) lines.push(`Refused: ${row.id} ${row.reason}`);
   if (result.applied.length === 0 && result.refused.length === 0) {
@@ -287,6 +295,29 @@ function runnerFile(): string {
   return path.resolve(import.meta.dirname, "..", "..", "..", "orchestrator", "src", "live-runner.ts");
 }
 
+type ReviewLoad = { ok: true; project: object } | { ok: false; message: string };
+
+async function loadReview(projectDir: string): Promise<ReviewLoad> {
+  const mod = asRecord(await import(pathToFileURL(qaFile("review-project.ts")).href));
+  const loadElevateReview = mod?.loadElevateReview;
+  if (typeof loadElevateReview !== "function") throw new Error("The review project module did not load.");
+  const loaded = asReviewLoad(await (loadElevateReview as (dir: string) => unknown)(projectDir));
+  if (loaded === null) throw new Error("The review project module did not load.");
+  return loaded;
+}
+
+function asReviewLoad(value: unknown): ReviewLoad | null {
+  const record = asRecord(value);
+  if (record === null || typeof record.ok !== "boolean") return null;
+  if (record.ok) {
+    const project = asRecord(record.project);
+    if (project === null) return null;
+    return { ok: true, project };
+  }
+  if (typeof record.message !== "string" || record.message.trim() === "") return null;
+  return { ok: false, message: record.message };
+}
+
 async function loadLoop(): Promise<{
   elevateRound: (
     projectDir: string,
@@ -295,6 +326,8 @@ async function loadLoop(): Promise<{
       pick: (items: Item[]) => Promise<Item[]>;
       runPrompt: (file: string) => Promise<void>;
       gates: () => Promise<GateResult>;
+      review: object;
+      qualityGates?: object;
     },
   ) => Promise<RoundResult>;
 }> {
@@ -309,6 +342,8 @@ async function loadLoop(): Promise<{
         pick: (items: Item[]) => Promise<Item[]>;
         runPrompt: (file: string) => Promise<void>;
         gates: () => Promise<GateResult>;
+        review: object;
+        qualityGates?: object;
       },
     ) => Promise<RoundResult>,
   };

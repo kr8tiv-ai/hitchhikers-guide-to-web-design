@@ -4,9 +4,10 @@
  * and one section order is only a hue change, and it fails. No ingest.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DecisionLogError, recordDirectionChoice, rejectedDirectionNames } from "./decision-canvas.ts";
 import { isOverusedFamily } from "./tokens.ts";
 import { TYPE_LIBRARY, type TypePairing } from "./type-library.ts";
 
@@ -42,6 +43,9 @@ export interface DirectionCheck {
 
 const HUES = ["#1f6b4a", "#8c4a2f", "#1d4e89"] as const;
 
+/** Factual line for a direction the person saw and did not pick. Not a taste invented for them. */
+const SHOWN_NOT_PICKED = "Shown and not picked.";
+
 const WORLD_ALIAS: Record<string, string> = {
   "minimal-luxury": "editorial",
   "scroll-film": "editorial",
@@ -73,8 +77,11 @@ export function loadStudiedPages(root = designLibraryRoot()): StudiedPage[] {
   return pages;
 }
 
-export function dealDirections(root = designLibraryRoot()): DirectionDeal {
-  const pages = loadStudiedPages(root);
+export function dealDirections(root = designLibraryRoot(), projectDir?: string): DirectionDeal {
+  const rejected = new Set(
+    projectDir === undefined || projectDir.trim() === "" ? [] : rejectedDirectionNames(projectDir),
+  );
+  const pages = loadStudiedPages(root).filter((page) => !rejected.has(page.title));
   const chosen: StudiedPage[] = [];
   const seenOrders = new Set<string>();
   for (const page of pages) {
@@ -137,6 +144,61 @@ export function pickDirection(deal: DirectionDeal, id: string): DirectionDeal {
   return { directions: deal.directions, pickedId: id };
 }
 
+export function directionDealPath(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "directions.json");
+}
+
+/** Persist the dealt set. This is not a decision-log row. */
+export function saveDirectionDeal(projectDir: string, deal: DirectionDeal): void {
+  const file = directionDealPath(projectDir);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(deal, null, 2)}\n`, "utf8");
+}
+
+/** Null when no deal has been saved. A damaged file throws instead of looking like a new deal. */
+export function readDirectionDeal(projectDir: string): DirectionDeal | null {
+  const file = directionDealPath(projectDir);
+  if (!existsSync(file)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    throw new DecisionLogError("directions.json is not a deal.");
+  }
+  const deal = asDeal(parsed);
+  if (deal === null) throw new DecisionLogError("directions.json is not a deal.");
+  return deal;
+}
+
+/**
+ * Record a choice the person actually made against the deal on disk.
+ * Rejected rows use a factual line. This function does not invent a pick.
+ */
+export function chooseDirection(
+  projectDir: string,
+  pickedId: string,
+  reason: string,
+  at = new Date().toISOString(),
+): DirectionDeal {
+  const id = pickedId.trim();
+  const line = reason.trim();
+  if (id === "") throw new DecisionLogError("A pick needs a direction.");
+  if (line === "") throw new DecisionLogError("A pick needs a one-line reason.");
+  const deal = readDirectionDeal(projectDir);
+  if (deal === null) throw new DecisionLogError("No directions are on the desk. Deal a set before a pick.");
+  if (!deal.directions.some((direction) => direction.id === id)) {
+    throw new DecisionLogError(`Unknown direction ${id}.`);
+  }
+  const reasons: Record<string, string> = {};
+  for (const direction of deal.directions) {
+    reasons[direction.id] = direction.id === id ? line : SHOWN_NOT_PICKED;
+  }
+  recordDirectionChoice(projectDir, deal, id, reasons, at);
+  const picked = pickDirection(deal, id);
+  saveDirectionDeal(projectDir, picked);
+  return picked;
+}
+
 export function renderDirectionBlock(deal: DirectionDeal): string {
   const lines = ["## Directions", "", "Pick one.", ""];
   for (const direction of deal.directions) {
@@ -151,6 +213,63 @@ export function renderDirectionBlock(deal: DirectionDeal): string {
     );
   }
   return lines.join("\n").replaceAll("!", ".").replaceAll("\u2014", "-");
+}
+
+function asDeal(value: unknown): DirectionDeal | null {
+  if (!isRecord(value) || !Array.isArray(value.directions) || value.directions.length === 0) return null;
+  const directions: Direction[] = [];
+  for (const item of value.directions) {
+    const direction = asDirection(item);
+    if (direction === null) return null;
+    directions.push(direction);
+  }
+  const ids = new Set(directions.map((direction) => direction.id));
+  if (ids.size !== directions.length) return null;
+  if (value.pickedId === undefined) return null;
+  if (value.pickedId === null) return { directions, pickedId: null };
+  if (typeof value.pickedId !== "string" || !ids.has(value.pickedId)) return null;
+  return { directions, pickedId: value.pickedId };
+}
+
+function asDirection(value: unknown): Direction | null {
+  if (!isRecord(value)) return null;
+  const sectionOrder = value.sectionOrder;
+  if (!Array.isArray(sectionOrder) || sectionOrder.length === 0) return null;
+  const sections: string[] = [];
+  for (const item of sectionOrder) {
+    if (typeof item !== "string" || item.trim() === "") return null;
+    sections.push(item);
+  }
+  const id = textField(value.id);
+  const name = textField(value.name);
+  const citationId = textField(value.citationId);
+  const title = textField(value.title);
+  const url = textField(value.url);
+  const display = textField(value.display);
+  const body = textField(value.body);
+  const hue = textField(value.hue);
+  if (
+    id === null ||
+    name === null ||
+    citationId === null ||
+    title === null ||
+    url === null ||
+    display === null ||
+    body === null ||
+    hue === null
+  ) {
+    return null;
+  }
+  return { id, name, citationId, title, url, display, body, sectionOrder: sections, hue };
+}
+
+function textField(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function pairFor(world: string, used: ReadonlySet<number>): TypePairing {

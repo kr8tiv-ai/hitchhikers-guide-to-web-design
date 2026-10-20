@@ -5,7 +5,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { dealDirections, renderDirectionBlock } from "./directions.ts";
+import { dealDirections, designLibraryRoot, renderDirectionBlock, saveDirectionDeal, type DirectionDeal } from "./directions.ts";
 import { familiesSentence } from "./type-scale.ts";
 import { pickType, proposePalettes } from "./tokens.ts";
 
@@ -55,7 +55,10 @@ export function defaultPalette(): BrandPalette {
   };
 }
 
-export function brandKitFromAnswers(answers: readonly BrandAnswer[]): { markdown: string; moduleSource: string; palette: BrandPalette } {
+export function brandKitFromAnswers(
+  answers: readonly BrandAnswer[],
+  deal: DirectionDeal = dealDirections(),
+): { markdown: string; moduleSource: string; palette: BrandPalette } {
   const offer = answered(answers, "DP-2.7") || "The offer is the sentence the owner already gave.";
   const action = answered(answers, "DP-3.1") || "Get in touch.";
   const voice = answered(answers, "DP-1.6") || "Clear, calm, specific.";
@@ -123,7 +126,7 @@ export function brandKitFromAnswers(answers: readonly BrandAnswer[]): { markdown
     "",
     `Named by the owner, as names only: ${references}`,
     "",
-    renderDirectionBlock(dealDirections()),
+    renderDirectionBlock(deal),
   ].join("\n");
   const moduleSource = [
     "/** Brand values from the interview. */",
@@ -144,13 +147,15 @@ export function brandKitFromAnswers(answers: readonly BrandAnswer[]): { markdown
 }
 
 export function writeBrandKit(projectDir: string, answers: readonly BrandAnswer[]): string {
-  const kit = brandKitFromAnswers(answers);
+  const deal = dealDirections(designLibraryRoot(), projectDir);
+  const kit = brandKitFromAnswers(answers, deal);
   const brandDir = path.join(projectDir, ".hitchhiker", "brand");
   const dataDir = path.join(projectDir, "src", "data");
   mkdirSync(brandDir, { recursive: true });
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(path.join(brandDir, "BRAND.md"), kit.markdown, "utf8");
   writeFileSync(path.join(dataDir, "brand.ts"), kit.moduleSource, "utf8");
+  saveDirectionDeal(projectDir, deal);
   return kit.markdown;
 }
 

@@ -476,11 +476,15 @@ export {
 export type { TypePair, TypePairing } from "./brand/tokens.ts";
 export {
   checkDirectionDeal,
+  chooseDirection,
   dealDirections,
   designLibraryRoot,
+  directionDealPath,
   loadStudiedPages,
   pickDirection,
+  readDirectionDeal,
   renderDirectionBlock,
+  saveDirectionDeal,
 } from "./brand/directions.ts";
 export type { Direction, DirectionCheck, DirectionDeal, StudiedPage } from "./brand/directions.ts";
 export {
