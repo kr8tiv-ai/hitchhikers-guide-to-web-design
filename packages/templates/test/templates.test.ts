@@ -607,26 +607,52 @@ test("scaffold copies a starter and the chosen recipes without secret values", a
 });
 
 function runPnpm(cwd: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("pnpm", args, {
-      cwd,
-      shell: true,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+  const once = (): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const child = spawn("pnpm", args, {
+        cwd,
+        shell: true,
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+      const timer = setTimeout(() => {
+        child.kill();
+      }, 180_000);
+      let output = "";
+      const keep = (chunk: Buffer): void => {
+        output += chunk.toString("utf8");
+        if (output.length > 24000) output = output.slice(-24000);
+      };
+      child.stdout?.on("data", keep);
+      child.stderr?.on("data", keep);
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        if (code === 0) resolve();
+        else reject(new Error(`pnpm ${args.join(" ")} exited ${code ?? "unknown"}\n${output}`));
+      });
     });
-    let output = "";
-    const keep = (chunk: Buffer): void => {
-      output += chunk.toString("utf8");
-      if (output.length > 24000) output = output.slice(-24000);
-    };
-    child.stdout?.on("data", keep);
-    child.stderr?.on("data", keep);
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`pnpm ${args.join(" ")} exited ${code ?? "unknown"}\n${output}`));
-    });
-  });
+  const run = async (): Promise<void> => {
+    let last: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        await once();
+        return;
+      } catch (error) {
+        last = error;
+        const text = error instanceof Error ? error.message : "";
+        const locked = /EBUSY|EPERM|ENOTEMPTY|resource busy/i.test(text);
+        if (!locked || attempt === 3) break;
+        await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
+      }
+    }
+    throw last;
+  };
+  return run();
 }
 
 test("each starter builds and the blank bundle omits unused libraries", { timeout: 600_000 }, async () => {
