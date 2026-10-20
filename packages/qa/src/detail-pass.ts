@@ -28,6 +28,32 @@ export const DETAIL_AREAS = [
 
 export type DetailArea = (typeof DETAIL_AREAS)[number];
 
+/** Frame rows ride along with the detail pass. They are not prompt areas. */
+export const FRAME_AREAS = ["frame-title", "frame-margins", "frame-blank"] as const;
+
+/** Phone, tablet, and desktop widths. Device projects call the same checks. */
+export const FRAME_WIDTHS = [375, 768, 1440] as const;
+
+/** Left and right content edges may differ by this many CSS pixels. */
+export const FRAME_MARGIN_TOLERANCE_PX = 4;
+
+export interface FrameSection {
+  height: number;
+  empty: boolean;
+  hasTitle: boolean;
+  hasPoster: boolean;
+}
+
+export interface FrameLayout {
+  viewportWidth: number;
+  viewportHeight: number;
+  titleTop: number | null;
+  titleBottom: number | null;
+  contentLeft: number | null;
+  contentRight: number | null;
+  sections: FrameSection[];
+}
+
 export interface DetailCheck {
   area: string;
   ok: boolean;
@@ -105,6 +131,124 @@ function row(area: string, ok: boolean, note: string): DetailCheck {
 
 function assertUrl(url: string): void {
   if (!/^https?:\/\//i.test(url)) throw new Error("detailChecks needs an http or https URL.");
+}
+
+function px(value: number): string {
+  return (Math.round(value * 10) / 10).toString();
+}
+
+/** Outcome judge. A full-bleed hero with the title and a poster is not a dead band. */
+export function judgeFrameLayout(layout: FrameLayout): DetailCheck[] {
+  const titleInside =
+    layout.titleTop !== null &&
+    layout.titleBottom !== null &&
+    layout.titleBottom > 0 &&
+    layout.titleTop < layout.viewportHeight;
+  const title = row(
+    "frame-title",
+    titleInside,
+    titleInside ? "The title sits inside the first viewport." : "The title is outside the first viewport.",
+  );
+
+  let marginsOk = false;
+  let marginsNote = "No visible content was measured for the margins.";
+  if (layout.contentLeft !== null && layout.contentRight !== null) {
+    const left = layout.contentLeft;
+    const right = layout.viewportWidth - layout.contentRight;
+    const gap = Math.abs(left - right);
+    marginsOk = gap <= FRAME_MARGIN_TOLERANCE_PX;
+    marginsNote = marginsOk
+      ? `Left margin is ${px(left)}px and right margin is ${px(right)}px. They match within ${FRAME_MARGIN_TOLERANCE_PX}px.`
+      : `Left margin is ${px(left)}px and right margin is ${px(right)}px. The tolerance is ${FRAME_MARGIN_TOLERANCE_PX}px.`;
+  }
+  const margins = row("frame-margins", marginsOk, marginsNote);
+
+  const dead = layout.sections.filter(
+    (section) => section.empty && section.height > layout.viewportHeight && !(section.hasTitle && section.hasPoster),
+  );
+  const hero = layout.sections.some(
+    (section) => section.height > layout.viewportHeight && section.hasTitle && section.hasPoster,
+  );
+  const blank = row(
+    "frame-blank",
+    dead.length === 0,
+    dead.length === 0
+      ? hero
+        ? "A full-bleed hero holds the title and the poster. It is not a dead blank stretch."
+        : "No empty section is taller than one viewport."
+      : "An empty section is taller than one viewport.",
+  );
+  return [title, margins, blank];
+}
+
+type FrameRect = { top: number; left: number; right: number; bottom: number; width: number; height: number };
+
+type FrameEl = {
+  innerText: string;
+  contains: (node: FrameEl) => boolean;
+  querySelector: (selector: string) => FrameEl | null;
+  getBoundingClientRect: () => FrameRect;
+};
+
+/** Element bounds for the frame judge. The caller sets the viewport first. */
+export async function measureFrameLayout(page: Page): Promise<FrameLayout> {
+  return page.evaluate(() => {
+    const view = globalThis as unknown as {
+      innerWidth: number;
+      innerHeight: number;
+      document: {
+        querySelector: (selector: string) => FrameEl | null;
+        querySelectorAll: (selector: string) => { length: number; [index: number]: FrameEl | undefined };
+      };
+      getComputedStyle: (el: FrameEl) => { display: string; visibility: string; opacity: string };
+    };
+    const viewportWidth = view.innerWidth;
+    const viewportHeight = view.innerHeight;
+
+    const hidden = (el: FrameEl): boolean => {
+      const style = view.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return true;
+      const rect = el.getBoundingClientRect();
+      return rect.width < 1 || rect.height < 1 || rect.bottom <= 0 || rect.right <= 0 || rect.left >= viewportWidth;
+    };
+
+    const title = view.document.querySelector("h1");
+    let titleTop: number | null = null;
+    let titleBottom: number | null = null;
+    if (title !== null && !hidden(title)) {
+      const rect = title.getBoundingClientRect();
+      titleTop = rect.top;
+      titleBottom = rect.bottom;
+    }
+
+    let contentLeft: number | null = null;
+    let contentRight: number | null = null;
+    const text = view.document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, a, button, figcaption, blockquote, label");
+    for (let index = 0; index < text.length; index += 1) {
+      const el = text[index];
+      if (el === undefined || hidden(el)) continue;
+      const rect = el.getBoundingClientRect();
+      contentLeft = contentLeft === null ? rect.left : Math.min(contentLeft, rect.left);
+      contentRight = contentRight === null ? rect.right : Math.max(contentRight, rect.right);
+    }
+
+    const sections: FrameSection[] = [];
+    const blocks = view.document.querySelectorAll("section, header, footer, main");
+    const titleText = title === null ? "" : title.innerText.replace(/\s+/g, " ").trim();
+    for (let index = 0; index < blocks.length; index += 1) {
+      const el = blocks[index];
+      if (el === undefined) continue;
+      const rect = el.getBoundingClientRect();
+      const poster = el.querySelector("img, video, canvas, picture, svg");
+      const hasPoster = poster !== null && !hidden(poster);
+      const hasTitle = title !== null && el.contains(title);
+      let copy = el.innerText.replace(/\s+/g, " ").trim();
+      if (hasTitle && titleText !== "") copy = copy.replace(titleText, "").trim();
+      sections.push({ height: rect.height, empty: copy === "", hasTitle, hasPoster });
+    }
+
+    return { viewportWidth, viewportHeight, titleTop, titleBottom, contentLeft, contentRight, sections };
+  });
 }
 
 async function textStatus(page: Page, target: string): Promise<number> {
@@ -380,10 +524,18 @@ export async function detailChecksIn(
       response = await page.goto(url, { waitUntil: "load", timeout: 20_000 });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The page did not load.";
-      return DETAIL_AREAS.map((area) => row(area, false, detail));
+      return failedReport(detail);
     }
     if (response === null || response.status() >= 400) {
-      return DETAIL_AREAS.map((area) => row(area, false, "The page did not load."));
+      return failedReport("The page did not load.");
+    }
+    // Measure the resting page. The focus probe reveals the skip link, and that box is not the margin.
+    let frames: DetailCheck[];
+    try {
+      frames = judgeFrameLayout(await measureFrameLayout(page));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "The frame was not measured.";
+      frames = FRAME_AREAS.map((area) => row(area, false, detail));
     }
     const type = await measureType(page);
     const hover = await measureHover(page);
@@ -405,10 +557,20 @@ export async function detailChecksIn(
       ["error", state.error],
       ["print", print],
     ]);
-    return DETAIL_AREAS.map((area) => byArea.get(area) ?? row(area, false, "This area was not measured."));
+    return [
+      ...DETAIL_AREAS.map((area) => byArea.get(area) ?? row(area, false, "This area was not measured.")),
+      ...frames,
+    ];
   } finally {
     await context.close();
   }
+}
+
+function failedReport(note: string): DetailCheck[] {
+  return [
+    ...DETAIL_AREAS.map((area) => row(area, false, note)),
+    ...FRAME_AREAS.map((area) => row(area, false, note)),
+  ];
 }
 
 function promptBody(area: DetailArea): string {

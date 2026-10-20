@@ -19,7 +19,7 @@ import {
   proposeCopy,
   type CopyProposal,
 } from "../src/copy-refine.ts";
-import { DETAIL_AREAS, detailChecks, writeDetailPrompts } from "../src/detail-pass.ts";
+import { DETAIL_AREAS, FRAME_AREAS, detailChecks, writeDetailPrompts } from "../src/detail-pass.ts";
 import { elevateRound, type GateResult } from "../src/elevate-loop.ts";
 import type { ElevateItem } from "../src/elevate.ts";
 import { startFixtureSite } from "../src/playwright-opener.ts";
@@ -404,7 +404,7 @@ test("detail checks report every area on the fixture site", { timeout: 180_000 }
     const report = await detailChecks(site.url);
     assert.deepEqual(
       report.map((row) => row.area),
-      [...DETAIL_AREAS],
+      [...DETAIL_AREAS, ...FRAME_AREAS],
     );
     for (const row of report) {
       assert.equal(row.note.trim().length > 0, true, row.area);
@@ -427,6 +427,9 @@ test("detail checks report every area on the fixture site", { timeout: 180_000 }
     expectOk("focus", true);
     expectOk("empty", false);
     expectOk("error", false);
+    expectOk("frame-title", true);
+    expectOk("frame-margins", true);
+    expectOk("frame-blank", true);
   } finally {
     await site.close();
   }
