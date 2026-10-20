@@ -2,9 +2,10 @@
  * Static anti-slop lint for site output and Guide UI strings (prompt 112).
  *
  * A new text ban is one function in `CHECKERS`. Words and phrases come from
- * the engine voice list, which matches the anti-slop pack fences. Visual bans
- * (three icon cards, a blob hero, cloned rhythm) are not decided here. The
- * caller passes the text. This module does not read the pack from disk.
+ * the engine voice list, which matches the anti-slop pack fences. Copy bans
+ * stay in `CHECKERS`. Visual cluster tells are `judgeAiCluster`. They measure
+ * outcomes and do not ban a library. The caller passes the text. This module
+ * does not read the pack from disk.
  *
  * `elevate` is a whole word, case-insensitive. `elevation` and `elevated` are
  * not hits. Site mode flags every line. Guide mode skips the elevate hit on a
@@ -17,7 +18,7 @@
  * degrees, saturation above 0.18, mid lightness. A hyphen is not an em dash.
  */
 
-import { BANNED_PHRASES, BANNED_WORDS } from "@hitchhiker/engine";
+import { BANNED_PHRASES, BANNED_WORDS, DENY_HEX, isOverusedFamily } from "@hitchhiker/engine";
 
 export interface SlopHit {
   line: number;
@@ -327,4 +328,275 @@ export function lintSlop(text: string, mode: "site" | "guide"): SlopHit[] {
   for (const checker of CHECKERS) checker(ctx);
   ctx.hits.sort((a, b) => a.line - b.line);
   return ctx.hits;
+}
+
+/** Same names as the 241e vision bans. Kept here so this file does not import zaphod. */
+export const AI_CLUSTER_VISION_KEYS = [
+  "genericAiDefaultType",
+  "weakDisplayBodyContrast",
+  "blobHero",
+  "threeIconCards",
+  "clonedRhythm",
+  "stockLaptopPeople",
+  "fakeLogos",
+  "fakeTestimonials",
+  "fakeNumbers",
+] as const;
+
+export type AiClusterVisionKey = (typeof AI_CLUSTER_VISION_KEYS)[number];
+
+export interface AiClusterInput {
+  css: string;
+  html: string;
+  namedFamilies?: readonly string[];
+  brief?: string;
+  vision?: Partial<Record<AiClusterVisionKey, boolean>>;
+}
+
+export interface AiClusterHit {
+  tell: string;
+  detail: string;
+}
+
+export interface AiClusterResult {
+  pass: boolean;
+  hits: readonly AiClusterHit[];
+}
+
+const VISION_DETAIL: Record<AiClusterVisionKey, string> = {
+  genericAiDefaultType: "Generic or AI-default type.",
+  weakDisplayBodyContrast: "Weak display and body contrast.",
+  blobHero: "Blob hero.",
+  threeIconCards: "Three icon cards.",
+  clonedRhythm: "Cloned rhythm.",
+  stockLaptopPeople: "Stock laptop people.",
+  fakeLogos: "Fake logos.",
+  fakeTestimonials: "Fake testimonials.",
+  fakeNumbers: "Fake numbers.",
+};
+
+const DISPLAY_SELECTOR = /(?:^|[\s,>+~])(?:h1|\.display|\.hero)(?![A-Za-z0-9_-])/i;
+const HERO_SELECTOR = /(?:^|[\s,>+~.#])hero(?![A-Za-z0-9_-])/i;
+const DENY = new Set<string>(DENY_HEX);
+
+/**
+ * Palette and chrome tells. An overused display face fails unless the person
+ * named it. A Three.js import is not a tell. Copy lint stays in `lintSlop`.
+ */
+export function judgeAiCluster(input: AiClusterInput): AiClusterResult {
+  const hits: AiClusterHit[] = [];
+  const css = `${input.css}\n${embeddedCss(input.html)}`;
+  const rules = parseRules(css);
+  for (const family of displayFamilies(rules, input.html)) {
+    if (!isOverusedFamily(family) || familyNamed(family, input)) continue;
+    hits.push({
+      tell: "display-face",
+      detail: `Display face is ${family}. A default face is refused unless the person named it.`,
+    });
+  }
+  for (const hex of heroDenyHex(rules, input.html)) {
+    hits.push({
+      tell: "deny-hex",
+      detail: `Hero uses ${hex}. Indigo and violet defaults are refused.`,
+    });
+  }
+  if (blobHero(rules, input.html)) hits.push({ tell: "blob-hero", detail: "Blob hero." });
+  if (threeIdenticalIconCards(input.html)) {
+    hits.push({ tell: "three-icon-cards", detail: "Three identical icon cards." });
+  }
+  if (clonedRhythm(input.html)) hits.push({ tell: "cloned-rhythm", detail: "Cloned section rhythm." });
+  if (stockLaptopPeople(input.html)) hits.push({ tell: "stock-laptop", detail: "Stock laptop people." });
+  if (/logoipsum|fake-logo|placeholder-logo/i.test(input.html)) {
+    hits.push({ tell: "fake-logos", detail: "Fake logos." });
+  }
+  if (/fake-testimonial|\bjohn doe\b|\bjane doe\b/i.test(input.html)) {
+    hits.push({ tell: "fake-testimonials", detail: "Fake testimonials." });
+  }
+  if (/fake-number|trusted by \d|\b\d[\d,]*\+\s+(?:happy\s+)?(?:customers|clients|users)\b/i.test(input.html)) {
+    hits.push({ tell: "fake-numbers", detail: "Fake numbers." });
+  }
+  const vision = input.vision;
+  if (vision !== undefined) {
+    for (const key of AI_CLUSTER_VISION_KEYS) {
+      if (vision[key] === true) hits.push({ tell: key, detail: VISION_DETAIL[key] });
+    }
+  }
+  return { pass: hits.length === 0, hits };
+}
+
+function familyNamed(family: string, input: AiClusterInput): boolean {
+  const key = family.trim().toLowerCase();
+  for (const name of input.namedFamilies ?? []) {
+    if (name.trim().toLowerCase() === key) return true;
+  }
+  const brief = input.brief ?? "";
+  if (brief.trim() === "") return false;
+  const escaped = family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:[^A-Za-z0-9]|$)`, "i").test(brief);
+}
+
+function displayFamilies(rules: readonly CssRule[], html: string): string[] {
+  const found: string[] = [];
+  for (const rule of rules) {
+    if (!DISPLAY_SELECTOR.test(rule.selector)) continue;
+    const family = familyOf(rule.body);
+    if (family !== "") found.push(family);
+  }
+  for (const tag of tags(html)) {
+    const tokens = classTokens(tag.attrs);
+    const display = tag.name === "h1" || tokens.includes("display") || tokens.includes("hero");
+    if (!display) continue;
+    const family = familyOf(styleOf(tag.attrs));
+    if (family !== "") found.push(family);
+  }
+  return dedupeFamilies(found);
+}
+
+function heroDenyHex(rules: readonly CssRule[], html: string): string[] {
+  const found: string[] = [];
+  for (const rule of rules) {
+    if (!HERO_SELECTOR.test(rule.selector)) continue;
+    for (const hex of hexes(rule.body)) {
+      if (DENY.has(hex)) found.push(hex);
+    }
+  }
+  for (const tag of tags(html)) {
+    if (!classTokens(tag.attrs).includes("hero") && !/\bid\s*=\s*["']hero["']/i.test(tag.attrs)) continue;
+    for (const hex of hexes(styleOf(tag.attrs))) {
+      if (DENY.has(hex)) found.push(hex);
+    }
+  }
+  return [...new Set(found)];
+}
+
+function blobHero(rules: readonly CssRule[], html: string): boolean {
+  for (const rule of rules) {
+    const blob = /\bblob\b/i.test(rule.selector) || /\bblob\b/i.test(rule.body);
+    if (blob && (HERO_SELECTOR.test(rule.selector) || /\bblob-hero\b/i.test(rule.selector))) return true;
+  }
+  if (/\bblob-hero\b/i.test(html)) return true;
+  for (const tag of tags(html)) {
+    const tokens = classTokens(tag.attrs);
+    if (tokens.includes("blob") && tokens.includes("hero")) return true;
+  }
+  return false;
+}
+
+function threeIdenticalIconCards(html: string): boolean {
+  const counts = new Map<string, number>();
+  for (const match of html.matchAll(/<(article|div|li)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+    const tokens = classTokens(match[2] ?? "");
+    const card = tokens.includes("card") || tokens.some((token) => token.endsWith("-card"));
+    if (!card) continue;
+    const icon = (match[3] ?? "").match(/\bicon[-a-z0-9]*/i);
+    if (icon === null) continue;
+    const key = icon[0].toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const count of counts.values()) {
+    if (count >= 3) return true;
+  }
+  return false;
+}
+
+function clonedRhythm(html: string): boolean {
+  const counts = new Map<string, number>();
+  for (const match of html.matchAll(/<section\b([^>]*)>([\s\S]*?)<\/section>/gi)) {
+    const classes = classTokens(match[1] ?? "").join(" ");
+    if (classes === "") continue;
+    const inner = [...(match[2] ?? "").matchAll(/<([a-zA-Z][a-zA-Z0-9]*)\b/g)]
+      .map((item) => (item[1] ?? "").toLowerCase())
+      .join(">");
+    const key = `${classes}|${inner}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const count of counts.values()) {
+    if (count >= 3) return true;
+  }
+  return false;
+}
+
+function stockLaptopPeople(html: string): boolean {
+  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = match[0].toLowerCase();
+    if (tag.includes("laptop") && /stock|unsplash|pexels|shutterstock/.test(tag)) return true;
+  }
+  return false;
+}
+
+interface CssRule {
+  selector: string;
+  body: string;
+}
+
+function parseRules(css: string): CssRule[] {
+  const rules: CssRule[] = [];
+  for (const match of css.matchAll(/([^{}/]+)\{([^{}]*)\}/g)) {
+    const selector = (match[1] ?? "").trim();
+    if (selector === "" || selector.startsWith("@")) continue;
+    rules.push({ selector, body: match[2] ?? "" });
+  }
+  return rules;
+}
+
+function embeddedCss(html: string): string {
+  const parts: string[] = [];
+  for (const match of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) parts.push(match[1] ?? "");
+  return parts.join("\n");
+}
+
+function tags(html: string): Array<{ name: string; attrs: string }> {
+  const found: Array<{ name: string; attrs: string }> = [];
+  for (const match of html.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g)) {
+    found.push({ name: (match[1] ?? "").toLowerCase(), attrs: match[2] ?? "" });
+  }
+  return found;
+}
+
+function classTokens(attrs: string): string[] {
+  const match = /class\s*=\s*["']([^"']*)["']/i.exec(attrs);
+  if (match === null) return [];
+  return (match[1] ?? "").split(/\s+/).map((token) => token.trim().toLowerCase()).filter((token) => token !== "");
+}
+
+function styleOf(attrs: string): string {
+  const match = /style\s*=\s*["']([^"']*)["']/i.exec(attrs);
+  return match?.[1] ?? "";
+}
+
+function familyOf(body: string): string {
+  const match = /font-family\s*:\s*([^;}{]+)/i.exec(body);
+  if (match === null) return "";
+  const first = (match[1] ?? "").split(",")[0] ?? "";
+  return first.replace(/!important/gi, "").replace(/["']/g, "").trim();
+}
+
+function hexes(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(/#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g)) {
+    const hex = normalizeHex(match[0]);
+    if (hex !== null && DENY.has(hex)) found.push(hex);
+  }
+  return found;
+}
+
+function normalizeHex(value: string): string | null {
+  const raw = value.trim().toLowerCase();
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(raw);
+  if (match === null) return null;
+  const hex = match[1] ?? "";
+  if (hex.length === 3) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  return `#${hex.slice(0, 6)}`;
+}
+
+function dedupeFamilies(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
 }

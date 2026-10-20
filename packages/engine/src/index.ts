@@ -429,6 +429,7 @@ export {
 } from "./brand/approve.ts";
 export { BANNED_PHRASES, BANNED_WORDS } from "./brand/voice.ts";
 export {
+  DENY_HEX,
   DO_NOT_SHIP,
   MOOD_TYPE_SAMPLES,
   OVERUSED_DEFAULTS,

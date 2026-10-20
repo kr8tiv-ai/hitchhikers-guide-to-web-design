@@ -9,6 +9,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertPhoneBudgetBefore3d, type QueueFile } from "@hitchhiker/engine";
+import { AI_CLUSTER_VISION_KEYS, judgeAiCluster, type AiClusterVisionKey } from "./antislop.ts";
 import { applyBeautyRound, judgeBeauty, type BeautyFailure, type BeautyRoundResult, type SectionShot } from "./beauty-gate.ts";
 import { jury, type JuryResult } from "./jury.ts";
 import { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
@@ -262,6 +263,24 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
     if (proportion.flagged) takeProblems(reasons, failures, project, proportion.reasons, "The palette proportion is off.");
   } catch (error) {
     note(error instanceof Error ? error.message : "The palette proportion check failed.");
+  }
+
+  try {
+    const vision: Partial<Record<AiClusterVisionKey, boolean>> = {};
+    for (const shot of project.shots) {
+      for (const key of AI_CLUSTER_VISION_KEYS) {
+        if (shot[key] === true) vision[key] = true;
+      }
+    }
+    const cluster = judgeAiCluster({
+      css: project.pageSource,
+      html: project.html,
+      brief: project.brief,
+      vision,
+    });
+    for (const hit of cluster.hits) note(hit.detail);
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The AI-cluster gate failed.");
   }
 
   try {

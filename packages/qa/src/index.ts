@@ -84,6 +84,8 @@ export {
   stillIsArtDirected,
 } from "./reduced-motion.ts";
 export type { LenisMotion, MotionSection, ReducedReport, ReducedRun, ReducedSample, TierZeroStill } from "./reduced-motion.ts";
+export { AI_CLUSTER_VISION_KEYS, judgeAiCluster, lintSlop } from "./antislop.ts";
+export type { AiClusterHit, AiClusterInput, AiClusterResult, AiClusterVisionKey, SlopHit } from "./antislop.ts";
 export { rankBeautyIssues } from "./beauty-gate.ts";
 export type { RankedBeautyIssue } from "./beauty-gate.ts";
 export {
