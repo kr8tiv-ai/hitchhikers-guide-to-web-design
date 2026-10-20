@@ -9,6 +9,7 @@
  * This does not write a file and does not claim an award.
  */
 
+import type { DefectRecord } from "./defect-log.ts";
 import type { SelfScoreReport } from "./self-score.ts";
 
 export interface QaReportInput {
@@ -124,4 +125,18 @@ export function renderSelfScore(report: SelfScoreReport): string {
     section("Overall", report.status, [`Jury: ${report.juryStatus} ${oneDecimal(report.juryTotal)}`]),
   ];
   return `${parts.join("\n\n")}\n`;
+}
+
+/** Idea 26. Severity, project, and the Elevate retest, one line each. */
+export function renderDefectLog(records: readonly DefectRecord[]): string {
+  const lines = records.map((record) => {
+    const retest = record.retest === null
+      ? "retest pending"
+      : `retest ${record.retest.result} on ${plain(record.retest.elevatePass)}`;
+    return `${plain(record.id)} ${record.severity} on ${plain(record.project)}, ${record.state}, ${retest}`;
+  });
+  const blocked = records.some(
+    (record) => record.severity === "blocker" && record.state !== "closed",
+  );
+  return `${section("Defects", blocked ? "BLOCKER" : "PASS", bullets(lines))}\n`;
 }

@@ -97,6 +97,7 @@ export {
   SCREENSHOT_FIX_MAX_ROUNDS,
   SCREENSHOT_FIX_TOP,
   judgeSectionLock,
+  recordElevateDefectRetest,
   runElevateAfterJurorFloor,
   runScopedSectionEdit,
   runScreenshotFixLoop,
@@ -121,6 +122,9 @@ export type {
   SectionVariant,
   VariantPick,
 } from "./variants.ts";
+export { closeDefect, judgeDefectLog, retestAfterElevate } from "./defect-log.ts";
+export type { DefectClose, DefectLogJudgement, DefectRecord, DefectRetest, DefectSeverity } from "./defect-log.ts";
+export { renderDefectLog } from "./report.ts";
 export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } from "./review-runners.ts";
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";

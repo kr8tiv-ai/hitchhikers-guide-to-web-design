@@ -31,10 +31,24 @@ import { rankBeautyIssues, writeBeautyRound, type RankedBeautyIssue, type Sectio
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
 import { runElevateReview, type QualityGates, type ReviewProject } from "./review-runners.ts";
+import { retestAfterElevate, type DefectRecord } from "./defect-log.ts";
 import { REVIEW_WIDTHS, sectionBuffersDiffer } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";
 export { PARALLEL_VARIANT_COUNT, combineSectionVariants } from "./variants.ts";
+
+/**
+ * Idea 26. After an Elevate pass, write the retest onto each defect
+ * that the pass measured. A blocker still needs closeDefect before it
+ * counts as closed.
+ */
+export function recordElevateDefectRetest(
+  records: readonly DefectRecord[],
+  elevatePass: string,
+  results: Readonly<Record<string, "pass" | "fail">>,
+): DefectRecord[] {
+  return retestAfterElevate(records, elevatePass, results);
+}
 
 /**
  * Idea 21. Elevate does not start while a juror-floor row is a no.
