@@ -9,6 +9,8 @@
  * This does not write a file and does not claim an award.
  */
 
+import type { SelfScoreReport } from "./self-score.ts";
+
 export interface QaReportInput {
   phone: { status: "PASS" | "BLOCKER"; reasons: string[] };
   a11y: { status: "PASS" | "BLOCKER"; notes: string[] };
@@ -92,6 +94,34 @@ export function renderQaReport(input: QaReportInput): string {
     section("Weight", input.weight.status, gateLines(input.weight.status, input.weight.reasons)),
     section("Jury", input.juryStatus, [`Total: ${oneDecimal(input.juryTotal)}`]),
     section("Overall", overall, overall === "BLOCKER" ? failureLines(input) : []),
+  ];
+  return `${parts.join("\n\n")}\n`;
+}
+
+function criterion(report: SelfScoreReport, id: SelfScoreReport["criteria"][number]["id"]): SelfScoreReport["criteria"][number] {
+  const found = report.criteria.find((item) => item.id === id);
+  if (found === undefined) throw new Error(`Self-score is missing ${id}.`);
+  return found;
+}
+
+/** Idea 20 report. Four criteria, the lab line, and three fixes. */
+export function renderSelfScore(report: SelfScoreReport): string {
+  const design = criterion(report, "design");
+  const usability = criterion(report, "usability");
+  const creativity = criterion(report, "creativity");
+  const content = criterion(report, "content");
+  const parts = [
+    section("Design", String(design.score), [`Weight: ${design.weight}`]),
+    section("Usability", String(usability.score), [`Weight: ${usability.weight}`]),
+    section("Creativity", String(creativity.score), [`Weight: ${creativity.weight}`]),
+    section("Content", String(content.score), [`Weight: ${content.weight}`]),
+    section("Lab", report.coldLoad, [
+      plain(report.lab.line),
+      `Cold load uses the ${plain(report.coldLoad)} preset.`,
+      `Sweep ${plain(report.sweep.descriptorKey)} at ${report.sweep.width} by ${report.sweep.height}.`,
+    ]),
+    section("Fixes", String(report.fixes.length), report.fixes.map((item) => plain(item.replaceAll("\u2014", "-")))),
+    section("Overall", report.status, [`Jury: ${report.juryStatus} ${oneDecimal(report.juryTotal)}`]),
   ];
   return `${parts.join("\n\n")}\n`;
 }

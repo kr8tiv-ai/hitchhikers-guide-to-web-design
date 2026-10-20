@@ -69,6 +69,8 @@ export type { StateFixture, SweepReport, UiState, ZoomSample } from "./state-swe
 export { TEXT_CHECK_WIDTHS, evaluateMobile, runMobileChecks } from "./mobile-checks.ts";
 export { evaluateNavFooter } from "./craft-gate.ts";
 export { PALETTE_TARGETS, PALETTE_TOLERANCE, checkPaletteProportion } from "./palette-proportion.ts";
+export { readHeadings, scoreSelf, selfScoreVerdict } from "./self-score.ts";
+export type { CriterionScore, SelfScoreInput, SelfScoreReport, SweepMeasurement } from "./self-score.ts";
 export type { PaletteProportionInput, PaletteProportionResult, PaletteShare } from "./palette-proportion.ts";
 export type { NavFooterInput, NavFooterResult, NavTarget } from "./craft-gate.ts";
 export type { MenuScript, MobileDocument, MobileReport, MobileRun, TargetBox, TextSample } from "./mobile-checks.ts";
