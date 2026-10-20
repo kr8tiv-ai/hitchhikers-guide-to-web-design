@@ -12,7 +12,12 @@ import path from "node:path";
 import { DESIGN_FILE_LINES, saveQueue, type QueueFile } from "@hitchhiker/engine";
 import { jury, type JuryInput } from "./jury.ts";
 import { captureAll, REVIEW_WIDTHS } from "./screenshots.ts";
-import { zaphodReviewSections, type VisualSectionScore } from "./zaphod-vision.ts";
+import {
+  VISUAL_BAN_KEYS,
+  VISUAL_BAN_REASONS,
+  zaphodReviewSections,
+  type VisualSectionScore,
+} from "./zaphod-vision.ts";
 
 export const BEAUTY_MIN = 8;
 export const BEAUTY_MAX_ROUNDS = 3;
@@ -62,14 +67,20 @@ export function judgeBeauty(shots: readonly SectionShot[]): { pass: boolean; fai
     if (!Number.isFinite(shot.score) || shot.score < 0 || shot.score > 10) {
       throw new Error(`Visual richness for ${shot.section} must be from 0 to 10.`);
     }
+    const reasons: string[] = [];
     const reason = failureReason(shot);
-    if (reason === null) continue;
-    failures.push({
-      page: shot.page.trim(),
-      section: shot.section.trim(),
-      screenshot: relativeShot(shot.screenshot),
-      reason,
-    });
+    if (reason !== null) reasons.push(reason);
+    for (const key of VISUAL_BAN_KEYS) {
+      if (shot[key] === true) reasons.push(VISUAL_BAN_REASONS[key]);
+    }
+    for (const item of reasons) {
+      failures.push({
+        page: shot.page.trim(),
+        section: shot.section.trim(),
+        screenshot: relativeShot(shot.screenshot),
+        reason: item,
+      });
+    }
   }
   return { pass: failures.length === 0, failures };
 }

@@ -22,7 +22,7 @@ import type { LhScores } from "../src/lighthouse-gate.ts";
 import { checkLinks } from "../src/link-check.ts";
 import { captureReviewShots, startFixtureSite } from "../src/playwright-opener.ts";
 import { ONCE_OVER_ID, insertOnceOver, runGates, writeOnceOver, type QueueEntry } from "../src/site-once-over.ts";
-import { zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
+import { falseVisualBans, zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
 
 const PILLARS = ["copy", "visuals", "color", "type", "spacing", "experience", "motion", "brand"] as const;
 
@@ -69,6 +69,7 @@ function reviewValue(overrides: {
     },
     boots: overrides.boots ?? true,
     copy: overrides.copy ?? "A quiet towel page.",
+    ...falseVisualBans(),
   };
   if (overrides.fixes !== undefined) value.fixes = overrides.fixes;
   return value;

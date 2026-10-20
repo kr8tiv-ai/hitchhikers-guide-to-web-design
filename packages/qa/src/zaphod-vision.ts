@@ -39,7 +39,60 @@ export interface JuryInput {
   blocked: boolean;
 }
 
-export interface VisualSectionScore {
+/** Prompt 23 visual bans. A true value is a measured outcome, not a library ban. */
+export const VISUAL_BAN_KEYS = [
+  "genericAiDefaultType",
+  "weakDisplayBodyContrast",
+  "blobHero",
+  "threeIconCards",
+  "clonedRhythm",
+  "stockLaptopPeople",
+  "fakeLogos",
+  "fakeTestimonials",
+  "fakeNumbers",
+] as const;
+
+export type VisualBanKey = (typeof VISUAL_BAN_KEYS)[number];
+
+export interface VisualBans {
+  genericAiDefaultType: boolean;
+  weakDisplayBodyContrast: boolean;
+  blobHero: boolean;
+  threeIconCards: boolean;
+  clonedRhythm: boolean;
+  stockLaptopPeople: boolean;
+  fakeLogos: boolean;
+  fakeTestimonials: boolean;
+  fakeNumbers: boolean;
+}
+
+export const VISUAL_BAN_REASONS: Record<VisualBanKey, string> = {
+  genericAiDefaultType: "Generic or AI-default type.",
+  weakDisplayBodyContrast: "Weak display and body contrast.",
+  blobHero: "Blob hero.",
+  threeIconCards: "Three icon cards.",
+  clonedRhythm: "Cloned rhythm.",
+  stockLaptopPeople: "Stock laptop people.",
+  fakeLogos: "Fake logos.",
+  fakeTestimonials: "Fake testimonials.",
+  fakeNumbers: "Fake numbers.",
+};
+
+export function falseVisualBans(): VisualBans {
+  return {
+    genericAiDefaultType: false,
+    weakDisplayBodyContrast: false,
+    blobHero: false,
+    threeIconCards: false,
+    clonedRhythm: false,
+    stockLaptopPeople: false,
+    fakeLogos: false,
+    fakeTestimonials: false,
+    fakeNumbers: false,
+  };
+}
+
+export interface VisualSectionScore extends VisualBans {
   page: string;
   section: string;
   score: number;
@@ -50,7 +103,7 @@ export interface VisualSectionScore {
   slop: string;
 }
 
-export interface ReviewVerdict {
+export interface ReviewVerdict extends VisualBans {
   verdict: "PASS" | "PASS_WITH_KNOWN_ISSUES" | "FIX" | "ESCALATE";
   reasons: string[];
   truths: TruthCheck[];
@@ -75,9 +128,23 @@ const PILLAR_NAMES = [
   "brand",
 ] as const;
 
+function banProperties(): Record<VisualBanKey, JsonSchema> {
+  return {
+    genericAiDefaultType: { type: "boolean" },
+    weakDisplayBodyContrast: { type: "boolean" },
+    blobHero: { type: "boolean" },
+    threeIconCards: { type: "boolean" },
+    clonedRhythm: { type: "boolean" },
+    stockLaptopPeople: { type: "boolean" },
+    fakeLogos: { type: "boolean" },
+    fakeTestimonials: { type: "boolean" },
+    fakeNumbers: { type: "boolean" },
+  };
+}
+
 const ZAPHOD_SCHEMA: JsonSchema = {
   type: "object",
-  required: ["truths", "pillars", "jury", "boots", "copy"],
+  required: ["truths", "pillars", "jury", "boots", "copy", ...VISUAL_BAN_KEYS],
   properties: {
     truths: {
       type: "array",
@@ -117,6 +184,7 @@ const ZAPHOD_SCHEMA: JsonSchema = {
     },
     boots: { type: "boolean" },
     copy: { type: "string" },
+    ...banProperties(),
     fixes: {
       type: "array",
       maxItems: 3,
@@ -127,7 +195,17 @@ const ZAPHOD_SCHEMA: JsonSchema = {
 
 const SECTION_SCHEMA: JsonSchema = {
   type: "object",
-  required: ["page", "section", "score", "reason", "textOnly", "todoImage", "placeholderImage", "slop"],
+  required: [
+    "page",
+    "section",
+    "score",
+    "reason",
+    "textOnly",
+    "todoImage",
+    "placeholderImage",
+    "slop",
+    ...VISUAL_BAN_KEYS,
+  ],
   properties: {
     page: { type: "string", maxLength: 80 },
     section: { type: "string", maxLength: 80 },
@@ -137,6 +215,7 @@ const SECTION_SCHEMA: JsonSchema = {
     todoImage: { type: "boolean" },
     placeholderImage: { type: "boolean" },
     slop: { type: "string", maxLength: 200 },
+    ...banProperties(),
   },
 };
 
@@ -210,6 +289,20 @@ function isStatus(value: string): value is PillarStatus {
   return value === "PASS" || value === "FIX" || value === "BLOCKER";
 }
 
+/** A present non-boolean is a schema failure. A missing key stays false so an older shot still scores. */
+function readBans(value: Record<string, unknown>): VisualBans {
+  const bans = falseVisualBans();
+  for (const key of VISUAL_BAN_KEYS) {
+    if (!Object.hasOwn(value, key)) continue;
+    const item = value[key];
+    if (typeof item !== "boolean") {
+      throw new Error(`Zaphod schema failed: ${key} must be a boolean.`);
+    }
+    bans[key] = item;
+  }
+  return bans;
+}
+
 function readFixes(value: unknown): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error("fixes must be a list of strings.");
@@ -230,6 +323,7 @@ function readModel(value: unknown): {
   boots: boolean;
   copy: string;
   fixes: string[];
+  bans: VisualBans;
 } {
   if (!isRecord(value) || !Array.isArray(value.truths) || !Array.isArray(value.pillars) || !isRecord(value.jury)) {
     throw new Error("Zaphod schema failed: the review object is incomplete.");
@@ -266,6 +360,7 @@ function readModel(value: unknown): {
     boots: value.boots,
     copy: value.copy,
     fixes: readFixes(value.fixes),
+    bans: readBans(value),
   };
 }
 
@@ -294,6 +389,7 @@ function readSections(value: unknown): VisualSectionScore[] {
       throw new Error("Zaphod schema failed: a section score is incomplete.");
     }
     sections.push({
+      ...readBans(item),
       page,
       section,
       score: readScore("score", item.score),
@@ -385,6 +481,7 @@ export async function zaphodReview(
     }
   }
   return {
+    ...model.bans,
     verdict,
     reasons,
     truths: checks,

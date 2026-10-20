@@ -20,7 +20,7 @@ import {
   type QualityGates,
   type ReviewProject,
 } from "../src/review-runners.ts";
-import { zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
+import { falseVisualBans, zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
 
 const GATE_NAMES = [
   "judgeBeauty",
@@ -440,6 +440,7 @@ test("elevateRound and zaphodReview call the same gates", async () => {
     jury: { brand: 9, craft: 9, clarity: 9, performance: 9 },
     boots: true,
     copy: "A quiet towel page.",
+    ...falseVisualBans(),
   };
   try {
     const elevated = await elevateRound(dir, {

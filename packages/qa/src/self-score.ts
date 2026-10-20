@@ -22,7 +22,7 @@ import {
 import { runReducedMotion, type ReducedSample } from "./reduced-motion.ts";
 import type { PillarStatus } from "./pillars.ts";
 import type { TruthCheck } from "./goal-backward.ts";
-import type { ReviewVerdict } from "./zaphod-vision.ts";
+import { falseVisualBans, type ReviewVerdict } from "./zaphod-vision.ts";
 
 const DESIGN = 40;
 const USABILITY = 30;
@@ -325,6 +325,7 @@ export function selfScoreVerdict(report: SelfScoreReport, fixRound: 0 | 1 | 2): 
     { truth: "The self-score names four criteria and three fixes.", status: hard ? "MISSING" : "FOUND" },
   ];
   return {
+    ...falseVisualBans(),
     verdict,
     reasons: [...report.reasons],
     truths,

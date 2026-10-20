@@ -13,6 +13,7 @@ import {
   writeBeautyRound,
   type SectionShot,
 } from "../src/beauty-gate.ts";
+import { falseVisualBans } from "../src/zaphod-vision.ts";
 
 const NOW = "2026-10-19T15:00:00.000Z";
 const ART = "Editorial world, slow Lenis, warm film grade.";
@@ -177,6 +178,7 @@ test("screenshots use every review width and vision stays on grok-4.7-build-fast
     jury: { brand: 9, craft: 9, clarity: 9, performance: 9 },
     boots: true,
     copy: "A quiet farm page.",
+    ...falseVisualBans(),
     sections: [
       {
         page: "home",
@@ -187,6 +189,7 @@ test("screenshots use every review width and vision stays on grok-4.7-build-fast
         todoImage: false,
         placeholderImage: false,
         slop: "warped text in an image",
+        ...falseVisualBans(),
       },
     ],
   };
