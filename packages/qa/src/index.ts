@@ -108,5 +108,5 @@ export { realQualityGates, runElevateReview, runJuryReview, runVerdictReview } f
 export type { PhonePictureSignals, QualityGates, ReviewProject, ReviewRun } from "./review-runners.ts";
 export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./imagery-grade.ts";
 export type { ImageryGradeResult, ImagerySample } from "./imagery-grade.ts";
-export { auditImageCredits, imageUrlsIn } from "./licenses.ts";
-export type { ImageCreditAudit } from "./licenses.ts";
+export { auditImageCredits, auditSourcedMedia, imageUrlsIn, mediaRefsIn } from "./licenses.ts";
+export type { ImageCreditAudit, MediaRef, SourcedMediaAudit } from "./licenses.ts";

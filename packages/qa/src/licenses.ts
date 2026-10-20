@@ -425,3 +425,134 @@ export function auditImageCredits(html: string, credits: unknown): ImageCreditAu
   }
   return { ok: problems.length === 0, problems };
 }
+
+/**
+ * Idea 12. Images and footage need an author, a source URL, and a
+ * licence string. The string is recorded. It is not checked against an
+ * allow list. A generated asset names its prompt id and is not labelled
+ * as a photograph of a real place.
+ */
+export interface MediaRef {
+  url: string;
+  kind: "image" | "video";
+}
+
+export interface SourcedMediaAudit {
+  ok: boolean;
+  problems: string[];
+}
+
+/** img, video src, video poster, and source URLs, in document order. */
+export function mediaRefsIn(html: string): MediaRef[] {
+  const refs: MediaRef[] = [];
+  const token = /<video\b[^>]*>|<\/video>|<img\b[^>]*>|<source\b[^>]*>/gi;
+  let inVideo = false;
+  for (const match of html.matchAll(token)) {
+    const tag = match[0] ?? "";
+    if (/^<video\b/i.test(tag)) {
+      inVideo = true;
+      pushRef(refs, tagAttr(tag, "src"), "video");
+      pushRef(refs, tagAttr(tag, "poster"), "image");
+      continue;
+    }
+    if (/^<\/video\b/i.test(tag)) {
+      inVideo = false;
+      continue;
+    }
+    if (/^<img\b/i.test(tag)) {
+      pushRef(refs, tagAttr(tag, "src"), "image");
+      for (const part of tagAttr(tag, "srcset").split(",")) {
+        pushRef(refs, part.trim().split(/\s+/)[0] ?? "", "image");
+      }
+      continue;
+    }
+    const type = tagAttr(tag, "type").toLowerCase();
+    const kind = inVideo || type.startsWith("video/") ? "video" : "image";
+    pushRef(refs, tagAttr(tag, "src"), kind);
+    const setKind = type.startsWith("video/") ? "video" : "image";
+    for (const part of tagAttr(tag, "srcset").split(",")) {
+      pushRef(refs, part.trim().split(/\s+/)[0] ?? "", setKind);
+    }
+  }
+  return refs;
+}
+
+function pushRef(refs: MediaRef[], url: string, kind: MediaRef["kind"]): void {
+  if (url.trim() === "") return;
+  refs.push({ url: url.trim(), kind });
+}
+
+function fieldText(row: Record<string, unknown>, keys: readonly string[]): string {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return "";
+}
+
+function fieldBlob(row: Record<string, unknown>, keys: readonly string[]): string {
+  const parts: string[] = [];
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim() !== "") parts.push(value.trim());
+  }
+  return parts.join(" ").toLowerCase();
+}
+
+function sourceUrlOf(row: Record<string, unknown>): string {
+  for (const key of ["link", "url", "source"] as const) {
+    const value = row[key];
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) return value.trim();
+  }
+  return "";
+}
+
+function generatedRow(row: Record<string, unknown>): boolean {
+  if (row.generated === true) return true;
+  return fieldBlob(row, ["category", "kind", "usedFor", "label"]).includes("generated");
+}
+
+function labelledAsRealPhotograph(row: Record<string, unknown>): boolean {
+  if (row.labelledAsPhotograph === true || row.photographOfRealPlace === true) return true;
+  const blob = fieldBlob(row, ["category", "kind", "usedFor", "label", "name"]);
+  if (blob.includes("photograph of a real place")) return true;
+  if (!generatedRow(row)) return false;
+  const category = fieldText(row, ["category", "kind"]).toLowerCase();
+  return category === "photograph" || category === "photo" || category === "photography";
+}
+
+function mediaLabel(kind: MediaRef["kind"]): string {
+  return kind === "video" ? "Video" : "Image";
+}
+
+/** Fail when imagery or footage is uncredited, or a generated image is mislabelled. */
+export function auditSourcedMedia(html: string, credits: unknown): SourcedMediaAudit {
+  const parsed = parseCredits(credits);
+  if ("error" in parsed) return { ok: false, problems: [parsed.error] };
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const ref of mediaRefsIn(html)) {
+    const key = `${ref.kind}:${normaliseRef(ref.url)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const row = parsed.rows.find((candidate) => rowMentions(candidate, ref.url));
+    const label = mediaLabel(ref.kind);
+    if (row === undefined) {
+      problems.push(`${label} ${ref.url} is missing from CREDITS.json.`);
+      continue;
+    }
+    if (fieldText(row, ["author"]) === "") problems.push(`${label} ${ref.url} is missing an author.`);
+    if (sourceUrlOf(row) === "") problems.push(`${label} ${ref.url} is missing a source URL.`);
+    if (fieldText(row, ["license", "licence"]) === "") {
+      problems.push(`${label} ${ref.url} is missing a licence.`);
+    }
+    if (!generatedRow(row)) continue;
+    if (fieldText(row, ["promptId", "prompt_id", "promptID"]) === "") {
+      problems.push(`${label} ${ref.url} is generated and has no prompt id.`);
+    }
+    if (labelledAsRealPhotograph(row)) {
+      problems.push(`${label} ${ref.url} is generated and is labelled as a photograph of a real place.`);
+    }
+  }
+  return { ok: problems.length === 0, problems };
+}
