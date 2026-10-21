@@ -141,3 +141,16 @@ export { GRADE_AXIS_TOLERANCE, checkImageryGrade, imageryGradeName } from "./ima
 export type { ImageryGradeResult, ImagerySample } from "./imagery-grade.ts";
 export { auditImageCredits, auditSourcedMedia, imageUrlsIn, mediaRefsIn } from "./licenses.ts";
 export type { ImageCreditAudit, MediaRef, SourcedMediaAudit } from "./licenses.ts";
+export { GATE_IDS, GATE_REGISTRY, gatesJsonPath, runAllGates } from "./gates/registry.ts";
+export type {
+  GateEntry,
+  GateId,
+  GateProject,
+  GateReport,
+  GateResult,
+  GateRunners,
+  GateStatus,
+  LighthouseRunInput,
+  MatrixRunInput,
+  MotionRunInput,
+} from "./gates/registry.ts";
