@@ -92,13 +92,15 @@ async function setStatus(projectDir: string, id: string, status: QueueStatus): P
 function adaptSpawn(spawn: SpawnLike, cwd: string): SpawnImpl {
   return async (argv) => {
     const command = argv[0] ?? "";
-    const output = await spawn({
-      command,
-      args: argv.slice(1),
-      cwd,
-      env: process.env,
-      timeoutMs: 0,
-    });
+    const output = await spawn(
+      hiddenChildOptions({
+        command,
+        args: argv.slice(1),
+        cwd,
+        env: process.env,
+        timeoutMs: 0,
+      }),
+    );
     return {
       code: output.status === null ? 1 : output.status,
       stderr: typeof output.stderr === "string" ? output.stderr : "",
