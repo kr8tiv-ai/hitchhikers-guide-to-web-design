@@ -8,13 +8,16 @@
  * without Chrome.
  *
  * planElevateModel ranks every accepted upgrade at xhigh. A visual pass may
- * add a section treatment, an effect, or an image. Each accepted pick
- * becomes one golden prompt (092). runPrompt is the Drive: the orchestrator
- * enqueues that prompt, runs it, and makes the one commit. This module does
- * not commit the pick. runElevate (130) refuses a Lighthouse or accessibility
- * BLOCKER. Console, links, and weight use the same rule. A refusal reverts
- * commits made after the pre-pick HEAD. An empty pick list writes the round
- * log and changes nothing.
+ * add a section treatment, an effect, or an image. The menu those upgrades
+ * are chosen from is seeded from the anatomy notes, the motion taxonomy,
+ * and the knowledge packs. Each accepted pick becomes one golden prompt
+ * (092). runPrompt is the Drive: the orchestrator enqueues that prompt,
+ * runs it, and makes the one commit. This module does not commit the pick.
+ * runElevate (130) refuses a Lighthouse or accessibility BLOCKER. Console,
+ * links, and weight use the same rule. A gate that was passing and becomes
+ * a fix or a failure, or a design score or jury score that goes down, also
+ * refuses the pick. A refusal puts HEAD back on the pre-pick commit.
+ * An empty pick list writes the round log and changes nothing.
  */
 
 import { execFile } from "node:child_process";
@@ -29,6 +32,8 @@ import {
   type ElevateColdRead,
   type ElevateItem,
 } from "./elevate.ts";
+import { writeElevateRound, type ElevateLedgerRound } from "./elevate-ledger.ts";
+import { loadElevateMenu } from "./elevate-menu.ts";
 import { rankBeautyIssues, writeBeautyRound, type RankedBeautyIssue, type SectionShot } from "./beauty-gate.ts";
 import { runElevate } from "./elevate-run.ts";
 import { captureReviewShots } from "./playwright-opener.ts";
@@ -90,7 +95,21 @@ export type {
   VariantPick,
 } from "./variants.ts";
 
-export type GateStatus = "PASS" | "BLOCKER";
+export type GateStatus = "PASS" | "FIX" | "BLOCKER";
+
+/** One named gate beside the five built-in checks. */
+export interface ElevateNamedGate {
+  id: string;
+  status: GateStatus;
+  /** Plain name. The id is used when this is omitted. */
+  label?: string;
+}
+
+/** Design score and jury score for one reading. */
+export interface ElevateRoundScores {
+  beauty: number;
+  jury: number;
+}
 
 /** Statuses from the 126 runners: Lighthouse, axe, console, links, and weight. */
 export interface GateResult {
@@ -99,6 +118,12 @@ export interface GateResult {
   console: GateStatus;
   links: GateStatus;
   weight: GateStatus;
+  /** Extra gates. A PASS that becomes FIX or BLOCKER reverts the pick. */
+  others?: readonly ElevateNamedGate[];
+  /** Design score. A lower number than the previous reading reverts the pick. */
+  beauty?: number;
+  /** Jury score. A lower number than the previous reading reverts the pick. */
+  jury?: number;
 }
 
 export interface ElevateRoundDeps {
@@ -117,6 +142,10 @@ export interface ElevateRoundDeps {
   variants?: VariantArtifact;
   sectionScope?: SectionEditScope;
   captureSections?: () => Promise<readonly SectionLockShot[]>;
+  /** Design score and jury score after this round, written into the ledger. */
+  scores?: () => Promise<ElevateRoundScores> | ElevateRoundScores;
+  /** Scores from the previous round. A drop reverts the picks kept in this round. */
+  priorScores?: ElevateRoundScores;
 }
 
 export interface ElevateRoundResult {
@@ -270,10 +299,20 @@ function readCode(projectDir: string): string {
   return joined.length > 0 ? joined : "No source files were read.";
 }
 
+function sourcedMenuNote(): string {
+  const lines = loadElevateMenu().map((item) => `${item.source.id} | ${item.source.file} | ${item.source.title}`);
+  return lines.join("\n");
+}
+
 function coldRead(projectDir: string, shots: readonly string[]): ElevateColdRead {
+  const menu = sourcedMenuNote();
+  const code =
+    menu.length > 0
+      ? `${readCode(projectDir)}\n\nSOURCED MENU\nChoose only from these sourced entries.\n${menu}`
+      : readCode(projectDir);
   return {
     shots,
-    code: readCode(projectDir),
+    code,
     brand: readFirst(
       projectDir,
       [path.join(".hitchhiker", "brand", "BRAND.md"), path.join(".hitchhiker", "BRAND.md"), "BRAND.md"],
@@ -415,6 +454,8 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
     "-c",
     "commit.gpgsign=false",
     "-c",
+    "core.autocrlf=false",
+    "-c",
     "core.fscache=false",
     "-c",
     "core.editor=true",
@@ -514,34 +555,57 @@ async function removeNewUntracked(projectDir: string, before: readonly string[])
   }
 }
 
-async function revertTo(projectDir: string, before: string, untracked: readonly string[]): Promise<void> {
-  const list = linesOf(await git(projectDir, ["rev-list", "--reverse", `${before}..HEAD`]));
-  const commits = list.filter((line) => /^[0-9a-f]+$/i.test(line));
-  if (commits.length > 0) {
-    try {
-      for (const commit of [...commits].reverse()) {
-        await git(projectDir, ["revert", "--no-edit", commit]);
-      }
-    } catch {
-      await git(projectDir, ["reset", "--hard", before]);
-    }
-  } else {
-    await git(projectDir, ["checkout", "--", "."]).catch(() => undefined);
-  }
-  await removeNewUntracked(projectDir, untracked);
+function ledgerNames(projectDir: string): string[] {
+  const dir = path.join(projectDir, ".hitchhiker", "elevate");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((name) => name === "rounds.json" || name === "ROUNDS.md" || /^ROUND-\d+\.md$/i.test(name));
 }
 
-const GATE_LABEL: Record<keyof GateResult, string> = {
+/** A pick commit can sweep the round log in with `git add -A`. Keep that log. */
+function snapshotLedger(projectDir: string): Map<string, string> {
+  const dir = path.join(projectDir, ".hitchhiker", "elevate");
+  const saved = new Map<string, string>();
+  for (const name of ledgerNames(projectDir)) {
+    saved.set(name, readFileSync(path.join(dir, name), "utf8"));
+  }
+  return saved;
+}
+
+async function restoreLedger(projectDir: string, saved: ReadonlyMap<string, string>): Promise<void> {
+  if (saved.size === 0) return;
+  const dir = path.join(projectDir, ".hitchhiker", "elevate");
+  await mkdir(dir, { recursive: true });
+  for (const [name, text] of saved) {
+    await writeFile(path.join(dir, name), text, "utf8");
+  }
+}
+
+/**
+ * Put the project back on the pre-pick commit. HEAD equals that hash
+ * afterwards. A new revert commit would leave a different HEAD.
+ */
+async function revertTo(projectDir: string, before: string, untracked: readonly string[]): Promise<void> {
+  const saved = snapshotLedger(projectDir);
+  await git(projectDir, ["reset", "--hard", before]);
+  await removeNewUntracked(projectDir, untracked);
+  await restoreLedger(projectDir, saved);
+  const head = (await headOf(projectDir)).toLowerCase();
+  if (head !== before.toLowerCase()) {
+    throw new Error("This change could not be undone.");
+  }
+}
+
+const GATE_LABEL = {
   lh: "Lighthouse",
   a11y: "Accessibility",
   console: "Console",
   links: "Links",
   weight: "Weight",
-};
+} as const;
 
 function refusalReasons(before: GateResult, after: GateResult): string[] {
   const reasons: string[] = [];
-  const keys = Object.keys(GATE_LABEL) as Array<keyof GateResult>;
+  const keys = Object.keys(GATE_LABEL) as Array<keyof typeof GATE_LABEL>;
   for (const key of keys) {
     if (after[key] !== "BLOCKER") continue;
     const label = GATE_LABEL[key];
@@ -549,6 +613,117 @@ function refusalReasons(before: GateResult, after: GateResult): string[] {
     else reasons.push(`${label} stayed BLOCKER.`);
   }
   return reasons.length > 0 ? reasons : ["A gate regressed."];
+}
+
+function binary(status: GateStatus): "PASS" | "BLOCKER" {
+  return status === "BLOCKER" ? "BLOCKER" : "PASS";
+}
+
+function plainLabel(value: string): string {
+  const text = calm(value).replace(/[^A-Za-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (text.length === 0 || text.length > 40) return "quality";
+  return text;
+}
+
+function scoreDropLines(
+  before: { beauty?: number; jury?: number },
+  after: { beauty?: number; jury?: number },
+): string[] {
+  const reasons: string[] = [];
+  if (
+    typeof before.beauty === "number" &&
+    typeof after.beauty === "number" &&
+    Number.isFinite(before.beauty) &&
+    Number.isFinite(after.beauty) &&
+    after.beauty < before.beauty
+  ) {
+    reasons.push("The design score went down, so this change was undone.");
+  }
+  if (
+    typeof before.jury === "number" &&
+    typeof after.jury === "number" &&
+    Number.isFinite(before.jury) &&
+    Number.isFinite(after.jury) &&
+    after.jury < before.jury
+  ) {
+    reasons.push("The jury score went down, so this change was undone.");
+  }
+  return reasons;
+}
+
+/** A passing gate that now needs a fix or is failing, or a score that fell. */
+function regressionReasons(before: GateResult, after: GateResult): string[] {
+  const reasons: string[] = [];
+  const keys = Object.keys(GATE_LABEL) as Array<keyof typeof GATE_LABEL>;
+  for (const key of keys) {
+    if (before[key] === "PASS" && after[key] === "FIX") {
+      reasons.push(`The ${GATE_LABEL[key]} check was passing and now it needs a fix, so this change was undone.`);
+    }
+  }
+  const prior = new Map((before.others ?? []).map((gate) => [gate.id, gate.status]));
+  for (const gate of after.others ?? []) {
+    if (prior.get(gate.id) !== "PASS") continue;
+    if (gate.status !== "FIX" && gate.status !== "BLOCKER") continue;
+    const label = plainLabel(gate.label ?? gate.id);
+    if (gate.status === "FIX") {
+      reasons.push(`The ${label} check was passing and now it needs a fix, so this change was undone.`);
+    } else {
+      reasons.push(`The ${label} check was passing and now it is failing, so this change was undone.`);
+    }
+  }
+  reasons.push(...scoreDropLines(before, after));
+  return reasons;
+}
+
+function priorDropReasons(before: ElevateRoundScores | undefined, after: ElevateRoundScores | null): string[] {
+  if (before === undefined || after === null) return [];
+  return scoreDropLines(before, after);
+}
+
+async function readRoundScores(deps: ElevateRoundDeps): Promise<ElevateRoundScores | null> {
+  if (typeof deps.scores !== "function") return null;
+  const value = await deps.scores();
+  if (
+    !isRecord(value) ||
+    typeof value.beauty !== "number" ||
+    typeof value.jury !== "number" ||
+    !Number.isFinite(value.beauty) ||
+    !Number.isFinite(value.jury)
+  ) {
+    throw new Error("The design score and the jury score need to be numbers before the next round.");
+  }
+  return { beauty: value.beauty, jury: value.jury };
+}
+
+function relativeShots(root: string, shots: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const shot of shots) {
+    const full = path.isAbsolute(shot) ? shot : path.join(root, shot);
+    const relative = path.relative(root, full).replaceAll("\\", "/");
+    if (relative.startsWith("..") || relative.length === 0) continue;
+    if (!out.includes(relative)) out.push(relative);
+  }
+  return out;
+}
+
+function onDiskShots(root: string): string[] {
+  return relativeShots(
+    root,
+    REVIEW_WIDTHS.map((width) => path.join(root, ".hitchhiker", "elevate", "shots", `full-${width}.png`)).filter((file) =>
+      existsSync(file),
+    ),
+  );
+}
+
+async function persistRound(
+  root: string,
+  round: number,
+  ranked: readonly ElevateItem[],
+  lines: readonly string[],
+  entry: Omit<ElevateLedgerRound, "round">,
+): Promise<void> {
+  await writeRound(root, round, ranked, lines);
+  await writeElevateRound(root, { round, ...entry });
 }
 
 function blockedResult(): GateResult {
@@ -640,8 +815,10 @@ async function settleDefects(root: string, round: number, kept: boolean): Promis
 }
 
 /**
- * One round. Picks nothing and the log says so. A gate that is BLOCKER
- * after a pick reverts that pick and is listed in `refused`.
+ * One round. Picks nothing and the log says so. A gate that leaves PASS
+ * for FIX or BLOCKER, or a design or jury score that drops, reverts that
+ * pick. HEAD equals the pre-pick commit afterwards. The ledger records
+ * the picks, the kept ids, the reverted ids and why, the scores, and the shots.
  */
 export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): Promise<ElevateRoundResult> {
   if (!isRecord(deps) || typeof deps.think !== "function" || typeof deps.pick !== "function") {
@@ -654,14 +831,18 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   const artifactReasons = await artifactRefusals(root, deps);
   if (artifactReasons.length > 0) {
     const blockedRound = nextRound(root);
-    await writeRound(root, blockedRound, [], artifactReasons);
-    return {
-      applied: [],
-      refused: artifactReasons.map((reason, index) => ({
-        id: `g${String(index + 1).padStart(2, "0")}`,
-        reason,
-      })),
-    };
+    const refused = artifactReasons.map((reason, index) => ({
+      id: `g${String(index + 1).padStart(2, "0")}`,
+      reason,
+    }));
+    await persistRound(root, blockedRound, [], artifactReasons, {
+      picks: [],
+      kept: [],
+      reverted: refused,
+      scores: await readRoundScores(deps),
+      shots: onDiskShots(root),
+    });
+    return { applied: [], refused };
   }
   if (deps.review !== undefined) {
     const reviewed =
@@ -703,22 +884,30 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     const defectProblem = await settleDefects(root, round, false);
     const lines = ["No picks. This round changes nothing."];
     if (defectProblem !== null) lines.push(defectProblem);
-    await writeRound(root, round, ranked, lines);
-    return {
-      applied: [],
-      refused: defectProblem === null ? [] : [{ id: `r${round}-defects`, reason: defectProblem }],
-    };
+    const refused = defectProblem === null ? [] : [{ id: `r${round}-defects`, reason: defectProblem }];
+    await persistRound(root, round, ranked, lines, {
+      picks: [],
+      kept: [],
+      reverted: refused,
+      scores: await readRoundScores(deps),
+      shots: relativeShots(root, shots),
+    });
+    return { applied: [], refused };
   }
 
   await assertClean(root);
+  const headAtRoundStart = await headOf(root);
+  const untrackedAtStart = untrackedFiles(await git(root, ["status", "--porcelain"]));
   let prior = await deps.gates();
   const applied: string[] = [];
   const refused: Array<{ id: string; reason: string }> = [];
+  const picks: Array<{ id: string; file: string; change: string }> = [];
 
   for (let index = 0; index < chosen.length; index += 1) {
     const item = chosen[index];
     if (item === undefined) continue;
     const id = `r${round}-${String(index + 1).padStart(2, "0")}`;
+    picks.push({ id, file: item.file, change: item.change });
     const headBefore = await headOf(root);
     const untracked = untrackedFiles(await git(root, ["status", "--porcelain"]));
     const file = await writePickPrompt(root, id, item);
@@ -763,21 +952,32 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
         }
       },
       rollback,
-      before: () => ({ lh: prior.lh, a11y: prior.a11y }),
-      after: () => ({ lh: next.lh, a11y: next.a11y }),
+      before: () => ({ lh: binary(prior.lh), a11y: binary(prior.a11y) }),
+      after: () => ({ lh: binary(next.lh), a11y: binary(next.a11y) }),
     });
-    const failed = outcome.status === "refused" || otherBlocked(next) || gateError.length > 0;
+    const extra = regressionReasons(prior, next);
+    const failed = outcome.status === "refused" || otherBlocked(next) || gateError.length > 0 || extra.length > 0;
     if (!failed) {
       applied.push(id);
       prior = next;
       continue;
     }
     if (outcome.status !== "refused") await rollback();
+    const blocked = outcome.status === "refused" || otherBlocked(next) ? refusalReasons(prior, next) : [];
     const reason =
       gateError.length > 0
         ? `Gates failed closed. ${calm(gateError)}`
-        : refusalReasons(prior, next).join(" ");
+        : calm([...blocked, ...extra].join(" "));
     refused.push({ id, reason });
+  }
+
+  const measured = await readRoundScores(deps);
+  const roundDrop = priorDropReasons(deps.priorScores, measured);
+  if (roundDrop.length > 0 && applied.length > 0) {
+    await revertTo(root, headAtRoundStart, untrackedAtStart);
+    const reason = calm(roundDrop.join(" "));
+    for (const id of applied) refused.push({ id, reason });
+    applied.length = 0;
   }
 
   const defectProblem = await settleDefects(root, round, applied.length > 0);
@@ -787,7 +987,13 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     ...refused.map((row) => `${row.id} refused. ${row.reason}`),
   ];
   if (applied.length === 0) outcomeLines.push("Nothing was kept.");
-  await writeRound(root, round, ranked, outcomeLines);
+  await persistRound(root, round, ranked, outcomeLines, {
+    picks,
+    kept: [...applied],
+    reverted: refused.map((row) => ({ id: row.id, reason: row.reason })),
+    scores: measured,
+    shots: relativeShots(root, shots),
+  });
   return { applied, refused };
 }
 

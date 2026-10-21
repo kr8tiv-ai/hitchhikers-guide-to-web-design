@@ -140,6 +140,16 @@ export {
   elevateStopWhen,
   runElevateLoop,
 } from "./elevate-rounds.ts";
+export { loadElevateMenu } from "./elevate-menu.ts";
+export type { ElevateMenuCandidate, ElevateMenuPass, ElevateSourceRef } from "./elevate-menu.ts";
+export { readElevateLedger } from "./elevate-ledger.ts";
+export type {
+  ElevateLedger,
+  ElevateLedgerPick,
+  ElevateLedgerRevert,
+  ElevateLedgerRound,
+  ElevateLedgerScores,
+} from "./elevate-ledger.ts";
 export type {
   ElevateLoopResult,
   ElevateLoopSnapshot,

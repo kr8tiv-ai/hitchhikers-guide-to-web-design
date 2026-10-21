@@ -285,6 +285,7 @@ export async function runElevateLoop({
   const snapshots: ElevateLoopSnapshot[] = [];
   let gates: GateReport | null = null;
   let accepted = 0;
+  let currentRound = 1;
   const roundDeps: ElevateRoundDeps = {
     ...deps,
     pick: async (items) => {
@@ -292,10 +293,14 @@ export async function runElevateLoop({
       accepted = countAccepted(items, chosen);
       return chosen;
     },
+    scores: () => scores(currentRound),
   };
 
   for (let round = 1; round <= maxRounds; round += 1) {
     accepted = 0;
+    currentRound = round;
+    const previous = history[history.length - 1];
+    if (previous !== undefined) roundDeps.priorScores = previous;
     const result = await elevateRound(root, roundDeps);
     gates = await runAllGates({ root }, runners);
     const point = readScores(await scores(round));

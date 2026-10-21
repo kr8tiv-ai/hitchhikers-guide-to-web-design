@@ -11,7 +11,9 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { defaultConfig, hiddenChildOptions, phonePerformanceBudget, think, type SpawnLike } from "@hitchhiker/engine";
-import type { ElevateRoundDeps, GateResult as RoundGates } from "../src/elevate-loop.ts";
+import { elevateRound, type ElevateRoundDeps, type GateResult as RoundGates } from "../src/elevate-loop.ts";
+import { readElevateLedger } from "../src/elevate-ledger.ts";
+import { loadElevateMenu } from "../src/elevate-menu.ts";
 import {
   DEFAULT_ELEVATE_ROUNDS,
   ELEVATE_SCORE_GAIN,
@@ -679,4 +681,229 @@ test("stopWhen can end the loop before a built-in rule fires", { timeout: 60_000
     rmSync(projectDir, { recursive: true, force: true });
   }
 });
+});
+
+const SOURCE_FILE = /^(?:context\/research\/(?:03-awwwards-anatomy|04-motion-taxonomy)\.md|packages\/knowledge\/packs\/[^/]+\/SKILL\.md)$/;
+
+function scriptedPlan(value: unknown): ElevateRoundDeps["think"] {
+  return async () => ({
+    value,
+    raw: JSON.stringify(value),
+    durationMs: 1,
+    cassette: "live",
+  });
+}
+
+function gateAt(calls: RoundGates[]): () => Promise<RoundGates> {
+  let seen = 0;
+  return async () => {
+    const row = calls[Math.min(seen, calls.length - 1)];
+    seen += 1;
+    if (row === undefined) throw new Error("The gate reading is missing.");
+    return row;
+  };
+}
+
+function withScores(beauty: number, jury: number, extra: Partial<RoundGates> = {}): RoundGates {
+  return { ...clearGates(), beauty, jury, ...extra };
+}
+
+describe("regression revert and sourced menu", { concurrency: false }, () => {
+  test("a passing gate that needs a fix reverts to the pre-pick commit", { timeout: 60_000 }, async () => {
+    const projectDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-fix-"));
+    try {
+      await initRepo(projectDir);
+      const before = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
+      const result = await elevateRound(projectDir, {
+        think: scriptedPlan(PLAN_PAYLOAD),
+        pick: async (items) => items.slice(0, 1),
+        runPrompt: async () => {
+          writeFileSync(path.join(projectDir, "src", "hero.tsx"), `${SOURCE}export const touched = true;\n`, "utf8");
+          await git(projectDir, ["add", "-A"]);
+          await git(projectDir, ["commit", "-m", "pick"]);
+        },
+        gates: gateAt([
+          withScores(8, 80, { others: [{ id: "spacing", status: "PASS", label: "spacing" }] }),
+          withScores(8, 80, { others: [{ id: "spacing", status: "FIX", label: "spacing" }] }),
+        ]),
+        scores: async () => ({ beauty: 8, jury: 80 }),
+      });
+      const head = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
+      assert.equal(head, before);
+      assert.deepEqual(result.applied, []);
+      assert.equal(result.refused.length, 1);
+      const reason = result.refused[0]?.reason ?? "";
+      assert.match(reason, /spacing check was passing and now it needs a fix/);
+      assert.equal(PLAIN.test(reason), false, reason);
+      assert.equal(reason.includes("!"), false);
+      assert.equal(readFileSync(path.join(projectDir, "src", "hero.tsx"), "utf8").includes("touched"), false);
+      const ledger = await readElevateLedger(projectDir);
+      const round = ledger.rounds[0];
+      assert.ok(round);
+      assert.equal(round.kept.length, 0);
+      assert.equal(round.reverted[0]?.id, "r1-01");
+      assert.match(round.reverted[0]?.reason ?? "", /undone/);
+      assert.equal(round.scores?.beauty, 8);
+      assert.equal(round.scores?.jury, 80);
+      assert.equal(round.shots.length, REVIEW_WIDTHS.length);
+      assert.equal(round.picks[0]?.file, "src/hero.tsx");
+      const markdown = readFileSync(path.join(projectDir, ".hitchhiker", "elevate", "ROUNDS.md"), "utf8");
+      assert.match(markdown, /## Round 1/);
+      assert.match(markdown, /spacing check was passing/);
+      assert.match(markdown, /Design 8/);
+      assert.match(markdown, /Jury 80/);
+      assert.match(markdown, /full-\d+\.png/);
+      assert.equal(markdown.includes("!"), false);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("a lower design score or jury score reverts that pick and keeps an earlier one", { timeout: 90_000 }, async () => {
+    const projectDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-score-"));
+    const two = {
+      upgrades: [
+        {
+          file: "src/hero.tsx",
+          change: "Open the tracking on the display line",
+          pass: "type-and-spacing",
+          phone: "poster",
+          reducedMotion: "the same poster",
+        },
+        {
+          file: "src/hero.tsx",
+          change: "Give the headline one size jump",
+          pass: "type-and-spacing",
+          phone: "poster",
+          reducedMotion: "the same poster",
+        },
+      ],
+    };
+    try {
+      await initRepo(projectDir);
+      const start = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
+      const heads: string[] = [];
+      let prompts = 0;
+      const beauty = await elevateRound(projectDir, {
+        think: scriptedPlan(two),
+        pick: async (items) => items,
+        runPrompt: async () => {
+          prompts += 1;
+          writeFileSync(path.join(projectDir, "src", "hero.tsx"), `${SOURCE}export const pass = ${prompts};\n`, "utf8");
+          await git(projectDir, ["add", "-A"]);
+          await git(projectDir, ["commit", "-m", `pick-${prompts}`]);
+          heads.push((await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase());
+        },
+        gates: gateAt([
+          withScores(8, 80),
+          withScores(8, 80),
+          withScores(7, 80),
+        ]),
+      });
+      const head = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
+      assert.equal(heads.length, 2);
+      assert.notEqual(heads[0], start);
+      assert.equal(head, heads[0]);
+      assert.deepEqual(beauty.applied, ["r1-01"]);
+      assert.match(beauty.refused[0]?.reason ?? "", /design score went down/);
+      assert.equal(readFileSync(path.join(projectDir, "src", "hero.tsx"), "utf8").includes("pass = 1"), true);
+
+      const juryDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-jury-"));
+      try {
+        await initRepo(juryDir);
+        const juryBefore = (await git(juryDir, ["rev-parse", "HEAD"])).toLowerCase();
+        const jury = await elevateRound(juryDir, {
+          think: scriptedPlan(PLAN_PAYLOAD),
+          pick: async (items) => items.slice(0, 1),
+          runPrompt: async () => {
+            writeFileSync(path.join(juryDir, "src", "hero.tsx"), `${SOURCE}export const jury = true;\n`, "utf8");
+            await git(juryDir, ["add", "-A"]);
+            await git(juryDir, ["commit", "-m", "pick"]);
+          },
+          gates: gateAt([withScores(8, 80), withScores(8, 70)]),
+        });
+        assert.equal((await git(juryDir, ["rev-parse", "HEAD"])).toLowerCase(), juryBefore);
+        assert.match(jury.refused[0]?.reason ?? "", /jury score went down/);
+        assert.equal(PLAIN.test(jury.refused[0]?.reason ?? ""), false);
+      } finally {
+        rmSync(juryDir, { recursive: true, force: true });
+      }
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("a lower score than the previous round reverts that round and the ledger keeps both", { timeout: 90_000 }, async () => {
+    const projectDir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-ledger-"));
+    try {
+      await initRepo(projectDir);
+      const heads: string[] = [];
+      let prompts = 0;
+      const result = await runElevateLoop({
+        projectDir,
+        maxRounds: 2,
+        deps: {
+          think: scriptedPlan(PLAN_PAYLOAD),
+          pick: async (items) => items.slice(0, 1),
+          runPrompt: async () => {
+            prompts += 1;
+            writeFileSync(path.join(projectDir, "src", "hero.tsx"), `${SOURCE}export const pass = ${prompts};\n`, "utf8");
+            await git(projectDir, ["add", "-A"]);
+            await git(projectDir, ["commit", "-m", `pick-${prompts}`]);
+            heads.push((await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase());
+          },
+          gates: async () => clearGates(),
+        },
+        runners: passingRunners(),
+        scores: (round) => (round === 1 ? { beauty: 8, jury: 80 } : { beauty: 7, jury: 90 }),
+        verdict: () => "PASS",
+      });
+      const head = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
+      assert.equal(prompts, 2);
+      assert.equal(heads.length, 2);
+      assert.equal(head, heads[0]);
+      assert.equal(result.roundsRun, 2);
+      assert.equal(result.stop.rule, "max-rounds");
+      assert.equal(result.gates.head, head);
+      assert.equal(readFileSync(path.join(projectDir, "src", "hero.tsx"), "utf8").includes("pass = 1"), true);
+      const ledger = await readElevateLedger(projectDir);
+      assert.equal(ledger.rounds.length, 2);
+      assert.deepEqual(ledger.rounds[0]?.kept, ["r1-01"]);
+      assert.equal(ledger.rounds[0]?.scores?.beauty, 8);
+      assert.equal(ledger.rounds[1]?.kept.length, 0);
+      assert.match(ledger.rounds[1]?.reverted[0]?.reason ?? "", /design score went down/);
+      assert.ok((ledger.rounds[1]?.shots.length ?? 0) > 0);
+      const markdown = readFileSync(path.join(projectDir, ".hitchhiker", "elevate", "ROUNDS.md"), "utf8");
+      assert.match(markdown, /## Round 1/);
+      assert.match(markdown, /## Round 2/);
+      assert.match(markdown, /design score went down/);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("the upgrade menu cites the anatomy notes, the motion taxonomy, and the knowledge packs", () => {
+    const menu = loadElevateMenu();
+    const again = loadElevateMenu();
+    assert.deepEqual(again, menu);
+    assert.ok(menu.length > 20);
+    const files = new Set(menu.map((item) => item.source.file));
+    assert.equal(files.has("context/research/03-awwwards-anatomy.md"), true);
+    assert.equal(files.has("context/research/04-motion-taxonomy.md"), true);
+    assert.equal([...files].some((file) => file.startsWith("packages/knowledge/packs/")), true);
+    const repo = path.resolve(here, "..", "..", "..");
+    for (const item of menu) {
+      assert.match(item.source.file, SOURCE_FILE);
+      assert.equal(item.source.id.length > 0, true);
+      assert.equal(item.change.includes("!"), false, item.change);
+      assert.equal(item.change.includes("\u2014"), false, item.change);
+      assert.equal(/\bmagnetic\b/i.test(item.change.replaceAll("non-magnetic", "")), false, item.change);
+      assert.notEqual(item.source.id, "D2");
+      const text = readFileSync(path.join(repo, item.source.file), "utf8");
+      assert.equal(text.includes(item.source.title), true, `${item.source.id} ${item.source.title}`);
+      if (item.source.file.endsWith("04-motion-taxonomy.md")) {
+        assert.equal(text.includes(item.source.id), true, item.source.id);
+      }
+    }
+  });
 });
