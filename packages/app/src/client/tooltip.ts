@@ -358,9 +358,12 @@ export function mountTooltips(doc: Document): void {
 /** A dialog, the tour, and an active mic already use Escape. Let that key through. */
 function escapeShouldPass(doc: Document, event: KeyboardEvent): boolean {
   if (doc.querySelector("dialog[open]") !== null) return true;
+  // The splash cue does not use this key. A tip must not swallow it either.
+  if (doc.querySelector("[data-splash-cover]") !== null) return true;
+  // The tour takes Escape from anywhere while it is open, including the desk behind it.
+  if (doc.querySelector("[data-tour]") !== null) return true;
   const target = event.target;
   if (!(target instanceof Element)) return false;
-  if (target.closest("[data-tour]") !== null) return true;
   const voice = doc.querySelector("[data-voice='hold'][aria-pressed='true']");
   if (voice === null) return false;
   return target === voice || voice.contains(target) || target.closest("#hh-card-draft") !== null;

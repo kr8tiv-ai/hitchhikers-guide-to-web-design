@@ -956,8 +956,9 @@ p.hh-error__next {
 
 @media (max-width: 719px) {
   .hh-qcard__entry > [data-voice="hold"] {
-    flex: 1 1 auto;
-    width: 100%;
+    flex: 1 1 100%;
+    width: auto;
+    min-width: 0;
     max-width: 100%;
   }
 }
@@ -1067,6 +1068,16 @@ p.hh-error__next {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hh-tour .hh-qcard__actions .hh-btn {
+  min-width: 44px;
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 [data-tour-current="true"] {
@@ -1145,9 +1156,10 @@ p.hh-error__next {
 }
 
 .hh-nav__icon {
-  flex: none;
+  flex: 0 0 1.05rem;
   width: 1.05rem;
   height: 1.05rem;
+  overflow: visible;
 }
 
 .hh-interview {
@@ -1185,9 +1197,19 @@ p.hh-error__next {
 .hh-save-line.hh-project {
   margin: var(--space-4) 0 0;
   padding: var(--space-2) var(--space-3);
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+
+.hh-save-line.hh-project .hh-btn {
+  min-width: 44px;
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .hh-effort {
@@ -1348,19 +1370,45 @@ p.hh-error__next {
 
   .hh-desk-menu {
     margin: 0;
+    min-width: 0;
+    max-width: 100%;
   }
 
-  /* Eight labelled links stay one 44px row. Swipe to the rest. */
+  .hh-desk-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 44px;
+  }
+
+  .hh-desk-menu .hh-btn {
+    min-width: 44px;
+    max-width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  /* Labels wrap onto more rows. A sideways scroller was clipping the icons. */
   .hh-routes {
-    flex-wrap: nowrap;
-    gap: var(--space-1);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+    max-width: 100%;
+    overflow: visible;
     padding-bottom: var(--space-1);
   }
 
   .hh-routes a {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  .hh-routes a span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .hh-interview__head {
@@ -1400,13 +1448,19 @@ p.hh-error__next {
   }
 
   .hh-interview .hh-qcard__entry {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
   }
 
-  .hh-interview .hh-qcard__entry > .hh-qcard__field {
-    flex: 1 1 auto;
+  .hh-interview .hh-qcard__entry > .hh-qcard__field,
+  .hh-interview .hh-qcard__entry > [data-voice="hold"] {
+    flex: 1 1 100%;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .hh-interview .hh-qcard__composer > .hh-qcard__voice {
@@ -1427,15 +1481,22 @@ p.hh-error__next {
   /* Answer stays full width. Suggest and Skip share the next row. */
   .hh-interview .hh-qcard .hh-qcard__actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-2);
+    min-width: 0;
+    max-width: 100%;
   }
 
   .hh-interview .hh-qcard .hh-qcard__actions .hh-btn {
     display: inline-flex;
     width: auto;
+    max-width: 100%;
+    min-width: 44px;
+    min-height: 44px;
     margin-top: 0;
     padding-inline: var(--space-2);
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .hh-interview .hh-qcard .hh-qcard__actions .hh-btn + .hh-btn {
@@ -1458,6 +1519,7 @@ p.hh-error__next {
     gap: var(--space-2);
     padding: var(--space-2);
     padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    min-width: 0;
     overflow-x: hidden;
     overflow-y: auto;
     box-shadow: var(--shadow-md);

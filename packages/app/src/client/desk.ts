@@ -54,7 +54,7 @@ import {
   type VoiceEngineId,
 } from "./voice-engine.ts";
 import { applyToolsEvent, handleInstallClick, handleInstallKey, mountToolInstall } from "./tool-install.ts";
-import { handleTourKey, mountTour } from "./tour.ts";
+import { handleTourKey, mountTour, revealTour } from "./tour.ts";
 import { hideOpenTips } from "./tooltip.ts";
 import { joinWords, mergeTranscript, settleVoice, type TranscriptPiece } from "./voice-text.ts";
 import {
@@ -539,7 +539,11 @@ interface DeskElement {
   remove?(): void;
   outerHTML?: string;
   focus?(options?: { preventScroll?: boolean }): void;
-  scrollIntoView?(options?: { block?: "start" | "center" | "end" | "nearest"; inline?: "start" | "center" | "end" | "nearest" }): void;
+  scrollIntoView?(options?: {
+    block?: "start" | "center" | "end" | "nearest";
+    inline?: "start" | "center" | "end" | "nearest";
+    behavior?: "auto" | "smooth";
+  }): void;
   getBoundingClientRect?(): { top: number };
   /** Set on real elements. The desk harness omits it. */
   tagName?: string;
@@ -1316,12 +1320,37 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("focusin", onFocusIn);
   let splashParked = false;
   let splashDismissed = false;
-  env.document.addEventListener("hh-splash-dismissed", () => {
+  let tourRevealTimer: ReturnType<typeof setTimeout> | null = null;
+  const revealTourSoon = (): void => {
+    // The cue pins the heading for 120ms. Reveal after that so the two scrolls
+    // do not fight. The landing is instant: a smooth scroll can stall before
+    // the plate is on screen. A second pass covers a late pin. Reduced motion
+    // uses the same instant call.
+    if (tourRevealTimer !== null) clearTimeout(tourRevealTimer);
+    tourRevealTimer = setTimeout(() => {
+      revealTour(env.document, "auto");
+      tourRevealTimer = setTimeout(() => {
+        tourRevealTimer = null;
+        revealTour(env.document, "auto");
+      }, 240);
+    }, 180);
+  };
+  const onSplashDismissed = (): void => {
     // The cue scrolls #desk-heading into view and focuses it. Replaying the
     // card placement pulls that heading back down the page.
     splashDismissed = true;
     splashParked = false;
-  });
+    revealTourSoon();
+  };
+  env.document.addEventListener("hh-splash-dismissed", onSplashDismissed);
+  // Enter can dismiss the cue before this module mounts. The event is already gone.
+  if (
+    env.document.querySelector("[data-splash]") !== null &&
+    env.document.querySelector("[data-splash-cover]") === null
+  ) {
+    splashDismissed = true;
+    revealTourSoon();
+  }
   const deskWindow = env.document.defaultView ?? null;
   if (deskWindow !== null) {
     deskWindow.addEventListener("pagehide", onPageHide);
@@ -1335,6 +1364,8 @@ export function mountDesk(env: DeskEnv): () => void {
   void load();
 
   return () => {
+    if (tourRevealTimer !== null) clearTimeout(tourRevealTimer);
+    env.document.removeEventListener("hh-splash-dismissed", onSplashDismissed);
     stopTour();
     stopTools();
     env.document.removeEventListener("click", onClick);

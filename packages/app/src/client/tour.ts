@@ -7,6 +7,7 @@ export interface TourKeyEvent {
   key?: string;
   target?: unknown | null;
   preventDefault?: () => void;
+  stopPropagation?: () => void;
 }
 
 export interface TourNode {
@@ -19,6 +20,11 @@ export interface TourNode {
   hidden?: boolean;
   focus?: () => void;
   closest?(selector: string): TourNode | null;
+  scrollIntoView?(options?: {
+    block?: "start" | "center" | "end" | "nearest";
+    inline?: "start" | "center" | "end" | "nearest";
+    behavior?: "auto" | "smooth";
+  }): void;
   requestSubmit?: () => void;
   click?: () => void;
   addEventListener?(type: string, listener: (event: TourClick) => void): void;
@@ -32,6 +38,11 @@ interface TourClick {
 export interface TourDocument {
   querySelector(selector: string): TourNode | null;
   activeElement?: TourNode | null;
+}
+
+interface TourKeyHost {
+  addEventListener?(type: string, listener: (event: TourKeyEvent) => void, capture?: boolean): void;
+  removeEventListener?(type: string, listener: (event: TourKeyEvent) => void, capture?: boolean): void;
 }
 
 const LAST_LABEL = "Done";
@@ -50,10 +61,41 @@ export function mountTour(doc: TourDocument): () => void {
     }
     if (marked(node, "data-tour-back")) moveTour(tour, -1);
   };
+  const onKey = (event: TourKeyEvent): void => {
+    // Document capture, not the tour plate. Focus may be on the body or the desk behind the plate.
+    if ((event.key ?? "") !== "Escape") return;
+    if (!handleTourKey(doc, event)) return;
+    event.stopPropagation?.();
+  };
+  const host = doc as TourDocument & TourKeyHost;
   tour.addEventListener?.("click", onClick);
+  host.addEventListener?.("keydown", onKey, true);
   return () => {
     tour.removeEventListener?.("click", onClick);
+    host.removeEventListener?.("keydown", onKey, true);
   };
+}
+
+/**
+ * Bring the open tour into view. `nearest` does not move the page when the
+ * plate already fits. Callers that must land even if a smooth scroll stalls
+ * pass `auto`. Omitted behavior follows prefers-reduced-motion.
+ */
+export function revealTour(doc: TourDocument, behavior?: "auto" | "smooth"): void {
+  const tour = doc.querySelector("[data-tour]");
+  if (tour === null || tour.scrollIntoView === undefined) return;
+  const motion = behavior ?? (prefersReducedMotion() ? "auto" : "smooth");
+  tour.scrollIntoView({ block: "nearest", inline: "nearest", behavior: motion });
+}
+
+function prefersReducedMotion(): boolean {
+  const media = (globalThis as { matchMedia?: (query: string) => { matches: boolean } }).matchMedia;
+  if (typeof media !== "function") return false;
+  try {
+    return media.call(globalThis, "(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
 }
 
 function marked(node: TourNode, name: string): boolean {
@@ -68,14 +110,17 @@ export function handleTourKey(doc: TourDocument, event: TourKeyEvent): boolean {
   if (tour === null) return false;
   if (doc.querySelector("dialog[open]") !== null) return false;
   const target = event.target;
-  if (!insideTour(target, tour) && doc.activeElement !== tour) return false;
-  if (isField(target)) return false;
   const key = event.key ?? "";
   if (key === "Escape") {
+    // Splash still covers the page. 242e/242g own that key. Do not close the tour behind it.
+    if (doc.querySelector("[data-splash-cover]") !== null) return false;
+    if (isField(target) && insideTour(target, tour)) return false;
     event.preventDefault?.();
     submitNamed(tour, "hh-tour-skip");
     return true;
   }
+  if (!insideTour(target, tour) && doc.activeElement !== tour) return false;
+  if (isField(target)) return false;
   if (key === "ArrowRight" || key === "ArrowDown") {
     event.preventDefault?.();
     moveTour(tour, 1);
