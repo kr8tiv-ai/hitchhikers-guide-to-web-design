@@ -4,7 +4,7 @@ description: Ask Zaphod for a review of the current build.
 user-invocable: true
 ---
 
-Ask Zaphod for a review of the current build. Compare desktop and phone screenshots with the spec. A failed gate does not merge.
+Ask Zaphod for a review of the current build. Compare desktop and phone screenshots with the spec. A failed gate does not merge. The orchestrator refuses deploy on a red gate.
 
 This command is not implemented in the hh CLI yet. Use /hh-help.
 

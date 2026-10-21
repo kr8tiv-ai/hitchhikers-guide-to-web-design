@@ -6,7 +6,9 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildContextPacket, loadState, readLedger, saveState } from "@hitchhiker/engine";
-import { FixtureRunError, runFixture } from "../src/fixture-run.ts";
+import { GATE_IDS, gatesJsonPath, type GateId, type GateStatus } from "@hitchhiker/qa";
+import { shipGate } from "../src/ship-gate.ts";
+import { FIXTURE_COMMIT, FixtureRunError, runFixture } from "../src/fixture-run.ts";
 import { evaluateCommand } from "../src/policy.ts";
 import { loadQueue } from "../src/queue-file.ts";
 import type { SpawnImpl } from "../src/runner.ts";
@@ -73,6 +75,28 @@ async function withDrive(approved: boolean, run: (dir: string) => Promise<void>)
   }
 }
 
+function writeGates(
+  dir: string,
+  overrides: Partial<Record<GateId, { status: GateStatus; reason: string }>> = {},
+): void {
+  const results = GATE_IDS.map((id) => {
+    const over = overrides[id];
+    return {
+      id,
+      status: over?.status ?? "PASS",
+      reason: over?.reason ?? "This check is in good shape.",
+      evidence: {},
+    };
+  });
+  const file = gatesJsonPath(dir);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `${JSON.stringify({ head: FIXTURE_COMMIT, ranAt: AT, results }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 function flag(argv: readonly string[], name: string): string | undefined {
   const index = argv.indexOf(name);
   if (index < 0) return undefined;
@@ -81,6 +105,7 @@ function flag(argv: readonly string[], name: string): string | undefined {
 
 test("a flaky first failure retries, passes, and leaves no running item", async () => {
   await withDrive(true, async (dir) => {
+    writeGates(dir);
     let calls = 0;
     const bins: string[] = [];
     const efforts: string[] = [];
@@ -203,6 +228,66 @@ test("an always-failing stub stops on rollback and does not loop", async () => {
   });
 });
 
+test("a blocker in the fixture gates ends in ESCALATE", async () => {
+  await withDrive(true, async (dir) => {
+    const reason = "The page is missing a font a reader needs.";
+    writeGates(dir, { fonts: { status: "BLOCKER", reason } });
+    let calls = 0;
+    const spawn: SpawnImpl = async () => {
+      calls += 1;
+      return { code: 0, stderr: "" };
+    };
+    await assert.rejects(
+      () => runFixture(dir, spawn),
+      (error: unknown) => {
+        assert.ok(error instanceof FixtureRunError);
+        assert.match(error.message, /ESCALATE/);
+        assert.match(error.message, new RegExp(reason));
+        assert.equal(error.message.includes("!"), false);
+        return true;
+      },
+    );
+    assert.equal(calls, 3);
+    const queue = await loadQueue(dir);
+    assert.ok(queue);
+    assert.equal(
+      queue.items.some((item) => item.status === "running"),
+      false,
+    );
+    assert.deepEqual(
+      queue.items.map((item) => item.status),
+      ["passed", "passed", "passed", "escalated"],
+    );
+    assert.equal(queue.items[3]?.kind, "review");
+    const state = loadState(dir);
+    assert.deepEqual(state?.blockers, ["review-after-003"]);
+    const ship = await shipGate(dir, FIXTURE_COMMIT);
+    assert.equal(ship.ok, false);
+    assert.ok(ship.reasons.some((line) => line.includes(reason)));
+  });
+});
+
+test("a passing fixture review reaches the ship gate", async () => {
+  await withDrive(true, async (dir) => {
+    writeGates(dir);
+    let calls = 0;
+    const spawn: SpawnImpl = async () => {
+      calls += 1;
+      return { code: 0, stderr: "" };
+    };
+    const result = await runFixture(dir, spawn);
+    assert.equal(calls, 3);
+    assert.equal(result.passed, 4);
+    assert.equal(result.retried, 0);
+    assert.equal(result.ship.ok, true);
+    assert.deepEqual(result.ship.reasons, []);
+    const state = loadState(dir);
+    assert.equal(state?.nextAction, "Drive idle");
+    assert.deepEqual(state?.blockers, []);
+    assert.equal(state?.lastGoodCommit, FIXTURE_COMMIT);
+  });
+});
+
 test("fixture-run wires the drive seams and does not import a network client", () => {
   const source = readFileSync(fileURLToPath(new URL("../src/fixture-run.ts", import.meta.url)), "utf8");
   assert.match(source, /insertReviews\(/);
@@ -216,6 +301,9 @@ test("fixture-run wires the drive seams and does not import a network client", (
   assert.match(source, /runGate\(/);
   assert.match(source, /evaluateCommand\(/);
   assert.match(source, /export async function runFixture\(/);
+  assert.match(source, /decideReview\(/);
+  assert.match(source, /shipGate\(/);
+  assert.doesNotMatch(source, /stubReview/);
   assert.doesNotMatch(source, /["']node:https?["']/);
   assert.doesNotMatch(source, /["']https?["']/);
   assert.doesNotMatch(source, /["']node:dns["']/);

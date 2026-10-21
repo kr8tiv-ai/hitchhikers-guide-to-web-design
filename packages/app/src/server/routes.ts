@@ -146,6 +146,7 @@ import { IDENTITY_CACHE, identityClaim, loadIdentity } from "./identity-files.ts
 import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
+import { gateStatusLine, readGateReport, renderGateCards, sanitizeGateId } from "../gate-card.ts";
 import { renderShell } from "../shell.ts";
 import { applySplash, deferSplashModuleScripts, resolveSplashLoop, type SplashLoop } from "../splash/markup.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
@@ -2233,6 +2234,31 @@ async function handleGet(
     );
     return;
   }
+  if (pathname === "/gates") {
+    const report = readGateReport(projectDir);
+    const ask = sanitizeGateId(queryValue(rawUrl, "ask"));
+    const asked = sanitizeGateId(queryValue(rawUrl, "asked"));
+    await deliverHtml(
+      req,
+      res,
+      200,
+      renderPanel({
+        notice,
+        token,
+        title: "Quality checks",
+        description: "Plain-language results for this version of the site. A blocked check keeps the site from going live.",
+        current: null,
+        kicker: "Checks",
+        status: gateStatusLine(report),
+        extraCss: ["/src/gate-card.css"],
+        main: renderGateCards(report, { ask, asked }),
+      }),
+      projectDir,
+      token,
+      false,
+    );
+    return;
+  }
   if (pathname === "/gallery") {
     const opened = await enqueue(() => openGallery(projectDir, rawUrl));
     await deliverHtml(req, res, 200, renderGallery(token, opened.view, notice), projectDir, token, false);
@@ -3634,6 +3660,7 @@ function deskMenu(token: string): string {
   return `<details class="hh-desk-menu hh-qcard__look">
           <summary class="hh-kicker" data-tip="Replay the first five minutes. Settings live in the route list.">Desk menu</summary>
           ${renderReplayControl(token)}
+          <a class="hh-desk-menu__checks" href="/gates">Quality checks</a>
         </details>`;
 }
 
