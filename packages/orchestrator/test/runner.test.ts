@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { hiddenChildOptions } from "@hitchhiker/engine";
+import { driveElevatePicks, type ElevateDrivePick } from "../src/elevate-drive.ts";
+import { loadQueue } from "../src/queue-file.ts";
 import {
   DEFAULT_MODEL,
   MAX_TURNS,
@@ -13,6 +17,7 @@ import {
   assembledPromptPath,
   buildArgv,
   osArgvLimit,
+  runElevatePicks,
   runPrompt,
   type RunRequest,
   type SpawnImpl,
@@ -324,4 +329,214 @@ test("the runner does not spawn a process or mint a session id", () => {
   assert.equal(source.includes("child_process"), false);
   assert.equal(source.includes("randomUUID"), false);
   assert.equal(source.includes("--always-approve"), false);
+  assert.match(source, /export async function runElevatePicks/);
+});
+
+function aliasRequest(promptPath: string, promptText = ASSEMBLED): RunRequest {
+  const req = ready({
+    promptPath,
+    promptText,
+    sessionMode: "alias",
+    effort: "xhigh",
+    maxTurns: null,
+  });
+  delete req.sessionId;
+  return req;
+}
+
+test("an empty elevate list does not spawn or commit", async () => {
+  let spawned = 0;
+  let committed = 0;
+  const result = await runElevatePicks(
+    [],
+    async () => {
+      spawned += 1;
+      return { code: 0, stderr: "" };
+    },
+    async () => {
+      committed += 1;
+    },
+  );
+  assert.deepEqual(result, { ran: 0, committed: 0 });
+  assert.equal(spawned, 0);
+  assert.equal(committed, 0);
+});
+
+test("a failed elevate prompt does not commit and stops the next one", async () => {
+  const first = aliasRequest(path.join(os.tmpdir(), "r1-01.md"));
+  const second = aliasRequest(path.join(os.tmpdir(), "r1-02.md"), "Second upgrade.");
+  const saved: string[] = [];
+  let spawned = 0;
+  await assert.rejects(
+    () =>
+      runElevatePicks(
+        [first, second],
+        async () => {
+          spawned += 1;
+          if (spawned === 1) return { code: 4, stderr: "nope" };
+          return { code: 0, stderr: "" };
+        },
+        async (req) => {
+          saved.push(req.promptPath);
+        },
+      ),
+    (error: unknown) => error instanceof RunFailed,
+  );
+  assert.deepEqual(saved, []);
+  assert.equal(spawned, 1);
+});
+
+function gitText(args: readonly string[], attempt = 0): Promise<string> {
+  const bin = args[0];
+  if (bin === undefined) return Promise.reject(new Error("missing git"));
+  return new Promise((resolve, reject) => {
+    execFile(
+      bin,
+      args.slice(1),
+      hiddenChildOptions({ encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }),
+      (error, stdout, stderr) => {
+        if (error) {
+          const detail = String(stderr ?? "").trim();
+          const message = detail.length > 0 ? detail : error.message;
+          if (attempt < 5 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(message)) {
+            setTimeout(() => {
+              gitText(args, attempt + 1).then(resolve, reject);
+            }, 200 * (attempt + 1));
+            return;
+          }
+          reject(new Error(message));
+          return;
+        }
+        resolve(String(stdout));
+      },
+    );
+  });
+}
+
+function git(dir: string, args: readonly string[]): Promise<string> {
+  return gitText(["git", "-C", dir, ...args]);
+}
+
+async function tempRepo(): Promise<string> {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "hh-elevate-drive-"));
+  await git(dir, ["init"]);
+  const hooks = path.join(dir, ".git", "hh-hooks");
+  mkdirSync(hooks);
+  await git(dir, ["config", "core.hooksPath", hooks]);
+  await git(dir, ["config", "user.email", "guide-test@example.com"]);
+  await git(dir, ["config", "user.name", "Guide Test"]);
+  await git(dir, ["config", "commit.gpgsign", "false"]);
+  await git(dir, ["config", "core.autocrlf", "false"]);
+  await git(dir, ["config", "core.fscache", "false"]);
+  writeFileSync(path.join(dir, "README.md"), "seed\n");
+  await git(dir, ["add", "README.md"]);
+  await git(dir, ["commit", "-m", "start"]);
+  return dir;
+}
+
+function picksFor(dir: string, ids: readonly string[]): ElevateDrivePick[] {
+  return ids.map((id) => {
+    const promptPath = path.join(dir, ".hitchhiker", "prompts", "elevate", `${id}.md`);
+    const promptText = `Apply only this upgrade.\n\n${id}\n`;
+    mkdirSync(path.dirname(promptPath), { recursive: true });
+    writeFileSync(promptPath, promptText);
+    return { id, promptPath, promptText };
+  });
+}
+
+test("an empty pick list commits nothing and writes no queue", async () => {
+  const dir = await tempRepo();
+  try {
+    let spawned = 0;
+    const result = await driveElevatePicks(dir, [], {
+      bin: "fixture-spawn",
+      spawnImpl: async () => {
+        spawned += 1;
+        return { code: 0, stderr: "" };
+      },
+    });
+    assert.deepEqual(result, { enqueued: 0, committed: 0 });
+    assert.equal(spawned, 0);
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", "queue.json")), false);
+    assert.equal((await git(dir, ["rev-list", "--count", "HEAD"])).trim(), "1");
+    assert.equal((await git(dir, ["log", "-1", "--format=%s"])).trim(), "start");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("each accepted pick is one prompt and one commit", async () => {
+  const dir = await tempRepo();
+  try {
+    const picks = picksFor(dir, ["r1-01", "r1-02"]);
+    let calls = 0;
+    const argvSeen: string[][] = [];
+    const result = await driveElevatePicks(dir, picks, {
+      bin: "fixture-spawn",
+      spawnImpl: async (argv) => {
+        argvSeen.push([...argv]);
+        calls += 1;
+        writeFileSync(path.join(dir, `site-${calls}.txt`), `${calls}\n`);
+        return { code: 0, stderr: "" };
+      },
+    });
+    assert.deepEqual(result, { enqueued: 2, committed: 2 });
+    assert.equal(calls, 2);
+    assert.equal(argvSeen.length, 2);
+    for (const argv of argvSeen) {
+      assert.equal(argv[0], "fixture-spawn");
+      assert.equal(argv.includes("--always-approve"), false);
+      assert.equal(argv.includes("--session-id"), false);
+      assert.equal(argv[argv.indexOf("--effort") + 1], "xhigh");
+    }
+    assert.equal((await git(dir, ["rev-list", "--count", "HEAD"])).trim(), "3");
+    assert.equal((await git(dir, ["log", "--format=%s"])).trim().split(/\r?\n/).join("\n"), "r1-02\nr1-01\nstart");
+    const queue = await loadQueue(dir);
+    assert.deepEqual(
+      queue?.items.map((entry) => ({ id: entry.id, kind: entry.kind, status: entry.status })),
+      [
+        { id: "r1-01", kind: "build", status: "passed" },
+        { id: "r1-02", kind: "build", status: "passed" },
+      ],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a failed pick saves nothing for that prompt and says so in plain words", async () => {
+  const dir = await tempRepo();
+  try {
+    const picks = picksFor(dir, ["r1-01", "r1-02"]);
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        driveElevatePicks(dir, picks, {
+          bin: "fixture-spawn",
+          spawnImpl: async () => {
+            calls += 1;
+            if (calls === 1) {
+              writeFileSync(path.join(dir, "site-1.txt"), "one\n");
+              return { code: 0, stderr: "noise" };
+            }
+            return { code: 7, stderr: "Prompt run failed with exit 7" };
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, "This improvement did not finish, so it was not saved.");
+        assert.equal(/exit|spawn|json|git|queue/i.test(error.message), false);
+        return true;
+      },
+    );
+    assert.equal(calls, 2);
+    assert.equal((await git(dir, ["rev-list", "--count", "HEAD"])).trim(), "2");
+    assert.equal((await git(dir, ["log", "-1", "--format=%s"])).trim(), "r1-01");
+    const queue = await loadQueue(dir);
+    assert.equal(queue?.items[0]?.status, "passed");
+    assert.equal(queue?.items[1]?.status, "failed");
+    assert.equal(queue?.items.length, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

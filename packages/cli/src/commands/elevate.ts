@@ -12,7 +12,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { loadConfig, spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import { spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
@@ -291,8 +291,8 @@ function qaFile(name: string): string {
   return path.resolve(import.meta.dirname, "..", "..", "..", "qa", "src", name);
 }
 
-function runnerFile(): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "orchestrator", "src", "live-runner.ts");
+function driveFile(): string {
+  return path.resolve(import.meta.dirname, "..", "..", "..", "orchestrator", "src", "elevate-drive.ts");
 }
 
 type ReviewLoad = { ok: true; project: object } | { ok: false; message: string };
@@ -375,20 +375,16 @@ async function loadGates(projectDir: string, url: string | null): Promise<GateRe
 }
 
 async function runLive(projectDir: string, file: string): Promise<void> {
-  const mod = asRecord(await import(pathToFileURL(runnerFile()).href));
-  const runLivePrompt = mod?.runLivePrompt;
-  if (typeof runLivePrompt !== "function") throw new Error("The live runner did not load.");
-  const result = await (
-    runLivePrompt as (
+  const mod = asRecord(await import(pathToFileURL(driveFile()).href));
+  const driveElevateFile = mod?.driveElevateFile;
+  if (typeof driveElevateFile !== "function") throw new Error("The drive did not load.");
+  await (
+    driveElevateFile as (
+      projectDir: string,
       promptFile: string,
-      deps: { spawnImpl: typeof spawnGrok; projectDir: string; config: ReturnType<typeof loadConfig> },
-    ) => Promise<{ exitCode: number }>
-  )(file, {
-    spawnImpl: spawnGrok,
-    projectDir,
-    config: loadConfig(projectDir),
-  });
-  if (result.exitCode !== 0) throw new Error(`Prompt exited ${result.exitCode}.`);
+      deps: { spawnImpl: typeof spawnGrok },
+    ) => Promise<unknown>
+  )(projectDir, file, { spawnImpl: spawnGrok });
 }
 
 async function loadDetail(): Promise<{

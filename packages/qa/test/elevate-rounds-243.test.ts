@@ -137,8 +137,9 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
         if (error) {
           const detail = String(stderr ?? "").trim();
           const message = detail.length > 0 ? detail : error.message;
-          if (attempt < 4 && /permission denied|unable to write file|index\.lock/i.test(message)) {
-            wait(200 * (attempt + 1)).then(() => git(dir, args, attempt + 1).then(resolve, reject), reject);
+          if (attempt < 8 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(message)) {
+            rmSync(path.join(dir, ".git", "index.lock"), { force: true });
+            wait(400 * (attempt + 1)).then(() => git(dir, args, attempt + 1).then(resolve, reject), reject);
             return;
           }
           reject(new Error(`${args.join(" ")}: ${message}`));
@@ -372,6 +373,8 @@ async function runOnce(
       `${SOURCE}export const pass = ${prompts.n};\n`,
       "utf8",
     );
+    await git(projectDir, ["add", "-A"]);
+    await git(projectDir, ["commit", "-m", `r-pick-${prompts.n}`]);
   };
   const input = {
     projectDir,
@@ -459,6 +462,10 @@ async function replay(scenario: Scenario): Promise<void> {
       if (scenario.accept && scenario.expect.roundsRun > 1) {
         assert.equal(new Set(heads).size, heads.length);
       }
+      const projectDir = run === first ? projectA : projectB;
+      const count = await git(projectDir, ["rev-list", "--count", "HEAD"]);
+      const expected = scenario.accept ? String(1 + scenario.expect.roundsRun) : "1";
+      assert.equal(count, expected);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });

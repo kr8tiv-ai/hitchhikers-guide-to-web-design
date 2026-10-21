@@ -114,6 +114,8 @@ flowchart LR
     E -.->|"Elevate<br/>(repeat as desired)"| D
 ```
 
+The dotted arrow belongs to the orchestrator. Elevate (repeat as desired) -> Drive puts each improvement you accept on the Drive queue as one prompt and one commit. Accept nothing, and the queue gains nothing and no commit is made.
+
 ### 1. Don't Panic: the interview
 > *The longest, most enjoyable meeting you will ever attend, and you can do it in your pyjamas.*
 

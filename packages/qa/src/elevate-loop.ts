@@ -8,11 +8,13 @@
  * without Chrome.
  *
  * planElevateModel ranks every accepted upgrade at xhigh. A visual pass may
- * add a section treatment, an effect, or an image. Each pick
- * becomes one golden prompt (092). runPrompt is the live runner. runElevate
- * (130) refuses a Lighthouse or accessibility BLOCKER. Console, links, and
- * weight use the same rule. A refusal reverts commits made after the pre-pick
- * HEAD. An empty pick list writes the round log and changes nothing.
+ * add a section treatment, an effect, or an image. Each accepted pick
+ * becomes one golden prompt (092). runPrompt is the Drive: the orchestrator
+ * enqueues that prompt, runs it, and makes the one commit. This module does
+ * not commit the pick. runElevate (130) refuses a Lighthouse or accessibility
+ * BLOCKER. Console, links, and weight use the same rule. A refusal reverts
+ * commits made after the pre-pick HEAD. An empty pick list writes the round
+ * log and changes nothing.
  */
 
 import { execFile } from "node:child_process";
@@ -453,14 +455,6 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
   });
 }
 
-function isSecretPath(filePath: string): boolean {
-  const normalized = filePath.replaceAll("\\", "/");
-  const base = path.posix.basename(normalized).toLowerCase();
-  if (base === ".env" || base.startsWith(".env.") || base.endsWith(".pem")) return true;
-  if (base === "credentials.json") return true;
-  return base === "config.json" && path.posix.basename(path.posix.dirname(normalized)) === ".hitchhiker";
-}
-
 async function headOf(dir: string): Promise<string> {
   try {
     const head = await git(dir, ["rev-parse", "HEAD"]);
@@ -506,21 +500,6 @@ async function assertClean(projectDir: string): Promise<void> {
   if (foreign.length > 0) {
     throw new Error("Commit or stash project changes before a round.");
   }
-}
-
-async function commitPick(projectDir: string, message: string): Promise<void> {
-  await git(projectDir, ["add", "-A"]);
-  const staged = linesOf(await git(projectDir, ["diff", "--cached", "--name-only"]));
-  const secrets = staged.filter((file) => isSecretPath(file));
-  if (secrets.length > 0) {
-    await git(projectDir, ["reset", "-q", "HEAD", "--", ...secrets]);
-  }
-  const remaining = linesOf(await git(projectDir, ["diff", "--cached", "--name-only"]));
-  if (remaining.length === 0) return;
-  if (remaining.some((file) => isSecretPath(file))) {
-    throw new Error("A secret path was staged. The pick was not committed.");
-  }
-  await git(projectDir, ["commit", "-m", message]);
 }
 
 async function removeNewUntracked(projectDir: string, before: readonly string[]): Promise<void> {
@@ -755,7 +734,6 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
       apply: async () => {
         const runBody = async (): Promise<void> => {
           await deps.runPrompt(file);
-          await commitPick(root, id);
           try {
             next = await deps.gates();
           } catch (error) {

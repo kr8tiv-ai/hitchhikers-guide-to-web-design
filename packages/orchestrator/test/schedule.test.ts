@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { ScheduleError, insertReviews } from "../src/schedule.ts";
+import { ELEVATE_TO_DRIVE } from "../src/elevate-drive.ts";
+import { ELEVATE_DRIVE_PHASE, ScheduleError, insertReviews, scheduleElevatePicks } from "../src/schedule.ts";
 
 function prompts(count: number, phase = "improbability-drive"): Array<{ id: string; phase: string }> {
   return Array.from({ length: count }, (_, index) => ({
@@ -172,4 +173,38 @@ test("schedule source does not call the runner", () => {
   assert.doesNotMatch(source, /from ["'].*runner/);
   assert.doesNotMatch(source, /node:fs/);
   assert.doesNotMatch(source, /saveQueue/);
+});
+
+test("an empty elevate list schedules nothing", () => {
+  assert.deepEqual(scheduleElevatePicks([]), []);
+});
+
+test("each elevate pick is one build prompt and not a review", () => {
+  const items = scheduleElevatePicks([{ id: "r1-01" }, { id: "r1-02" }]);
+  assert.deepEqual(items, [
+    { id: "r1-01", kind: "build", effort: "xhigh" },
+    { id: "r1-02", kind: "build", effort: "xhigh" },
+  ]);
+  assert.equal(items.some((item) => item.id.startsWith("review-")), false);
+  assert.equal(ELEVATE_DRIVE_PHASE, "improbability-drive");
+  assert.equal(items.length, 2);
+});
+
+test("elevate pick ids use the same rules as other prompts", () => {
+  assert.throws(() => scheduleElevatePicks([{ id: "r1-01" }, { id: "r1-01" }]), /Duplicate prompt id/);
+  assert.throws(() => scheduleElevatePicks([{ id: "review-r1-01" }]), /review-/);
+  assert.throws(() => scheduleElevatePicks([{ id: "sk-abcdefghijklmnop" }]), /secret/);
+  assert.throws(() => scheduleElevatePicks([{ id: "Bad_Id" }]), /\/\^\[a-z0-9-\]\+\$\//);
+});
+
+test("the orchestrator owns the Elevate to Drive edge", () => {
+  const readme = readFileSync(path.join(import.meta.dirname, "..", "..", "..", "README.md"), "utf8");
+  assert.match(readme, /Elevate \(repeat as desired\) -> Drive/);
+  assert.equal(ELEVATE_TO_DRIVE, "Elevate (repeat as desired) -> Drive");
+  const source = readFileSync(path.join(import.meta.dirname, "..", "src", "elevate-drive.ts"), "utf8");
+  assert.match(source, /orchestrator owns/);
+  assert.match(source, /scheduleElevatePicks/);
+  assert.match(source, /enqueueElevatePicks/);
+  assert.match(source, /runElevatePicks/);
+  assert.match(source, /commitPrompt/);
 });

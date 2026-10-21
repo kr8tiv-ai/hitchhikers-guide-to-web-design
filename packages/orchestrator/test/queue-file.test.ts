@@ -5,8 +5,10 @@ import path from "node:path";
 import { test } from "node:test";
 import { LockHeld, withStateLock } from "@hitchhiker/engine";
 import { insertReviews } from "../src/schedule.ts";
+import { scheduleElevatePicks } from "../src/schedule.ts";
 import {
   QueueFileError,
+  enqueueElevatePicks,
   loadQueue,
   pauseQueue,
   saveQueue,
@@ -249,4 +251,58 @@ test("queue source uses the engine lock and does not start a runner", () => {
   assert.doesNotMatch(barrel, /child_process/);
   assert.doesNotMatch(barrel, /spawn\(/);
   assert.doesNotMatch(barrel, /from ["'].*runner/);
+});
+
+test("an empty elevate list does not create or change the queue", async () => {
+  const dir = tempProject();
+  const existing: QueueFile = {
+    items: [item("001", "passed")],
+    pause: { at: "2026-10-15T12:00:00.000Z", after: "001" },
+  };
+  try {
+    assert.equal((await enqueueElevatePicks(dir, [])).enqueued, 0);
+    assert.equal(existsSync(queueFile(dir)), false);
+    await saveQueue(dir, existing);
+    const before = readFileSync(queueFile(dir), "utf8");
+    assert.deepEqual(await enqueueElevatePicks(dir, []), { enqueued: 0 });
+    assert.equal(readFileSync(queueFile(dir), "utf8"), before);
+    await assert.rejects(
+      () => enqueueElevatePicks(dir, null as unknown as { id: string }[]),
+      QueueFileError,
+    );
+    assert.equal(readFileSync(queueFile(dir), "utf8"), before);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("scheduled elevate picks append as queued builds and keep a pause", async () => {
+  const dir = tempProject();
+  const existing: QueueFile = {
+    items: [item("001", "passed")],
+    pause: { at: "2026-10-15T12:00:00.000Z", after: "001" },
+  };
+  try {
+    await saveQueue(dir, existing);
+    const scheduled = scheduleElevatePicks([{ id: "r1-01" }, { id: "r1-02" }]);
+    assert.equal(scheduled.length, 2);
+    const wrote = await enqueueElevatePicks(dir, scheduled);
+    assert.equal(wrote.enqueued, 2);
+    const loaded = await loadQueue(dir);
+    assert.equal(loaded?.pause?.after, "001");
+    assert.deepEqual(
+      loaded?.items.map((entry) => ({ id: entry.id, kind: entry.kind, status: entry.status })),
+      [
+        { id: "001", kind: "build", status: "passed" },
+        { id: "r1-01", kind: "build", status: "queued" },
+        { id: "r1-02", kind: "build", status: "queued" },
+      ],
+    );
+    const raw = readFileSync(queueFile(dir), "utf8");
+    await assert.rejects(() => enqueueElevatePicks(dir, [{ id: "r1-01" }]), /Duplicate queue id/);
+    await assert.rejects(() => enqueueElevatePicks(dir, [{ id: "Bad_Id" }]), QueueFileError);
+    assert.equal(readFileSync(queueFile(dir), "utf8"), raw);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

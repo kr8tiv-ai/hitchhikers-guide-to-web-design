@@ -249,6 +249,37 @@ function recordPromptFile(args: readonly string[], promptText: string): void {
   }
 }
 
+/**
+ * Run accepted Elevate prompts in order.
+ * An empty list does not spawn and does not call commit.
+ * Each request spawns once, then commit runs once. A failed run
+ * does not commit that prompt or any prompt after it.
+ */
+export async function runElevatePicks(
+  requests: readonly RunRequest[],
+  spawnImpl: SpawnImpl,
+  commit: (req: RunRequest) => Promise<void>,
+  readImpl?: ReadImpl,
+): Promise<{ ran: number; committed: number }> {
+  if (!Array.isArray(requests)) {
+    throw new RunConfigError("Elevate picks must be a list.");
+  }
+  if (requests.length === 0) return { ran: 0, committed: 0 };
+  if (typeof commit !== "function") {
+    throw new RunConfigError("Elevate picks need a way to save each one.");
+  }
+
+  let ran = 0;
+  let committed = 0;
+  for (const req of requests) {
+    await runPrompt(req, spawnImpl, readImpl);
+    ran += 1;
+    await commit(req);
+    committed += 1;
+  }
+  return { ran, committed };
+}
+
 export async function runPrompt(req: RunRequest, spawnImpl: SpawnImpl, readImpl?: ReadImpl): Promise<void> {
   const args = buildArgv(req);
   if (readImpl !== undefined) {

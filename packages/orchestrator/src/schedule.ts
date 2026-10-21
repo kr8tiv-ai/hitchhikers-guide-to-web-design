@@ -123,3 +123,38 @@ export function insertReviews(
 
   return items;
 }
+
+/**
+ * Phase 4, the Improbability Drive.
+ * Accepted Elevate picks come back here. One pick is one build prompt.
+ * Reviews stay on the build cadence in `insertReviews`. An Elevate pick
+ * does not grow a second review, because that would be a second commit.
+ */
+export const ELEVATE_DRIVE_PHASE = "improbability-drive";
+
+/**
+ * Schedule accepted Elevate picks for the Drive.
+ * An empty list schedules nothing, so the caller can commit nothing.
+ * The list never starts with a review, because every row is a build.
+ */
+export function scheduleElevatePicks(
+  picks: readonly { id: string }[],
+): Array<{ id: string; kind: "build"; effort: "xhigh" }> {
+  if (!Array.isArray(picks)) {
+    throw new ScheduleError("Elevate picks must be a list.");
+  }
+  if (picks.length === 0) return [];
+
+  const clean: Array<{ id: string; kind: "build"; effort: "xhigh" }> = [];
+  const seen = new Set<string>();
+  for (const pick of picks) {
+    const id = typeof pick === "object" && pick !== null ? pick.id : "";
+    const item = assertPrompt({ id, phase: ELEVATE_DRIVE_PHASE });
+    if (seen.has(item.id)) {
+      throw new ScheduleError("Duplicate prompt id.");
+    }
+    seen.add(item.id);
+    clean.push({ id: item.id, kind: "build", effort: "xhigh" });
+  }
+  return clean;
+}

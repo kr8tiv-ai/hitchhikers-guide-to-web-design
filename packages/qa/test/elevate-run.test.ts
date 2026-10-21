@@ -289,4 +289,9 @@ test("the executor exports runElevate and does not import a browser", () => {
   assert.equal(source.includes("@lhci"), false);
   assert.equal(source.includes("child_process"), false);
   assert.equal(source.includes("node:fs"), false);
+  assert.equal(source.includes("commit"), false);
+  assert.equal(source.includes("saveQueue"), false);
+  assert.equal(source.includes("scheduleElevate"), false);
+  assert.equal(source.includes("writeFile"), false);
+  assert.match(source, /does not build a pick/);
 });

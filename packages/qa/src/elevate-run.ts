@@ -11,6 +11,9 @@
  * already BLOCKER. Elevate may not keep a change while a gate is red. A clear
  * pair of PASS results keeps the edit. Rollback runs once for the edit, not
  * once per gate. If `rollback` throws, that rejection is returned as-is.
+ *
+ * This module does not build a pick, write a golden prompt, or touch the
+ * Drive queue. The orchestrator owns that path.
  */
 
 import type { A11yGateResult } from "./a11y-gate.ts";
