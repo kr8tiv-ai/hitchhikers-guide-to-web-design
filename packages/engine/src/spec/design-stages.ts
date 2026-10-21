@@ -6,16 +6,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { chooseDirection } from "../brand/directions.ts";
+import { chooseDirection, readDirectionDeal } from "../brand/directions.ts";
 import type { BrandAnswer } from "../brand/kit-from-interview.ts";
 import { planFromBrief, type BriefAnswer } from "./brief-plan.ts";
 import { writeDesignMd } from "./design-outputs.ts";
+import { runPrebuildChecks, type PrebuildReport } from "./prebuild-checks.ts";
 
 export const SITEMAP_REL = ".hitchhiker/sitemap.md";
 export const WIREFRAME_REL = ".hitchhiker/wireframe.md";
 export const STAGE_APPROVALS_REL = ".hitchhiker/design-stages.json";
 
-export type DesignStageName = "sitemap" | "wireframe";
+export type DesignStageName = "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
 
 export interface DesignStageRequest {
   brief: string;
@@ -35,6 +36,15 @@ export interface DesignStageResult {
 interface StageApprovals {
   sitemap?: string;
   wireframe?: string;
+  styleGuide?: string;
+  direction?: string;
+  prebuild?: string;
+}
+
+export interface DesignBuildGate {
+  ok: boolean;
+  reason: string;
+  checks: PrebuildReport;
 }
 
 export function advanceDesignStages(projectDir: string, input: DesignStageRequest): DesignStageResult {
@@ -81,7 +91,52 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
     writeDesignMd(projectDir, brief, answers);
     return result("style-guide", projectDir);
   }
+
+  if (input.approval?.stage === "style-guide") recordText(state, "styleGuide", input.approval.text);
+  if (state.styleGuide !== undefined) writeApprovals(projectDir, state);
+  if (state.styleGuide === undefined) return result("none", projectDir);
+
+  if (input.approval?.stage === "direction" && directionPicked(projectDir)) {
+    recordText(state, "direction", input.approval.text);
+  }
+  if (state.direction !== undefined) writeApprovals(projectDir, state);
+  if (state.direction === undefined) return result("none", projectDir);
+
+  if (input.approval?.stage === "prebuild" && runPrebuildChecks(brief).pass) {
+    recordText(state, "prebuild", input.approval.text);
+  }
+  if (state.prebuild !== undefined) writeApprovals(projectDir, state);
   return result("none", projectDir);
+}
+
+function recordText(state: StageApprovals, key: keyof StageApprovals, text: string): void {
+  const trimmed = text.trim();
+  if (trimmed === "") return;
+  state[key] = trimmed;
+}
+
+function directionPicked(projectDir: string): boolean {
+  try {
+    return readDirectionDeal(projectDir)?.pickedId !== null && readDirectionDeal(projectDir)?.pickedId !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+/** True only when every design stage is approved and the pre-build checks pass. */
+export function designReadyForBuild(projectDir: string, brief: string): DesignBuildGate {
+  const state = readApprovals(projectDir);
+  const checks = runPrebuildChecks(brief);
+  if (state.sitemap === undefined) return { ok: false, reason: "Approve the sitemap before the build.", checks };
+  if (state.wireframe === undefined) return { ok: false, reason: "Approve the wireframe before the build.", checks };
+  if (state.styleGuide === undefined) return { ok: false, reason: "Approve the style guide before the build.", checks };
+  if (state.direction === undefined) return { ok: false, reason: "Approve the direction before the build.", checks };
+  if (!checks.pass) {
+    const failed = checks.checks.find((check) => !check.pass);
+    return { ok: false, reason: failed?.detail ?? "The pre-build checks did not pass.", checks };
+  }
+  if (state.prebuild === undefined) return { ok: false, reason: "Approve the pre-build checks before the build.", checks };
+  return { ok: true, reason: "", checks };
 }
 
 function recordChosenDirection(projectDir: string, direction: DesignStageRequest["direction"]): void {
@@ -150,6 +205,9 @@ function readApprovals(projectDir: string): StageApprovals {
   const state: StageApprovals = {};
   if (typeof record.sitemap === "string" && record.sitemap.trim() !== "") state.sitemap = record.sitemap;
   if (typeof record.wireframe === "string" && record.wireframe.trim() !== "") state.wireframe = record.wireframe;
+  if (typeof record.styleGuide === "string" && record.styleGuide.trim() !== "") state.styleGuide = record.styleGuide;
+  if (typeof record.direction === "string" && record.direction.trim() !== "") state.direction = record.direction;
+  if (typeof record.prebuild === "string" && record.prebuild.trim() !== "") state.prebuild = record.prebuild;
   return state;
 }
 
@@ -157,5 +215,8 @@ function writeApprovals(projectDir: string, state: StageApprovals): void {
   const body: StageApprovals = {};
   if (state.sitemap !== undefined) body.sitemap = state.sitemap;
   if (state.wireframe !== undefined) body.wireframe = state.wireframe;
+  if (state.styleGuide !== undefined) body.styleGuide = state.styleGuide;
+  if (state.direction !== undefined) body.direction = state.direction;
+  if (state.prebuild !== undefined) body.prebuild = state.prebuild;
   writeFileSync(path.join(projectDir, STAGE_APPROVALS_REL), `${JSON.stringify(body, null, 2)}\n`, "utf8");
 }

@@ -28,4 +28,15 @@ test("a file lock is retried and a rejected ref returns once", () => {
   }, () => undefined);
   assert.equal(rejects, 1);
   assert.equal(rejected.status, 1);
+
+  let indexWrites = 0;
+  const index = retryGitText((): GitText => {
+    indexWrites += 1;
+    if (indexWrites < 2) {
+      return { status: 1, stdout: "", stderr: "fatal: unable to write new index file" };
+    }
+    return { status: 0, stdout: "ok\n", stderr: "" };
+  }, () => undefined);
+  assert.equal(index.status, 0);
+  assert.equal(indexWrites, 2);
 });

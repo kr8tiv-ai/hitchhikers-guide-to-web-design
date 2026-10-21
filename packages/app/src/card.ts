@@ -1,6 +1,7 @@
 import type { InterviewCommand, InterviewSession, Question } from "@hitchhiker/engine";
 import { acceptAttribute, kindsFor, zoneCopy } from "./client/attach.ts";
 import { dropInternalCopy, omitModelInstructions, stripQuestionIds, stripRawMarkdown } from "./question-parts.ts";
+import { SPECIMEN_SVG } from "./type-specimen-data.ts";
 
 /**
  * One question. The interview session stores the answer.
@@ -109,7 +110,11 @@ export interface CardState {
    * Set only after the interview is finished.
    * Omitted, the done card stays a heading with no action.
    */
-  brief?: { status: "idle" | "drafting" | "pending" | "approved" | "revising" } | null;
+  brief?: {
+    status: "idle" | "drafting" | "pending" | "approved" | "revising";
+    buildStarted?: boolean;
+    planApproved?: boolean;
+  } | null;
   /** Dealt type pairs for DP-1.5. Absent, the card uses the six canned moods. */
   fontSamples?: readonly FontSampleView[];
 }
@@ -334,8 +339,17 @@ function heading(title: string, why: string, done: boolean): string {
 }
 
 /** Finished interview. The action is absent until the desk names a brief status. */
-function doneCard(brief: CardState["brief"]): string {
-  if (brief === undefined || brief === null) return heading(DONE_TITLE, DONE_WHY, true);
+function doneCard(brief: CardState["brief"], counts: CardCounts | null | undefined): string {
+  const progress =
+    counts !== undefined && counts !== null && counts.total > 0
+      ? `  <p class="hh-progress" data-card-progress>Interview done (${counts.total} of ${counts.total})</p>\n`
+      : "";
+  if (brief === undefined || brief === null) {
+    return `<article class="hh-qcard" data-done="true" aria-labelledby="hh-card-ask">
+  <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
+  <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
+${progress}</article>`;
+  }
   const status = brief.status;
   let action = "";
   if (status === "idle") {
@@ -344,13 +358,17 @@ function doneCard(brief: CardState["brief"]): string {
     action = `  <p class="hh-qcard__reading" data-guide-reading aria-live="polite">Drafting the Site Brief · 0s</p>\n  <p class="hh-qcard__next"><button type="button" class="hh-btn hh-btn--primary" data-action="draft-brief" disabled>Draft the Site Brief</button></p>\n`;
   } else if (status === "pending" || status === "revising") {
     action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Review the Site Brief</a></p>\n`;
-  } else {
+  } else if (brief.buildStarted === true) {
     action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/hh-dashboard">The build is started.</a></p>\n`;
+  } else if (brief.planApproved === true) {
+    action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Review the design</a></p>\n`;
+  } else {
+    action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Approve the plan</a></p>\n`;
   }
   return `<article class="hh-qcard" data-done="true" data-brief-status="${status}" aria-labelledby="hh-card-ask">
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
   <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
-${action}</article>`;
+${progress}${action}</article>`;
 }
 
 function kickerBlock(question: Question, counts: CardCounts | null | undefined): string {
@@ -426,20 +444,19 @@ const FONT_SAMPLES: readonly FontSampleView[] = [
 ];
 
 const SAMPLE_LINE = "Find your calm";
-
-function specimenSrc(display: string, body: string): string {
-  const title = display === body ? display : `${display} + ${body}`;
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120" viewBox="0 0 640 120">` +
-    `<rect width="640" height="120" fill="#f4f0e6"/>` +
-    `<text x="24" y="52" fill="#1c1915" font-size="28" font-family="ui-sans-serif,sans-serif">${escapeXml(title)}</text>` +
-    `<text x="24" y="88" fill="#5c564c" font-size="16" font-family="ui-sans-serif,sans-serif">Specimen</text>` +
-    `</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+/** Cached outline of "Find your calm" in that display face. Null when the face was not outlined. */
+export function specimenSvg(display: string): string | null {
+  const svg = SPECIMEN_SVG[display];
+  if (svg === undefined) return null;
+  if (!svg.includes(`<!-- face:${display} -->`) || !svg.includes("<path")) return null;
+  if (/ui-sans-serif|font-family\s*=/i.test(svg)) return null;
+  return svg;
 }
 
-function escapeXml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function specimenSrc(display: string): string | null {
+  const svg = specimenSvg(display);
+  if (svg === null) return null;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /**
@@ -453,10 +470,18 @@ function fontExamplesHtml(ask: string, samples: readonly FontSampleView[] | unde
   const buttons = list.map((sample) => {
     const display = sample.display;
     const body = sample.body === "" ? display : sample.body;
-    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(sample.adjectives)}" data-display="${escapeHtml(display)}" data-body="${escapeHtml(body)}" aria-pressed="false">
+    const src = specimenSrc(display);
+    const outlined = src !== null;
+    const image = outlined
+      ? `<img class="hh-type-sample__specimen" alt="Find your calm, set in ${escapeHtml(display)}" src="${src}" />`
+      : "";
+    const approx = outlined
+      ? `<span class="hh-type-sample__approx" hidden>approximate preview</span>`
+      : `<span class="hh-type-sample__approx">approximate preview</span>`;
+    return `    <button type="button" class="hh-type-sample" data-font-sample="${escapeHtml(sample.adjectives)}" data-display="${escapeHtml(display)}" data-body="${escapeHtml(body)}" data-specimen="${outlined ? "outline" : "missing"}" aria-pressed="false">
       <span class="hh-type-sample__display" data-display="${escapeHtml(display)}">${SAMPLE_LINE}</span>
-      <img class="hh-type-sample__specimen" alt="Specimen for ${escapeHtml(display)}" src="${specimenSrc(display, body)}" />
-      <span class="hh-type-sample__approx" hidden>approximate preview</span>
+      ${image}
+      ${approx}
       <span class="hh-type-sample__text" data-body="${escapeHtml(body)}">${escapeHtml(sample.pair)}</span>
       <span class="hh-type-sample__name">${escapeHtml(sample.adjectives)}</span>
     </button>`;
@@ -556,7 +581,7 @@ function timeoutRetry(error: string | null): string {
 
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
-  if (state.done) return doneCard(state.brief);
+  if (state.done) return doneCard(state.brief, state.counts);
   const question = state.question;
   if (question === null) return heading(EMPTY_TITLE, EMPTY_WHY, false);
 

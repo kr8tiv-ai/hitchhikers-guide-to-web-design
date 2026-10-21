@@ -83,6 +83,7 @@ test("a new project approves the brief, the plan, and each design stage", async 
     await page.locator("#hh-new-dir").fill(dest);
     await page.getByRole("button", { name: "Create project" }).click();
     await page.locator('[data-region="question"][data-live="true"]').waitFor({ timeout: 30_000 });
+    await expect(page.locator(".hh-project__name")).toHaveText("Visit Book");
     const skip = page.getByRole("button", { name: "Skip tour" });
     if (await skip.count()) await skip.click();
     await expect(page.locator("[data-question-id]")).toBeVisible();
@@ -116,7 +117,10 @@ test("a new project approves the brief, the plan, and each design stage", async 
     const approvePlan = page.getByRole("button", { name: "Approve plan", exact: true });
     await expect(approvePlan).toBeEnabled();
     await approvePlan.click();
-    await expect(page.locator("[data-build-status]")).toContainText("The build is started.", { timeout: 60_000 });
+    await expect(page.locator("[data-design-stage='sitemap']")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator("body")).not.toContainText("The build is started.");
+    expect(existsSync(path.join(dest, ".hitchhiker", "queue.json"))).toBe(false);
+    expect(existsSync(path.join(dest, ".hitchhiker", "build-run.json"))).toBe(false);
 
     await expect(page.getByRole("button", { name: "Approve sitemap" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Approve sitemap" }).click();
@@ -125,10 +129,19 @@ test("a new project approves the brief, the plan, and each design stage", async 
     await expect(page.locator("[data-design-stage='style-guide']")).toContainText("The style guide is in.", {
       timeout: 30_000,
     });
-
+    await page.getByRole("button", { name: "Approve style guide" }).click();
     await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
     await page.locator("[data-pick-direction]").first().click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked", { timeout: 30_000 });
+    await page.getByRole("button", { name: "Approve direction" }).click();
+    await expect(page.locator("[data-design-stage='prebuild']")).toBeVisible();
+    expect(existsSync(path.join(dest, ".hitchhiker", "queue.json"))).toBe(false);
+    await page.getByRole("button", { name: "Approve pre-build checks" }).click();
+    await expect(page.locator("[data-start-build]")).toBeEnabled();
+    expect(existsSync(path.join(dest, ".hitchhiker", "queue.json"))).toBe(false);
+    await page.locator("[data-start-build]").click();
+    await expect(page.locator("[data-build-status]")).toContainText("The build is started.", { timeout: 60_000 });
+    expect(existsSync(path.join(dest, ".hitchhiker", "queue.json"))).toBe(true);
 
     expect(existsSync(path.join(dest, ".hitchhiker", "sitemap.md"))).toBe(true);
     expect(existsSync(path.join(dest, ".hitchhiker", "wireframe.md"))).toBe(true);

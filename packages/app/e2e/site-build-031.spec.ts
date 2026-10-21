@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { approveDesignAndStart } from "./design-then-build.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +61,7 @@ async function approveBriefThenPlan(page: import("@playwright/test").Page): Prom
   await expect(plan).toBeEnabled();
   if (await box.count()) await box.check();
   await plan.click();
+  await approveDesignAndStart(page);
 }
 
 async function finishInterview(page: import("@playwright/test").Page, url: string): Promise<void> {

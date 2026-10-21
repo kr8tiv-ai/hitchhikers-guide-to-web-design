@@ -96,7 +96,7 @@ test("draftSiteBrief calls briefLoop with the context packet and does not draft 
   }
 });
 
-test("approve starts one build and a second approve does not call the model", async () => {
+test("approve opens the design stages and a second approve does not call the model", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-brief-027-approve-"));
   const tasks: string[] = [];
   const think = asThink((req) => {
@@ -110,19 +110,12 @@ test("approve starts one build and a second approve does not call the model", as
     assert.equal(approved.buildStarted, false);
     const started = await approveSitePlan(dir);
     assert.equal(started.status, "approved");
-    assert.equal(started.buildStarted, true);
-    assert.equal(started.phase, "Babel Fish");
-    assert.equal(started.nextAction, "The build is started.");
-    const state = loadState(dir);
-    assert.equal(state?.phase, "Babel Fish");
-    assert.equal(state?.slice, "Guide Entry");
-    assert.equal(state?.promptId, "guide-entry");
-    const queue = await loadQueue(dir);
-    assert.ok((queue?.items.length ?? 0) > 1);
-    assert.equal(queue?.items[0]?.id, "001");
-    assert.equal(queue?.items[0]?.kind, "build");
-    assert.equal(queue?.items[0]?.status, "queued");
-    assert.equal(queue?.items.some((item) => item.id === "guide-entry"), false);
+    assert.equal(started.planApproved, true);
+    assert.equal(started.buildStarted, false);
+    assert.notEqual(started.phase, "Babel Fish");
+    assert.notEqual(started.nextAction, "The build is started.");
+    assert.equal(existsSync(path.join(dir, ".hitchhiker", "sitemap.md")), true);
+    assert.equal((await loadQueue(dir))?.items.length ?? 0, 0);
     const briefFile = path.join(dir, ".hitchhiker", "SITE-BRIEF.md");
     assert.equal(existsSync(briefFile), true);
     assert.match(readFileSync(briefFile, "utf8"), /The site helps a visitor book a visit/);
@@ -130,10 +123,10 @@ test("approve starts one build and a second approve does not call the model", as
     const drafts = tasks.filter((task) => task === "brief-draft");
     assert.equal(drafts.length, 1);
     const again = await approveSiteBrief(dir, think as never);
-    assert.equal(again.buildStarted, true);
+    assert.equal(again.buildStarted, false);
+    assert.equal(again.planApproved, true);
     assert.equal(tasks.filter((task) => task === "brief-draft").length, 1);
-    const queueAgain = await loadQueue(dir);
-    assert.equal(queueAgain?.items.length, queue?.items.length);
+    assert.equal((await loadQueue(dir))?.items.length ?? 0, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

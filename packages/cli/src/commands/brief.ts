@@ -1,15 +1,13 @@
 /**
  * `hh brief` drafts or shows the Site Brief.
- * `hh brief --approve` approves it and starts the next phase.
+ * `hh brief --approve` approves it and opens the design stages.
+ * It does not start the billed build.
  * Both use the same engine path as the desk.
  */
 import {
   approveSiteBrief,
   approveSitePlan,
   draftSiteBrief,
-  getBuildRunner,
-  hasProjectBuildRunner,
-  installLiveBuildRunner,
   readBriefDesk,
   think,
 } from "@hitchhiker/engine";
@@ -33,9 +31,6 @@ export async function runBriefCommand(
     if (arg !== "--approve") return { exitCode: 2, stdout: USAGE };
   }
   const approve = argv.includes("--approve");
-  if (approve && thinkImpl === think && !hasProjectBuildRunner(project.dir) && getBuildRunner() === null) {
-    installLiveBuildRunner();
-  }
   try {
     const current = readBriefDesk(project.dir);
     const drafted = approve

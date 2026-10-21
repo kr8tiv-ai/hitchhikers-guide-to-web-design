@@ -65,6 +65,7 @@ import {
   inferAssetRole,
   approveSiteBrief,
   approveSitePlan,
+  startSiteBuild,
   draftSiteBrief,
   planDraftInFlight,
   readBriefDesk,
@@ -1777,6 +1778,7 @@ function briefPayload(desk: BriefDeskView): {
   phase: string;
   nextAction: string;
   buildStarted: boolean;
+  planApproved: boolean;
   draft: BriefDeskView["draft"];
   error: string;
   note: string;
@@ -1788,6 +1790,7 @@ function briefPayload(desk: BriefDeskView): {
     phase: desk.phase,
     nextAction: desk.nextAction,
     buildStarted: desk.buildStarted,
+    planApproved: desk.planApproved,
     draft: desk.draft,
     error: desk.error,
     note: desk.note,
@@ -1903,7 +1906,13 @@ async function handleApproveForm(
       const typed = (params?.get("approval") ?? "").trim();
       const commit = params?.get("commit") ?? "approve";
       const text = typed !== "" ? typed : commit === "approve" ? "Approved." : "";
-      if ((stage !== "sitemap" && stage !== "wireframe") || text === "") {
+      const knownStage =
+        stage === "sitemap" ||
+        stage === "wireframe" ||
+        stage === "style-guide" ||
+        stage === "direction" ||
+        stage === "prebuild";
+      if (!knownStage || text === "") {
         const brief = readBriefDesk(projectDir);
         const message = text === "" ? "Write the change." : "That stage is not on the desk.";
         if (mime === "application/json") {
@@ -1915,7 +1924,18 @@ async function handleApproveForm(
       }
       const brief = readBriefDesk(projectDir);
       const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
-      await approveDesignStage(projectDir, markdown, stage, text);
+      await approveDesignStage(
+        projectDir,
+        markdown,
+        stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild",
+        text,
+      );
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "start-build") {
+      await startSiteBuild(projectDir);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
@@ -2264,7 +2284,7 @@ async function handleGet(
   }
   if (pathname === "/approve") {
     const brief = readBriefDesk(projectDir);
-    if (brief.buildStarted) {
+    if (brief.planApproved || brief.buildStarted) {
       const markdown = briefMarkdown(projectDir, brief);
       if (markdown.trim() !== "") await presentDesignStage(projectDir, markdown);
     }
@@ -2464,6 +2484,16 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(CARD_SOURCE)));
     return;
   }
+  if (pathname === "/client/type-specimen-data.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(path.resolve(SRC_ROOT, "type-specimen-data.ts"))),
+    );
+    return;
+  }
   if (pathname === "/client/question-parts.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(QUESTION_PARTS_SOURCE)));
     return;
@@ -2611,16 +2641,25 @@ function buildSession(
   const questionId = question?.id ?? null;
   const index = questionId === null ? 0 : questions.findIndex((item) => item.id === questionId) + 1;
   const counts: CardCounts | null =
-    question === null || index < 1
-      ? null
-      : {
+    question !== null && index >= 1
+      ? {
           index,
           total: questions.length,
           phase: state.phase,
           openRequired: openRequiredCount(questions, answers, requiredList),
           mode: depth,
           modeNote: modeNote(depth),
-        };
+        }
+      : done && questions.length > 0
+        ? {
+            index: questions.length,
+            total: questions.length,
+            phase: state.phase,
+            openRequired: 0,
+            mode: depth,
+            modeNote: modeNote(depth),
+          }
+        : null;
   const assumption = previousAssumption(questions, answers, question?.id ?? null);
   const required = questionNeedsConfirm(question, requiredList);
   let choices =
@@ -2704,7 +2743,9 @@ function buildSession(
     ...(savedFiles.length > 0 ? { attach: chipsFromSaved(savedFiles) } : {}),
     ...(lead !== "" ? { lead } : {}),
     ...(help !== "" ? { help } : {}),
-    ...(briefDesk !== null ? { brief: { status: briefDesk.status } } : {}),
+    ...(briefDesk !== null
+      ? { brief: { status: briefDesk.status, buildStarted: briefDesk.buildStarted, planApproved: briefDesk.planApproved } }
+      : {}),
   };
   const compact = depthTouched(questions, answers);
   const stepTotal = questions.length;
@@ -3150,8 +3191,12 @@ function renderDesk(
 function interviewHead(token: string, session: DeskSession): string {
   const index = session.counts?.index ?? 1;
   const total = session.counts?.total ?? 1;
+  const progress =
+    session.done && session.counts !== null
+      ? `Interview done (${session.counts.total} of ${session.counts.total})`
+      : `Question ${index} of ${total}`;
   return `<div class="hh-interview__head" data-interview-head>
-            <p class="hh-progress" data-progress>Question ${index} of ${total}</p>
+            <p class="hh-progress" data-progress>${progress}</p>
             <button class="hh-btn hh-btn--secondary" type="button" data-restart-open="restart" data-tip="Saves the project file, then returns the interview to the first question.">Restart the interview</button>
           </div>
           <dialog class="hh-dialog" data-restart-dialog aria-labelledby="hh-restart-title">
@@ -3296,6 +3341,15 @@ function renderBrand(
   });
 }
 
+function approveStatusLine(desk: BriefDeskView): string {
+  if (desk.buildStarted) return "The build is started.";
+  if (desk.status === "drafting") return "Drafting the Site Brief";
+  if (desk.status === "revising") return "Revising the Site Brief";
+  if (desk.planApproved) return "The design is waiting for a yes.";
+  if (desk.status === "approved") return "The plan is drafted.";
+  return "The Site Brief is ready for a yes.";
+}
+
 function renderBrandBrief(token: string, notice: string | null, desk: BriefDeskView): string {
   return renderPanel({
     notice,
@@ -3304,7 +3358,7 @@ function renderBrandBrief(token: string, notice: string | null, desk: BriefDeskV
     description: "The Site Brief is on the desk.",
     current: "/brand",
     kicker: "Brand kit",
-    status: desk.status === "approved" ? "The build is started." : "The brief is ready for a yes.",
+    status: approveStatusLine(desk),
     main: brandBriefMain(desk),
   });
 }
@@ -3343,14 +3397,7 @@ function renderApproveBrief(
   projectDir = "",
   confirmError = "",
 ): string {
-  const status =
-    desk.buildStarted
-      ? "The build is started."
-      : desk.status === "drafting"
-        ? "Drafting the Site Brief"
-        : desk.status === "revising"
-          ? "Revising the Site Brief"
-          : "The Site Brief is ready for a yes.";
+  const status = approveStatusLine(desk);
   const stage: ApproveStage =
     projectDir !== "" && planDraftInFlight(projectDir)
       ? "planning"
@@ -3366,7 +3413,10 @@ function renderApproveBrief(
       coverage = undefined;
     }
   }
-  const stageHtml = desk.buildStarted && projectDir !== "" ? renderDesignStagePanel(projectDir, token) : "";
+  const stageHtml =
+    (desk.planApproved || desk.buildStarted) && projectDir !== ""
+      ? renderDesignStagePanel(projectDir, token, desk.draft === null ? "" : renderSiteBrief(desk.draft))
+      : "";
   let html = renderPanel({
     notice,
     token,
@@ -3813,6 +3863,7 @@ function browserModule(filePath: string): string {
   const js = stripped
     .replace(/from\s+["']\.\.\/card\.ts["']/g, 'from "/client/card.js"')
     .replace(/from\s+["']\.\/card\.ts["']/g, 'from "/client/card.js"')
+    .replace(/from\s+["']\.\/type-specimen-data\.ts["']/g, 'from "/client/type-specimen-data.js"')
     .replace(/from\s+["']\.\/question-parts\.ts["']/g, 'from "/client/question-parts.js"')
     .replace(/from\s+["']\.\.\/question-parts\.ts["']/g, 'from "/client/question-parts.js"')
     .replace(/from\s+["']\.\/client\/attach\.ts["']/g, 'from "/client/attach.js"')

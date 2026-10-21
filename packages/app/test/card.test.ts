@@ -425,8 +425,17 @@ test("a finished interview offers Draft the Site Brief", () => {
   assert.match(pending, /href="\/approve"/);
   assert.match(pending, /Review the Site Brief/);
   const approved = renderCard({ ...state(), question: null, done: true, brief: { status: "approved" } });
-  assert.match(approved, /href="\/hh-dashboard"/);
-  assert.match(approved, /The build is started\./);
+  assert.match(approved, /href="\/approve"/);
+  assert.match(approved, /Approve the plan/);
+  assert.doesNotMatch(approved, /The build is started/);
+  const building = renderCard({
+    ...state(),
+    question: null,
+    done: true,
+    brief: { status: "approved", buildStarted: true },
+  });
+  assert.match(building, /href="\/hh-dashboard"/);
+  assert.match(building, /The build is started\./);
 });
 
 test("a question with resources lists where to look, and one without does not", () => {

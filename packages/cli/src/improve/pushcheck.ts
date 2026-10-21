@@ -15,7 +15,7 @@ const GIT_LOCK_ATTEMPTS = 10;
 
 /** A Windows lock on a loose object. A rejected ref is not this. */
 export function gitTextIsFileLock(text: string): boolean {
-  return /permission denied|unable to write file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i.test(
+  return /permission denied|unable to write file|unable to write new index file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i.test(
     text,
   );
 }

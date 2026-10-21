@@ -4143,7 +4143,9 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const progress = env.document.querySelector("[data-progress]");
     if (progress !== null && view?.counts != null) {
-      progress.textContent = `Question ${view.counts.index} of ${view.counts.total}`;
+      progress.textContent = view.done
+        ? `Interview done (${view.counts.total} of ${view.counts.total})`
+        : `Question ${view.counts.index} of ${view.counts.total}`;
     }
     if (view !== null) applyMast(env.document, view.mastCompact, view.mastLine);
     paintSaveStatus(view?.saveStatus ?? null);
@@ -4200,18 +4202,52 @@ export function mountDesk(env: DeskEnv): () => void {
     const host = root as DeskElement & { querySelectorAll?: (selector: string) => ArrayLike<DeskElement> };
     const list = host.querySelectorAll?.("[data-font-sample]");
     if (list === undefined) return;
-    const fonts = (env.document as { fonts?: { check?: (font: string) => boolean } }).fonts;
     for (let index = 0; index < list.length; index += 1) {
       const button = list[index];
       if (button === undefined) continue;
       const display = button.getAttribute("data-display") ?? "";
-      const loaded = display !== "" && fonts?.check?.(`700 16px "${display}"`) === true;
+      // fonts.check is true for a missing family, because the fallback can draw the line.
+      // A system stand-in must not hide the outline or skip the approximate-preview label.
+      const loaded = displayFaceReady(display);
       if (loaded) {
         button.setAttribute("data-font-live", "true");
         button.removeAttribute("data-font-fallback");
         continue;
       }
       button.removeAttribute("data-font-live");
+      if (button.getAttribute("data-specimen") === "outline") {
+        button.removeAttribute("data-font-fallback");
+        continue;
+      }
+      button.setAttribute("data-font-fallback", "approx");
+    }
+  }
+
+  function displayFaceReady(display: string): boolean {
+    if (display === "") return false;
+    const create = env.document.createElement;
+    if (create === undefined) return false;
+    try {
+      const canvas = create.call(env.document, "canvas") as DeskElement & {
+        getContext?: (kind: string) => {
+          font: string;
+          measureText: (text: string) => { width: number };
+        } | null;
+      };
+      const ctx = canvas.getContext?.("2d") ?? null;
+      if (ctx === null) return false;
+      const sample = "Find your calm";
+      const family = display.replace(/["\\]/g, "");
+      ctx.font = `700 72px "${family}", monospace`;
+      const faced = ctx.measureText(sample).width;
+      ctx.font = "700 72px monospace";
+      const mono = ctx.measureText(sample).width;
+      ctx.font = "700 72px sans-serif";
+      const sans = ctx.measureText(sample).width;
+      if (!Number.isFinite(faced) || faced <= 0) return false;
+      return Math.abs(faced - mono) > 0.5 && Math.abs(faced - sans) > 0.5;
+    } catch {
+      return false;
     }
   }
 

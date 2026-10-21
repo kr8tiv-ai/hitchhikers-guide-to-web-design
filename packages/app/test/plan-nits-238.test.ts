@@ -41,6 +41,7 @@ function desk(): BriefDeskView {
     markdown: "",
     sources: [],
     buildStarted: false,
+    planApproved: false,
     phase: "Don't Panic",
     nextAction: "Approve the Site Brief.",
     error: "",

@@ -23,6 +23,7 @@ import {
   loadState,
   locationLabel,
   projectHome,
+  readProjectDisplayName,
   readRecentProjects,
   readSaveNotice,
   removeRecentProject,
@@ -272,7 +273,8 @@ export async function projectChrome(
   const saveForm = holding
     ? ""
     : `<form method="post" action="/api/project/save"><input type="hidden" name="csrf" value="${escapeHtml(token)}" /><button class="hh-btn hh-btn--secondary" type="submit" data-tip="Writes one project file on this machine. The interview stays where it is.">Save project</button></form>`;
-  const name = holding ? "" : `<p class="hh-project__name">${escapeHtml(path.basename(projectDir))}</p>`;
+  const displayName = readProjectDisplayName(projectDir) ?? path.basename(projectDir);
+  const name = holding ? "" : `<p class="hh-project__name">${escapeHtml(displayName)}</p>`;
   const effort = holding ? "" : effortControl(projectDir);
   const flashLine = flash.trim() === "" ? "" : `<p class="hh-small" data-open-notice role="alert">${escapeHtml(flash.trim())}</p>`;
   const created = newProjectFields(token, holding);

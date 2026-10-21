@@ -7,11 +7,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  advanceDesignStages,
+  chooseDirection,
   clearProjectBuildRunner,
+  dealDirections,
   loadQueue,
+  readBriefDesk,
   readBuildRun,
+  saveDirectionDeal,
   setProjectBuildRunner,
   siteBuildSettled,
+  startSiteBuild,
   type BuildSpawn,
   type ThinkRequest,
   type ThinkResult,
@@ -40,7 +46,7 @@ function sample(): Record<string, string> {
   };
 }
 
-test("hh brief --approve and hh next --run spawn through the injected runner once", async () => {
+test("Start build and hh next --run spawn through the injected runner once", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-cli-build-"));
   let calls = 0;
   let release: (code: number) => void = () => undefined;
@@ -67,7 +73,22 @@ test("hh brief --approve and hh next --run spawn through the injected runner onc
   try {
     const approved = await runBriefCommand(["--approve", "--project", dir], process.cwd(), think as never);
     assert.equal(approved.exitCode, 0);
-    assert.match(approved.stdout, /The build is started/);
+    assert.doesNotMatch(approved.stdout, /The build is started/);
+    assert.equal(calls, 0);
+    const brief = readBriefDesk(dir).markdown;
+    advanceDesignStages(dir, { brief, approval: { stage: "sitemap", text: "Approved." } });
+    advanceDesignStages(dir, { brief, approval: { stage: "wireframe", text: "Approved." } });
+    advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
+    const deal = dealDirections();
+    saveDirectionDeal(dir, deal);
+    const first = deal.directions[0];
+    assert.ok(first);
+    chooseDirection(dir, first.id, "It fits the visit.");
+    advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
+    advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+    assert.equal(calls, 0);
+    const started = await startSiteBuild(dir);
+    assert.equal(started.buildStarted, true);
     let running = false;
     for (let attempt = 0; attempt < 40 && !running; attempt += 1) {
       running = readBuildRun(dir)?.status === "running";

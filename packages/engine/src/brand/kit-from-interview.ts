@@ -15,6 +15,11 @@ export interface BrandAnswer {
   status?: string;
 }
 
+export interface BrandSwatch {
+  name: string;
+  hex: string;
+}
+
 export interface BrandPalette {
   paper: string;
   ink: string;
@@ -22,6 +27,8 @@ export interface BrandPalette {
   muted: string;
   body: number;
   large: number;
+  /** Named colours from the answer. Empty when the kit is using the default palette. */
+  swatches: readonly BrandSwatch[];
 }
 
 const SKIPPED = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
@@ -52,6 +59,7 @@ export function defaultPalette(): BrandPalette {
     muted,
     body: contrastRatio(INK, PAPER),
     large: contrastRatio(ACCENT, PAPER),
+    swatches: [],
   };
 }
 
@@ -96,6 +104,7 @@ export function brandKitFromAnswers(
     `Paper ${palette.paper} carries ink ${palette.ink} at ${palette.body.toFixed(2)} to 1.`,
     `Muted ${palette.muted} is for secondary body text and also clears 4.5 to 1.`,
     `Accent ${palette.accent} is for large text at ${palette.large.toFixed(2)} to 1.`,
+    swatchLine(palette),
     paletteNote(colour, moodPalette),
     "",
     "## Type",
@@ -161,6 +170,10 @@ export function writeBrandKit(projectDir: string, answers: readonly BrandAnswer[
 
 function typeDeal(type: string): string | null {
   if (/^no type yet\b/i.test(type)) return null;
+  if (/^no fonts yet\b/i.test(type)) {
+    const rest = type.replace(/^no fonts yet\.?\s*/i, "").trim();
+    return rest === "" ? null : rest;
+  }
   return type;
 }
 
@@ -196,6 +209,7 @@ function paletteFromMood(mood: string): BrandPalette | null {
     muted,
     body: contrastRatio(first.ink, first.paper),
     large: contrastRatio(accent, first.paper),
+    swatches: [],
   };
   if (!passesBodyContrast(palette.ink, palette.paper)) return null;
   if (!passesBodyContrast(palette.muted, palette.paper)) return null;
@@ -234,8 +248,42 @@ function optsIntoSound(motion: string): boolean {
   return /\b(sound|ambient|audio)\b/i.test(motion) && !/\bno sound\b|\bwithout sound\b|\bsound off\b/i.test(motion);
 }
 
+const NAMED_COLOURS: readonly { name: string; pattern: RegExp; hex: string; role: "paper" | "ink" | "accent" | "swatch" }[] = [
+  { name: "soft sand", pattern: /soft sand/i, hex: "#f3e6d0", role: "paper" },
+  { name: "near-black green", pattern: /near-black green/i, hex: "#14241c", role: "ink" },
+  { name: "sunset gold", pattern: /sunset gold/i, hex: "#8a6a12", role: "accent" },
+  { name: "jungle green", pattern: /jungle green/i, hex: "#1f6b4a", role: "swatch" },
+  { name: "ocean blue", pattern: /ocean blue/i, hex: "#1d4e89", role: "swatch" },
+];
+
+function swatchLine(palette: BrandPalette): string {
+  if (palette.swatches.length === 0) return "";
+  return `Swatches: ${palette.swatches.map((swatch) => `${swatch.name} ${swatch.hex}`).join(", ")}.`;
+}
+
 function paletteFromWords(words: string): BrandPalette {
   const palette = defaultPalette();
+  const named = NAMED_COLOURS.filter((colour) => colour.pattern.test(words));
+  if (named.length > 0) {
+    const paper = named.find((colour) => colour.role === "paper")?.hex ?? palette.paper;
+    const ink = named.find((colour) => colour.role === "ink")?.hex ?? palette.ink;
+    let accent = named.find((colour) => colour.role === "accent")?.hex ?? palette.accent;
+    if (!passesLargeContrast(accent, paper)) accent = darkenUntil(accent, paper, 3);
+    const muted = darkenUntil("#5c6570", paper, 4.5);
+    const swatches = named.map((colour) => ({
+      name: colour.name,
+      hex: colour.role === "accent" ? accent : colour.hex,
+    }));
+    return {
+      paper,
+      ink,
+      accent,
+      muted,
+      body: contrastRatio(ink, paper),
+      large: contrastRatio(accent, paper),
+      swatches,
+    };
+  }
   const hex = /#[0-9a-fA-F]{6}/.exec(words);
   if (hex?.[0] !== undefined && passesBodyContrast(hex[0], PAPER)) {
     return { ...palette, accent: hex[0], large: contrastRatio(hex[0], PAPER) };

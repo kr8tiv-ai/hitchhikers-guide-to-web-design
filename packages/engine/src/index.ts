@@ -145,7 +145,10 @@ export type { SiteTypeHint } from "./site-types.ts";
 export { missingRequired, renderBrief, requiredIds } from "./required.ts";
 export type { AnswerRecord } from "./required.ts";
 export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
-export { advanceDesignStages } from "./spec/design-stages.ts";
+export { advanceDesignStages, designReadyForBuild } from "./spec/design-stages.ts";
+export type { DesignBuildGate, DesignStageName } from "./spec/design-stages.ts";
+export { runPrebuildChecks } from "./spec/prebuild-checks.ts";
+export type { PrebuildCheck, PrebuildReport } from "./spec/prebuild-checks.ts";
 export type { DesignStageRequest, DesignStageResult, InterviewCommand, InterviewErrorCode, InterviewSession } from "./interview.ts";
 export { coverageReport, pushbackFor } from "./pushback.ts";
 export {
@@ -190,6 +193,7 @@ export {
   approveSiteBrief,
   approveSitePlan,
   draftSiteBrief,
+  startSiteBuild,
   planDraftInFlight,
   inflightBriefDraft,
   inflightBriefRevision,
@@ -487,6 +491,8 @@ export {
   dealDirections,
   designLibraryRoot,
   directionDealPath,
+  isDocsOrPackUrl,
+  loadDesignReferences,
   loadStudiedPages,
   pickDirection,
   readDirectionDeal,
@@ -678,6 +684,7 @@ export {
   parseProjectFile,
   progressLabel,
   projectHome,
+  readProjectDisplayName,
   interviewProgressLabel,
   readRecentProjects,
   readSaveNotice,

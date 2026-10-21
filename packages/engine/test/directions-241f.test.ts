@@ -4,39 +4,31 @@
  * A made-up Site of the Day id fails. No ingest.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { DENY_HEX } from "../src/brand/tokens.ts";
 import { brandKitFromAnswers } from "../src/brand/kit-from-interview.ts";
 import {
   checkDirectionDeal,
   dealDirections,
-  loadStudiedPages,
+  isDocsOrPackUrl,
+  loadDesignReferences,
   pickDirection,
   type DirectionDeal,
 } from "../src/brand/directions.ts";
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 test("a deal cites three studied pages and does not differ only by hue", () => {
   const deal = dealDirections();
   assert.equal(deal.directions.length, 3);
   assert.equal(deal.pickedId, null);
+  const studied = loadDesignReferences();
   const signatures = new Set<string>();
   for (const direction of deal.directions) {
-    const file = path.join(root, "packages", "knowledge", "design-library", "entries", `${direction.citationId}.json`);
-    const entry = JSON.parse(readFileSync(file, "utf8")) as {
-      id: string;
-      title: string;
-      url: string;
-      retired: boolean;
-    };
-    assert.equal(entry.retired, false);
-    assert.equal(entry.id, direction.citationId);
+    assert.equal(isDocsOrPackUrl(direction.url), false);
+    const entry = studied.find((page) => page.id === direction.citationId);
+    assert.ok(entry);
     assert.equal(entry.title, direction.title);
     assert.equal(entry.url, direction.url);
+    assert.equal(direction.description.trim().length > 0, true);
     assert.equal((DENY_HEX as readonly string[]).includes(direction.hue), false);
     signatures.add(`${direction.display}|${direction.body}|${direction.sectionOrder.join(",")}`);
   }
@@ -47,7 +39,7 @@ test("a deal cites three studied pages and does not differ only by hue", () => {
 });
 
 test("the same type pair and the same section order fail even with three hues", () => {
-  const page = loadStudiedPages()[0];
+  const page = loadDesignReferences()[0];
   assert.ok(page);
   const hues = ["#1f6b4a", "#8c4a2f", "#1d4e89"];
   const deal: DirectionDeal = {
@@ -55,6 +47,7 @@ test("the same type pair and the same section order fail even with three hues", 
     directions: hues.map((hue, index) => ({
       id: `hue-${index}`,
       name: `Wash ${index}`,
+      description: "One wash.",
       citationId: page.id,
       title: page.title,
       url: page.url,
@@ -70,7 +63,7 @@ test("the same type pair and the same section order fail even with three hues", 
 });
 
 test("an invented site of the day citation fails", () => {
-  const page = loadStudiedPages()[0];
+  const page = loadDesignReferences()[0];
   assert.ok(page);
   const deal: DirectionDeal = {
     pickedId: null,
@@ -78,6 +71,7 @@ test("an invented site of the day citation fails", () => {
       {
         id: "fake-0",
         name: "Imaginary",
+        description: "Not a studied page.",
         citationId: "sotd-imaginary-winner",
         title: "Imaginary winner",
         url: "https://example.invalid/sotd",
@@ -89,6 +83,7 @@ test("an invented site of the day citation fails", () => {
       {
         id: "real-1",
         name: page.title,
+        description: page.title,
         citationId: page.id,
         title: page.title,
         url: page.url,
@@ -100,6 +95,7 @@ test("an invented site of the day citation fails", () => {
       {
         id: "real-2",
         name: page.title,
+        description: page.title,
         citationId: page.id,
         title: page.title,
         url: page.url,
@@ -129,8 +125,10 @@ test("the brand kit lists the directions and asks for a pick", () => {
   const kit = brandKitFromAnswers([]);
   assert.match(kit.markdown, /## Directions/);
   assert.match(kit.markdown, /Pick one\./);
-  assert.match(kit.markdown, /Astro images/);
-  assert.match(kit.markdown, /https:\/\/docs\.astro\.build\/en\/guides\/images\//);
+  assert.match(kit.markdown, /Depth instead of a second pitch/);
+  assert.match(kit.markdown, /https:\/\/landonorris\.com\//);
+  assert.equal(kit.markdown.includes("docs.astro.build"), false);
+  assert.equal(kit.markdown.includes("Studied page:"), false);
   assert.equal(kit.markdown.includes("!"), false);
   assert.equal(kit.markdown.includes("\u2014"), false);
 });

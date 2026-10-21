@@ -10,6 +10,7 @@ import path from "node:path";
 import { loadConfig } from "../config.ts";
 import { loadState } from "../state.ts";
 import { questionsToAsk, loadTree, type DepthName } from "../tree.ts";
+import { readProjectDisplayName } from "./display-name.ts";
 import { readGitRefs } from "./git-refs.ts";
 import {
   APP_NAME,
@@ -290,7 +291,7 @@ export function interviewProgressLabel(projectDir: string): string | null {
     const promptId = loadState(projectDir)?.promptId ?? "";
     const current = promptId.startsWith("interview:") ? promptId.slice("interview:".length) : "";
     if (current === "" ) return `question 1 of ${total}`;
-    if (current === "done") return `question ${total} of ${total}`;
+    if (current === "done") return `Interview done (${total} of ${total})`;
     const at = questions.findIndex((question) => question.id === current);
     if (at < 0) return `question 1 of ${total}`;
     return `question ${at + 1} of ${total}`;
@@ -331,7 +332,7 @@ export async function captureProject(projectDir: string, options: CaptureOptions
   const brand = await brandStamp(resolved, await readText(path.join(hitch, "brand-approval.json")));
   const driveRaw = await readText(path.join(hitch, "drive-approval.json"));
   const blockers = state?.blockers ?? [];
-  const name = options.projectName ?? path.basename(resolved);
+  const name = options.projectName ?? readProjectDisplayName(resolved) ?? path.basename(resolved);
   return {
     schemaVersion: 1,
     createdAt: options.createdAt ?? now,

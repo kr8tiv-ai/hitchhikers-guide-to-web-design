@@ -22,6 +22,8 @@ export interface StudiedPage {
 export interface Direction {
   id: string;
   name: string;
+  /** One line a person can read. Empty on a deal saved before this field existed. */
+  description: string;
   citationId: string;
   title: string;
   url: string;
@@ -55,6 +57,76 @@ export function designLibraryRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "design-library");
 }
 
+/**
+ * Docs hosts, framework guides, and gallery listing pages are knowledge packs.
+ * A direction may cite a studied site. It may not cite the documentation of a tool.
+ */
+export function isDocsOrPackUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return true;
+  }
+  const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+  const pathName = parsed.pathname.toLowerCase();
+  if (host.startsWith("docs.")) return true;
+  const packHost =
+    host === "astro.build" ||
+    host.endsWith(".astro.build") ||
+    host === "nextjs.org" ||
+    host.endsWith(".nextjs.org") ||
+    host === "vitejs.dev" ||
+    host.endsWith(".vitejs.dev") ||
+    host === "gsap.com" ||
+    host.endsWith(".gsap.com") ||
+    host === "github.com" ||
+    host.endsWith(".github.com") ||
+    host === "threejs.org" ||
+    host.endsWith(".threejs.org") ||
+    host === "developer.chrome.com" ||
+    host.endsWith(".chrome.com") ||
+    host.endsWith(".pmnd.rs") ||
+    host === "tympanus.net" ||
+    host.endsWith(".tympanus.net") ||
+    host === "stitch.withgoogle.com" ||
+    host === "framer.com" ||
+    host.endsWith(".framer.com");
+  if (packHost) return true;
+  if (host === "awwwards.com" && (pathName.startsWith("/websites") || pathName.startsWith("/sites"))) return true;
+  if (
+    pathName === "/docs" ||
+    pathName.startsWith("/docs/") ||
+    pathName.includes("/guides/") ||
+    pathName.startsWith("/guides") ||
+    pathName.includes("/knowledge/") ||
+    pathName.includes("knowledge-pack")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Gallery sites, named design references, and a custom library that is not a docs pack. */
+export function loadDesignReferences(root?: string, projectDir?: string): StudiedPage[] {
+  const libraryRoot = root === undefined || root.trim() === "" ? designLibraryRoot() : root;
+  if (path.resolve(libraryRoot) !== path.resolve(designLibraryRoot())) {
+    return loadStudiedPages(libraryRoot).filter((page) => !isDocsOrPackUrl(page.url));
+  }
+  const pages: StudiedPage[] = [];
+  const seen = new Set<string>();
+  const add = (page: StudiedPage): void => {
+    if (isDocsOrPackUrl(page.url) || seen.has(page.id)) return;
+    seen.add(page.id);
+    pages.push(page);
+  };
+  for (const page of namedReferencePages()) add(page);
+  for (const page of loadGalleryPages()) add(page);
+  for (const page of loadStudiedPages(designLibraryRoot())) add(page);
+  for (const page of customerReferencePages(projectDir)) add(page);
+  return pages;
+}
+
 export function loadStudiedPages(root = designLibraryRoot()): StudiedPage[] {
   const indexPath = path.join(root, "index.json");
   const index = JSON.parse(readFileSync(indexPath, "utf8")) as { entries?: unknown };
@@ -77,12 +149,14 @@ export function loadStudiedPages(root = designLibraryRoot()): StudiedPage[] {
   return pages;
 }
 
-export function dealDirections(root = designLibraryRoot(), projectDir?: string): DirectionDeal {
+export function dealDirections(root?: string, projectDir?: string): DirectionDeal {
   const rejected = new Set(
     projectDir === undefined || projectDir.trim() === "" ? [] : rejectedDirectionNames(projectDir),
   );
-  const pages = loadStudiedPages(root).filter((page) => !rejected.has(page.title));
-  const chosen: StudiedPage[] = [];
+  const pages = pagesForDeal(root, projectDir).filter(
+    (page) => !rejected.has(page.title) && !rejected.has(page.moodName),
+  );
+  const chosen: ReferencePage[] = [];
   const seenOrders = new Set<string>();
   for (const page of pages) {
     const key = page.sectionTypes.join("|");
@@ -104,7 +178,8 @@ export function dealDirections(root = designLibraryRoot(), projectDir?: string):
     const hue = HUES[index] ?? "#1f6b4a";
     return {
       id: `dir-${page.id}`,
-      name: page.title,
+      name: page.moodName,
+      description: page.description,
       citationId: page.id,
       title: page.title,
       url: page.url,
@@ -117,7 +192,7 @@ export function dealDirections(root = designLibraryRoot(), projectDir?: string):
   return { directions, pickedId: null };
 }
 
-export function checkDirectionDeal(deal: DirectionDeal, pages = loadStudiedPages()): DirectionCheck {
+export function checkDirectionDeal(deal: DirectionDeal, pages = loadDesignReferences()): DirectionCheck {
   if (deal.directions.length !== 3) {
     return { pass: false, failure: "A deal needs three directions." };
   }
@@ -205,7 +280,8 @@ export function renderDirectionBlock(deal: DirectionDeal): string {
     lines.push(
       `### ${direction.name}`,
       "",
-      `Studied page: ${direction.title} (${direction.citationId}). ${direction.url}`,
+      direction.description,
+      `Reference: ${direction.title}. ${direction.url}`,
       `Type: ${direction.display} and ${direction.body}.`,
       `Sections: ${direction.sectionOrder.join(", ")}.`,
       `Hue: ${direction.hue}.`,
@@ -260,7 +336,8 @@ function asDirection(value: unknown): Direction | null {
   ) {
     return null;
   }
-  return { id, name, citationId, title, url, display, body, sectionOrder: sections, hue };
+  const description = typeof value.description === "string" ? value.description : "";
+  return { id, name, description, citationId, title, url, display, body, sectionOrder: sections, hue };
 }
 
 function textField(value: unknown): string | null {
@@ -289,4 +366,242 @@ function typeKey(direction: Direction): string {
 
 function sectionKey(direction: Direction): string {
   return direction.sectionOrder.join("|").toLowerCase();
+}
+
+interface ReferencePage extends StudiedPage {
+  moodName: string;
+  description: string;
+}
+
+interface NamedReference {
+  id: string;
+  names: readonly string[];
+  title: string;
+  moodName: string;
+  description: string;
+  url: string;
+  styleWorld: string;
+  sectionTypes: readonly string[];
+}
+
+/** Sites a customer can name. Cereal is known so a "meh" can be skipped, not dealt by accident. */
+const NAMED_REFERENCES: readonly NamedReference[] = [
+  {
+    id: "patagonia",
+    names: ["patagonia"],
+    title: "Patagonia",
+    moodName: "Big quiet photography",
+    description: "A wide photograph carries the page, and the type stays plain.",
+    url: "https://www.patagonia.com/",
+    styleWorld: "editorial",
+    sectionTypes: ["hero", "gallery", "story", "visit"],
+  },
+  {
+    id: "aesop",
+    names: ["aesop"],
+    title: "Aesop",
+    moodName: "Restraint and empty space",
+    description: "A few words, a lot of quiet ground, and type that does not shout.",
+    url: "https://www.aesop.com/",
+    styleWorld: "editorial",
+    sectionTypes: ["hero", "story", "detail", "visit"],
+  },
+  {
+    id: "kinfolk",
+    names: ["kinfolk"],
+    title: "Kinfolk",
+    moodName: "Margins doing the hierarchy",
+    description: "The page stacks a few long lines and trusts the reader to move without a second pitch.",
+    url: "https://www.kinfolk.com/",
+    styleWorld: "editorial",
+    sectionTypes: ["hero", "essay", "gallery", "colophon"],
+  },
+  {
+    id: "airbnb-luxe",
+    names: ["airbnb luxe", "airbnb"],
+    title: "Airbnb Luxe",
+    moodName: "Clean listing cards",
+    description: "A card, a gallery, and a clear way to ask.",
+    url: "https://www.airbnb.com/luxury",
+    styleWorld: "product",
+    sectionTypes: ["hero", "cards", "gallery", "inquiry"],
+  },
+  {
+    id: "cereal",
+    names: ["cereal"],
+    title: "Cereal",
+    moodName: "A cold magazine grid",
+    description: "A cold grid. Deal it only when the owner did not set it aside.",
+    url: "https://www.readcereal.com/",
+    styleWorld: "editorial",
+    sectionTypes: ["hero", "grid", "essay", "colophon"],
+  },
+];
+
+const SECTION_BANK: readonly (readonly string[])[] = [
+  ["hero", "essay", "gallery", "colophon"],
+  ["hero", "story", "detail", "visit"],
+  ["hero", "cards", "gallery", "inquiry"],
+  ["hero", "object", "story", "visit"],
+  ["hero", "look", "list", "visit"],
+  ["hero", "facts", "story", "visit"],
+];
+
+function namedReferencePages(): ReferencePage[] {
+  return NAMED_REFERENCES.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    url: entry.url,
+    styleWorld: entry.styleWorld,
+    sectionTypes: entry.sectionTypes,
+    moodName: entry.moodName,
+    description: entry.description,
+  }));
+}
+
+function pagesForDeal(root: string | undefined, projectDir: string | undefined): ReferencePage[] {
+  const libraryRoot = root === undefined || root.trim() === "" ? designLibraryRoot() : root;
+  if (path.resolve(libraryRoot) !== path.resolve(designLibraryRoot())) {
+    return loadStudiedPages(libraryRoot)
+      .filter((page) => !isDocsOrPackUrl(page.url))
+      .map((page) => ({ ...page, moodName: page.title, description: page.title }));
+  }
+  const loved = customerReferencePages(projectDir);
+  const seen = new Set(loved.map((page) => page.id));
+  const gallery = loadGalleryPages().filter((page) => !seen.has(page.id));
+  return [...loved, ...gallery];
+}
+
+function customerReferencePages(projectDir: string | undefined): ReferencePage[] {
+  if (projectDir === undefined || projectDir.trim() === "") return [];
+  const answers = readInterviewAnswers(projectDir);
+  const loved = answers.find((answer) => answer.id === "DP-5.2")?.value ?? "";
+  const named = answers.find((answer) => answer.id === "DP-5.1")?.value ?? "";
+  const sentiment = new Map<string, "love" | "meh" | "hate" | "named">();
+  markSentiment(named, sentiment, false);
+  markSentiment(loved, sentiment, true);
+  const pages: ReferencePage[] = [];
+  for (const entry of NAMED_REFERENCES) {
+    const tone = sentiment.get(entry.id);
+    if (tone === undefined || tone === "meh" || tone === "hate") continue;
+    pages.push({
+      id: entry.id,
+      title: entry.title,
+      url: entry.url,
+      styleWorld: entry.styleWorld,
+      sectionTypes: entry.sectionTypes,
+      moodName: entry.moodName,
+      description: entry.description,
+    });
+  }
+  pages.sort((left, right) => rankTone(sentiment.get(left.id)) - rankTone(sentiment.get(right.id)));
+  return pages;
+}
+
+function rankTone(tone: "love" | "meh" | "hate" | "named" | undefined): number {
+  if (tone === "love") return 0;
+  if (tone === "named") return 1;
+  return 2;
+}
+
+function markSentiment(
+  text: string,
+  sentiment: Map<string, "love" | "meh" | "hate" | "named">,
+  preferExplicit: boolean,
+): void {
+  const lower = text.toLowerCase();
+  const catalog = [...NAMED_REFERENCES].sort((left, right) => {
+    const leftLen = Math.max(...left.names.map((name) => name.length));
+    const rightLen = Math.max(...right.names.map((name) => name.length));
+    return rightLen - leftLen;
+  });
+  const names = catalog.flatMap((entry) => [...entry.names]);
+  for (const entry of catalog) {
+    for (const name of entry.names) {
+      const at = lower.indexOf(name);
+      if (at < 0) continue;
+      // Stop at the next name or sentence, so "Patagonia: love. Cereal: meh" does not mark Patagonia meh.
+      const window = clauseAround(lower, at, name.length, names);
+      let tone: "love" | "meh" | "hate" | "named" = "named";
+      if (/\bhate\b/.test(window)) tone = "hate";
+      else if (/\bmeh\b/.test(window)) tone = "meh";
+      else if (/\blove\b/.test(window)) tone = "love";
+      const current = sentiment.get(entry.id);
+      if (current === undefined || preferExplicit) sentiment.set(entry.id, tone);
+      break;
+    }
+  }
+}
+
+/** The words that belong to this name: up to the next sentence or the next catalog name. */
+function clauseAround(lower: string, at: number, nameLength: number, names: readonly string[]): string {
+  const after = at + nameLength;
+  let end = lower.length;
+  const sentence = lower.slice(after).search(/[.!?]/);
+  if (sentence >= 0) end = after + sentence;
+  for (const other of names) {
+    if (other.length === 0) continue;
+    const next = lower.indexOf(other, after);
+    if (next >= 0 && next < end) end = next;
+  }
+  return lower.slice(at, end);
+}
+
+function readInterviewAnswers(projectDir: string): Array<{ id: string; value: string }> {
+  const file = path.join(projectDir, ".hitchhiker", "interview.json");
+  if (!existsSync(file)) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+  const list = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.answers)
+      ? value.answers
+      : [];
+  const answers: Array<{ id: string; value: string }> = [];
+  for (const item of list) {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.value !== "string") continue;
+    const status = typeof item.status === "string" ? item.status : "";
+    if (status === "SKIPPED" || status === "NOT_APPLICABLE" || status === "UNANSWERED") continue;
+    answers.push({ id: item.id, value: item.value });
+  }
+  return answers;
+}
+
+function loadGalleryPages(): ReferencePage[] {
+  const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "galleries", "curated.json");
+  if (!existsSync(file)) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(value)) return [];
+  const pages: ReferencePage[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    const url = typeof item.url === "string" ? item.url.trim() : "";
+    const why = typeof item.why === "string" ? item.why.trim() : "";
+    const styleWorld = typeof item.styleWorld === "string" ? item.styleWorld.trim() : "editorial";
+    if (id === "" || title === "" || url === "" || isDocsOrPackUrl(url)) continue;
+    const named = NAMED_REFERENCES.find((entry) => entry.id === id || entry.url === url);
+    const index = pages.length;
+    const bank = SECTION_BANK[index % SECTION_BANK.length] ?? ["hero", "story", "visit"];
+    pages.push({
+      id: named?.id ?? id,
+      title: named?.title ?? title,
+      url: named?.url ?? url,
+      styleWorld: named?.styleWorld ?? (styleWorld === "" ? "editorial" : styleWorld),
+      sectionTypes: named?.sectionTypes ?? bank,
+      moodName: named?.moodName ?? title,
+      description: named?.description ?? (why === "" ? title : why),
+    });
+  }
+  return pages;
 }

@@ -98,14 +98,26 @@ export function readDecisionLog(projectDir: string): DecisionEntry[] {
   return entries;
 }
 
-/** Names a later phase can read. Order is the order the rejections were written. */
+/**
+ * Names a later phase can read. Order is the order the rejections were written.
+ * A later pick of the same id supersedes the earlier rejection.
+ */
 export function rejectedDirectionNames(projectDir: string): string[] {
+  const log = readDecisionLog(projectDir);
+  const latest = new Map<string, string>();
+  const latestName = new Map<string, string>();
+  for (const entry of log) {
+    if (entry.status !== "rejected" && entry.status !== "picked") continue;
+    latest.set(entry.id, entry.status);
+    if (entry.status === "rejected") latestName.set(entry.id, entry.name);
+  }
   const seen = new Set<string>();
   const names: string[] = [];
-  for (const entry of readDecisionLog(projectDir)) {
+  for (const entry of log) {
     if (entry.status !== "rejected" || seen.has(entry.id)) continue;
+    if (latest.get(entry.id) !== "rejected") continue;
     seen.add(entry.id);
-    names.push(entry.name);
+    names.push(latestName.get(entry.id) ?? entry.name);
   }
   return names;
 }

@@ -174,7 +174,8 @@ test("brief Approve is on with no plan, then the plan Approve follows coverage",
     );
     assert.equal(accepted.status, 303);
     const built = await raw(handle.port, "GET", "/approve");
-    assert.match(built.body, /The build is started/);
+    assert.match(built.body, /data-design-stage="sitemap"/);
+    assert.doesNotMatch(built.body, /The build is started/);
   } finally {
     if (handle !== undefined) await handle.close();
     rmSync(dir, { recursive: true, force: true });

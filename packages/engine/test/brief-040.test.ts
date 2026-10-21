@@ -312,7 +312,8 @@ test("confirming a small fallback approves it and keeps the marker", async () =>
     assert.equal(approved.fallback, true);
     assert.equal(approved.buildStarted, false);
     const started = await approveSitePlan(dir);
-    assert.equal(started.buildStarted, true);
+    assert.equal(started.buildStarted, false);
+    assert.equal(started.planApproved, true);
     assert.equal(approved.error, "");
     assert.match(approved.draft?.budget ?? "", /Not applicable/);
     const file = JSON.parse(readFileSync(path.join(dir, ".hitchhiker", "brief-pending.json"), "utf8")) as {

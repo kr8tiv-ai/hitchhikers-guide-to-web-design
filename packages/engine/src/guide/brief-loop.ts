@@ -544,7 +544,72 @@ function emptyBrief(): SiteBrief {
 export function deterministicBrief(facts: Facts, _language: string): SiteBrief {
   const recorded = emptyBrief();
   for (const key of BRIEF_KEYS) recorded[key] = safeField(recordedField(key, facts).text);
+  applyLimitRouting(recorded, facts);
   return shapeBrief(recorded, facts, recorded);
+}
+
+/**
+ * Timeline belongs in Timeline. Office hours and a program fact are not limits.
+ * Filler confirmations are dropped. Limits keep constraints and never-dos.
+ */
+function applyLimitRouting(brief: SiteBrief, facts: Facts): void {
+  const byId = new Map<string, string>();
+  for (const answer of facts.answers) {
+    if (SKIPPED_STATUS.has(answer.status ?? "")) continue;
+    byId.set(answer.id, answer.value);
+  }
+  const limits: string[] = [];
+  const timeline: string[] = [];
+  const factsOut: string[] = [];
+  for (const id of ["DP-8.4", "DP-9.1", "DP-9.5"]) {
+    const cleaned = cleanAnswer(id, byId.get(id) ?? "");
+    if (cleaned === "") continue;
+    for (const sentence of splitSentences(cleaned)) {
+      let text = sentence.trim().replace(/^yes[,:]?\s+/i, "").trim();
+      if (text === "" || isFillerSentence(text)) continue;
+      if (isTimelineSentence(text)) timeline.push(ensureSentence(text));
+      else if (isContentFact(text)) factsOut.push(capitalizeSentence(ensureSentence(text)));
+      else limits.push(capitalizeSentence(ensureSentence(text)));
+    }
+  }
+  if (limits.length > 0) brief.limits = safeField(joinSentences(limits));
+  if (timeline.length > 0) {
+    const line = `Timeline: ${joinSentences(timeline)}`;
+    const base = brief.cadence === UNSTATED ? "" : brief.cadence;
+    brief.cadence = safeField(joinSentences([base, line].filter((part) => part.trim() !== "")));
+  }
+  if (factsOut.length > 0) {
+    const base = brief.session === UNSTATED ? "" : brief.session;
+    brief.session = safeField(joinSentences([base, ...factsOut].filter((part) => part.trim() !== "")));
+  }
+}
+
+function isFillerSentence(text: string): boolean {
+  const bare = text.replace(/[.?!]+$/g, "").trim();
+  return /^(yes(, that is right)?|yeah|ok|okay|that is right|right)$/i.test(bare);
+}
+
+function isTimelineSentence(text: string): boolean {
+  return /\bin \d+ weeks\b/i.test(text) || /\bby [a-z]+ \d{1,2}, \d{4}\b/i.test(text) || /\btimeline\b/i.test(text);
+}
+
+function isContentFact(text: string): boolean {
+  if (/\bnever\b/i.test(text) || /\bdisclaimer\b/i.test(text)) return false;
+  return /\boffice hours\b/i.test(text) || /\bcaretaker program\b/i.test(text);
+}
+
+function ensureSentence(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === "") return "";
+  return /[.?!]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function joinSentences(parts: readonly string[]): string {
+  const text = parts
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join(" ");
+  return text.replace(/([.?!;])([A-Za-z])/g, "$1 $2");
 }
 
 /** One DP id, one field. The draft prompt and the fallback both read this table. */
@@ -679,7 +744,10 @@ function shapeBrief(brief: SiteBrief, facts: Facts, recorded: SiteBrief): SiteBr
 function feelNeverList(raw: string): string[] {
   return raw
     .split(/,|\/|\band\b/i)
-    .map((part) => part.replace(/[.]+$/, "").trim())
+    .map((part) => {
+      const text = part.replace(/[.]+$/, "").trim().replace(/^(?:or|and)\s+/i, "").trim();
+      return text;
+    })
     .filter((part) => part !== "");
 }
 
@@ -713,7 +781,8 @@ export function vibeProse(raw: string): string | null {
   if (neverWords.length > 0) {
     sentences.push(`It should never feel ${oxfordJoin(neverWords, "or")}.`);
   }
-  return sentences.join(" ");
+  const safe = sentences.filter((sentence) => !/^(is|are|was|were)\b/i.test(sentence.trim()));
+  return safe.join(" ");
 }
 
 function dropEmptySlotSentences(text: string): string {
@@ -940,9 +1009,22 @@ function renderFacts(facts: Facts): string {
 export function renderSiteBrief(draft: SiteBrief): string {
   const lines: string[] = ["# Site Brief", ""];
   for (const key of BRIEF_KEYS) {
+    if (key === "cadence") {
+      const split = splitTimeline(draft.cadence);
+      lines.push(`## ${BRIEF_HEADINGS[key]}`, "", split.body, "");
+      if (split.timeline !== "") lines.push("## Timeline", "", split.timeline, "");
+      continue;
+    }
     lines.push(`## ${BRIEF_HEADINGS[key]}`, "", draft[key], "");
   }
   return lines.join("\n");
+}
+
+function splitTimeline(text: string): { body: string; timeline: string } {
+  const match = /(?:^|\s)Timeline:\s*([\s\S]+)$/.exec(text);
+  if (match === null || match.index === undefined) return { body: text, timeline: "" };
+  const body = text.slice(0, match.index).trim();
+  return { body: body === "" ? UNSTATED : body, timeline: (match[1] ?? "").trim() };
 }
 
 async function writeSiteBrief(projectDir: string, draft: SiteBrief): Promise<void> {

@@ -89,6 +89,16 @@ test("DP-1.5 shows the six font examples", async ({ page }) => {
     await expect(samples.nth(0)).toContainText("Gambetta + Synonym");
     await expect(samples.nth(0)).toContainText("Find your calm");
     await expect(samples.nth(0)).toContainText("editorial, quiet, publishing");
+    const shots: Buffer[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      shots.push(await samples.nth(index).locator("img.hh-type-sample__specimen").screenshot());
+    }
+    for (let left = 0; left < shots.length; left += 1) {
+      for (let right = left + 1; right < shots.length; right += 1) {
+        expect(shots[left]?.equals(shots[right] ?? Buffer.alloc(0))).toBe(false);
+      }
+    }
+    await expect(samples.nth(0).locator(".hh-type-sample__approx")).toBeHidden();
     await expect(page.locator("#hh-card-ask")).toContainText("pick a style from these examples");
     const heading = await page.locator("#hh-card-ask").innerText();
     expect(heading.includes(" : ")).toBe(false);

@@ -53,7 +53,7 @@ function coverageTable(coverage: ApproveCoverage | undefined): string {
 }
 
 function nextAction(stage: ApproveStage, desk: BriefDeskView): string {
-  if (desk.draft === null || desk.buildStarted) return "";
+  if (desk.draft === null || desk.buildStarted || desk.planApproved) return "";
   if (stage === "planning") return `<p data-next-action>Drafting the plan</p>`;
   if (stage === "brief") return `<p data-next-action>Draft the plan</p>`;
   return "";
@@ -160,7 +160,7 @@ export function approveMain(
         ${stage === "plan" ? coverageTable(coverage) : ""}
         ${stageHtml}
         ${brandPanel(brandMarkdown)}
-        ${desk.buildStarted ? "" : `<form method="post" action="/approve">
+        ${desk.buildStarted || desk.planApproved ? "" : `<form method="post" action="/approve">
           <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
           ${confirm}
           <button class="hh-btn hh-btn--primary" type="submit" name="action" value="approve"${approveDisabled(stage, coverage) ? " disabled" : ""}>${stage === "plan" ? "Approve plan" : "Approve"}</button>
@@ -189,6 +189,15 @@ export function brandBriefMain(desk: BriefDeskView): string {
         <p><a class="hh-btn hh-btn--ghost" href="/approve">Review the Site Brief</a></p>
       </section>`;
   }
+  if (desk.planApproved) {
+    return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
+        <p class="hh-kicker" id="brand-title">Brand kit</p>
+        <h1 class="hh-specimen__display">The design is waiting for a yes</h1>
+        <p class="hh-specimen__text" data-brief-goal>${goal}</p>
+        <p data-next-action>Approve the design, then start the build</p>
+        <p><a class="hh-btn hh-btn--primary" href="/approve">Review the design</a></p>
+      </section>`;
+  }
   if (desk.status === "approved") {
     return `<section class="hh-specimen hh-rise hh-rise--2" aria-labelledby="brand-title">
         <p class="hh-kicker" id="brand-title">Brand kit</p>
@@ -210,8 +219,11 @@ export function brandBriefMain(desk: BriefDeskView): string {
 export function dashboardBriefNote(desk: BriefDeskView): string {
   if (desk.status !== "approved") return "";
   const goal = escapeHtml(desk.draft?.goal ?? "");
-  if (!desk.buildStarted) {
-    return `<p data-next-action data-brief-goal="${goal}">The plan is drafted. Approve the plan.</p>`;
+  if (desk.buildStarted) {
+    return `<p data-build-phase="${escapeHtml(desk.phase)}" data-brief-goal="${goal}">${escapeHtml(desk.phase)} is the next phase. The build is started.</p>`;
   }
-  return `<p data-build-phase="${escapeHtml(desk.phase)}" data-brief-goal="${goal}">${escapeHtml(desk.phase)} is the next phase. The build is started.</p>`;
+  if (desk.planApproved) {
+    return `<p data-next-action data-brief-goal="${goal}">The design is waiting for a yes.</p>`;
+  }
+  return `<p data-next-action data-brief-goal="${goal}">The plan is drafted. Approve the plan.</p>`;
 }

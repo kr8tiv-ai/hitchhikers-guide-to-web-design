@@ -115,7 +115,7 @@ interface Draft {
 }
 
 const GLUE =
-  /^(?:i|a|an|the|and|or|for|with|please|use|using|font|fonts|like|want|my|set|in|on|to|of|our|we|headlines?|body|text|pairing|pair|family|families|something|really|just|maybe)$/i;
+  /^(?:i|a|an|the|and|or|for|with|please|use|using|font|fonts|like|want|my|set|in|on|to|of|our|we|headlines?|body|text|pairing|pair|pairings|family|families|something|really|just|maybe|no|not|none|light|wide|airy|sans|serif|show|plus|yet|easy|reading|logo|from|photo|hero|page|me)$/i;
 
 /**
  * WCAG 2.2 relative luminance.
@@ -266,6 +266,7 @@ function rankPairs(answer: string): TypePairing[] {
     for (const era of pairing.era) if (eras.has(era)) score += 2;
     for (const industry of pairing.industry) if (industries.has(industry)) score += 2;
     if (oneFamily && pairing.display === pairing.body) score += 4;
+    score += wideSansScore(answer, pairing);
     if (score <= 0) continue;
     scored.push({ pairing, score });
   }
@@ -581,6 +582,18 @@ function readAdjectives(answer: string): string[] {
   return adjectives;
 }
 
+/** Light, wide, airy sans is a shape, not a family name. Syne is the wide grotesque. */
+function wideSansScore(answer: string, pairing: TypePairing): number {
+  const sans = /\bsans\b/i.test(answer);
+  const wide = /\bwide\b/i.test(answer);
+  const light = /\b(?:light|airy)\b/i.test(answer);
+  if (!sans || (!wide && !light)) return 0;
+  if (pairing.id === 28) return light ? 8 : 6;
+  if (pairing.id === 24) return 5;
+  if (pairing.id === 29) return 4;
+  return 0;
+}
+
 function dealFromMood(answer: string, adjectives: readonly string[]): TypePair {
   const worlds = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "world" && entry.value === value)));
   const tones = new Set(adjectives.filter((value) => LEXICON.some((entry) => entry.kind === "tone" && entry.value === value)));
@@ -599,6 +612,7 @@ function dealFromMood(answer: string, adjectives: readonly string[]): TypePair {
     for (const era of pairing.era) if (eras.has(era)) score += 2;
     for (const industry of pairing.industry) if (industries.has(industry)) score += 2;
     if (oneFamily && pairing.display === pairing.body) score += 4;
+    score += wideSansScore(answer, pairing);
     if (score <= 0) continue;
     if (best === null || score > bestScore || (score === bestScore && pairing.id < best.id)) {
       best = pairing;

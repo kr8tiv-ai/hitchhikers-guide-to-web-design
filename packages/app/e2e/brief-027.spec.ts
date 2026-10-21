@@ -62,6 +62,18 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await expect(page.locator("[data-plan-coverage]")).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve plan", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Approve plan", exact: true }).click();
+    await expect(page.locator("[data-design-stage='sitemap']")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("body")).not.toContainText("The build is started.");
+    await page.getByRole("button", { name: "Approve sitemap" }).click();
+    await page.getByRole("button", { name: "Approve wireframe" }).click();
+    await page.getByRole("button", { name: "Approve style guide" }).click();
+    await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
+    await page.locator("[data-pick-direction]").first().click();
+    await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
+    await page.getByRole("button", { name: "Approve direction" }).click();
+    await page.getByRole("button", { name: "Approve pre-build checks" }).click();
+    await expect(page.locator("[data-start-build]")).toBeEnabled();
+    await page.locator("[data-start-build]").click();
     await expect(page.locator("[data-build-status]")).toContainText("The build is started.");
     await page.reload();
     await expect(page.locator("[data-build-status]")).toContainText("The build is started.");

@@ -7,6 +7,7 @@ import { copyFile, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { acquire, LockHeld, release, replaceViaTemp } from "../lock.ts";
 import { captureProject } from "./capture.ts";
+import { readProjectDisplayName } from "./display-name.ts";
 import {
   locateProjectFile,
   projectHome,
@@ -169,7 +170,7 @@ export async function saveProjectFile(projectDir: string, options: SaveOptions =
   } catch {
     remembered = null;
   }
-  const projectName = options.projectName ?? priorName ?? path.basename(resolved);
+  const projectName = options.projectName ?? readProjectDisplayName(resolved) ?? priorName ?? path.basename(resolved);
   const located = await locateProjectFile(projectName, {
     homeDir,
     remembered,

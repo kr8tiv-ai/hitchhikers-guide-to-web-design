@@ -35,6 +35,7 @@ function desk(): BriefDeskView {
     error: "",
     fallback: false,
     buildStarted: false,
+    planApproved: false,
     phase: "plan",
     statusLine: "",
   } as BriefDeskView;

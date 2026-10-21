@@ -80,26 +80,36 @@ function tokenFrom(html: string): string {
   return matched[1];
 }
 
-/** Brief approval drafts the plan. Plan approval is the click that starts the runner. */
+/** Brief approval drafts the plan. Start build is the click that starts the runner. */
 async function approveBriefThenPlan(port: number, token: string): Promise<void> {
-  const drafted = await raw(
-    port,
-    "POST",
-    "/approve",
-    { "content-type": "application/x-www-form-urlencoded" },
-    `csrf=${token}&action=approve`,
-  );
+  const form = { "content-type": "application/x-www-form-urlencoded" };
+  const drafted = await raw(port, "POST", "/approve", form, `csrf=${token}&action=approve`);
   assert.equal(drafted.status, 303);
   const page = await raw(port, "GET", "/approve");
   assert.match(page.body, /Approve plan/);
   assert.equal(page.body.includes('value="approve" disabled'), false);
-  const started = await raw(
+  const planned = await raw(port, "POST", "/approve", form, `csrf=${token}&action=approve`);
+  assert.equal(planned.status, 303);
+  for (const stage of ["sitemap", "wireframe", "style-guide"]) {
+    const step = await raw(port, "POST", "/approve", form, `csrf=${token}&action=stage&stage=${stage}&commit=approve`);
+    assert.equal(step.status, 303, stage);
+  }
+  const directionPage = await raw(port, "GET", "/approve");
+  const id = /data-pick-direction="([^"]+)"/.exec(directionPage.body)?.[1];
+  assert.ok(id);
+  const picked = await raw(
     port,
     "POST",
-    "/approve",
-    { "content-type": "application/x-www-form-urlencoded" },
-    `csrf=${token}&action=approve`,
+    "/api/direction",
+    { "content-type": "application/json", "x-hh-csrf": token },
+    JSON.stringify({ id, reason: "This direction matches the visit." }),
   );
+  assert.equal(picked.status, 200);
+  for (const stage of ["direction", "prebuild"]) {
+    const step = await raw(port, "POST", "/approve", form, `csrf=${token}&action=stage&stage=${stage}&commit=approve`);
+    assert.equal(step.status, 303, stage);
+  }
+  const started = await raw(port, "POST", "/approve", form, `csrf=${token}&action=start-build`);
   assert.equal(started.status, 303);
 }
 

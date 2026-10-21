@@ -2,7 +2,7 @@
  * One path from a finished interview to the Site Brief and the build.
  * The desk and `hh brief` both call this. The model work stays inside briefLoop.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
 import type { think } from "../ai/think.ts";
@@ -21,6 +21,7 @@ import {
 import { BRIEF_KEYS, BRIEF_OPTIONAL_KEYS, type BriefKey, type SiteBrief } from "./schemas.ts";
 import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
+import { advanceDesignStages, designReadyForBuild } from "../spec/design-stages.ts";
 import { PlanCoverageError } from "../spec/plan-coverage.ts";
 import { draftBriefPlan, ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -47,6 +48,8 @@ export interface BriefDeskView {
   markdown: string;
   sources: BriefSource[];
   buildStarted: boolean;
+  /** True after Approve plan. The design stages are open. The build is not. */
+  planApproved: boolean;
   phase: string;
   nextAction: string;
   /** Honest draft failure. Empty when the model returned a brief. */
@@ -62,6 +65,7 @@ interface PendingFile {
   status: "idle" | "drafting" | "revising" | "pending" | "approved";
   draft: SiteBrief | null;
   buildStarted: boolean;
+  planApproved?: boolean;
   error?: string;
   note?: string;
   fallback?: boolean;
@@ -71,6 +75,7 @@ const jobs = new Map<string, Promise<BriefDeskView>>();
 const approving = new Map<string, Promise<BriefDeskView>>();
 const planning = new Map<string, Promise<BriefDeskView>>();
 const planApproving = new Map<string, Promise<BriefDeskView>>();
+const starting = new Map<string, Promise<BriefDeskView>>();
 const revisions = new Map<string, Promise<BriefDeskView>>();
 
 /** True while approving the brief is writing the prompt files. */
@@ -116,6 +121,7 @@ function readPending(projectDir: string): PendingFile {
       status: known ? status : "idle",
       draft,
       buildStarted: record.buildStarted === true,
+      planApproved: record.planApproved === true,
       error,
       note: typeof record.note === "string" ? record.note : "",
       fallback: fallbackFrom(record, error),
@@ -175,7 +181,8 @@ export function readBriefDesk(projectDir: string): BriefDeskView {
     draft: pending.draft,
     markdown: pending.draft === null ? "" : dropInternalCopy(renderSiteBrief(pending.draft), hidden),
     sources,
-    buildStarted: pending.buildStarted,
+    buildStarted: buildHasStarted(projectDir, state?.nextAction ?? ""),
+    planApproved: pending.planApproved === true,
     phase: state?.phase ?? "Don't Panic",
     nextAction: state?.nextAction ?? "",
     error: pending.error ?? "",
@@ -241,6 +248,13 @@ async function runLoopApprove(projectDir: string, thinkFn: typeof think, saved: 
   if (opened.done || opened.value === undefined) throw new Error("The brief did not resume.");
   const closed = await loop.next("approve");
   if (closed.value?.approved !== true) throw new Error("The brief was not approved.");
+}
+
+function buildHasStarted(projectDir: string, nextAction: string): boolean {
+  const hitch = path.join(projectDir, ".hitchhiker");
+  if (existsSync(path.join(hitch, "queue.json"))) return true;
+  if (existsSync(path.join(hitch, "build-run.json"))) return true;
+  return nextAction.trim() === "The build is started.";
 }
 
 async function startBuild(projectDir: string): Promise<void> {
@@ -309,17 +323,41 @@ async function runApprove(projectDir: string, thinkFn: typeof think, confirmFall
 
 async function runPlanApprove(projectDir: string): Promise<BriefDeskView> {
   const current = readBriefDesk(projectDir);
-  if (current.buildStarted) return current;
+  if (current.buildStarted || current.planApproved) return current;
   const file = readPending(projectDir);
   if (file.draft === null) throw new Error("The brief is not ready to approve.");
+  const markdown = renderSiteBrief(file.draft);
+  advanceDesignStages(projectDir, { brief: markdown });
+  writePending(projectDir, {
+    status: "approved",
+    draft: file.draft,
+    buildStarted: false,
+    planApproved: true,
+    error: "",
+    fallback: file.fallback === true,
+  });
+  return readBriefDesk(projectDir);
+}
+
+async function runStartBuild(projectDir: string): Promise<BriefDeskView> {
+  const current = readBriefDesk(projectDir);
+  if (current.buildStarted) return current;
+  const file = readPending(projectDir);
+  if (file.draft === null || file.planApproved !== true) {
+    throw new Error("Approve the plan before the build.");
+  }
+  const markdown = renderSiteBrief(file.draft);
+  const gate = designReadyForBuild(projectDir, markdown);
+  if (!gate.ok) throw new Error(gate.reason);
   try {
     await startBuild(projectDir);
   } catch (error) {
     if (error instanceof PlanCoverageError) {
       writePending(projectDir, {
-        status: file.status === "approved" ? "approved" : "pending",
+        status: "approved",
         draft: file.draft,
         buildStarted: false,
+        planApproved: true,
         error: error.message,
         fallback: file.fallback === true,
       });
@@ -330,10 +368,22 @@ async function runPlanApprove(projectDir: string): Promise<BriefDeskView> {
     status: "approved",
     draft: file.draft,
     buildStarted: true,
+    planApproved: true,
     error: "",
     fallback: file.fallback === true,
   });
   return readBriefDesk(projectDir);
+}
+
+/** The only desk path that starts billed work. Design stages and checks must already pass. */
+export function startSiteBuild(projectDir: string): Promise<BriefDeskView> {
+  const key = path.resolve(projectDir);
+  const existing = starting.get(key);
+  if (existing) return existing;
+  const job = runStartBuild(projectDir);
+  starting.set(key, job);
+  dropJob(starting, key, job);
+  return job;
 }
 
 export function approveSitePlan(projectDir: string): Promise<BriefDeskView> {

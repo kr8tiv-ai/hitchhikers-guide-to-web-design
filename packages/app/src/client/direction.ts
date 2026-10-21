@@ -4,6 +4,14 @@
  */
 
 function mountDirectionDesk(doc: Document): void {
+  const change = doc.querySelector("[data-change-direction]");
+  const choices = doc.querySelector("[data-direction-choices]");
+  if (change instanceof HTMLButtonElement && choices instanceof HTMLElement) {
+    change.addEventListener("click", () => {
+      choices.hidden = false;
+      change.hidden = true;
+    });
+  }
   const buttons = [...doc.querySelectorAll("[data-pick-direction]")];
   if (buttons.length === 0) return;
   const token = doc.querySelector('meta[name="hh-csrf"]')?.getAttribute("content") ?? "";

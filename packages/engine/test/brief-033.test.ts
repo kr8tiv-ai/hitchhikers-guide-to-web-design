@@ -213,9 +213,12 @@ test("Paradise Found fallback maps each field to its own answers", async () => {
   };
   const filled = deterministicBrief(facts, "en");
   assert.match(filled.limits, /Privacy and terms/);
-  assert.match(filled.limits, /November 10, 2026/);
-  assert.match(filled.limits, /caretaker program/);
+  assert.match(filled.limits, /Never promise/);
+  assert.equal(filled.limits.includes("November"), false);
+  assert.equal(filled.limits.includes("caretaker program"), false);
   assert.equal(filled.limits.includes("Yes, that is right"), false);
+  assert.match(filled.cadence, /November 10, 2026/);
+  assert.match(filled.session, /caretaker program/);
   assert.equal(filled.limits.includes("Kinfolk"), false);
   assert.equal(filled.motion, "4 of 10, editorial");
   assert.equal(filled.motion.includes("4."), false);

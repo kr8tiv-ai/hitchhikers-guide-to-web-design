@@ -27,6 +27,7 @@ export {
   type SaveNotice,
 } from "./locate.ts";
 export { migrate, type MigrateResult } from "./migrate.ts";
+export { readProjectDisplayName } from "./display-name.ts";
 export { sanitizeProjectName } from "./names.ts";
 export { nextPromptId } from "./restart.ts";
 export { progressLabel, renderResumeMd } from "./resume-md.ts";

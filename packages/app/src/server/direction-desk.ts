@@ -48,25 +48,35 @@ export function renderDirectionPicker(projectDir: string): string {
           </section>`;
   }
   if (deal === null) return "";
+  const choices = directionChoices(deal);
   if (deal.pickedId !== null) {
     const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
     const name = picked === undefined ? deal.pickedId : picked.name;
+    const line = picked !== undefined && picked.description !== "" ? ` ${escapeHtml(picked.description)}` : "";
     return `<section data-direction-desk>
             <h2 class="hh-title">Directions</h2>
-            <p>Picked ${escapeHtml(name)}. The directions that were shown and not picked stay in the decision log.</p>
+            <p>Picked ${escapeHtml(name)}.${line} The directions that were shown and not picked stay in the decision log.</p>
+            <button class="hh-btn hh-btn--secondary" type="button" data-change-direction>Change direction</button>
+            <div data-direction-choices hidden>
+              ${choices}
+            </div>
           </section>`;
   }
-  const buttons = deal.directions
-    .map(
-      (direction) =>
-        `<button class="hh-btn hh-btn--secondary" type="button" data-pick-direction="${escapeHtml(direction.id)}">${escapeHtml(direction.name)}</button>`,
-    )
-    .join("");
   return `<section data-direction-desk>
             <h2 class="hh-title">Directions</h2>
             <p>Pick one. The others stay on the decision log.</p>
-            <label>One-line reason <input type="text" maxlength="240" autocomplete="off" data-direction-reason /></label>
-            <div>${buttons}</div>
-            <p data-direction-note></p>
+            ${choices}
           </section>`;
+}
+
+function directionChoices(deal: { directions: readonly { id: string; name: string; description: string }[] }): string {
+  const buttons = deal.directions
+    .map((direction) => {
+      const about = direction.description === "" ? "" : `<span class="hh-small">${escapeHtml(direction.description)}</span>`;
+      return `<p class="hh-small">${escapeHtml(direction.name)}. ${about}</p><button class="hh-btn hh-btn--secondary" type="button" data-pick-direction="${escapeHtml(direction.id)}">${escapeHtml(direction.name)}</button>`;
+    })
+    .join("");
+  return `<label>One-line reason <input type="text" maxlength="240" autocomplete="off" data-direction-reason /></label>
+            <div>${buttons}</div>
+            <p data-direction-note></p>`;
 }

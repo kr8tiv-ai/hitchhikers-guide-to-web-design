@@ -192,21 +192,21 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const after = await raw(handle.port, "GET", "/approve");
       afterBody = after.body;
-      if (afterBody.includes("The build is started")) break;
+      if (afterBody.includes('data-design-stage="sitemap"')) break;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    assert.match(afterBody, /The build is started/);
+    assert.match(afterBody, /data-design-stage="sitemap"/);
+    assert.doesNotMatch(afterBody, /The build is started/);
     assert.equal(afterBody.includes(">Approve plan<"), false);
     const brand = await raw(handle.port, "GET", "/brand");
-    assert.match(brand.body, /Babel Fish/);
+    assert.doesNotMatch(brand.body, /The build is started/);
+    assert.doesNotMatch(brand.body, /Babel Fish/);
     assert.match(brand.body, /The site helps a visitor book a visit/);
-    assert.match(brand.body, /href="\/hh-dashboard"/);
     assert.match(brand.body, /href="\/approve"/);
     const drive = await raw(handle.port, "GET", "/hh-dashboard");
     assert.match(drive.body, /Improbability Drive/);
-    assert.match(drive.body, /Babel Fish/);
-    assert.match(drive.body, /data-id="001"/);
-    assert.doesNotMatch(drive.body, /data-id="guide-entry"/);
+    assert.doesNotMatch(drive.body, /The build is started/);
+    assert.doesNotMatch(drive.body, /data-id="001"/);
     assert.match(drive.body, /The site helps a visitor book a visit/);
     const again = await raw(
       handle.port,
@@ -217,9 +217,7 @@ test("draft, review, approve, and a second approve stays one build", async () =>
     );
     assert.equal(again.status, 303);
     const queue = await loadQueue(dir);
-    assert.ok((queue?.items.length ?? 0) > 1);
-    assert.equal(queue?.items[0]?.id, "001");
-    assert.equal(queue?.items[0]?.status, "queued");
+    assert.equal(queue?.items.length ?? 0, 0);
     assert.equal(seen.filter((task) => task === "brief-draft").length, 1);
   } finally {
     release();

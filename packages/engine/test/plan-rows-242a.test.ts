@@ -50,6 +50,20 @@ test("the Run 6 vibe answer is a whole sentence", () => {
   const emptyFeel = vibeProse("Feel: . Never: salesy, cluttered, loud.");
   assert.equal(emptyFeel, "It should never feel salesy, cluttered, or loud.");
   assert.equal(emptyFeel?.startsWith("is "), false);
+  const feelOnly = vibeProse("Feel: calm.");
+  assert.equal(feelOnly, "Calm is the test for the words, the space, and the photos.");
+  assert.equal(feelOnly?.startsWith("is "), false);
+  const neverOnly = vibeProse("Never: loud.");
+  assert.equal(neverOnly, "It should never feel loud.");
+  const oneWord = vibeProse("Feel: warm. Never: loud.");
+  assert.equal(oneWord, "Warm is the test for the words, the space, and the photos. It should never feel loud.");
+  const long = vibeProse("Feel: calm, warm, honest, quiet, slow. Never: salesy, cluttered, loud, cheap, or frantic.");
+  assert.equal(
+    long,
+    "Calm, warm, honest, quiet, and slow is the test for the words, the space, and the photos. It should never feel salesy, cluttered, loud, cheap, or frantic.",
+  );
+  assert.equal(/^(is|are|was|were)\b/i.test(long ?? ""), false);
+  assert.equal((long ?? "").includes(" or or "), false);
 });
 
 test("the coverage count uses the questions the desk asks, not the stored default", () => {

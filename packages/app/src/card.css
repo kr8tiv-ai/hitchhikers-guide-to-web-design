@@ -454,10 +454,12 @@
   display: none;
 }
 
+.hh-type-sample[data-specimen="missing"] .hh-type-sample__approx,
 .hh-type-sample[data-font-fallback="approx"] .hh-type-sample__approx {
   display: inline;
 }
 
+.hh-type-sample[data-specimen="missing"] .hh-type-sample__display,
 .hh-type-sample[data-font-fallback="approx"] .hh-type-sample__display {
   position: static;
   width: auto;

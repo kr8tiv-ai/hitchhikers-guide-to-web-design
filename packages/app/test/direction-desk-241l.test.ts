@@ -88,8 +88,22 @@ test("a desk pick writes the log and the next page hides the buttons", async () 
       assert.deepEqual(rejectedDirectionNames(dir), payload.rejected);
       const after = await fetch(new URL("/", handle.url));
       const next = await after.text();
-      assert.equal(next.includes("data-pick-direction"), false);
+      assert.match(next, /data-change-direction/);
+      assert.match(next, /data-direction-choices hidden/);
       assert.match(next, new RegExp(`Picked ${button[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      const ids = [...html.matchAll(/data-pick-direction="([^"]+)"/g)].map((match) => match[1] ?? "");
+      const second = ids.find((id) => id !== button[1]);
+      assert.ok(second);
+      const changed = await postDirection(handle.url, token, { id: second, reason: "The second page fits the brief better." });
+      assert.equal(changed.status, 200);
+      const again = JSON.parse(changed.text) as { pickedId?: string };
+      assert.equal(again.pickedId, second);
+      const both = readDecisionLog(dir).filter((row) => row.status === "picked");
+      assert.equal(both.length, 2);
+      assert.equal(both[0]?.id, button[1]);
+      assert.equal(both[1]?.id, second);
+      assert.equal(both[1]?.reason, "The second page fits the brief better.");
+      assert.equal(rejectedDirectionNames(dir).includes(button[2]), true);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

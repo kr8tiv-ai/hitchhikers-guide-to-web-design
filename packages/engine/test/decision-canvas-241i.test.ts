@@ -22,6 +22,7 @@ const deal: DirectionDeal = {
     {
       id: "dir-north",
       name: "North kiln",
+      description: "A kiln and a quiet yard.",
       citationId: "north",
       title: "North",
       url: "https://example.com/north",
@@ -33,6 +34,7 @@ const deal: DirectionDeal = {
     {
       id: "dir-south",
       name: "South yard",
+      description: "A yard palette.",
       citationId: "south",
       title: "South",
       url: "https://example.com/south",
@@ -44,6 +46,7 @@ const deal: DirectionDeal = {
     {
       id: "dir-west",
       name: "West road",
+      description: "A road order.",
       citationId: "west",
       title: "West",
       url: "https://example.com/west",

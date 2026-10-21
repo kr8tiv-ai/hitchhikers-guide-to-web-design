@@ -212,17 +212,19 @@ test("Change something keeps the fallback marker, and Approve requires confirmat
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const next = await raw(handle.port, "GET", "/approve");
       after = next.body;
-      if (after.includes("The build is started")) break;
+      if (after.includes('data-design-stage="sitemap"')) break;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    assert.match(after, /The build is started/);
+    assert.match(after, /data-design-stage="sitemap"/);
+    assert.doesNotMatch(after, /The build is started/);
     assert.match(after, /data-brief-fallback/);
     assert.match(after, /50 dollars/);
     assert.doesNotMatch(after, /data-brief-error/);
     const approved = await raw(handle.port, "GET", "/api/brief");
     assert.match(approved.body, /"status":"approved"/);
     assert.match(approved.body, /"fallback":true/);
-    assert.match(approved.body, /"buildStarted":true/);
+    assert.match(approved.body, /"planApproved":true/);
+    assert.match(approved.body, /"buildStarted":false/);
     assert.match(approved.body, /"error":""/);
   } finally {
     if (handle !== undefined) await handle.close();

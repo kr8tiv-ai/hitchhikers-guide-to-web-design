@@ -189,9 +189,17 @@ function parsePages(body: string): PlannedPage[] {
   const semi = splitTopLevel(text, ";");
   let chunks = semi;
   if (semi.length < 2) {
-    const commas = splitTopLevel(text, ",");
-    const titles = commas.map((chunk) => canonicalTitle(splitTitleNote(cutSentence(chunk)).title));
-    if (commas.length > 1 && titles.every((title) => title !== null)) chunks = commas;
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*•]\s*/, "").replace(/^pages:\s*/i, "").trim())
+      .filter((line) => line.length > 0);
+    if (lines.length > 1) {
+      chunks = lines;
+    } else {
+      const commas = splitTopLevel(text, ",");
+      const titles = commas.map((chunk) => canonicalTitle(splitTitleNote(cutSentence(chunk)).title));
+      if (commas.length > 1 && titles.every((title) => title !== null)) chunks = commas;
+    }
   }
   const pages: PlannedPage[] = [];
   for (const chunk of chunks) {
@@ -229,6 +237,20 @@ function parsePages(body: string): PlannedPage[] {
 function explicitFeatures(body: string): string[] {
   const text = body.trim();
   if (text === "") return [];
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter((line) => line.length > 0);
+  if (lines.length > 1 && lines.every((line) => line.length <= 80 && !line.includes("."))) {
+    const names: string[] = [];
+    for (const line of lines) {
+      const name = stripQuotes(line.replace(/\s+/g, " ").trim().replace(/[.]+$/, ""));
+      if (name.length === 0 || name.length > 80) continue;
+      if (/^(no|none|not)\b/i.test(name)) continue;
+      names.push(name);
+    }
+    if (names.length > 0) return names;
+  }
   const sentences = text.split(/(?<=\.)\s+/);
   if (text.length > 280 || sentences.length > 2) return [];
   const sep = text.includes(";") ? ";" : ",";
@@ -356,6 +378,20 @@ function pagesFromCorpus(markdown: string, corpus: string): { pages: PlannedPage
   };
 }
 
+/** A shortened Pages section still keeps every page the person named in DP-2.8. */
+function unionAnswerPages(pages: PlannedPage[], answers: readonly BriefAnswer[]): PlannedPage[] {
+  const next = [...pages];
+  for (const answer of answers) {
+    if (answer.id !== "DP-2.8") continue;
+    if (SKIPPED_ANSWER.has(answer.status ?? "")) continue;
+    for (const page of parsePages(answer.value)) {
+      if (next.some((item) => item.id === page.id)) continue;
+      next.push(page);
+    }
+  }
+  return next;
+}
+
 function answerCorpus(answers: readonly BriefAnswer[]): string {
   const parts: string[] = [];
   for (const answer of answers) {
@@ -371,7 +407,7 @@ export function planFromBrief(briefMarkdown: string, answers: readonly BriefAnsw
   const featuresBody = sectionBody(briefMarkdown, "Features");
   const corpus = [briefMarkdown, answerCorpus(answers)].filter((part) => part.trim() !== "").join("\n");
   const collected = pagesFromCorpus(briefMarkdown, corpus);
-  const pages = collected.pages;
+  const pages = unionAnswerPages(collected.pages, answers);
   let features = featureNames(corpus, featuresBody);
   if (features.length === 0 && !collected.parsed) features = ["contact form"];
   const requirements: PlanRequirement[] = [
