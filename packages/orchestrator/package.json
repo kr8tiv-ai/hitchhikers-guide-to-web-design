@@ -16,7 +16,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hitchhiker/engine": "workspace:*"
+    "@hitchhiker/engine": "workspace:*",
+    "@hitchhiker/qa": "workspace:*"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/**/*.test.ts"

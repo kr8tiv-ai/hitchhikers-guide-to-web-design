@@ -62,6 +62,38 @@ export async function advance(input: AdvanceInput): Promise<{ nextId: string | n
   return result;
 }
 
+const LAUNCH_CLOSED = "Launch stays closed until the quality check is clean.";
+
+/**
+ * Record a phase-6 refusal on the project state the desk already reads.
+ * The phase stays where it was. Launch is the next action until the check is clean.
+ */
+export async function noteShipRefusal(projectDir: string, reasons: readonly string[]): Promise<void> {
+  if (typeof projectDir !== "string" || projectDir.length === 0) {
+    throw new ProgressError("Project directory is missing.");
+  }
+  const existing = loadState(projectDir);
+  const lines = reasons.map(oneLine).filter((line) => line.length > 0);
+  const blockers = [...(existing?.blockers ?? [])];
+  for (const line of lines) {
+    if (!blockers.includes(line)) blockers.push(line);
+  }
+  const state: GuideState = {
+    phase: existing?.phase && existing.phase.length > 0 ? existing.phase : "Mostly Harmless",
+    slice: existing?.slice && existing.slice.length > 0 ? existing.slice : "Slartibartfast's Fjords",
+    promptId: existing?.promptId && existing.promptId.length > 0 ? existing.promptId : "ship-gate",
+    lastGoodCommit: existing?.lastGoodCommit ?? "",
+    blockers,
+    nextAction: LAUNCH_CLOSED,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveState(projectDir, state);
+}
+
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").replace(/ {2,}/g, " ").trim();
+}
+
 function assertInput(input: AdvanceInput): void {
   if (typeof input.projectDir !== "string" || input.projectDir.length === 0) {
     throw new ProgressError("Project directory is missing.");

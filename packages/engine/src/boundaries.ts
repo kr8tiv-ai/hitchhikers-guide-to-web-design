@@ -18,11 +18,12 @@ export interface PackageBoundary {
  * @resvg/resvg-js and pdf-lib on assets, prompt 063;
  * templates on engine for the brand truth gate, prompt 065;
  * @gltf-transform/core, @gltf-transform/extensions, @gltf-transform/functions,
- * draco3dgltf, and meshoptimizer on assets for 3D optimization, prompt 085).
+ * draco3dgltf, and meshoptimizer on assets for 3D optimization, prompt 085;
+ * qa on the orchestrator for the ship gate, prompt 243e).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
-  { name: "@hitchhiker/orchestrator", allowDeps: ["@hitchhiker/engine"] },
+  { name: "@hitchhiker/orchestrator", allowDeps: ["@hitchhiker/engine", "@hitchhiker/qa"] },
   { name: "@hitchhiker/grok-plugin", allowDeps: [] },
   {
     name: "@hitchhiker/app",

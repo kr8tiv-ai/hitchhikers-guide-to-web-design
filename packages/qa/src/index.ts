@@ -180,3 +180,4 @@ export type {
   MedianPhoneInput,
   MotionRunInput,
 } from "./gates/registry.ts";
+export { decideReview } from "./verdict.ts";

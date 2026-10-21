@@ -156,7 +156,7 @@ test("package.json dependencies match BOUNDARIES", () => {
 
   const orchestrator = BOUNDARIES.find((boundary) => boundary.name === "@hitchhiker/orchestrator");
   assert.ok(orchestrator);
-  assert.deepEqual(orchestrator.allowDeps, [ENGINE_DEP]);
+  assert.deepEqual(orchestrator.allowDeps, [ENGINE_DEP, "@hitchhiker/qa"]);
   assert.equal(orchestrator.allowDeps.includes("@hitchhiker/app"), false);
 });
 
