@@ -134,6 +134,20 @@ export type {
   SectionLockResult,
   SectionLockShot,
 } from "./elevate-loop.ts";
+export {
+  DEFAULT_ELEVATE_ROUNDS,
+  ELEVATE_SCORE_GAIN,
+  elevateStopWhen,
+  runElevateLoop,
+} from "./elevate-rounds.ts";
+export type {
+  ElevateLoopResult,
+  ElevateLoopSnapshot,
+  ElevateScores,
+  ElevateStop,
+  ElevateStopRule,
+  RunElevateLoopInput,
+} from "./elevate-rounds.ts";
 export { REVIEW_WIDTHS, captureAll, sectionBuffersDiffer, shotPairGap } from "./screenshots.ts";
 export { REDESIGN_STEPS, judgeRedesignOrder } from "./redesign-order.ts";
 export type { RedesignOrderResult, RedesignStepId, RedesignStepShot, RedesignStoredShot } from "./redesign-order.ts";

@@ -16,7 +16,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -402,8 +402,9 @@ function emptyHooks(): string {
   return dir.replaceAll("\\", "/");
 }
 
-function git(dir: string, args: readonly string[]): Promise<string> {
+function git(dir: string, args: readonly string[], attempt = 0): Promise<string> {
   // An empty hooks path keeps a machine-level hook from blocking the revert.
+  // fscache off: that Windows cache denies new object writes.
   const full = [
     "-c",
     "user.name=Hitchhiker",
@@ -411,6 +412,8 @@ function git(dir: string, args: readonly string[]): Promise<string> {
     "user.email=hh@localhost",
     "-c",
     "commit.gpgsign=false",
+    "-c",
+    "core.fscache=false",
     "-c",
     "core.editor=true",
     "-c",
@@ -433,6 +436,14 @@ function git(dir: string, args: readonly string[]): Promise<string> {
       (error, stdout, stderr) => {
         if (error) {
           const detail = stderr.trim().length > 0 ? stderr.trim() : error.message;
+          // Windows can deny the object write for a moment while a scanner holds the new file.
+          if (attempt < 5 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(detail)) {
+            rmSync(path.join(dir, ".git", "index.lock"), { force: true });
+            setTimeout(() => {
+              git(dir, args, attempt + 1).then(resolve, reject);
+            }, 300 * (attempt + 1));
+            return;
+          }
           reject(new Error(calm(detail)));
           return;
         }

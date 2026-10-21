@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { defaultConfig, think, type SpawnLike, type ThinkRequest } from "@hitchhiker/engine";
+import { defaultConfig, hiddenChildOptions, think, type SpawnLike, type ThinkRequest } from "@hitchhiker/engine";
 import {
   COPY_REFINE_SCHEMA,
   COPY_REFINE_TASK,
@@ -93,7 +93,7 @@ function codeOf(error: Error | null): number {
   return 1;
 }
 
-function git(dir: string, args: readonly string[]): Promise<void> {
+function git(dir: string, args: readonly string[], attempt = 0): Promise<void> {
   const hooks = path.join(os.tmpdir(), "hh-elevate-no-hooks").replaceAll("\\", "/");
   mkdirSync(hooks, { recursive: true });
   const full = [
@@ -103,6 +103,8 @@ function git(dir: string, args: readonly string[]): Promise<void> {
     "user.email=hh@localhost",
     "-c",
     "commit.gpgsign=false",
+    "-c",
+    "core.fscache=false",
     "-c",
     "core.editor=true",
     "-c",
@@ -115,8 +117,7 @@ function git(dir: string, args: readonly string[]): Promise<void> {
     execFile(
       "git",
       full,
-      {
-        windowsHide: true,
+      hiddenChildOptions({
         encoding: "utf8",
         env: {
           ...process.env,
@@ -125,10 +126,16 @@ function git(dir: string, args: readonly string[]): Promise<void> {
           GIT_COMMITTER_NAME: "Hitchhiker",
           GIT_COMMITTER_EMAIL: "hh@localhost",
         },
-      },
+      }),
       (error, _stdout, stderr) => {
         if (error) {
           const detail = stderr.trim().length > 0 ? stderr.trim() : error.message;
+          if (attempt < 5 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(detail)) {
+            setTimeout(() => {
+              git(dir, args, attempt + 1).then(resolve, reject);
+            }, 300 * (attempt + 1));
+            return;
+          }
           reject(new Error(detail));
           return;
         }
