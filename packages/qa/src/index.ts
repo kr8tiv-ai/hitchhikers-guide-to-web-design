@@ -32,7 +32,7 @@ export type {
   PerformanceInput,
   PerformanceResult,
 } from "./performance-gate.ts";
-export { evaluateDeviceLh, webglLcpIsPoster } from "./lighthouse-gate.ts";
+export { MOBILE_LH_RUNS, PHONE_CATEGORY_FLOOR, evaluateDeviceLh, evaluateMedianPhone, webglLcpIsPoster } from "./lighthouse-gate.ts";
 export type { DeviceLhResult, DeviceRecord, DeviceSlot, LhViewport } from "./lighthouse-gate.ts";
 export {
   REAL_DEVICE_EMULATION,
@@ -54,14 +54,26 @@ export type {
 } from "./pattern-score.ts";
 export {
   EMULATION_LIMITS,
+  MATRIX_DESKTOP_WIDTHS,
+  MATRIX_PHONE_WIDTHS,
+  MATRIX_TABLET_WIDTHS,
+  MATRIX_WIDTH_ENGINES,
   OPTIONAL_DEVICE_LABS,
   OPTIONAL_ENGINES,
   PHONE_CLASS_WIDTHS,
   buildDeviceMatrix,
   missingDescriptorMessage,
   runDeviceMatrix,
+  widthCoverage,
 } from "./device-matrix.ts";
-export type { DeviceDescriptor, DeviceMap, DeviceMatrixRun, DeviceProject } from "./device-matrix.ts";
+export type {
+  DeviceDescriptor,
+  DeviceMap,
+  DeviceMatrixRun,
+  DeviceProject,
+  WidthCheck,
+  WidthCoverage,
+} from "./device-matrix.ts";
 export { captureLiveDeviceMatrix } from "./device-run.ts";
 export { stateSweepProjects } from "./device-matrix.ts";
 export { UI_STATES, ZOOM_PERCENT, evaluateStateSweeps, stateFixture } from "./state-sweep.ts";
@@ -82,13 +94,25 @@ export type { JurorFloorReport, JurorFloorRow, JurorRow, JurorSample } from "./j
 export {
   OPACITY_KEEP_MS,
   OPACITY_KEEP_NOTE,
+  PHONE_FRAME_MAX_MS,
+  PHONE_LONG_TASK_MAX_MS,
   classifyMotion,
   evaluateReducedMotion,
+  judgePhoneScene,
   posesMatch,
   runReducedMotion,
   stillIsArtDirected,
 } from "./reduced-motion.ts";
-export type { LenisMotion, MotionSection, ReducedReport, ReducedRun, ReducedSample, TierZeroStill } from "./reduced-motion.ts";
+export type {
+  LenisMotion,
+  MotionSection,
+  PhoneSceneJudgement,
+  PhoneSceneSample,
+  ReducedReport,
+  ReducedRun,
+  ReducedSample,
+  TierZeroStill,
+} from "./reduced-motion.ts";
 export { AI_CLUSTER_VISION_KEYS, judgeAiCluster, lintSlop } from "./antislop.ts";
 export type { AiClusterHit, AiClusterInput, AiClusterResult, AiClusterVisionKey, SlopHit } from "./antislop.ts";
 export { rankBeautyIssues } from "./beauty-gate.ts";
@@ -153,5 +177,6 @@ export type {
   GateStatus,
   LighthouseRunInput,
   MatrixRunInput,
+  MedianPhoneInput,
   MotionRunInput,
 } from "./gates/registry.ts";

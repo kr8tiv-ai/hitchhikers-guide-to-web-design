@@ -21,11 +21,18 @@ const BANNED_BUDGET = [
   /poster only on phones/i,
 ] as const;
 
+/** A pause longer than this on the phone misses the budget. Research 06. */
+export const PHONE_LONG_TASK_MAX_MS = 200;
+
+/** One frame at 45 per second. A slower frame misses the budget. */
+export const PHONE_FRAME_MAX_MS = 1000 / 45;
+
 export function phonePerformanceBudget(): string {
   return [
     "## Phone performance budget",
     "",
     "Performance at least 90 on the mobile preset. LCP at most 2.5 s. CLS at most 0.1. GLB at most 5 MiB. The poster is the LCP image. The phone keeps the scene after the poster, at a GPU tier the device can hold. A width cutoff does not replace the scene with a still.",
+    `A long task on the phone stays at or under ${PHONE_LONG_TASK_MAX_MS} ms. The phone keeps 45 frames a second.`,
   ].join("\n");
 }
 

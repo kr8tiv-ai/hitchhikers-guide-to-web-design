@@ -4,7 +4,15 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { defaultConfig } from "@hitchhiker/engine";
-import { evaluateLh, fromLhci, type LhFloors, type LhScores } from "../src/lighthouse-gate.ts";
+import {
+  evaluateLh,
+  evaluateMedianPhone,
+  fromLhci,
+  MOBILE_LH_RUNS,
+  PHONE_CATEGORY_FLOOR,
+  type LhFloors,
+  type LhScores,
+} from "../src/lighthouse-gate.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -430,4 +438,38 @@ test("the gate module does not shell out or download a browser", () => {
   assert.doesNotMatch(source, /playwright/);
   assert.doesNotMatch(source, /puppeteer/);
   assert.match(source, /GuideConfig/);
+});
+
+test("the phone floor matches the deploy post-check", () => {
+  assert.equal(PHONE_CATEGORY_FLOOR, 90);
+  assert.equal(MOBILE_LH_RUNS, 3);
+  const postCheck = readFileSync(
+    path.join(here, "..", "..", "deploy", "src", "post-check.ts"),
+    "utf8",
+  );
+  assert.match(postCheck, /export const PHONE_CATEGORY_FLOOR = 90;/);
+});
+
+test("one noisy phone run does not fail a median that clears 90", () => {
+  const run = (performance: number): LhScores => scores({ performance });
+  const noisy = evaluateMedianPhone([run(0.8), run(0.96), run(0.97)]);
+  assert.equal(noisy.status, "PASS");
+  assert.deepEqual(noisy.reasons, []);
+
+  const low = evaluateMedianPhone([run(0.8), run(0.8), run(0.97)]);
+  assert.equal(low.status, "BLOCKER");
+  assert.deepEqual(low.reasons, ["Phone performance is 80, below the floor of 90."]);
+});
+
+test("fewer than three phone checks is a blocker", () => {
+  const result = evaluateMedianPhone([scores({ performance: 1 }), scores({ performance: 1 })]);
+  assert.equal(result.status, "BLOCKER");
+  assert.deepEqual(result.reasons, ["The phone was checked 2 times. It needs 3 checks."]);
+});
+
+test("an accessibility median under 90 blocks the phone", () => {
+  const run = (accessibility: number): LhScores => scores({ performance: 0.96, accessibility });
+  const result = evaluateMedianPhone([run(0.89), run(0.89), run(1)]);
+  assert.equal(result.status, "BLOCKER");
+  assert.match(result.reasons.join("\n"), /Phone accessibility is 89, below the floor of 90/);
 });

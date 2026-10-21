@@ -8,15 +8,24 @@ import { REVIEW_WIDTHS } from "../src/screenshots.ts";
 import { CHROME_FIX, assertBrowserEngine } from "../src/playwright-opener.ts";
 import {
   EMULATION_LIMITS,
+  MATRIX_DESKTOP_WIDTHS,
+  MATRIX_PHONE_WIDTHS,
+  MATRIX_TABLET_WIDTHS,
+  MATRIX_WIDTH_ENGINES,
   OPTIONAL_DEVICE_LABS,
   OPTIONAL_ENGINES,
   PHONE_CLASS_WIDTHS,
+  TABLET_CHECK_HEIGHT,
+  WIDTH_CHECK_HEIGHT,
+  DESKTOP_VIEWPORT_HEIGHT,
   buildDeviceMatrix,
   missingDescriptorMessage,
   runDeviceMatrix,
   type DeviceDescriptor,
   type DeviceMap,
   type DeviceProject,
+  type MatrixWidthEngine,
+  type MatrixWidthKind,
 } from "../src/device-matrix.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -142,6 +151,49 @@ test("390 and 430 are width checks on top of the review widths", () => {
   }
 });
 
+test("375, 390, and 430, plus tablet and desktop widths, run on Chromium, WebKit, and Pixel", () => {
+  const source = fixtureMap();
+  const projects = buildDeviceMatrix(source);
+  const rows: readonly (readonly [number, MatrixWidthKind, number])[] = [
+    ...MATRIX_PHONE_WIDTHS.map((width) => [width, "phone", WIDTH_CHECK_HEIGHT] as const),
+    ...MATRIX_TABLET_WIDTHS.map((width) => [width, "tablet", TABLET_CHECK_HEIGHT] as const),
+    ...MATRIX_DESKTOP_WIDTHS.map((width) => [width, "desktop", DESKTOP_VIEWPORT_HEIGHT] as const),
+  ];
+  for (const [width, kind, height] of rows) {
+    for (const engine of MATRIX_WIDTH_ENGINES) {
+      const item = project(projects, `matrix-${engine}-${width}`);
+      assert.equal(item.widthCheck?.width, width);
+      assert.equal(item.widthCheck?.kind, kind);
+      assert.equal(item.widthCheck?.engine, engine);
+      assert.equal(item.descriptorKey, null);
+      assert.equal(item.requestedKey, null);
+      assert.equal(item.p0Phone, false);
+      assert.equal(item.fallbackNote, "Width check. Not a Playwright device key.");
+      assert.deepEqual(item.context.viewport, { width, height });
+      assert.equal(item.context.deviceScaleFactor, 1);
+      const touch = kind !== "desktop";
+      assert.equal(item.context.isMobile, touch);
+      assert.equal(item.context.hasTouch, touch);
+      assertEngine(item, engine, source);
+    }
+  }
+  assert.equal(project(projects, "width-390").context.viewport.width, 390);
+  assert.equal(project(projects, "desktop-1440").context.viewport.width, 1440);
+});
+
+function assertEngine(item: DeviceProject, engine: MatrixWidthEngine, source: DeviceMap): void {
+  if (engine === "webkit") {
+    assert.equal(item.browser, "webkit");
+    assert.equal(item.context.defaultBrowserType, "webkit");
+    assert.equal(item.context.userAgent, source["iPhone 15"]?.userAgent);
+    return;
+  }
+  assert.equal(item.browser, "chromium");
+  assert.equal(item.context.defaultBrowserType, "chromium");
+  const key = engine === "pixel" ? "Pixel 7" : "Desktop Chrome";
+  assert.equal(item.context.userAgent, source[key]?.userAgent);
+}
+
 test("a missing descriptor fails and names the key", () => {
   const source = fixtureMap();
   delete source["Pixel 7"];
@@ -242,6 +294,12 @@ test("each project captures a full shot, a fold shot, the detail pass, and a scr
   const webkit = run.captures.filter((row) => row.browser === "webkit");
   assert.ok(webkit.length >= 4);
   assert.deepEqual(run.limits, [...EMULATION_LIMITS]);
+  assert.equal(run.coverage.length, 21);
+  assert.equal(
+    run.coverage.length,
+    (MATRIX_PHONE_WIDTHS.length + MATRIX_TABLET_WIDTHS.length + MATRIX_DESKTOP_WIDTHS.length) *
+      MATRIX_WIDTH_ENGINES.length,
+  );
   assert.deepEqual(run.optionalLabs, [...OPTIONAL_DEVICE_LABS]);
   assert.equal(run.optionalEngines.some((engine) => engine.name === "firefox" && engine.required === false), true);
   assert.equal(OPTIONAL_ENGINES.some((engine) => engine.name === "edge"), true);

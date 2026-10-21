@@ -50,8 +50,17 @@ export interface LhGateResult {
   reasons: string[];
 }
 
+/**
+ * Same floor as `PHONE_CATEGORY_FLOOR` in `packages/deploy/src/post-check.ts`.
+ * All four phone categories. A stored gate below this is rejected.
+ */
+export const PHONE_CATEGORY_FLOOR = 90;
+
+/** Mobile Lighthouse runs. The speed gate scores the median. */
+export const MOBILE_LH_RUNS = 3;
+
 /** D-006. A stored gate below this is rejected rather than applied. */
-const FLOOR_MIN = 90;
+const FLOOR_MIN = PHONE_CATEGORY_FLOOR;
 const FLOOR_MAX = 100;
 const RATIO_MAX = 1;
 const SCORE_MAX = 100;
@@ -184,6 +193,53 @@ function desktopNote(desktop: NormalizedScores): string {
     `and SEO ${formatScore(desktop.seo)} are recorded. ` +
     `A desktop run does not waive the phone.`
   );
+}
+
+function medianOf(values: readonly number[]): number {
+  const sorted = values.slice().sort((left, right) => left - right);
+  const mid = sorted[Math.floor(sorted.length / 2)];
+  if (mid === undefined) throw new Error("The phone checks have no scores.");
+  return mid;
+}
+
+function readRunScore(run: unknown, index: number, field: keyof LhScores): number {
+  if (!isRecord(run)) throw new Error(`Phone check ${index + 1} is missing its scores.`);
+  const value = run[field];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`Phone check ${index + 1} is missing ${field}.`);
+  }
+  return value;
+}
+
+/**
+ * Median of three mobile runs. Every category uses the post-check floor
+ * of 90. One noisy run under the floor does not fail a median that clears it.
+ * Fewer or more than three runs is a blocker. This does not start a browser.
+ */
+export function evaluateMedianPhone(runs: readonly LhScores[]): LhGateResult {
+  if (!Array.isArray(runs)) throw new Error("Phone checks are missing. Expected three mobile checks.");
+  if (runs.length !== MOBILE_LH_RUNS) {
+    return {
+      status: "BLOCKER",
+      reasons: [`The phone was checked ${runs.length} times. It needs ${MOBILE_LH_RUNS} checks.`],
+    };
+  }
+  const phone: LhScores = {
+    performance: medianOf(runs.map((run, index) => readRunScore(run, index, "performance"))),
+    accessibility: medianOf(runs.map((run, index) => readRunScore(run, index, "accessibility"))),
+    bestPractices: medianOf(runs.map((run, index) => readRunScore(run, index, "bestPractices"))),
+    seo: medianOf(runs.map((run, index) => readRunScore(run, index, "seo"))),
+  };
+  return evaluateLh({
+    phone,
+    heavy: false,
+    floors: {
+      phonePerfMin: PHONE_CATEGORY_FLOOR,
+      a11yMin: PHONE_CATEGORY_FLOOR,
+      bestPracticesMin: PHONE_CATEGORY_FLOOR,
+      seoMin: PHONE_CATEGORY_FLOOR,
+    },
+  });
 }
 
 /**

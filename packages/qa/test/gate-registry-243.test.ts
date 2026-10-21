@@ -9,8 +9,19 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { jargonHits } from "@hitchhiker/engine";
-import { EMULATION_LIMITS, type DeviceProject, type MatrixHooks } from "../src/device-matrix.ts";
+import { jargonHits, phonePerformanceBudget } from "@hitchhiker/engine";
+import {
+  EMULATION_LIMITS,
+  MATRIX_DESKTOP_WIDTHS,
+  MATRIX_PHONE_WIDTHS,
+  MATRIX_TABLET_WIDTHS,
+  MATRIX_WIDTH_ENGINES,
+  buildDeviceMatrix,
+  type DeviceDescriptor,
+  type DeviceMap,
+  type DeviceProject,
+  type MatrixHooks,
+} from "../src/device-matrix.ts";
 import {
   GATE_IDS,
   GATE_REGISTRY,
@@ -22,7 +33,7 @@ import {
   type GateRunners,
 } from "../src/gates/registry.ts";
 import { GATE_IDS as exportedIds, runAllGates as exportedRun } from "../src/index.ts";
-import { OPACITY_KEEP_MS, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
+import { PHONE_FRAME_MAX_MS, type PhoneSceneSample, OPACITY_KEEP_MS, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
 import { loadBrandScale } from "../src/spacing-gate.ts";
 
 /** The eleven dimensions in spec 243. Motion and 3D are the motion-3d pair. Device is mobile/device. */
@@ -111,6 +122,11 @@ test("runAllGates writes GATES.json for the project commit", { timeout: 30_000 }
     assertPlain(report);
     const matrix = evidenceOf(result(report, "device")).matrix as { limits?: unknown };
     assert.deepEqual(matrix.limits, [...EMULATION_LIMITS]);
+    const motionEvidence = evidenceOf(result(report, "motion")).scene as unknown[];
+    assert.deepEqual(motionEvidence, []);
+    const copyEvidence = evidenceOf(result(report, "copy"));
+    assert.deepEqual(copyEvidence.voice, []);
+    assert.equal(copyEvidence.placeholder, false);
   } finally {
     rmSync(project.root, { recursive: true, force: true });
   }
@@ -289,6 +305,100 @@ test("folded gates return FIX or BLOCKER in plain words", { timeout: 30_000 }, a
     assert.match(result(slow, "speed").reason, /phone/);
     assert.equal(result(slow, "spacing").reason, "The spacing sits on the scale.");
     assertPlain(slow);
+
+    const outlier = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        lighthouse: async () => ({
+          runs: [
+            { performance: 0.96, accessibility: 0.89, bestPractices: 1, seo: 1 },
+            { performance: 0.96, accessibility: 0.89, bestPractices: 1, seo: 1 },
+            { performance: 0.97, accessibility: 1, bestPractices: 1, seo: 1 },
+          ],
+        }),
+      }),
+    );
+    assert.equal(result(outlier, "speed").status, "BLOCKER");
+    assert.match(JSON.stringify(result(outlier, "speed").evidence), /Phone accessibility is 89/);
+    assertPlain(outlier);
+
+    const noisy = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        lighthouse: async () => ({
+          runs: [
+            { performance: 80, accessibility: 95, bestPractices: 95, seo: 95 },
+            { performance: 96, accessibility: 95, bestPractices: 95, seo: 95 },
+            { performance: 97, accessibility: 95, bestPractices: 95, seo: 95 },
+          ],
+        }),
+      }),
+    );
+    assert.equal(result(noisy, "speed").status, "PASS");
+    assertPlain(noisy);
+
+    const shortRuns = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        lighthouse: async () => ({
+          runs: [
+            { performance: 95, accessibility: 95, bestPractices: 95, seo: 95 },
+            { performance: 95, accessibility: 95, bestPractices: 95, seo: 95 },
+          ],
+        }),
+      }),
+    );
+    assert.equal(result(shortRuns, "speed").status, "BLOCKER");
+    assert.match(JSON.stringify(result(shortRuns, "speed").evidence), /checked 2 times/);
+    assertPlain(shortRuns);
+
+    const placeholder = await runAllGates(
+      { root: project.root },
+      passingRunners({ copyText: async () => "Placeholder headline for the towel." }),
+    );
+    assert.equal(result(placeholder, "copy").status, "BLOCKER");
+    assert.match(result(placeholder, "copy").reason, /placeholder text/);
+    assert.equal(evidenceOf(result(placeholder, "copy")).placeholder, true);
+    assertPlain(placeholder);
+
+    const voice = await runAllGates(
+      { root: project.root },
+      passingRunners({ copyText: async () => "We unlock a quiet towel." }),
+    );
+    assert.equal(result(voice, "copy").status, "FIX");
+    assert.deepEqual(evidenceOf(result(voice, "copy")).voice, ["unlock"]);
+    assertPlain(voice);
+
+    const blank = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        motion: async () => ({
+          projects: [phoneProject()],
+          sampleFor: (item) => quiet(item, { has3d: false, scene: null, still: null }),
+          scene: sceneSample({ webgl: false, posterPresent: false, rendersWhen3dOff: false }),
+        }),
+      }),
+    );
+    assert.equal(result(blank, "3d").status, "BLOCKER");
+    assert.match(result(blank, "3d").reason, /blank when the three-dimensional scene is turned off/);
+    assert.equal(result(blank, "motion").status, "PASS");
+    assertPlain(blank);
+
+    const pause = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        motion: async () => ({
+          projects: [phoneProject()],
+          sampleFor: (item) => quiet(item),
+          scene: sceneSample({ longestLongTaskMs: 201, slowestFrameMs: PHONE_FRAME_MAX_MS + 1 }),
+        }),
+      }),
+    );
+    assert.equal(result(pause, "motion").status, "FIX");
+    assert.match(result(pause, "motion").reason, /pauses too long/);
+    assert.match(result(pause, "motion").reason, /too slow on a phone/);
+    assert.equal(result(pause, "3d").status, "PASS");
+    assertPlain(pause);
   } finally {
     rmSync(project.root, { recursive: true, force: true });
   }
@@ -366,6 +476,42 @@ test("spacing over 10 percent is FIX and body contrast is a blocker", { timeout:
     assert.match(result(both, "color").reason, /One color covers more of the page/);
     assert.match(JSON.stringify(result(both, "color").evidence), /Accent covers half the page/);
     assertPlain(both);
+  } finally {
+    rmSync(project.root, { recursive: true, force: true });
+  }
+});
+
+test("the device report keeps the emulation limits and the widened widths", { timeout: 30_000 }, async () => {
+  const project = tempProject();
+  try {
+    const report = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        device: async () => ({
+          projects: buildDeviceMatrix(matrixMap()),
+          sections: [],
+          hooks: hooks(),
+        }),
+      }),
+    );
+    assert.equal(result(report, "device").status, "PASS");
+    const matrix = evidenceOf(result(report, "device")).matrix as {
+      limits?: unknown;
+      widths?: { width: number; kind: string; engine: string }[];
+    };
+    assert.deepEqual(matrix.limits, [...EMULATION_LIMITS]);
+    const widths = matrix.widths ?? [];
+    assert.equal(widths.length, MATRIX_PHONE_WIDTHS.length * MATRIX_WIDTH_ENGINES.length + MATRIX_TABLET_WIDTHS.length * MATRIX_WIDTH_ENGINES.length + MATRIX_DESKTOP_WIDTHS.length * MATRIX_WIDTH_ENGINES.length);
+    for (const width of [...MATRIX_PHONE_WIDTHS, ...MATRIX_TABLET_WIDTHS, ...MATRIX_DESKTOP_WIDTHS]) {
+      for (const engine of MATRIX_WIDTH_ENGINES) {
+        assert.equal(
+          widths.some((item) => item.width === width && item.engine === engine),
+          true,
+          `${engine} ${width}`,
+        );
+      }
+    }
+    assertPlain(report);
   } finally {
     rmSync(project.root, { recursive: true, force: true });
   }
@@ -491,6 +637,43 @@ function quiet(project: DeviceProject, over: Partial<ReducedSample> = {}): Reduc
   };
 }
 
+function matrixMap(): DeviceMap {
+  const row = (
+    viewport: { width: number; height: number },
+    browser: "chromium" | "webkit",
+  ): DeviceDescriptor => ({
+    userAgent: `ua-${viewport.width}-${browser}`,
+    viewport,
+    deviceScaleFactor: 2,
+    isMobile: viewport.width < 1200,
+    hasTouch: viewport.width < 1400,
+    defaultBrowserType: browser,
+  });
+  return {
+    "iPhone 15": row({ width: 393, height: 659 }, "webkit"),
+    "iPhone 15 landscape": row({ width: 734, height: 343 }, "webkit"),
+    "Pixel 7": row({ width: 412, height: 839 }, "chromium"),
+    "Pixel 7 landscape": row({ width: 863, height: 360 }, "chromium"),
+    "iPad Pro 11": row({ width: 834, height: 1194 }, "webkit"),
+    "iPad Pro 11 landscape": row({ width: 1194, height: 834 }, "webkit"),
+    "Galaxy Tab S9": row({ width: 640, height: 1024 }, "chromium"),
+    "Galaxy Tab S9 landscape": row({ width: 1024, height: 640 }, "chromium"),
+    "Desktop Chrome": row({ width: 1280, height: 720 }, "chromium"),
+  };
+}
+
+function sceneSample(over: Partial<PhoneSceneSample> = {}): PhoneSceneSample {
+  return {
+    webgl: true,
+    posterPresent: true,
+    rendersWhen3dOff: true,
+    longestLongTaskMs: 40,
+    slowestFrameMs: 16,
+    brief: phonePerformanceBudget(),
+    ...over,
+  };
+}
+
 function hooks(): MatrixHooks {
   return {
     engineReady() {
@@ -529,7 +712,11 @@ function passingRunners(overrides: Partial<GateRunners> = {}): GateRunners {
       { kind: "large", place: "the title", ratio: 4 },
     ],
     imagery: async () => [{ src: "hero.jpg", temperature: 0.5, contrast: 0.5, saturation: 0.5 }],
-    motion: async () => ({ projects: [phone], sampleFor: (project) => quiet(project) }),
+    motion: async () => ({
+      projects: [phone],
+      sampleFor: (project) => quiet(project),
+      scene: sceneSample(),
+    }),
     copyText: async () => "The valley holds three jobs and a quiet road.",
     device: async () => ({ projects: [phone], sections: [], hooks: hooks() }),
     console: async () => ({ errors: 0, failedRequests: 0, pass: true }),
@@ -542,9 +729,11 @@ function passingRunners(overrides: Partial<GateRunners> = {}): GateRunners {
       motionUsed: false,
     }),
     lighthouse: async () => ({
-      phone: { performance: 95, accessibility: 95, bestPractices: 95, seo: 95 },
-      heavy: false,
-      floors: { phonePerfMin: 90, a11yMin: 90, bestPracticesMin: 90, seoMin: 90 },
+      runs: [
+        { performance: 92, accessibility: 95, bestPractices: 95, seo: 95 },
+        { performance: 96, accessibility: 95, bestPractices: 95, seo: 95 },
+        { performance: 98, accessibility: 95, bestPractices: 95, seo: 95 },
+      ],
     }),
     weight: async () => ({
       title: "Field notes",

@@ -4,11 +4,16 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { devices } from "playwright";
+import { phonePerformanceBudget } from "@hitchhiker/engine";
 import { buildDeviceMatrix, type DeviceDescriptor, type DeviceMap, type DeviceProject } from "../src/device-matrix.ts";
 import {
   OPACITY_KEEP_MS,
+  PHONE_FRAME_MAX_MS,
+  PHONE_LONG_TASK_MAX_MS,
   evaluateReducedMotion,
+  judgePhoneScene,
   runReducedMotion,
+  type PhoneSceneSample,
   type ReducedSample,
   type TierZeroStill,
 } from "../src/reduced-motion.ts";
@@ -243,4 +248,51 @@ test("width and core count do not select the tier-0 still", () => {
   assert.match(index, /evaluateReducedMotion/);
   assert.match(index, /posesMatch/);
   assert.match(index, /classifyMotion/);
+  assert.match(index, /judgePhoneScene/);
+});
+
+function scene(over: Partial<PhoneSceneSample> = {}): PhoneSceneSample {
+  return {
+    webgl: true,
+    posterPresent: true,
+    rendersWhen3dOff: true,
+    longestLongTaskMs: 40,
+    slowestFrameMs: 16,
+    brief: phonePerformanceBudget(),
+    ...over,
+  };
+}
+
+test("the phone budget names the long-task and frame lines", () => {
+  const block = phonePerformanceBudget();
+  assert.match(block, /long task on the phone stays at or under 200 ms/);
+  assert.match(block, /45 frames a second/);
+  assert.equal(PHONE_LONG_TASK_MAX_MS, 200);
+  assert.equal(PHONE_FRAME_MAX_MS, 1000 / 45);
+  assert.equal(block.includes("!"), false);
+});
+
+test("a WebGL scene needs a poster, the phone plan, and a page that still renders", () => {
+  assert.equal(judgePhoneScene(scene()).status, "PASS");
+  const poster = judgePhoneScene(scene({ posterPresent: false }));
+  assert.equal(poster.status, "BLOCKER");
+  assert.match(poster.problems.map((item) => item.reason).join(" "), /still picture/);
+  const plan = judgePhoneScene(scene({ brief: "No WebGL on phones." }));
+  assert.equal(plan.status, "BLOCKER");
+  assert.match(plan.problems.map((item) => item.reason).join(" "), /phone plan/);
+  const missing = judgePhoneScene(scene({ brief: "A towel shop." }));
+  assert.equal(missing.status, "BLOCKER");
+});
+
+test("the scene turned off still has to render, and a slow phone is a fix", () => {
+  const off = judgePhoneScene(scene({ webgl: false, posterPresent: false, brief: "", rendersWhen3dOff: true }));
+  assert.equal(off.status, "PASS");
+  const blank = judgePhoneScene(scene({ webgl: false, rendersWhen3dOff: false }));
+  assert.equal(blank.status, "BLOCKER");
+  assert.match(blank.problems.map((item) => item.reason).join(" "), /turned off/);
+  const slow = judgePhoneScene(scene({ longestLongTaskMs: PHONE_LONG_TASK_MAX_MS + 1, slowestFrameMs: PHONE_FRAME_MAX_MS + 0.1 }));
+  assert.equal(slow.status, "FIX");
+  assert.equal(slow.problems.every((item) => item.gate === "motion"), true);
+  const edge = judgePhoneScene(scene({ longestLongTaskMs: PHONE_LONG_TASK_MAX_MS, slowestFrameMs: PHONE_FRAME_MAX_MS }));
+  assert.equal(edge.status, "PASS");
 });

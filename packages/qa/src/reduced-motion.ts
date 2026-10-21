@@ -9,13 +9,24 @@ import type { DeviceProject } from "./device-matrix.ts";
 import {
   OPACITY_KEEP_MS,
   OPACITY_KEEP_NOTE,
+  PHONE_FRAME_MAX_MS,
+  PHONE_LONG_TASK_MAX_MS,
+  briefHasPhoneBudget,
   classifyMotion,
   posesMatch,
   stillIsArtDirected,
   type TierZeroStill,
 } from "@hitchhiker/engine";
 
-export { OPACITY_KEEP_MS, OPACITY_KEEP_NOTE, classifyMotion, posesMatch, stillIsArtDirected };
+export {
+  OPACITY_KEEP_MS,
+  OPACITY_KEEP_NOTE,
+  PHONE_FRAME_MAX_MS,
+  PHONE_LONG_TASK_MAX_MS,
+  classifyMotion,
+  posesMatch,
+  stillIsArtDirected,
+};
 export type { TierZeroStill };
 
 export interface MotionSection {
@@ -142,5 +153,103 @@ function checkReduced(sample: ReducedSample, problems: string[]): void {
   if (!stillIsArtDirected(sample.still)) problems.push("The tier-0 still is not art-directed.");
   if (!posesMatch(sample.scene, sample.still)) {
     problems.push("The tier-0 still does not match the scene camera, grade, and lighting.");
+  }
+}
+
+export type PhoneSceneGate = "motion" | "3d";
+
+/**
+ * Injected WebGL facts. The runner measures the page. This does not open
+ * a browser. The long-task and frame numbers come from the phone budget.
+ */
+export interface PhoneSceneSample {
+  /** The page has a moving three-dimensional scene. */
+  webgl: boolean;
+  /** A still or poster is in the page for when the scene cannot run. */
+  posterPresent: boolean;
+  /** The words stay on the page when the scene is turned off. */
+  rendersWhen3dOff: boolean;
+  /** Longest pause on the phone, in milliseconds. */
+  longestLongTaskMs: number;
+  /** Slowest frame on the phone, in milliseconds. */
+  slowestFrameMs: number;
+  /** Site brief. A scene needs the phone performance budget block. */
+  brief: string;
+}
+
+export interface PhoneSceneProblem {
+  gate: PhoneSceneGate;
+  status: "FIX" | "BLOCKER";
+  reason: string;
+}
+
+export interface PhoneSceneJudgement {
+  status: "PASS" | "FIX" | "BLOCKER";
+  problems: readonly PhoneSceneProblem[];
+}
+
+/**
+ * WebGL fallback, the phone long-task and frame budget, and the path with
+ * the scene turned off. A turned-off scene must still show the page.
+ */
+export function judgePhoneScene(sample: PhoneSceneSample): PhoneSceneJudgement {
+  const problems: PhoneSceneProblem[] = [];
+  if (typeof sample.webgl !== "boolean") throw new Error("webgl must be true or false.");
+  if (typeof sample.posterPresent !== "boolean") throw new Error("posterPresent must be true or false.");
+  if (typeof sample.rendersWhen3dOff !== "boolean") {
+    throw new Error("rendersWhen3dOff must be true or false.");
+  }
+  if (typeof sample.brief !== "string") throw new Error("The phone plan must be text.");
+  readDuration(sample.longestLongTaskMs, "longestLongTaskMs");
+  readDuration(sample.slowestFrameMs, "slowestFrameMs");
+
+  if (!sample.rendersWhen3dOff) {
+    problems.push({
+      gate: "3d",
+      status: "BLOCKER",
+      reason: "The page is blank when the three-dimensional scene is turned off.",
+    });
+  }
+  if (sample.webgl) {
+    if (!sample.posterPresent) {
+      problems.push({
+        gate: "3d",
+        status: "BLOCKER",
+        reason: "The scene has no still picture for when it cannot run.",
+      });
+    }
+    if (!briefHasPhoneBudget(sample.brief)) {
+      problems.push({
+        gate: "3d",
+        status: "BLOCKER",
+        reason: "The phone plan for this scene is missing.",
+      });
+    }
+    if (sample.longestLongTaskMs > PHONE_LONG_TASK_MAX_MS) {
+      problems.push({
+        gate: "motion",
+        status: "FIX",
+        reason: "The phone pauses too long while the page works.",
+      });
+    }
+    if (sample.slowestFrameMs > PHONE_FRAME_MAX_MS) {
+      problems.push({
+        gate: "motion",
+        status: "FIX",
+        reason: "The moving picture is too slow on a phone.",
+      });
+    }
+  }
+  const status = problems.some((item) => item.status === "BLOCKER")
+    ? "BLOCKER"
+    : problems.length > 0
+      ? "FIX"
+      : "PASS";
+  return { status, problems };
+}
+
+function readDuration(value: number, field: string): void {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be a number of milliseconds, zero or more.`);
   }
 }

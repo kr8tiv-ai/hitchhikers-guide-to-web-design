@@ -204,6 +204,8 @@ export {
 export type { BriefDeskView, BriefSource } from "./guide/brief-desk.ts";
 export { generateBriefPlan, planFromBrief } from "./spec/brief-plan.ts";
 export {
+  PHONE_FRAME_MAX_MS,
+  PHONE_LONG_TASK_MAX_MS,
   PhoneBudgetError,
   assertPhoneBudgetBefore3d,
   briefAsksForWebglHero,

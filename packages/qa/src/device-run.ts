@@ -1,6 +1,10 @@
 /**
  * Live device-matrix run. Tests stub the hooks in device-matrix.ts.
  * This wires WebKit, Chromium, screenshots, the detail pass, and scroll strips.
+ *
+ * The matrix built here covers phone 375/390/430, tablet 768/1024, and
+ * desktop 1440/1920 on Chromium, WebKit (the iOS stand-in), and the
+ * Chromium Pixel descriptor. The returned run keeps EMULATION_LIMITS.
  */
 
 import { buildDeviceMatrix, runDeviceMatrix, type DeviceMap, type DeviceMatrixRun } from "./device-matrix.ts";

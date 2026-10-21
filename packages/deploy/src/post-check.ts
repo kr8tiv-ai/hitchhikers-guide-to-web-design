@@ -11,6 +11,13 @@ import type { DeployResult } from "./types.ts";
 
 const REDIRECT_CAP = 3;
 
+/**
+ * Mobile Lighthouse floor for every category. The speed gate uses this
+ * same number on the median of three phone runs. A live deploy check
+ * judges the phone against it as well.
+ */
+export const PHONE_CATEGORY_FLOOR = 90;
+
 export interface PostCheckPage {
   status: number;
   body: string;

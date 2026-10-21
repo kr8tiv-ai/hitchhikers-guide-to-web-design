@@ -18,7 +18,7 @@ import {
 import { contrastRatio } from "../src/axe-run.ts";
 import { applyFixLoop } from "../src/fix-prompts.ts";
 import { judgeLhRuns, lhciCollectConfig } from "../src/lhci-run.ts";
-import type { LhScores } from "../src/lighthouse-gate.ts";
+import { evaluateMedianPhone, type LhScores } from "../src/lighthouse-gate.ts";
 import { checkLinks } from "../src/link-check.ts";
 import { captureReviewShots, startFixtureSite } from "../src/playwright-opener.ts";
 import { ONCE_OVER_ID, insertOnceOver, runGates, writeOnceOver, type QueueEntry } from "../src/site-once-over.ts";
@@ -414,6 +414,26 @@ describe("live gates", { concurrency: false }, () => {
     const asserted = judgeLhRuns("/", [sample(1), sample(1), sample(1)], false, "LHCI assert failed.");
     assert.equal(asserted.status, "BLOCKER");
     assert.match(asserted.reasons.join("\n"), /LHCI assert failed/);
+  });
+
+  test("the speed gate agrees with the three-run median", () => {
+    const sample = (performance: number): LhScores => ({
+      performance,
+      accessibility: 1,
+      bestPractices: 1,
+      seo: 1,
+    });
+    const wrapped = (performance: number): { scores: LhScores } => ({ scores: sample(performance) });
+    const cases = [
+      [0.8, 0.96, 0.97],
+      [0.8, 0.8, 0.97],
+      [1, 1],
+    ] as const;
+    for (const values of cases) {
+      const runs = values.map((value) => sample(value));
+      const judged = judgeLhRuns("/", values.map((value) => wrapped(value)), true, "");
+      assert.equal(evaluateMedianPhone(runs).status, judged.status);
+    }
   });
 
   test("the starter page inlines critical CSS and has no render-blocking head resource", async () => {

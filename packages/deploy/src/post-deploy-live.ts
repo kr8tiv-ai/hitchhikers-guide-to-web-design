@@ -12,9 +12,9 @@
  * Bing Webmaster Tools and is not submitted.
  */
 
-import { postCheck, type PostCheckResult } from "./post-check.ts";
+import { PHONE_CATEGORY_FLOOR, postCheck, type PostCheckResult } from "./post-check.ts";
 
-const FLOOR = 90;
+const FLOOR = PHONE_CATEGORY_FLOOR;
 const RATIO_MAX = 1;
 const REDIRECT_CAP = 3;
 

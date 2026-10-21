@@ -9,13 +9,17 @@
  *
  * Runners are injected. This file does not open a browser or the network.
  * Spacing uses the spacing gate. Color folds palette share and text contrast.
+ * Motion and 3D add the WebGL still, the phone long-task and frame budget,
+ * and the path with the scene turned off. Copy adds voice-kit bans and
+ * placeholder text. Speed scores the median of three phone runs at the
+ * same floor as the deploy post-check, then the page weight.
  * Font licenses are not checked.
  */
 
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { hiddenChildOptions } from "@hitchhiker/engine";
+import { BANNED_PHRASES, BANNED_WORDS, hiddenChildOptions } from "@hitchhiker/engine";
 import { evaluateA11y, type A11yGateInput, type A11yGateResult } from "../a11y-gate.ts";
 import { lintSlop, type SlopHit } from "../antislop.ts";
 import type { ConsoleGateResult } from "../console-gate.ts";
@@ -26,14 +30,21 @@ import {
   type MatrixHooks,
 } from "../device-matrix.ts";
 import { checkImageryGrade, type ImageryGradeResult, type ImagerySample } from "../imagery-grade.ts";
-import { evaluateLh, type LhGateResult } from "../lighthouse-gate.ts";
+import { evaluateLh, evaluateMedianPhone, type LhGateResult, type LhScores } from "../lighthouse-gate.ts";
 import type { LinkResult } from "../link-check.ts";
 import {
   checkPaletteProportion,
   type PaletteProportionInput,
   type PaletteProportionResult,
 } from "../palette-proportion.ts";
-import { runReducedMotion, type ReducedRun, type ReducedSample } from "../reduced-motion.ts";
+import {
+  judgePhoneScene,
+  runReducedMotion,
+  type PhoneSceneJudgement,
+  type PhoneSceneSample,
+  type ReducedRun,
+  type ReducedSample,
+} from "../reduced-motion.ts";
 import {
   evaluateSpacing,
   loadBrandScale,
@@ -82,6 +93,11 @@ export interface GateProject {
 export interface MotionRunInput {
   projects: readonly DeviceProject[];
   sampleFor(project: DeviceProject): ReducedSample;
+  /**
+   * WebGL still, phone pause and frame, and the scene turned off.
+   * Omitted when the runner did not measure that path.
+   */
+  scene?: PhoneSceneSample;
 }
 
 export interface MatrixRunInput {
@@ -90,7 +106,12 @@ export interface MatrixRunInput {
   hooks: MatrixHooks;
 }
 
-export type LighthouseRunInput = Parameters<typeof evaluateLh>[0];
+/** Three mobile runs. The speed gate takes the median of each category. */
+export interface MedianPhoneInput {
+  runs: readonly LhScores[];
+}
+
+export type LighthouseRunInput = Parameters<typeof evaluateLh>[0] | MedianPhoneInput;
 
 /** One measured text color. Body must clear 4.5. Large text must clear 3. */
 export interface ContrastReading {
@@ -138,6 +159,8 @@ interface GateFacts {
   imagery: ImageryGradeResult;
   motion: ReducedRun;
   any3d: boolean;
+  scene: PhoneSceneJudgement | null;
+  copyText: string;
   slop: readonly SlopHit[];
   links: LinkResult;
   matrix: { ok: true; run: DeviceMatrixRun } | { ok: false; message: string };
@@ -244,17 +267,19 @@ async function collect(project: GateProject, runners: GateRunners): Promise<Gate
     imagery: checkImageryGrade(imagerySamples),
     motion: measured.run,
     any3d: measured.any3d,
+    scene: measured.scene,
+    copyText,
     slop: lintSlop(copyText, "site"),
     links: linkResult,
     matrix: await runMatrix(deviceInput),
     console: consoleResult,
     a11y: evaluateA11y(a11yInput),
-    lighthouse: evaluateLh(lighthouseInput),
+    lighthouse: judgeLighthouse(lighthouseInput),
     weight: evaluatePage(weightInput),
   };
 }
 
-function measureMotion(input: MotionRunInput): { run: ReducedRun; any3d: boolean } {
+function measureMotion(input: MotionRunInput): { run: ReducedRun; any3d: boolean; scene: PhoneSceneJudgement | null } {
   const samples = input.projects.map((project) => input.sampleFor(project));
   const byProject = new Map<DeviceProject, ReducedSample>();
   input.projects.forEach((project, index) => {
@@ -268,7 +293,20 @@ function measureMotion(input: MotionRunInput): { run: ReducedRun; any3d: boolean
     }
     return sample;
   });
-  return { run, any3d: samples.some((sample) => sample.has3d) };
+  return {
+    run,
+    any3d: samples.some((sample) => sample.has3d),
+    scene: input.scene === undefined ? null : judgePhoneScene(input.scene),
+  };
+}
+
+function isMedianPhone(input: LighthouseRunInput): input is MedianPhoneInput {
+  return "runs" in input && Array.isArray(input.runs);
+}
+
+function judgeLighthouse(input: LighthouseRunInput): LhGateResult {
+  if (isMedianPhone(input)) return evaluateMedianPhone(input.runs);
+  return evaluateLh(input);
 }
 
 async function runMatrix(
@@ -426,20 +464,44 @@ function imageryFrom(facts: GateFacts): GateResult {
 
 function motionFrom(facts: GateFacts): GateResult {
   const problems = splitMotion(facts.motion.problems).motion;
-  const status = motionStatus(problems);
-  return row("motion", status, motionReason(status, problems), { problems });
+  const base = motionStatus(problems);
+  const extra = sceneProblems(facts, "motion");
+  const status = worst(base, extra);
+  const parts: string[] = [];
+  if (base !== "PASS") parts.push(motionReason(base, problems));
+  else if (extra.length === 0) parts.push(motionReason("PASS", problems));
+  for (const item of extra) parts.push(item.reason);
+  return row("motion", status, parts.join(" "), { problems, scene: extra });
 }
 
 function threeFrom(facts: GateFacts): GateResult {
   const problems = splitMotion(facts.motion.problems).three;
-  const status = threeStatus(problems);
-  return row("3d", status, threeReason(status, problems, facts.any3d), { problems, any3d: facts.any3d });
+  const base = threeStatus(problems);
+  const extra = sceneProblems(facts, "3d");
+  const status = worst(base, extra);
+  const parts: string[] = [];
+  if (base !== "PASS") parts.push(threeReason(base, problems, facts.any3d));
+  else if (extra.length === 0) parts.push(threeReason("PASS", problems, facts.any3d));
+  for (const item of extra) parts.push(item.reason);
+  return row("3d", status, parts.join(" "), { problems, any3d: facts.any3d, scene: extra });
+}
+
+function sceneProblems(facts: GateFacts, gate: "motion" | "3d"): PhoneSceneJudgement["problems"] {
+  return (facts.scene?.problems ?? []).filter((item) => item.gate === gate);
+}
+
+function worst(base: GateStatus, extra: readonly { status: "FIX" | "BLOCKER" }[]): GateStatus {
+  if (base === "BLOCKER" || extra.some((item) => item.status === "BLOCKER")) return "BLOCKER";
+  if (base === "FIX" || extra.length > 0) return "FIX";
+  return "PASS";
 }
 
 function copyFrom(facts: GateFacts): GateResult {
   const linkBad = facts.links.pass !== true || facts.links.broken.length > 0;
   const lorem = facts.slop.some((hit) => hit.rule === "lorem");
-  const other = facts.slop.some((hit) => hit.rule !== "lorem");
+  const voice = voiceHits(facts.copyText);
+  const other = facts.slop.some((hit) => hit.rule !== "lorem") || voice.length > 0;
+  const placeholder = hasPlaceholderText(facts.copyText);
   const parts: string[] = [];
   let status: GateStatus = "PASS";
   if (lorem) {
@@ -449,6 +511,10 @@ function copyFrom(facts: GateFacts): GateResult {
     status = "FIX";
     parts.push("Some words should be rewritten in plainer language.");
   }
+  if (placeholder) {
+    status = "BLOCKER";
+    parts.push("The page still has placeholder text where real words should be.");
+  }
   if (linkBad) {
     status = "BLOCKER";
     parts.push("A link on the page does not open.");
@@ -456,8 +522,33 @@ function copyFrom(facts: GateFacts): GateResult {
   if (parts.length === 0) parts.push("The words read like a finished page.");
   return row("copy", status, parts.join(" "), {
     hits: facts.slop.map((hit) => ({ line: hit.line, rule: hit.rule })),
+    voice,
+    placeholder,
     links: { broken: facts.links.broken, pass: facts.links.pass },
   });
+}
+
+function voiceHits(text: string): string[] {
+  const folded = text.toLowerCase().replaceAll("\u2019", "'");
+  const hits: string[] = [];
+  for (const word of BANNED_WORDS) {
+    if (new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(text)) hits.push(word);
+  }
+  for (const phrase of BANNED_PHRASES) {
+    if (folded.includes(phrase)) hits.push(phrase);
+  }
+  return hits;
+}
+
+function hasPlaceholderText(text: string): boolean {
+  const visible = text
+    .replace(/::placeholder\b/gi, "")
+    .replace(/\splaceholder\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  return /\b(?:placeholder|your text here|text goes here|insert text here)\b/i.test(visible);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function deviceFrom(facts: GateFacts): GateResult {
@@ -469,7 +560,11 @@ function deviceFrom(facts: GateFacts): GateResult {
   const status: GateStatus = parts.length === 0 ? "PASS" : "BLOCKER";
   if (parts.length === 0) parts.push("The device check finished.");
   const matrixEvidence = facts.matrix.ok
-    ? { limits: facts.matrix.run.limits, projectCount: facts.matrix.run.projects.length }
+    ? {
+        limits: facts.matrix.run.limits,
+        projectCount: facts.matrix.run.projects.length,
+        widths: facts.matrix.run.coverage,
+      }
     : { failure: facts.matrix.message };
   return row("device", status, parts.join(" "), {
     matrix: matrixEvidence,
