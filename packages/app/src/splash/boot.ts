@@ -18,6 +18,8 @@ function bootSplash(splash: HTMLElement): void {
     // Capture so preventDefault runs before the link follows the hash.
     // The fragment scroll would otherwise fight the heading landing.
     skip.addEventListener("click", onEnter, true);
+    // Enter and Space only, and only while the splash still covers the page.
+    // Escape belongs to the tour. Do not stop the event.
     skip.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       onEnter(event);
@@ -99,9 +101,36 @@ function bootSplash(splash: HTMLElement): void {
   else window.addEventListener("load", queue, { once: true });
 }
 
+function splashCovering(): boolean {
+  if (document.documentElement.hasAttribute("data-splash-cover")) return true;
+  const splash = document.querySelector("[data-splash]");
+  return splash instanceof HTMLElement && splash.hasAttribute("data-splash-cover");
+}
+
+/**
+ * True while the cue still owns focus. The tour and the rest of the desk do not.
+ * A scroll after that must not pull focus back onto the heading.
+ */
+function landingOwnsFocus(heading: HTMLElement): boolean {
+  const active = document.activeElement;
+  if (
+    active === null ||
+    active === heading ||
+    active === document.body ||
+    active === document.documentElement
+  ) {
+    return true;
+  }
+  if (!(active instanceof Element)) return true;
+  if (active.closest("[data-splash]") !== null) return true;
+  return active.closest("a.hh-skip") !== null;
+}
+
 function onEnter(event: Event): void {
+  // A second Enter, after the cover is gone, must follow the link and must
+  // not lock focus. Stopping the event would swallow keys the tour still needs.
+  if (!splashCovering()) return;
   event.preventDefault();
-  event.stopPropagation();
   const splash = document.querySelector("[data-splash]");
   if (splash instanceof HTMLElement) clearCover(splash);
   document.dispatchEvent(new Event("hh-splash-dismissed"));
@@ -120,8 +149,19 @@ let landing = 0;
 function holdHeading(heading: HTMLElement): void {
   const generation = ++landing;
   let snapping = false;
+  let stopped = false;
+
+  const owns = (): boolean => generation === landing && !stopped && landingOwnsFocus(heading);
+
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    document.removeEventListener("scroll", onScroll, true);
+    document.removeEventListener("focusin", onFocusIn, true);
+  };
+
   const snap = (): void => {
-    if (generation !== landing || snapping) return;
+    if (!owns() || snapping) return;
     snapping = true;
     heading.focus({ preventScroll: true });
     if (document.activeElement === heading) {
@@ -129,13 +169,25 @@ function holdHeading(heading: HTMLElement): void {
     }
     snapping = false;
   };
+
   const onScroll = (): void => {
+    // Focus has moved into the app, often the tour. Leave that key target alone.
+    if (!owns()) {
+      stop();
+      return;
+    }
     snap();
   };
-  // The hash scroll and the keydown focus scroll run after this handler,
-  // sometimes a frame later. Correct them until that burst is over.
+
+  const onFocusIn = (): void => {
+    if (!owns()) stop();
+  };
+
+  // Viewport scroll does not fire on the splash. Drop the listener as soon
+  // as focus leaves the cue, and always once the landing burst is over.
   // scrollIntoView dispatches scroll synchronously; snapping blocks re-entry.
   document.addEventListener("scroll", onScroll, true);
+  document.addEventListener("focusin", onFocusIn, true);
   snap();
   window.requestAnimationFrame(() => {
     snap();
@@ -143,8 +195,8 @@ function holdHeading(heading: HTMLElement): void {
   });
   window.setTimeout(snap, 0);
   window.setTimeout(() => {
-    document.removeEventListener("scroll", onScroll, true);
     snap();
+    stop();
   }, 120);
 }
 
