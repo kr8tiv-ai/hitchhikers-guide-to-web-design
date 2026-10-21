@@ -1,8 +1,11 @@
+[banner]: docs/assets/banner.svg "Don't Panic."
+
 <div align="center">
 
-<img src="docs/assets/social-card.png" alt="Don't Panic. The Hitchhiker's Guide to Web Design." width="100%">
-
-<img src="docs/assets/banner.svg" alt="Guide banner." width="100%">
+<picture>
+  <source srcset="docs/assets/hero.png" media="(prefers-reduced-motion: reduce)">
+  <img src="docs/assets/hero.gif" width="100%" alt="DON'T PANIC &#8212; The Hitchhiker's Guide to Web Design">
+</picture>
 
 # The Hitchhiker's Guide to Web Design
 
