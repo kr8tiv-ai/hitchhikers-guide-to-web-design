@@ -176,6 +176,9 @@ function scheduleHide(pair: TipPair): void {
   clearTimer(pair.hideTimer);
   pair.hideTimer = setTimeout(() => {
     pair.hideTimer = null;
+    // Focus opened this tip. Pointer proximity must not close it afterwards.
+    // Blur, Escape, and typing still hide it on their own path.
+    if (pair.trigger.ownerDocument.activeElement === pair.trigger) return;
     if (coversAnswer(pair.trigger.ownerDocument)) {
       pair.tip.hidden = true;
       return;
@@ -348,20 +351,24 @@ export function mountTooltips(doc: Document): void {
       hideAll();
       if (escapeShouldPass(doc, event)) return;
       event.preventDefault();
-      event.stopPropagation();
+      // The tour listens on this same document, in capture, registered later.
+      // stopPropagation still lets that listener skip the tour and reload.
+      event.stopImmediatePropagation();
     },
     true,
   );
   watchKeyboard(doc);
 }
 
-/** A dialog, the tour, and an active mic already use Escape. Let that key through. */
+/**
+ * A dialog, the splash, and an active mic already use Escape. Let that key through.
+ * An open tip owns Escape otherwise. The tour's listener still runs when no tip
+ * is open, so one press does not both dismiss the tip and skip the tour.
+ */
 function escapeShouldPass(doc: Document, event: KeyboardEvent): boolean {
   if (doc.querySelector("dialog[open]") !== null) return true;
   // The splash cue does not use this key. A tip must not swallow it either.
   if (doc.querySelector("[data-splash-cover]") !== null) return true;
-  // The tour takes Escape from anywhere while it is open, including the desk behind it.
-  if (doc.querySelector("[data-tour]") !== null) return true;
   const target = event.target;
   if (!(target instanceof Element)) return false;
   const voice = doc.querySelector("[data-voice='hold'][aria-pressed='true']");
