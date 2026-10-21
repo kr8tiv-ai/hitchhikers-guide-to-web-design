@@ -131,6 +131,9 @@ async function roundTripGallery(page: Page, width: number, height: number): Prom
   await link.click();
   await expect(page).toHaveURL(/\/gallery$/);
   await page.locator("nav a[href='/']").click();
+  // The splash defers the desk script until after first paint. The question
+  // HTML is already in the document. Wait until the click handlers are live.
+  await page.locator('[data-region="question"][data-live="true"]').waitFor();
   await expect(page.locator("[data-question-id='DP-5.2']")).toBeVisible();
   await expect(page.locator("#hh-card-ask")).toContainText("real sites should we walk");
 }

@@ -62,6 +62,7 @@ test.describe("desk clarity", () => {
     for (const width of [375, 1440]) {
       const height = width === 375 ? 812 : 900;
       await page.setViewportSize({ width, height });
+      await showApp(page);
       const askLocator = page.locator("#hh-card-ask");
       const restartLocator = page.locator("[data-restart-open]");
       // Windows can report empty content quads for one frame after a resize.
@@ -92,6 +93,7 @@ test.describe("desk clarity", () => {
     }
 
     await page.setViewportSize({ width: 1440, height: 900 });
+    await showApp(page);
     const bar = page.locator("[data-tour-spot='project']");
     await expect(bar.getByRole("button", { name: "Save project" })).toBeVisible();
     await expect(bar.getByRole("button", { name: "Resume project" })).toBeVisible();
@@ -169,11 +171,35 @@ test.describe("desk clarity", () => {
   });
 });
 
+async function showApp(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const splash = document.querySelector("[data-splash]");
+    if (splash === null) return true;
+    return splash.hasAttribute("data-splash-booted") && document.documentElement.hasAttribute("data-desk-ready");
+  });
+  const skip = page.getByRole("link", { name: "Skip to the app" });
+  if (await skip.count()) {
+    // Translated above the viewport, so a Playwright click cannot scroll it in.
+    await skip.evaluate((link) => {
+      if (link instanceof HTMLAnchorElement) link.focus();
+    });
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#desk-heading")).toBeFocused();
+  }
+  await page.evaluate(() => {
+    document.documentElement.removeAttribute("data-splash-cover");
+    document.querySelector("[data-splash]")?.removeAttribute("data-splash-cover");
+    const shell = document.querySelector(".hh-shell");
+    if (shell instanceof HTMLElement) shell.scrollIntoView({ block: "start" });
+  });
+}
+
 async function prepare(page: Page, url: string): Promise<void> {
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator("[data-hh-ready]").first().waitFor({ state: "attached" });
+  await showApp(page);
   const skip = page.getByRole("button", { name: "Skip tour" });
   if (await skip.count()) {
     await skip.click();

@@ -147,6 +147,7 @@ import { renderMotionPage } from "../motion-previews/index.ts";
 import { galleryStatus, renderGalleryBody, type GalleryCardModel, type GalleryLoveModel, type GalleryView } from "../gallery/walk.ts";
 import { renderGuideMap, renderMap } from "../map.ts";
 import { renderShell } from "../shell.ts";
+import { applySplash, deferSplashModuleScripts, resolveSplashLoop, type SplashLoop } from "../splash/markup.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
@@ -308,6 +309,7 @@ const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
 const TILE_SOURCE = path.resolve(SRC_ROOT, "gallery", "tile.ts");
 const MOTION_SOURCE = path.resolve(SRC_ROOT, "motion-previews", "index.ts");
 const MOTION_ROOT = path.resolve(SRC_ROOT, "motion-previews");
+const SPLASH_ROOT = path.resolve(SRC_ROOT, "splash");
 const APP_NODE = path.resolve(import.meta.dirname, "..", "..", "node_modules");
 const PNPM_STORE = path.resolve(import.meta.dirname, "..", "..", "..", "..", "node_modules", ".pnpm");
 
@@ -321,6 +323,10 @@ const STATIC_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
+  ".avif": "image/avif",
+  ".webm": "video/webm",
+  ".mp4": "video/mp4",
+  ".vtt": "text/vtt; charset=utf-8",
 };
 
 const SAFE = {
@@ -2121,6 +2127,17 @@ function dropRequest(req: IncomingMessage): void {
   });
 }
 
+/** Keeps the splash document's load event waiting until the hero has painted. */
+const splashHolds = new Map<string, { res: ServerResponse; timer: ReturnType<typeof setTimeout> }>();
+
+function releaseSplashHold(id: string): void {
+  const pending = splashHolds.get(id);
+  if (pending === undefined) return;
+  clearTimeout(pending.timer);
+  splashHolds.delete(id);
+  if (!pending.res.writableEnded) pending.res.end("ok");
+}
+
 async function handleGet(
   req: IncomingMessage,
   res: ServerResponse,
@@ -2135,6 +2152,37 @@ async function handleGet(
   getPreflight: () => DeskPreflight | null = () => null,
   holding = false,
 ): Promise<void> {
+  if (pathname === "/src/splash/hold" || pathname === "/src/splash/release") {
+    let id = "";
+    try {
+      id = new URL(rawUrl, "http://localhost").searchParams.get("id") ?? "";
+    } catch {
+      id = "";
+    }
+    if (!/^[a-f0-9]{16}$/.test(id)) {
+      res.writeHead(400, { "cache-control": "no-store", "content-length": "0" });
+      res.end();
+      return;
+    }
+    if (pathname === "/src/splash/release") {
+      releaseSplashHold(id);
+      res.writeHead(204, { "cache-control": "no-store" });
+      res.end();
+      return;
+    }
+    res.writeHead(200, {
+      "content-type": "text/plain; charset=utf-8",
+      "content-length": "2",
+      "cache-control": "no-store",
+    });
+    const timer = setTimeout(() => releaseSplashHold(id), 8000);
+    splashHolds.set(id, { res, timer });
+    res.on("close", () => {
+      clearTimeout(timer);
+      splashHolds.delete(id);
+    });
+    return;
+  }
   if (
     holding &&
     pathname !== "/" &&
@@ -2153,8 +2201,9 @@ async function handleGet(
   }
   if (pathname === "/") {
     const openNotice = openErrorNotice(rawUrl);
+    const splashLoop = resolveSplashLoop(rawUrl);
     if (holding) {
-      await deliverHtml(req, res, 200, renderFirstRun(token), projectDir, token, true, undefined, openNotice);
+      await deliverHtml(req, res, 200, renderFirstRun(token, splashLoop), projectDir, token, true, undefined, openNotice);
       return;
     }
     const session = view();
@@ -2175,7 +2224,7 @@ async function handleGet(
       req,
       res,
       200,
-      renderDesk(token, session, flags, showTour, projectDir),
+      renderDesk(token, session, flags, showTour, projectDir, splashLoop),
       projectDir,
       token,
       !stay,
@@ -2234,6 +2283,14 @@ async function handleGet(
     }
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
     return;
+  }
+  if (pathname.startsWith("/src/splash/") && pathname.endsWith(".js")) {
+    const rel = pathname.slice("/src/".length).replace(/\.js$/, ".ts");
+    const compiled = compileSplashModule(path.resolve(SRC_ROOT, rel));
+    if (compiled !== null) {
+      sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(compiled));
+      return;
+    }
   }
   if (pathname === "/context") {
     await deliverHtml(req, res, 200, renderContext(token, projectDir, notice), projectDir, token, false);
@@ -3082,6 +3139,7 @@ function renderDesk(
   flags?: VoiceDeskFlags,
   showTour = false,
   projectDir = "",
+  splashLoop: SplashLoop = "cosmos",
 ): string {
   const voiceFlags = flags ?? { xaiSetting: false, rateAccepted: false, localWhisper: false };
   const engine = engineForDesk(voiceFlags, true);
@@ -3180,10 +3238,11 @@ function renderDesk(
       `${renderTour(token)}\n          <section class="hh-log hh-rise hh-rise--2" id="transcript"`,
     );
   }
-  return html.replace(
+  html = html.replace(
     "</body>",
     `    <script type="module" src="/client/tooltip.js"></script>\n    <script type="module" src="/client/desk.js"></script>\n${motion}${directionScript}  </body>`,
   );
+  return applySplash(html, splashLoop);
 }
 
 function interviewHead(token: string, session: DeskSession): string {
@@ -4051,9 +4110,17 @@ function rewriteSpecifiers(code: string, fromFile: string): string {
 }
 
 function compileAppModule(filePath: string): string | null {
-  const cached = moduleCache.get(`motion:${filePath}`);
+  return compileScopedModule(filePath, MOTION_ROOT, `motion:${filePath}`);
+}
+
+function compileSplashModule(filePath: string): string | null {
+  return compileScopedModule(filePath, SPLASH_ROOT, `splash:${filePath}`);
+}
+
+function compileScopedModule(filePath: string, root: string, cacheKey: string): string | null {
+  const cached = moduleCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const relative = path.relative(MOTION_ROOT, filePath);
+  const relative = path.relative(root, filePath);
   if (relative.startsWith("..") || path.isAbsolute(relative) || !filePath.endsWith(".ts")) return null;
   if (!existsSync(filePath)) return null;
   const stripped = stripTypeScriptTypes(readFileSync(filePath, "utf8"), { mode: "strip" });
@@ -4072,7 +4139,7 @@ function compileAppModule(filePath: string): string | null {
     },
   );
   const js = rewriteSpecifiers(withLocal, filePath);
-  moduleCache.set(`motion:${filePath}`, js);
+  moduleCache.set(cacheKey, js);
   return js;
 }
 
@@ -4918,7 +4985,9 @@ async function deliverHtml(
   notice = "",
 ): Promise<void> {
   const chrome = await projectChrome(projectDir, token, first, notice);
-  sendHtml(req, res, status, applyProjectChrome(html, chrome), headers);
+  let page = applyProjectChrome(html, chrome);
+  if (page.includes("data-splash")) page = deferSplashModuleScripts(page);
+  sendHtml(req, res, status, page, headers);
 }
 
 function openErrorNotice(rawUrl: string): string {
@@ -4933,7 +5002,7 @@ function openErrorNotice(rawUrl: string): string {
   return "";
 }
 
-function renderFirstRun(token: string): string {
+function renderFirstRun(token: string, splashLoop: SplashLoop = "cosmos"): string {
   let html = renderShell();
   html = html.replace(
     '<meta charset="utf-8" />',
@@ -4954,7 +5023,7 @@ function renderFirstRun(token: string): string {
             <p>The desk will not interview inside its own source folder. Name a project, or open one you already have.</p>
           </section>`,
   );
-  return html;
+  return applySplash(html, splashLoop);
 }
 
 function sendHtml(

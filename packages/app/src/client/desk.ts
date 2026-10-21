@@ -1314,6 +1314,14 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("contextmenu", onContextMenu);
   env.document.addEventListener("visibilitychange", onVisibility);
   env.document.addEventListener("focusin", onFocusIn);
+  let splashParked = false;
+  let splashDismissed = false;
+  env.document.addEventListener("hh-splash-dismissed", () => {
+    // The cue scrolls the shell and focuses #desk-heading. Replaying the card
+    // placement pulls that heading back down the page.
+    splashDismissed = true;
+    splashParked = false;
+  });
   const deskWindow = env.document.defaultView ?? null;
   if (deskWindow !== null) {
     deskWindow.addEventListener("pagehide", onPageHide);
@@ -4361,8 +4369,20 @@ export function mountDesk(env: DeskEnv): () => void {
    * A browser document focuses the answer box, or the heading when that box
    * would open a keyboard. Harnesses omit defaultView, so they keep focus.
    * The tour is not a focus target.
+   * While the splash still covers the viewport, keep the landing in place.
+   * Once the cue has dismissed it, the shell scroll and the desk heading
+   * stay put. A late session response must not scroll the card over them.
    */
+  function splashCovers(): boolean {
+    return env.document.querySelector("[data-splash-cover]") !== null;
+  }
+
   function placeQuestion(): void {
+    if (splashCovers()) {
+      splashParked = true;
+      return;
+    }
+    if (splashDismissed) return;
     const question = region();
     if (question === null) return;
     const heading = question.querySelector("#hh-card-ask");
@@ -5137,4 +5157,7 @@ function browserEnv(): DeskEnv | null {
 }
 
 const detected = browserEnv();
-if (detected !== null) mountDesk(detected);
+if (detected !== null) {
+  mountDesk(detected);
+  detected.document.querySelector("html")?.setAttribute("data-desk-ready", "");
+}

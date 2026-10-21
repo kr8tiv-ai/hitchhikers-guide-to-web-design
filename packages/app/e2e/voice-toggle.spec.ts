@@ -1354,7 +1354,16 @@ async function storedDraftText(page: Page): Promise<string | null> {
 
 async function openDesk(page: Page, mode: VoiceMode, clock = false): Promise<void> {
   await page.addInitScript(installVoice, mode);
-  if (clock) await page.clock.install();
+  // A paused clock freezes requestAnimationFrame. The splash promotes the
+  // desk scripts on a frame, so a second visit on this page would never go live.
+  await page.clock.resume().catch(() => undefined);
+  if (clock) {
+    try {
+      await page.clock.install();
+    } catch {
+      // Installed by an earlier openDesk on this page. Time is already running.
+    }
+  }
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto(deskUrl);
   await page.locator('[data-region="question"][data-live="true"]').waitFor();

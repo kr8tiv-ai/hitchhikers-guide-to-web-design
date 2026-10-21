@@ -200,11 +200,20 @@ async function measure(
 
 async function settle(page: Page): Promise<void> {
   await page.locator("[data-hh-ready]").first().waitFor({ state: "attached" });
+  await page.waitForFunction(() => {
+    const splash = document.querySelector("[data-splash]");
+    if (splash === null) return true;
+    return splash.hasAttribute("data-splash-booted") && document.documentElement.hasAttribute("data-desk-ready");
+  });
   await page.evaluate(() => {
     for (const animation of document.getAnimations()) animation.finish();
     const active = document.activeElement;
     if (active instanceof HTMLElement) active.blur();
-    window.scrollTo(0, 0);
+    document.documentElement.removeAttribute("data-splash-cover");
+    document.querySelector("[data-splash]")?.removeAttribute("data-splash-cover");
+    const shell = document.querySelector(".hh-shell");
+    if (shell instanceof HTMLElement) shell.scrollIntoView({ block: "start" });
+    else window.scrollTo(0, 0);
   });
 }
 

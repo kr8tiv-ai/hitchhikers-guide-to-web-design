@@ -97,6 +97,7 @@ async function answer(page: Page, text: string): Promise<void> {
 }
 
 async function skipTo(page: Page, id: string, limit: number): Promise<void> {
+  await enterGuide(page);
   const question = page.locator("[data-region='question']");
   for (let step = 0; step < limit; step += 1) {
     const current = question.locator("[data-question-id]").first();
@@ -108,6 +109,19 @@ async function skipTo(page: Page, id: string, limit: number): Promise<void> {
     await expect(question.locator(`[data-question-id="${before}"]`)).toHaveCount(0);
   }
   throw new Error(`did not reach ${id}`);
+}
+
+/** The splash sits above the desk. Enter it before the question is used. */
+async function enterGuide(page: Page): Promise<void> {
+  const cover = page.locator("html[data-splash-cover]");
+  if (await cover.count() === 0) return;
+  await page.locator("[data-splash-booted]").waitFor();
+  await page.evaluate(() => {
+    const skip = document.querySelector('a.hh-skip[href="#desk-heading"]');
+    if (skip instanceof HTMLAnchorElement) skip.click();
+    document.querySelector(".hh-shell")?.scrollIntoView({ block: "start" });
+  });
+  await expect(cover).toHaveCount(0);
 }
 
 function startDesk(projectDir: string): ChildProcess {

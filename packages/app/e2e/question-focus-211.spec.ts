@@ -20,6 +20,7 @@ test("load and resume keep the question in view", async ({ page }) => {
     await openAndCheck(page, url, { width: 1024, height: 640 });
     await page.reload();
     await page.locator('[data-region="question"][data-live="true"]').waitFor();
+    await enterDesk(page);
     await expectQuestionInView(page, 640);
     await openAndCheck(page, url, { width: 390, height: 640 });
   } finally {
@@ -28,16 +29,31 @@ test("load and resume keep the question in view", async ({ page }) => {
   }
 });
 
+async function enterDesk(page: Page): Promise<void> {
+  const skip = page.getByRole("link", { name: "Skip to the app" });
+  await skip.evaluate((link) => {
+    if (link instanceof HTMLAnchorElement) link.focus();
+  });
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#desk-heading")).toBeFocused();
+}
+
 async function openAndCheck(page: Page, url: string, viewport: { width: number; height: number }): Promise<void> {
   await page.setViewportSize(viewport);
   await page.goto(url);
   await page.locator('[data-region="question"][data-live="true"]').waitFor();
+  await enterDesk(page);
   await expectQuestionInView(page, viewport.height);
 }
 
 async function expectQuestionInView(page: Page, height: number): Promise<void> {
   const heading = page.locator("#hh-card-ask");
   await expect(heading).toBeVisible();
+  await expect.poll(async () => {
+    const box = await heading.boundingBox();
+    if (box === null) return false;
+    return box.y >= 0 && box.y < height;
+  }).toBe(true);
   const box = await heading.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y).toBeGreaterThanOrEqual(0);
@@ -56,7 +72,7 @@ async function expectQuestionInView(page: Page, height: number): Promise<void> {
   expect(placed.scrollY).toBeLessThanOrEqual(placed.top + 1);
   expect(placed.scrollY + height).toBeGreaterThan(placed.top);
   expect(placed.tour).toBe(false);
-  expect(placed.id === "hh-card-ask" || placed.id === "hh-card-draft").toBe(true);
+  expect(placed.id === "desk-heading" || placed.id === "hh-card-ask" || placed.id === "hh-card-draft").toBe(true);
 }
 
 function startDesk(projectDir: string): ChildProcess {

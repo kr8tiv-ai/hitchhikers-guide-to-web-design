@@ -33,6 +33,12 @@ test("the first screen is finished at 375 and 1440, and the tour and sample work
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(url);
+    const skip = page.getByRole("link", { name: "Skip to the app" });
+    await skip.evaluate((link) => {
+      if (link instanceof HTMLAnchorElement) link.focus();
+    });
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#desk-heading")).toBeFocused();
     await expect(page.locator("[data-tour]")).toBeVisible();
     await expect(page.getByRole("img", { name: "Don't Panic" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Open the sample" })).toBeVisible();
