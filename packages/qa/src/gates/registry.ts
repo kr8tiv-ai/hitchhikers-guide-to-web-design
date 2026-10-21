@@ -14,6 +14,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { hiddenChildOptions } from "@hitchhiker/engine";
 import { evaluateA11y, type A11yGateInput, type A11yGateResult } from "../a11y-gate.ts";
 import { lintSlop, type SlopHit } from "../antislop.ts";
 import type { ConsoleGateResult } from "../console-gate.ts";
@@ -249,7 +250,7 @@ async function runMatrix(
 
 function readHead(root: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }, (error, stdout) => {
+    execFile("git", ["rev-parse", "HEAD"], hiddenChildOptions({ cwd: root, encoding: "utf8" }), (error, stdout) => {
       const head = stdout.trim().toLowerCase();
       const valid = /^[0-9a-f]{40}$/.test(head) || /^[0-9a-f]{64}$/.test(head);
       if (error !== null || !valid) {
