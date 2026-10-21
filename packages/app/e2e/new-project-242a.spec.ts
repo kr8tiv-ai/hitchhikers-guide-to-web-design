@@ -132,6 +132,8 @@ test("a new project approves the brief, the plan, and each design stage", async 
     await page.getByRole("button", { name: "Approve style guide" }).click();
     await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
     await page.locator("[data-pick-direction]").first().click();
+    await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Approve style guide" }).click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked", { timeout: 30_000 });
     await page.getByRole("button", { name: "Approve direction" }).click();
     await expect(page.locator("[data-design-stage='prebuild']")).toBeVisible();

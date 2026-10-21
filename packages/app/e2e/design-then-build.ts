@@ -13,6 +13,8 @@ export async function approveDesignAndStart(page: Page): Promise<void> {
   await expect(page.locator("[data-design-stage='direction']")).toBeVisible();
   await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
   await page.locator("[data-pick-direction]").first().click();
+  await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();
+  await page.getByRole("button", { name: "Approve style guide" }).click();
   await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
   await page.getByRole("button", { name: "Approve direction" }).click();
   await expect(page.locator("[data-design-stage='prebuild']")).toBeVisible();

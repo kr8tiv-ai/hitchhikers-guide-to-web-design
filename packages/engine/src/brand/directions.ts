@@ -249,6 +249,13 @@ export function readDirectionDeal(projectDir: string): DirectionDeal | null {
  * Record a choice the person actually made against the deal on disk.
  * Rejected rows use a factual line. This function does not invent a pick.
  */
+/** Registered by the design stages so a pick can refresh the style guide without a cycle. */
+let afterDirectionPicked: ((projectDir: string) => void) | null = null;
+
+export function onDirectionPicked(listener: (projectDir: string) => void): void {
+  afterDirectionPicked = listener;
+}
+
 export function chooseDirection(
   projectDir: string,
   pickedId: string,
@@ -271,6 +278,7 @@ export function chooseDirection(
   recordDirectionChoice(projectDir, deal, id, reasons, at);
   const picked = pickDirection(deal, id);
   saveDirectionDeal(projectDir, picked);
+  afterDirectionPicked?.(projectDir);
   return picked;
 }
 

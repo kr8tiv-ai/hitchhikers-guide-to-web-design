@@ -6,6 +6,7 @@
  * Appetite (DP-6.2) is a weight ceiling. It does not remove a library.
  */
 
+import { spaceAfterTerminal } from "./guide/sentence-space.ts";
 import { briefAsksForWebglHero, phonePerformanceBudget } from "./spec/phone-budget.ts";
 
 export interface AnswerRecord {
@@ -88,7 +89,7 @@ function isPresent(record: AnswerRecord | undefined): boolean {
 
 function fieldBody(record: AnswerRecord | undefined): string {
   if (record === undefined) return "";
-  const value = record.value.trim();
+  const value = spaceAfterTerminal(record.value.trim());
   if (value === "") return "";
   if (record.status === "SOFT") return `SOFT: ${value}`;
   return value;

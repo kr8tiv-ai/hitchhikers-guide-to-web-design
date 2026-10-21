@@ -178,6 +178,7 @@ export type {
 } from "./ingest.ts";
 export {
   briefLoop,
+  deterministicBrief,
   isApproval,
   readSiteBrief,
   renderSiteBrief,

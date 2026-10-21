@@ -69,6 +69,8 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await page.getByRole("button", { name: "Approve style guide" }).click();
     await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
     await page.locator("[data-pick-direction]").first().click();
+    await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();
+    await page.getByRole("button", { name: "Approve style guide" }).click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
     await page.getByRole("button", { name: "Approve direction" }).click();
     await page.getByRole("button", { name: "Approve pre-build checks" }).click();

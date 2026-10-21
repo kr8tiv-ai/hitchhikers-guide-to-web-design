@@ -34,8 +34,23 @@ export async function approveDesignStage(
   brief: string,
   stage: DesignStageName,
   text: string,
+  acknowledge = false,
 ): Promise<void> {
-  await advanceDesignStages(projectDir, { brief, approval: { stage, text } });
+  await advanceDesignStages(projectDir, {
+    brief,
+    approval: { stage, text },
+    ...(acknowledge ? { acknowledge: true } : {}),
+  });
+}
+
+/** Applies an edit and leaves the stage waiting. It does not record an approval. */
+export async function reviseDesignStage(
+  projectDir: string,
+  brief: string,
+  stage: DesignStageName,
+  text: string,
+): Promise<void> {
+  await advanceDesignStages(projectDir, { brief, change: { stage, text } });
 }
 
 function readText(file: string): string {
@@ -75,7 +90,7 @@ function stageApprovals(projectDir: string): StageState {
   }
 }
 
-function stageForm(token: string, stage: DesignStageName, title: string, enabled = true): string {
+function stageForm(token: string, stage: DesignStageName, title: string, enabled = true, extra = ""): string {
   const disabled = enabled ? "" : " disabled";
   return `<form method="post" action="/approve">
       <input type="hidden" name="csrf" value="${escapeHtml(token)}" />
@@ -84,6 +99,7 @@ function stageForm(token: string, stage: DesignStageName, title: string, enabled
       <label>Change something
         <textarea name="approval" rows="3"></textarea>
       </label>
+      ${extra}
       <button class="hh-btn hh-btn--primary" type="submit" name="commit" value="approve"${disabled}>Approve ${escapeHtml(title)}</button>
       <button class="hh-btn hh-btn--secondary" type="submit" name="commit" value="change">Change the ${escapeHtml(title)}</button>
     </form>`;
@@ -150,18 +166,22 @@ export function renderDesignStagePanel(projectDir: string, token: string, briefM
     </section>`;
   }
   const brief = briefMarkdown.trim() !== "" ? briefMarkdown : briefFor(projectDir);
-  const report = runPrebuildChecks(brief);
+  const report = runPrebuildChecks(brief, projectDir);
   if (!state.prebuild) {
     const rows = report.checks
-      .map(
-        (check) =>
-          `<li data-prebuild-check="${escapeHtml(check.id)}" data-prebuild-pass="${check.pass ? "yes" : "no"}">${escapeHtml(check.label)}: ${escapeHtml(check.detail)}</li>`,
-      )
+      .map((check) => {
+        const fix = check.fix.trim() === "" ? "" : ` <span data-prebuild-fix>${escapeHtml(check.fix)}</span>`;
+        return `<li data-prebuild-check="${escapeHtml(check.id)}" data-prebuild-pass="${check.pass ? "yes" : "no"}" data-prebuild-status="${escapeHtml(check.status)}">${escapeHtml(check.label)}: ${escapeHtml(check.detail)}${fix}</li>`;
+      })
       .join("");
+    const warned = report.checks.some((check) => check.status === "warn");
+    const ack = warned
+      ? `<label>I acknowledge the warnings <input type="checkbox" name="ack" value="yes" /></label>`
+      : "";
     return `<section data-design-stage="prebuild">
       <h2>Pre-build checks</h2>
       <ul>${rows}</ul>
-      ${stageForm(token, "prebuild", "pre-build checks", report.pass)}
+      ${stageForm(token, "prebuild", "pre-build checks", report.pass, ack)}
     </section>`;
   }
   const gate = designReadyForBuild(projectDir, brief);

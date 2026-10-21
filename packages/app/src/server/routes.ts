@@ -152,7 +152,7 @@ import { renderReplayControl, renderTour } from "../tour.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
 import { approveMain, brandBriefMain, dashboardBriefNote, type ApproveStage } from "./brief-page.ts";
-import { approveDesignStage, presentDesignStage, renderDesignStagePanel } from "./design-stage-desk.ts";
+import { approveDesignStage, presentDesignStage, renderDesignStagePanel, reviseDesignStage } from "./design-stage-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
 import { blockingNotes, readGuideNotes, renderGuideNotes, upsertGuideNote, type GuideNote } from "./guide-notes.ts";
@@ -1905,6 +1905,7 @@ async function handleApproveForm(
       const stage = params?.get("stage") ?? "";
       const typed = (params?.get("approval") ?? "").trim();
       const commit = params?.get("commit") ?? "approve";
+      const acknowledge = params?.get("ack") === "yes";
       const text = typed !== "" ? typed : commit === "approve" ? "Approved." : "";
       const knownStage =
         stage === "sitemap" ||
@@ -1924,12 +1925,9 @@ async function handleApproveForm(
       }
       const brief = readBriefDesk(projectDir);
       const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
-      await approveDesignStage(
-        projectDir,
-        markdown,
-        stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild",
-        text,
-      );
+      const stageName = stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
+      if (commit === "change") await reviseDesignStage(projectDir, markdown, stageName, typed);
+      else await approveDesignStage(projectDir, markdown, stageName, text, acknowledge);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;

@@ -183,27 +183,53 @@ function sourcesFor(note: string): string[] {
   return sources;
 }
 
-function parsePages(body: string): PlannedPage[] {
-  const text = body.trim();
-  if (text === "") return [];
-  const semi = splitTopLevel(text, ";");
-  let chunks = semi;
-  if (semi.length < 2) {
-    const lines = text
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^[-*•]\s*/, "").replace(/^pages:\s*/i, "").trim())
-      .filter((line) => line.length > 0);
-    if (lines.length > 1) {
-      chunks = lines;
-    } else {
-      const commas = splitTopLevel(text, ",");
-      const titles = commas.map((chunk) => canonicalTitle(splitTitleNote(cutSentence(chunk)).title));
-      if (commas.length > 1 && titles.every((title) => title !== null)) chunks = commas;
-    }
+function chunksLookLikePages(chunks: readonly string[]): boolean {
+  if (chunks.length < 2) return false;
+  let titles = 0;
+  for (const chunk of chunks) {
+    if (canonicalTitle(chunkTitle(chunk).title) !== null) titles += 1;
   }
+  return titles >= 2 && titles * 2 >= chunks.length;
+}
+
+/** A glossary semicolon is not a page break. Sentence boundaries are, once the semicolon split is not a title list. */
+function pageChunks(text: string): string[] {
+  const semi = splitTopLevel(text, ";");
+  if (chunksLookLikePages(semi)) return semi;
+  const sentences = text
+    .split(/\.\s+(?=[A-Z])/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (chunksLookLikePages(sentences)) return sentences;
+  if (semi.length >= 2) return semi;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*•]\s*/, "").replace(/^pages:\s*/i, "").trim())
+    .filter((line) => line.length > 0);
+  if (lines.length > 1) return lines;
+  const commas = splitTopLevel(text, ",");
+  const titles = commas.map((chunk) => canonicalTitle(chunkTitle(chunk).title));
+  if (commas.length > 1 && titles.every((title) => title !== null)) return commas;
+  return semi;
+}
+
+function chunkTitle(chunk: string): { title: string; note: string } {
+  const paren = splitTitleNote(cutSentence(chunk.trim()));
+  const colon = paren.title.indexOf(":");
+  if (colon <= 0) return paren;
+  const head = paren.title.slice(0, colon).trim();
+  const rest = paren.title.slice(colon + 1).trim();
+  const note = [rest, paren.note].filter((part) => part !== "").join(" ");
+  return { title: head, note };
+}
+
+function parsePages(body: string): PlannedPage[] {
+  const text = body.trim().replace(/^pages:\s*/i, "");
+  if (text === "") return [];
+  const chunks = pageChunks(text);
   const pages: PlannedPage[] = [];
   for (const chunk of chunks) {
-    const { title: rawTitle, note } = splitTitleNote(cutSentence(chunk));
+    const { title: rawTitle, note } = chunkTitle(chunk);
     const title = canonicalTitle(rawTitle);
     if (title === null) continue;
     const id = title === "Home" ? "home" : slug(title);

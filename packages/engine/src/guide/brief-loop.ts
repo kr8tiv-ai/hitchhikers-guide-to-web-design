@@ -22,6 +22,7 @@ import {
 } from "./schemas.ts";
 import { INTERVIEW_MODEL } from "./interview-call.ts";
 import { budgetCardCopy } from "./session-state.ts";
+import { spaceAfterTerminal } from "./sentence-space.ts";
 import { loadFacts } from "./suggest.ts";
 import { loadTree } from "../tree.ts";
 import { briefTextIssues } from "./validators.ts";
@@ -216,16 +217,16 @@ async function draftOrFallback(
   const recorded = deterministicBrief(facts, s.language);
   const first = await askDraft(s, facts, recorded, deps, priorError);
   if (first.brief !== null) {
-    return { brief: shapeBrief(lockRecorded(first.brief, recorded), facts, recorded), error: "", fallback: false };
+    return { brief: routeLimits(shapeBrief(lockRecorded(first.brief, recorded), facts, recorded), facts), error: "", fallback: false };
   }
-  if (first.reason === BILLING_TOP_UP) return { brief: recorded, error: BILLING_TOP_UP, fallback: true };
+  if (first.reason === BILLING_TOP_UP) return { brief: routeLimits(recorded, facts), error: BILLING_TOP_UP, fallback: true };
   const second = await askDraft(s, facts, recorded, deps, joinPrior(priorError, first.reason));
   if (second.brief !== null) {
-    return { brief: shapeBrief(lockRecorded(second.brief, recorded), facts, recorded), error: "", fallback: false };
+    return { brief: routeLimits(shapeBrief(lockRecorded(second.brief, recorded), facts, recorded), facts), error: "", fallback: false };
   }
-  if (priorError.trim() !== "") return { brief: recorded, error: retryFailure(second.reason), fallback: true };
-  if (first.rejected || second.rejected) return { brief: recorded, error: rejectedDraftCopy(second.reason), fallback: true };
-  return { brief: recorded, error: BRIEF_DRAFT_ERROR, fallback: true };
+  if (priorError.trim() !== "") return { brief: routeLimits(recorded, facts), error: retryFailure(second.reason), fallback: true };
+  if (first.rejected || second.rejected) return { brief: routeLimits(recorded, facts), error: rejectedDraftCopy(second.reason), fallback: true };
+  return { brief: routeLimits(recorded, facts), error: BRIEF_DRAFT_ERROR, fallback: true };
 }
 
 function rejectedDraftCopy(reason: string): string {
@@ -545,7 +546,14 @@ export function deterministicBrief(facts: Facts, _language: string): SiteBrief {
   const recorded = emptyBrief();
   for (const key of BRIEF_KEYS) recorded[key] = safeField(recordedField(key, facts).text);
   applyLimitRouting(recorded, facts);
-  return shapeBrief(recorded, facts, recorded);
+  return routeLimits(shapeBrief(recorded, facts, recorded), facts);
+}
+
+/** The desk path and the fallback both end here, so a model draft cannot put the timeline back into Limits. */
+function routeLimits(brief: SiteBrief, facts: Facts): SiteBrief {
+  applyLimitRouting(brief, facts);
+  for (const key of BRIEF_KEYS) brief[key] = spaceAfterTerminal(brief[key]);
+  return brief;
 }
 
 /**
@@ -574,19 +582,26 @@ function applyLimitRouting(brief: SiteBrief, facts: Facts): void {
   }
   if (limits.length > 0) brief.limits = safeField(joinSentences(limits));
   if (timeline.length > 0) {
-    const line = `Timeline: ${joinSentences(timeline)}`;
+    const sentence = joinSentences(timeline);
     const base = brief.cadence === UNSTATED ? "" : brief.cadence;
-    brief.cadence = safeField(joinSentences([base, line].filter((part) => part.trim() !== "")));
+    const already = base.toLowerCase().includes(sentence.replace(/\.$/, "").toLowerCase());
+    if (!already) {
+      const line = `Timeline: ${sentence}`;
+      brief.cadence = safeField(joinSentences([base, line].filter((part) => part.trim() !== "")));
+    }
   }
   if (factsOut.length > 0) {
     const base = brief.session === UNSTATED ? "" : brief.session;
-    brief.session = safeField(joinSentences([base, ...factsOut].filter((part) => part.trim() !== "")));
+    const missing = factsOut.filter((fact) => !base.toLowerCase().includes(fact.replace(/\.$/, "").toLowerCase()));
+    if (missing.length > 0) {
+      brief.session = safeField(joinSentences([base, ...missing].filter((part) => part.trim() !== "")));
+    }
   }
 }
 
 function isFillerSentence(text: string): boolean {
-  const bare = text.replace(/[.?!]+$/g, "").trim();
-  return /^(yes(, that is right)?|yeah|ok|okay|that is right|right)$/i.test(bare);
+  const bare = text.replace(/[.?!]+$/g, "").trim().replaceAll("\u2019", "'");
+  return /^(yes(, that is right)?|yeah|ok|okay|that is right|that's right|thats right|correct|right)$/i.test(bare);
 }
 
 function isTimelineSentence(text: string): boolean {
@@ -609,7 +624,7 @@ function joinSentences(parts: readonly string[]): string {
     .map((part) => part.trim())
     .filter((part) => part !== "")
     .join(" ");
-  return text.replace(/([.?!;])([A-Za-z])/g, "$1 $2");
+  return spaceAfterTerminal(text);
 }
 
 /** One DP id, one field. The draft prompt and the fallback both read this table. */
@@ -640,7 +655,10 @@ export function recordedField(
   let skipped = "";
   let skippedId = "";
   for (const id of ordered) {
-    const value = cleanAnswer(id, byId.get(id) ?? "");
+    const cleaned = spaceAfterTerminal(cleanAnswer(id, byId.get(id) ?? ""));
+    // A timeline or filler answer still names its question, so Change this answer can open it.
+    const value = key === "limits" ? limitsSourceText(cleaned) : cleaned;
+    if (key === "limits" && cleaned !== "") sourceIds.push(id);
     if (value === "" || seen.has(value)) continue;
     if (key === "cadence" && value === CADENCE_SKIP) {
       skipped = value;
@@ -649,15 +667,28 @@ export function recordedField(
     }
     seen.add(value);
     parts.push(value);
-    sourceIds.push(id);
+    if (key !== "limits") sourceIds.push(id);
   }
   if (parts.length === 0 && skipped !== "") {
     parts.push(skipped);
     sourceIds.push(skippedId);
   }
-  let text = parts.join(" ");
+  let text = spaceAfterTerminal(parts.join(" "));
   if (key === "budget") text = budgetCardCopy(text, byId.get("DP-6.4") ?? "");
-  return { text, sourceIds };
+  return { text: spaceAfterTerminal(text), sourceIds };
+}
+
+/** The Limits source line keeps constraints. Timeline, filler, and program facts leave it. */
+function limitsSourceText(value: string): string {
+  const kept: string[] = [];
+  for (const sentence of splitSentences(value)) {
+    const text = sentence.trim().replace(/^yes[,:]?\s+/i, "").trim();
+    if (text === "" || isFillerSentence(text) || isFillerSentence(sentence)) continue;
+    if (isTimelineSentence(text) || isTimelineSentence(sentence)) continue;
+    if (isContentFact(text)) continue;
+    kept.push(sentence.trim());
+  }
+  return joinSentences(kept);
 }
 
 let defaultSurfaceIds: Set<string> | null = null;
@@ -988,6 +1019,7 @@ function safeField(raw: string): string {
   if (text.startsWith("ASSUMED:")) text = text.slice("ASSUMED:".length).trim();
   if (text.startsWith("SOFT:")) text = text.slice("SOFT:".length).trim();
   text = stripUnsafe(text);
+  text = spaceAfterTerminal(text);
   return text === "" ? UNSTATED : text;
 }
 
@@ -1015,7 +1047,7 @@ export function renderSiteBrief(draft: SiteBrief): string {
       if (split.timeline !== "") lines.push("## Timeline", "", split.timeline, "");
       continue;
     }
-    lines.push(`## ${BRIEF_HEADINGS[key]}`, "", draft[key], "");
+    lines.push(`## ${BRIEF_HEADINGS[key]}`, "", spaceAfterTerminal(draft[key]), "");
   }
   return lines.join("\n");
 }

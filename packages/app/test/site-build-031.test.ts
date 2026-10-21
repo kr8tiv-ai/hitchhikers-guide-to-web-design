@@ -105,6 +105,10 @@ async function approveBriefThenPlan(port: number, token: string): Promise<void> 
     JSON.stringify({ id, reason: "This direction matches the visit." }),
   );
   assert.equal(picked.status, 200);
+  const afterPick = await raw(port, "GET", "/approve");
+  assert.match(afterPick.body, /data-design-stage="style-guide"/);
+  const styled = await raw(port, "POST", "/approve", form, `csrf=${token}&action=stage&stage=style-guide&commit=approve`);
+  assert.equal(styled.status, 303);
   for (const stage of ["direction", "prebuild"]) {
     const step = await raw(port, "POST", "/approve", form, `csrf=${token}&action=stage&stage=${stage}&commit=approve`);
     assert.equal(step.status, 303, stage);

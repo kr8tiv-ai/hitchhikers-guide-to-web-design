@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
+import { pickType } from "../brand/tokens.ts";
 import { typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
 import { writeDesignExports } from "./design-export.ts";
@@ -76,13 +77,27 @@ const BANDS: Record<"quiet" | "measured" | "cinematic", Band> = {
   },
 };
 
-export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = []): string {
+export interface DesignFontChoice {
+  display: string;
+  body: string;
+  /** "brand kit", "picked direction", or "default tokens". */
+  source: string;
+}
+
+export function renderDesignMd(
+  brief: string,
+  answers: readonly BrandAnswer[] = [],
+  fonts?: DesignFontChoice | null,
+): string {
   const art = translateBrief(brief, answers as readonly ArtAnswer[]);
   const band = bandFor(art.motion.score);
   const palette = brandKitFromAnswers(answers).palette;
-  const scale = typeScaleFor(documentText(brief, answers));
+  const chosen = fontChoice(brief, answers, fonts);
+  const scale = { ...typeScaleFor(documentText(brief, answers)), familiesLine: chosen.line };
   const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
-  const families = typeChoiceFor(documentText(brief, answers)).families;
+  const families = [chosen.display, chosen.body];
+  const paletteSource = colourFromKit(answers) ? "brand kit" : "default tokens";
+  const no3d = refuses3d(documentText(brief, answers));
   const markdown = [
     frontMatter(palette, scale, families),
     "# Design",
@@ -95,16 +110,16 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "",
     "## Colors",
     "",
-    `Paper ${palette.paper} carries ink ${palette.ink}.`,
-    `Accent ${palette.accent} is for large text and marks.`,
-    `Muted ${palette.muted} is for secondary text.`,
+    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
+    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
+    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
     `Grade: ${art.colorGrade} Light: ${art.light}`,
     "",
     "## Color",
     "",
-    `Paper ${palette.paper} carries ink ${palette.ink}.`,
-    `Accent ${palette.accent} is for large text and marks.`,
-    `Muted ${palette.muted} is for secondary text.`,
+    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
+    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
+    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
     `Grade: ${art.colorGrade} Light: ${art.light}`,
     "",
     "## Typography",
@@ -131,6 +146,10 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "## Layout",
     "",
     "The page keeps an equal inset and a clear first frame.",
+    "Viewport: width=device-width, viewport-fit=cover. Insets use env(safe-area-inset-top).",
+    "Type scale holds at 360, 390, 768, and 1440.",
+    "Tap targets are at least 44px. No interaction is hover-only.",
+    "Hero image budget: 200KB. The font files for the picked pair stay inside the phone budget.",
     "",
     "## Spacing",
     "",
@@ -164,20 +183,13 @@ export function renderDesignMd(brief: string, answers: readonly BrandAnswer[] = 
     "",
     "## Tokens",
     "",
-    `Color tokens: paper ${palette.paper}, ink ${palette.ink}, accent ${palette.accent}, muted ${palette.muted}.`,
+    `Color tokens: paper ${palette.paper}, ink ${palette.ink}, accent ${palette.accent}, muted ${palette.muted}. Source: ${paletteSource}.`,
     "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
     "Motion tokens live in src/scripts/motion.ts.",
     "",
     "## Motion principles",
     "",
-    `Reveal duration: ${num(band.reveal)}s. Ease: expo.out. Line stagger: ${num(band.lineStagger)}. Card stagger: ${num(band.cardStagger)}.`,
-    "Distance: yPercent: 100.",
-    `Pin length: ${band.pinEnd}. Camera travel: +=200%. Scrub: 1. anticipatePin: 1.`,
-    "Snap duration: 0.2s to 0.8s, delay 0.1s, ease power1.inOut. Track ease: none.",
-    `Lenis lerp: ${num(band.lerp)}. Anchor offset: -80. Anchor duration: 1.2s. Reduced motion jumps instantly.`,
-    `Damping: ${num(band.damping)}. Look-ahead: ${num(band.lookAhead)}s. FOV: ${band.fov}.`,
-    `Bloom strength: ${num(band.bloom)}, radius 0.4, threshold 0.85, exposure 1.1.`,
-    "Reduced motion keeps content visible: duration 0, scrub off, pin off, opacity 1, yPercent 0.",
+    ...motionPrinciples(band, art.motion.score, no3d),
     "",
     "## Signature techniques",
     "",
@@ -355,10 +367,15 @@ export function renderMotionModule(
   return source;
 }
 
-export function writeDesignMd(projectDir: string, brief: string, answers: readonly BrandAnswer[] = []): string {
+export function writeDesignMd(
+  projectDir: string,
+  brief: string,
+  answers: readonly BrandAnswer[] = [],
+  fonts?: DesignFontChoice | null,
+): string {
   const file = path.join(projectDir, DESIGN_MD_PATH);
   mkdirSync(projectDir, { recursive: true });
-  const markdown = renderDesignMd(brief, answers);
+  const markdown = renderDesignMd(brief, answers, fonts);
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
   return file;
@@ -394,6 +411,72 @@ export function flagIgnoredMotionTokens(files: readonly { path: string; source: 
     });
   }
   return hits;
+}
+
+function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: DesignFontChoice | null): DesignFontChoice & { line: string } {
+  if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
+    const display = fonts.display.trim();
+    const body = fonts.body.trim();
+    return { display, body, source: fonts.source, line: `Families: ${display} and ${body}. Source: ${fonts.source}.` };
+  }
+  const typeAnswer = answeredValue(answers, "DP-1.5");
+  if (typeAnswer !== "") {
+    let mood = typeAnswer;
+    if (/^no fonts yet\b/i.test(mood)) mood = mood.replace(/^no fonts yet\.?\s*/i, "").trim();
+    if (/^no type yet\b/i.test(mood)) mood = "";
+    const dealt = pickType(mood === "" ? null : mood);
+    const display = dealt.families[0] ?? "Switzer";
+    const body = dealt.families[1] ?? display;
+    return { display, body, source: "brand kit", line: `Families: ${display} and ${body}. Source: brand kit.` };
+  }
+  const choice = typeChoiceFor(documentText(brief, answers));
+  const display = choice.families[0] ?? "Switzer";
+  const body = choice.families[1] ?? display;
+  const same = body === display;
+  const line = same ? `Families: ${display}.` : `Families: ${display} and ${body}.`;
+  return { display, body, source: "default tokens", line };
+}
+
+function answeredValue(answers: readonly BrandAnswer[], id: string): string {
+  const found = answers.find((answer) => answer.id === id);
+  if (found === undefined) return "";
+  if (found.status === "SKIPPED" || found.status === "NOT_APPLICABLE" || found.status === "UNANSWERED") return "";
+  return found.value.trim();
+}
+
+function colourFromKit(answers: readonly BrandAnswer[]): boolean {
+  return answeredValue(answers, "DP-1.2") !== "";
+}
+
+function refuses3d(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (/\bno 3d\b/.test(lower)) return true;
+  if (/\b3d is none\b/.test(lower)) return true;
+  if (/\bno models\b/.test(lower) && /\b3d\b/.test(lower)) return true;
+  return false;
+}
+
+function motionPrinciples(band: Band, score: number, no3d: boolean): string[] {
+  const lines = [
+    `Reveal duration: ${num(band.reveal)}s. Ease: expo.out. Line stagger: ${num(band.lineStagger)}. Card stagger: ${num(band.cardStagger)}.`,
+    "Distance: yPercent: 100.",
+  ];
+  if (no3d) {
+    lines.push(`Scrub: 1. Motion score ${score} stays in this band.`);
+  } else {
+    lines.push(`Pin length: ${band.pinEnd}. Camera travel: +=200%. Scrub: 1. anticipatePin: 1.`);
+  }
+  lines.push("Snap duration: 0.2s to 0.8s, delay 0.1s, ease power1.inOut. Track ease: none.");
+  lines.push(`Lenis lerp: ${num(band.lerp)}. Anchor offset: -80. Anchor duration: 1.2s. Reduced motion jumps instantly.`);
+  if (no3d) {
+    lines.push(`Damping: ${num(band.damping)}. Look-ahead: ${num(band.lookAhead)}s.`);
+    lines.push("Reduced motion keeps content visible: duration 0, scrub off, opacity 1, yPercent 0.");
+  } else {
+    lines.push(`Damping: ${num(band.damping)}. Look-ahead: ${num(band.lookAhead)}s. FOV: ${band.fov}.`);
+    lines.push(`Bloom strength: ${num(band.bloom)}, radius 0.4, threshold 0.85, exposure 1.1.`);
+    lines.push("Reduced motion keeps content visible: duration 0, scrub off, pin off, opacity 1, yPercent 0.");
+  }
+  return lines;
 }
 
 function documentText(brief: string, answers: readonly BrandAnswer[]): string {

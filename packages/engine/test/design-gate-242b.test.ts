@@ -65,6 +65,7 @@ function passStages(dir: string, brief: string): void {
   const first = deal.directions[0];
   if (first === undefined) throw new Error("No direction was dealt.");
   chooseDirection(dir, first.id, "It fits the visit.");
+  advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
 }

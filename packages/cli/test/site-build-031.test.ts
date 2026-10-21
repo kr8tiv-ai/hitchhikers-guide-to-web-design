@@ -84,6 +84,7 @@ test("Start build and hh next --run spawn through the injected runner once", asy
     const first = deal.directions[0];
     assert.ok(first);
     chooseDirection(dir, first.id, "It fits the visit.");
+    advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
     advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
     advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
     assert.equal(calls, 0);

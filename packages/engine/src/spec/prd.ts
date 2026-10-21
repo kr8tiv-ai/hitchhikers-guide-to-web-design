@@ -12,6 +12,7 @@
  * plus every SOFT answer. ANSWERED, SUGGESTED, and IMPORTED stay out.
  */
 
+import { spaceAfterTerminal } from "../guide/sentence-space.ts";
 import { missingRequired, type AnswerRecord } from "../required.ts";
 import { SITE_TYPES, type SiteTypeHint } from "../site-types.ts";
 
@@ -141,11 +142,11 @@ function show(record: AnswerRecord | undefined, label: string): string {
   if (record.status === "SOFT" || record.status === "SKIPPED") {
     return `${label} is not settled (${record.status}). See Assumptions.`;
   }
-  if (record.status === "IMPORTED") return `${label}, imported: ${withPeriod(flatten(record.value))}`;
+  if (record.status === "IMPORTED") return `${label}, imported: ${withPeriod(spaceAfterTerminal(flatten(record.value)))}`;
   if (record.status === "SUGGESTED") {
-    return `${label}, suggested and stored: ${withPeriod(flatten(record.value))}`;
+    return `${label}, suggested and stored: ${withPeriod(spaceAfterTerminal(flatten(record.value)))}`;
   }
-  return `${label}: ${withPeriod(flatten(record.value))}`;
+  return `${label}: ${withPeriod(spaceAfterTerminal(flatten(record.value)))}`;
 }
 
 function tokens(value: string): Set<string> {
@@ -245,7 +246,7 @@ function sourceNote(record: AnswerRecord | undefined, id: string): string {
   if (record.status === "SOFT" || record.status === "SKIPPED") {
     return `${id} not settled (${record.status})`;
   }
-  return `${id} recorded: ${flatten(record.value)}`;
+  return `${id} recorded: ${spaceAfterTerminal(flatten(record.value))}`;
 }
 
 function functional(latest: ReadonlyMap<string, AnswerRecord>): string {
@@ -254,7 +255,7 @@ function functional(latest: ReadonlyMap<string, AnswerRecord>): string {
   ];
   for (const req of REQS) {
     const notes = req.sources.map((id) => sourceNote(latest.get(id), id));
-    lines.push(`- **${req.id}**: ${req.label}. ${notes.join(". ")}.`);
+    lines.push(`- **${req.id}**: ${req.label}. ${spaceAfterTerminal(notes.join(". "))}.`);
   }
   return section("7. Functional requirements", lines);
 }
