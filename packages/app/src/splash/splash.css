@@ -193,6 +193,30 @@ a.hh-skip[href="#transcript"] {
   right: var(--space-4);
 }
 
+/* Match the shell's top padding so an instant heading scroll lands where
+   scrolling the shell to its start would have. Kept under the 240px band. */
+#desk-heading {
+  scroll-margin-top: var(--space-5, 24px);
+}
+
+@media (max-width: 719px) {
+  #desk-heading {
+    scroll-margin-top: var(--space-3, 12px);
+  }
+}
+
+@media (min-width: 768px) {
+  #desk-heading {
+    scroll-margin-top: var(--space-7, 48px);
+  }
+}
+
+@media (min-width: 1100px) {
+  #desk-heading {
+    scroll-margin-top: var(--space-8, 64px);
+  }
+}
+
 @media (max-width: 719px) {
   html[data-splash-cover] .hh-interview .hh-qcard__composer {
     position: static;

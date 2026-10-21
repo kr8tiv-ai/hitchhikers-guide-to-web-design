@@ -15,13 +15,13 @@ function bootSplash(splash: HTMLElement): void {
   if (enter instanceof HTMLButtonElement) enter.addEventListener("click", onEnter);
   const skip = document.querySelector('a.hh-skip[href="#desk-heading"]');
   if (skip instanceof HTMLAnchorElement) {
-    skip.addEventListener("click", onEnter);
-    // Enter on a link follows the hash in the keydown default action. That
-    // scroll fights the shell landing and can leave the heading off screen.
+    // Capture so preventDefault runs before the link follows the hash.
+    // The fragment scroll would otherwise fight the heading landing.
+    skip.addEventListener("click", onEnter, true);
     skip.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       onEnter(event);
-    });
+    }, true);
   }
 
   const video = splash.querySelector("[data-splash-video]");
@@ -105,16 +105,47 @@ function onEnter(event: Event): void {
   const splash = document.querySelector("[data-splash]");
   if (splash instanceof HTMLElement) clearCover(splash);
   document.dispatchEvent(new Event("hh-splash-dismissed"));
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const shell = document.querySelector(".hh-shell");
-  if (shell instanceof HTMLElement) {
-    shell.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
-  }
   const heading = document.getElementById("desk-heading");
-  if (heading instanceof HTMLElement) {
-    if (heading.tabIndex < 0) heading.tabIndex = -1;
+  if (!(heading instanceof HTMLElement)) return;
+  if (heading.tabIndex < 0) heading.tabIndex = -1;
+  // Instant. A smooth scroll of the shell races the skip link's fragment
+  // navigation. Chromium then scrolls the focused heading to the nearest
+  // edge and, on a headless compositor, the smooth animation never wins
+  // back the top band. scrollIntoView honors scroll-margin-top.
+  holdHeading(heading);
+}
+
+let landing = 0;
+
+function holdHeading(heading: HTMLElement): void {
+  const generation = ++landing;
+  let snapping = false;
+  const snap = (): void => {
+    if (generation !== landing || snapping) return;
+    snapping = true;
     heading.focus({ preventScroll: true });
-  }
+    if (document.activeElement === heading) {
+      heading.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
+    }
+    snapping = false;
+  };
+  const onScroll = (): void => {
+    snap();
+  };
+  // The hash scroll and the keydown focus scroll run after this handler,
+  // sometimes a frame later. Correct them until that burst is over.
+  // scrollIntoView dispatches scroll synchronously; snapping blocks re-entry.
+  document.addEventListener("scroll", onScroll, true);
+  snap();
+  window.requestAnimationFrame(() => {
+    snap();
+    window.requestAnimationFrame(snap);
+  });
+  window.setTimeout(snap, 0);
+  window.setTimeout(() => {
+    document.removeEventListener("scroll", onScroll, true);
+    snap();
+  }, 120);
 }
 
 function clearCover(splash: HTMLElement): void {

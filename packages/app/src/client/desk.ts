@@ -1317,8 +1317,8 @@ export function mountDesk(env: DeskEnv): () => void {
   let splashParked = false;
   let splashDismissed = false;
   env.document.addEventListener("hh-splash-dismissed", () => {
-    // The cue scrolls the shell and focuses #desk-heading. Replaying the card
-    // placement pulls that heading back down the page.
+    // The cue scrolls #desk-heading into view and focuses it. Replaying the
+    // card placement pulls that heading back down the page.
     splashDismissed = true;
     splashParked = false;
   });
@@ -4370,11 +4370,17 @@ export function mountDesk(env: DeskEnv): () => void {
    * would open a keyboard. Harnesses omit defaultView, so they keep focus.
    * The tour is not a focus target.
    * While the splash still covers the viewport, keep the landing in place.
-   * Once the cue has dismissed it, the shell scroll and the desk heading
-   * stay put. A late session response must not scroll the card over them.
+   * Once the cue has focused the desk heading, that landing stays put.
+   * A late session response must not scroll the card over it.
    */
   function splashCovers(): boolean {
     return env.document.querySelector("[data-splash-cover]") !== null;
+  }
+
+  function appHeadingFocused(): boolean {
+    const active = env.document.activeElement;
+    if (active === null || active === undefined || typeof active.getAttribute !== "function") return false;
+    return active.getAttribute("id") === "desk-heading";
   }
 
   function placeQuestion(): void {
@@ -4382,7 +4388,14 @@ export function mountDesk(env: DeskEnv): () => void {
       splashParked = true;
       return;
     }
-    if (splashDismissed) return;
+    // A session that arrives after the cue, including one that missed
+    // hh-splash-dismissed because the desk mounted late, must not scroll
+    // the card over the heading the cue just focused.
+    if (splashDismissed || appHeadingFocused()) {
+      splashDismissed = true;
+      splashParked = false;
+      return;
+    }
     const question = region();
     if (question === null) return;
     const heading = question.querySelector("#hh-card-ask");
