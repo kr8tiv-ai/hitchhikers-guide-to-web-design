@@ -1208,8 +1208,7 @@ p.hh-error__next {
   min-width: 44px;
   max-width: 100%;
   min-height: 44px;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .hh-effort {
@@ -1374,24 +1373,34 @@ p.hh-error__next {
     max-width: 100%;
   }
 
+  /* Hit area grows without adding a row. A 44px summary made the mast taller than the baseline. */
   .hh-desk-menu > summary {
-    display: inline-flex;
-    align-items: center;
+    position: relative;
     max-width: 100%;
-    min-height: 44px;
+  }
+
+  .hh-desk-menu > summary::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
   }
 
   .hh-desk-menu .hh-btn {
     min-width: 44px;
     max-width: 100%;
     min-height: 44px;
-    white-space: normal;
+    white-space: nowrap;
   }
 
-  /* Labels wrap onto more rows. A sideways scroller was clipping the icons. */
+  /* One 44px row of icon targets. The name stays in the link for assistive tech.
+     Nine targets overlap by 7.5px so they fit the 336px column at 375 without a scroller. */
   .hh-routes {
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-2);
+    flex-wrap: nowrap;
+    gap: 0;
     min-width: 0;
     max-width: 100%;
     overflow: visible;
@@ -1399,16 +1408,33 @@ p.hh-error__next {
   }
 
   .hh-routes a {
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 100%;
+    position: relative;
+    flex: 0 0 44px;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
     min-height: 44px;
-    white-space: normal;
+    margin-right: -7.5px;
+    padding-inline: 0;
+    gap: 0;
+    white-space: nowrap;
+  }
+
+  .hh-routes a:last-child {
+    margin-right: 0;
   }
 
   .hh-routes a span {
-    min-width: 0;
-    overflow-wrap: anywhere;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 
   .hh-interview__head {
