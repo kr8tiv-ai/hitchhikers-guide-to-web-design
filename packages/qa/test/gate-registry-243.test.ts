@@ -23,6 +23,7 @@ import {
 } from "../src/gates/registry.ts";
 import { GATE_IDS as exportedIds, runAllGates as exportedRun } from "../src/index.ts";
 import { OPACITY_KEEP_MS, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
+import { loadBrandScale } from "../src/spacing-gate.ts";
 
 /** The eleven dimensions in spec 243. Motion and 3D are the motion-3d pair. Device is mobile/device. */
 const SPEC_DIMENSIONS = [
@@ -51,6 +52,7 @@ const WRAPPED_MODULES = [
   "weight-gate.ts",
   "console-gate.ts",
   "link-check.ts",
+  "spacing-gate.ts",
 ] as const;
 
 const TECHNICAL =
@@ -70,7 +72,11 @@ test("the registry lists every spec dimension once", () => {
   }
   assert.deepEqual(
     GATE_REGISTRY.find((entry) => entry.id === "spacing")?.modules,
-    [],
+    ["spacing-gate.ts"],
+  );
+  assert.deepEqual(
+    GATE_REGISTRY.find((entry) => entry.id === "color")?.modules,
+    ["palette-proportion.ts"],
   );
   assert.equal(exportedRun, runAllGates);
   assert.deepEqual(exportedIds, GATE_IDS);
@@ -95,7 +101,13 @@ test("runAllGates writes GATES.json for the project commit", { timeout: 30_000 }
       assert.equal(item.status, "PASS", item.id);
       assert.equal(item.reason.trim().length > 0, true, item.id);
     }
-    assert.equal(result(report, "spacing").reason, "not measured yet");
+    assert.equal(result(report, "spacing").reason, "The spacing sits on the scale.");
+    const colorEvidence = evidenceOf(result(report, "color")).contrast as {
+      bodyFloor?: unknown;
+      largeFloor?: unknown;
+    };
+    assert.equal(colorEvidence.bodyFloor, 4.5);
+    assert.equal(colorEvidence.largeFloor, 3);
     assertPlain(report);
     const matrix = evidenceOf(result(report, "device")).matrix as { limits?: unknown };
     assert.deepEqual(matrix.limits, [...EMULATION_LIMITS]);
@@ -120,7 +132,7 @@ test("folded gates return FIX or BLOCKER in plain words", { timeout: 30_000 }, a
     assert.equal(result(font, "fonts").status, "FIX");
     assert.equal(result(font, "type-scale").status, "PASS");
     assertPlain(font);
-    assert.equal(result(font, "spacing").reason, "not measured yet");
+    assert.equal(result(font, "spacing").reason, "The spacing sits on the scale.");
 
     const scale = await runAllGates(
       { root: project.root },
@@ -275,8 +287,85 @@ test("folded gates return FIX or BLOCKER in plain words", { timeout: 30_000 }, a
     );
     assert.equal(result(slow, "speed").status, "BLOCKER");
     assert.match(result(slow, "speed").reason, /phone/);
-    assert.equal(result(slow, "spacing").reason, "not measured yet");
+    assert.equal(result(slow, "spacing").reason, "The spacing sits on the scale.");
     assertPlain(slow);
+  } finally {
+    rmSync(project.root, { recursive: true, force: true });
+  }
+});
+
+test("spacing over 10 percent is FIX and body contrast is a blocker", { timeout: 30_000 }, async () => {
+  const project = tempProject();
+  const off = Math.max(...loadBrandScale().spacing) + 3;
+  try {
+    const spacing = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        spacing: async () => ({
+          boxes: [
+            { name: "the hero", lengths: [{ kind: "padding", pixels: off }] },
+            { name: "the cards", lengths: [{ kind: "gap", pixels: 16 }] },
+          ],
+        }),
+      }),
+    );
+    assert.equal(result(spacing, "spacing").status, "FIX");
+    assert.match(result(spacing, "spacing").reason, /padding on the hero/);
+    assert.match(result(spacing, "spacing").reason, /off the spacing scale/);
+    assert.equal(result(spacing, "color").status, "PASS");
+    assertPlain(spacing);
+
+    const body = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        contrast: async () => [
+          { kind: "body", place: "the opening paragraph", ratio: 4.499 },
+          { kind: "large", place: "the title", ratio: 3 },
+        ],
+      }),
+    );
+    assert.equal(result(body, "color").status, "BLOCKER");
+    assert.match(result(body, "color").reason, /body text on the opening paragraph/);
+    assert.equal(/wcag/i.test(result(body, "color").reason), false);
+    assertPlain(body);
+
+    const edge = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        contrast: async () => [
+          { kind: "body", place: "the opening paragraph", ratio: 4.5 },
+          { kind: "large", place: "the title", ratio: 3 },
+        ],
+      }),
+    );
+    assert.equal(result(edge, "color").status, "PASS");
+    assertPlain(edge);
+
+    const large = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        contrast: async () => [
+          { kind: "body", place: "the opening paragraph", ratio: 7 },
+          { kind: "large", place: "the title", ratio: 2.999 },
+        ],
+      }),
+    );
+    assert.equal(result(large, "color").status, "FIX");
+    assert.match(result(large, "color").reason, /large text on the title/);
+    assertPlain(large);
+
+    const both = await runAllGates(
+      { root: project.root },
+      passingRunners({
+        palette: async () => ({ enabled: true, shares: { dominant: 0.3, secondary: 0.2, accent: 0.5 } }),
+        contrast: async () => [{ kind: "body", place: "the opening paragraph", ratio: 2 }],
+      }),
+    );
+    assert.equal(result(both, "color").status, "BLOCKER");
+    assert.match(result(both, "color").reason, /body text/);
+    assert.match(result(both, "color").reason, /One color covers more of the page/);
+    assert.match(JSON.stringify(result(both, "color").evidence), /Accent covers half the page/);
+    assertPlain(both);
   } finally {
     rmSync(project.root, { recursive: true, force: true });
   }
@@ -424,6 +513,21 @@ function passingRunners(overrides: Partial<GateRunners> = {}): GateRunners {
   const base: GateRunners = {
     typeAudit: async () => ({ ok: true, problems: [], samples: [] }),
     palette: async () => ({ enabled: true, shares: { dominant: 0.6, secondary: 0.3, accent: 0.1 } }),
+    spacing: async () => ({
+      boxes: [
+        {
+          name: "the hero",
+          lengths: [
+            { kind: "padding", pixels: 16 },
+            { kind: "gap", pixels: 24 },
+          ],
+        },
+      ],
+    }),
+    contrast: async () => [
+      { kind: "body", place: "the opening paragraph", ratio: 7 },
+      { kind: "large", place: "the title", ratio: 4 },
+    ],
     imagery: async () => [{ src: "hero.jpg", temperature: 0.5, contrast: 0.5, saturation: 0.5 }],
     motion: async () => ({ projects: [phone], sampleFor: (project) => quiet(project) }),
     copyText: async () => "The valley holds three jobs and a quiet road.",

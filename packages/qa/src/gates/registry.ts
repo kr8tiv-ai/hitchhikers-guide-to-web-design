@@ -8,7 +8,8 @@
  * console with device, links with copy, weight with speed.
  *
  * Runners are injected. This file does not open a browser or the network.
- * Spacing is a stub until the spacing gate exists. Font licenses are not checked.
+ * Spacing uses the spacing gate. Color folds palette share and text contrast.
+ * Font licenses are not checked.
  */
 
 import { execFile } from "node:child_process";
@@ -33,6 +34,12 @@ import {
   type PaletteProportionResult,
 } from "../palette-proportion.ts";
 import { runReducedMotion, type ReducedRun, type ReducedSample } from "../reduced-motion.ts";
+import {
+  evaluateSpacing,
+  loadBrandScale,
+  type SpacingJudgement,
+  type SpacingMeasurement,
+} from "../spacing-gate.ts";
 import type { TypeAudit } from "../type-gate.ts";
 import { evaluatePage, type PageWeightInput, type PageWeightResult } from "../weight-gate.ts";
 
@@ -85,9 +92,21 @@ export interface MatrixRunInput {
 
 export type LighthouseRunInput = Parameters<typeof evaluateLh>[0];
 
+/** One measured text color. Body must clear 4.5. Large text must clear 3. */
+export interface ContrastReading {
+  kind: "body" | "large";
+  /** Plain place, such as "the opening paragraph". */
+  place: string;
+  ratio: number;
+}
+
 export interface GateRunners {
   typeAudit(project: GateProject): Promise<TypeAudit> | TypeAudit;
   palette(project: GateProject): Promise<PaletteProportionInput> | PaletteProportionInput;
+  /** Margins, paddings, and gaps measured on the page. */
+  spacing(project: GateProject): Promise<SpacingMeasurement> | SpacingMeasurement;
+  /** Body and large text contrast. An empty list means contrast was not measured. */
+  contrast(project: GateProject): Promise<readonly ContrastReading[]> | readonly ContrastReading[];
   imagery(project: GateProject): Promise<readonly ImagerySample[]> | readonly ImagerySample[];
   motion(project: GateProject): Promise<MotionRunInput> | MotionRunInput;
   copyText(project: GateProject): Promise<string> | string;
@@ -101,13 +120,21 @@ export interface GateRunners {
 
 export interface GateEntry {
   id: GateId;
-  /** Existing modules this entry calls. Empty for the spacing stub. */
+  /** Existing modules this entry calls. */
   modules: readonly string[];
+}
+
+interface ContrastFloors {
+  body: number;
+  large: number;
 }
 
 interface GateFacts {
   typeAudit: TypeAudit;
   palette: PaletteProportionResult;
+  spacing: SpacingJudgement;
+  contrast: readonly ContrastReading[];
+  floors: ContrastFloors;
   imagery: ImageryGradeResult;
   motion: ReducedRun;
   any3d: boolean;
@@ -123,7 +150,7 @@ interface GateFacts {
 const MODULES: Record<GateId, readonly string[]> = {
   fonts: ["type-gate.ts"],
   "type-scale": ["type-gate.ts"],
-  spacing: [],
+  spacing: ["spacing-gate.ts"],
   color: ["palette-proportion.ts"],
   imagery: ["imagery-grade.ts"],
   motion: ["reduced-motion.ts"],
@@ -180,6 +207,8 @@ async function collect(project: GateProject, runners: GateRunners): Promise<Gate
   const [
     typeAudit,
     paletteInput,
+    spacingInput,
+    contrastInput,
     imagerySamples,
     motionInput,
     copyText,
@@ -192,6 +221,8 @@ async function collect(project: GateProject, runners: GateRunners): Promise<Gate
   ] = await Promise.all([
     runners.typeAudit(project),
     runners.palette(project),
+    runners.spacing(project),
+    runners.contrast(project),
     runners.imagery(project),
     runners.motion(project),
     runners.copyText(project),
@@ -203,9 +234,13 @@ async function collect(project: GateProject, runners: GateRunners): Promise<Gate
     runners.weight(project),
   ]);
   const measured = measureMotion(motionInput);
+  const brand = loadBrandScale();
   return {
     typeAudit,
     palette: checkPaletteProportion(paletteInput),
+    spacing: evaluateSpacing(spacingInput, brand.spacing),
+    contrast: readContrast(contrastInput),
+    floors: { body: brand.bodyContrast, large: brand.largeContrast },
     imagery: checkImageryGrade(imagerySamples),
     motion: measured.run,
     any3d: measured.any3d,
@@ -292,20 +327,81 @@ function scaleFrom(facts: GateFacts): GateResult {
   return row("type-scale", status, reason, { problems, sampleCount: facts.typeAudit.samples.length });
 }
 
-/** Stub. The spacing gate replaces this. */
-function spacingFrom(_facts: GateFacts): GateResult {
-  return row("spacing", "PASS", "not measured yet", { measured: false });
+function spacingFrom(facts: GateFacts): GateResult {
+  return row("spacing", facts.spacing.status, facts.spacing.reason, facts.spacing.evidence);
 }
 
+/**
+ * Palette drift is FIX. Large text under its floor is FIX.
+ * Body text under its floor is BLOCKER, and it stays a blocker when the
+ * palette is also off. An empty contrast list is not a failure.
+ */
 function colorFrom(facts: GateFacts): GateResult {
-  if (!facts.palette.flagged) {
-    return row("color", "PASS", "The colors cover the page in a balanced way.", {
-      reasons: facts.palette.reasons,
-    });
+  const bodyFails = facts.contrast.filter((item) => item.kind === "body" && item.ratio < facts.floors.body);
+  const largeFails = facts.contrast.filter((item) => item.kind === "large" && item.ratio < facts.floors.large);
+  const parts: string[] = [];
+  let status: GateStatus = "PASS";
+  if (bodyFails.length > 0) {
+    status = "BLOCKER";
+    parts.push(contrastReason("body", bodyFails));
   }
-  return row("color", "FIX", "One color covers more of the page than it should.", {
+  if (largeFails.length > 0) {
+    if (status === "PASS") status = "FIX";
+    parts.push(contrastReason("large", largeFails));
+  }
+  if (facts.palette.flagged) {
+    if (status === "PASS") status = "FIX";
+    parts.push("One color covers more of the page than it should.");
+  }
+  if (parts.length === 0) {
+    parts.push(
+      facts.contrast.length === 0
+        ? "The colors cover the page in a balanced way."
+        : "The colors cover the page in a balanced way, and the text stands out from its background.",
+    );
+  }
+  const failures = [...bodyFails, ...largeFails].map((item) => ({
+    kind: item.kind,
+    place: item.place,
+    ratio: item.ratio,
+  }));
+  return row("color", status, parts.join(" "), {
     reasons: facts.palette.reasons,
+    contrast: { bodyFloor: facts.floors.body, largeFloor: facts.floors.large, failures },
   });
+}
+
+function contrastReason(kind: "body" | "large", fails: readonly ContrastReading[]): string {
+  const worst = [...fails].sort((left, right) => left.ratio - right.ratio);
+  const place = worst[0]?.place ?? "the page";
+  if (kind === "body") {
+    const lead = `The body text on ${place} does not stand out from its background.`;
+    return fails.length === 1 ? lead : `${lead} Other body text is hard to read as well.`;
+  }
+  const lead = `The large text on ${place} does not stand out enough from its background.`;
+  return fails.length === 1 ? lead : `${lead} Other large text is hard to read as well.`;
+}
+
+function readContrast(value: readonly ContrastReading[]): ContrastReading[] {
+  if (!Array.isArray(value)) throw new Error("Contrast input is not a list.");
+  return value.map((item, index) => readContrastItem(item, index));
+}
+
+function readContrastItem(value: unknown, index: number): ContrastReading {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`Contrast item ${index} is missing.`);
+  }
+  const item = value as Record<string, unknown>;
+  if (item.kind !== "body" && item.kind !== "large") {
+    throw new Error(`Contrast item ${index} must be body or large text.`);
+  }
+  if (typeof item.place !== "string" || item.place.trim() === "") {
+    throw new Error(`Contrast item ${index} is missing a place.`);
+  }
+  if (typeof item.ratio !== "number" || !Number.isFinite(item.ratio) || item.ratio < 0) {
+    throw new Error(`Contrast item ${index} needs a contrast number.`);
+  }
+  return { kind: item.kind, place: item.place.trim(), ratio: item.ratio };
 }
 
 function imageryFrom(facts: GateFacts): GateResult {

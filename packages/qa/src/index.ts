@@ -143,6 +143,7 @@ export { auditImageCredits, auditSourcedMedia, imageUrlsIn, mediaRefsIn } from "
 export type { ImageCreditAudit, MediaRef, SourcedMediaAudit } from "./licenses.ts";
 export { GATE_IDS, GATE_REGISTRY, gatesJsonPath, runAllGates } from "./gates/registry.ts";
 export type {
+  ContrastReading,
   GateEntry,
   GateId,
   GateProject,
