@@ -6,7 +6,8 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
+import { packagedPackage } from "../packaged-dir.ts";
 
 export type PdfPaper = "A4" | "Letter";
 
@@ -53,7 +54,7 @@ const KIND_LABEL: Record<string, string> = {
   positioning: "Positioning",
 };
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+
 
 export function readBrandName(projectDir: string): string | null {
   const context = readOptional(path.join(projectDir, ".hitchhiker", "CONTEXT.md"));
@@ -260,9 +261,10 @@ function isEnoent(error: unknown): boolean {
 }
 
 function loadPrintCss(): string {
-  const design = path.resolve(here, "../../../app/src/design");
-  const revealCss = path.resolve(here, "../../../app/src/reveals/reveals.css");
-  const fonts = path.resolve(here, "../../../app/public/fonts");
+  const appRoot = packagedPackage("app");
+  const design = path.join(appRoot, "src", "design");
+  const revealCss = path.join(appRoot, "src", "reveals", "reveals.css");
+  const fonts = path.join(appRoot, "public", "fonts");
   const fontHref = `${pathToFileURL(fonts).href}/`;
   const tokens = readFileSync(path.join(design, "tokens.css"), "utf8");
   const type = readFileSync(path.join(design, "type.css"), "utf8").replaceAll("../../public/fonts/", fontHref);

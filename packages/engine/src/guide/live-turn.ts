@@ -17,6 +17,7 @@ import { InterviewError, openInterview } from "../interview.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
 import { bindPacket, refreshSummary, syncInterviewFacts } from "../context/index.ts";
+import { interviewTreeFile, packagedPackage } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
@@ -736,22 +737,13 @@ async function rewriteSuggestedValue(projectDir: string, id: string, text: strin
 }
 
 function personaSkillPath(): string {
-  return path.resolve(
-    import.meta.dirname,
-    "..",
-    "..",
-    "..",
-    "grok-plugin",
-    "skills",
-    "guide-persona",
-    "SKILL.md",
-  );
+  return path.join(packagedPackage("grok-plugin"), "skills", "guide-persona", "SKILL.md");
 }
 
 function resolveTreePath(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function isQuiet(error: unknown): boolean {

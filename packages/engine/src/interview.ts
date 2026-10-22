@@ -8,6 +8,7 @@ import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
 import { advanceDesignStages, type DesignStageRequest, type DesignStageResult } from "./spec/design-stages.ts";
 import { loadState, type GuideState } from "./state.ts";
+import { interviewTreeFile } from "./packaged-dir.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 /**
@@ -454,7 +455,7 @@ function isFilled(answers: readonly AnswerRecord[], id: string): boolean {
 function resolveTreePath(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function loadInterview(filePath: string): { answers: AnswerRecord[]; pushedIds: PushedCount[] } {

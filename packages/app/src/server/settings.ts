@@ -7,6 +7,7 @@
 
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   ConfigError,
   LockHeld,
@@ -14,6 +15,7 @@ import {
   loadConfig,
   parseConfig,
   replaceViaTemp,
+  packagedModule,
   withStateLock,
   type Effort,
   type GuideConfig,
@@ -29,7 +31,7 @@ const EFFORTS = ["medium", "high", "xhigh"] as const;
 export type VoiceChoice = (typeof VOICES)[number];
 
 const REFUSE_XAI = "xAI speech-to-text stays off until you accept the rate.";
-const RATES_URL = new URL("../../../voice/src/xai-stt.ts", import.meta.url);
+const RATES_URL = pathToFileURL(packagedModule("voice", "src/xai-stt.ts"));
 
 interface RateSide {
   ratePerHour: number;

@@ -4,7 +4,8 @@
  * A probe that throws leaves every flag false, so a paid engine cannot turn on by accident.
  */
 
-import { loadConfig } from "@hitchhiker/engine";
+import { pathToFileURL } from "node:url";
+import { loadConfig, packagedModule } from "@hitchhiker/engine";
 import { loadSettingsView } from "./settings.ts";
 
 export interface VoiceDeskFlags {
@@ -13,7 +14,7 @@ export interface VoiceDeskFlags {
   localWhisper: boolean;
 }
 
-const WHISPER_URL = new URL("../../../voice/src/whisper.ts", import.meta.url);
+const WHISPER_URL = pathToFileURL(packagedModule("voice", "src/whisper.ts"));
 
 export async function readVoiceDeskFlags(projectDir: string): Promise<VoiceDeskFlags> {
   try {

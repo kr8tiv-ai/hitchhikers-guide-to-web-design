@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
+import { loadState, packagedModule, saveState, type GuideState } from "@hitchhiker/engine";
 import { isPortableResume, runResumeFile, runSave } from "./commands/project-file.ts";
 import { runAssetsCommand } from "./commands/assets.ts";
 import { runElevateCommand } from "./commands/elevate.ts";
@@ -251,7 +251,7 @@ function markdownBlocks(markdown: string): boolean {
 }
 
 async function loadRender(): Promise<(input: QaReportInput) => string> {
-  const file = path.resolve(import.meta.dirname, "..", "..", "qa", "src", "report.ts");
+  const file = packagedModule("qa", "src/report.ts");
   const loaded: unknown = await import(pathToFileURL(file).href);
   if (!isRecord(loaded) || typeof loaded.renderQaReport !== "function") {
     throw new Error("The report module did not load.");
@@ -260,7 +260,7 @@ async function loadRender(): Promise<(input: QaReportInput) => string> {
 }
 
 async function loadQuestions(_project: string): Promise<string[]> {
-  const file = path.resolve(import.meta.dirname, "..", "..", "engine", "src", "spec", "before-jump.ts");
+  const file = packagedModule("engine", "src/spec/before-jump.ts");
   const loaded: unknown = await import(pathToFileURL(file).href);
   if (!isRecord(loaded) || typeof loaded.beforeWeJump !== "function") {
     throw new Error("Before we jump did not load.");

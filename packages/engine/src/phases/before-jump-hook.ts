@@ -18,6 +18,7 @@ import { BRAND_SECTIONS } from "../brand/approve.ts";
 import type { AnswerRecord } from "../required.ts";
 import { bindPacket } from "../context/index.ts";
 import { isLive, loadDecisions } from "../context/disk.ts";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { beforeWeJump } from "../spec/before-jump.ts";
 import { loadTree, type Question } from "../tree.ts";
 import {
@@ -498,7 +499,7 @@ function readBrand(file: string): string {
 function resolveTree(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function latest(answers: readonly AnswerRecord[], id: string): AnswerRecord | undefined {

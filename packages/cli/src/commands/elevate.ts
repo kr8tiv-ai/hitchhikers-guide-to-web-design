@@ -14,7 +14,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import { packagedModule, spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 /** Exact usage text. The Elevate skill must include this string unchanged. */
@@ -397,11 +397,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function qaFile(name: string): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "qa", "src", name);
+  return packagedModule("qa", `src/${name}`);
 }
 
 function driveFile(): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "orchestrator", "src", "elevate-drive.ts");
+  return packagedModule("orchestrator", "src/elevate-drive.ts");
 }
 
 type ReviewLoad = { ok: true; project: object } | { ok: false; message: string };

@@ -350,8 +350,9 @@ The app is in the repo, and so is the brain it was built from. The version in `p
 | [`hh-build-plan/INDEX.md`](hh-build-plan/INDEX.md) | The build plan. Prompts 001 through 180 are in the tree. Later prompts are still ahead. |
 | [`docs/dont-panic.md`](docs/dont-panic.md) | The short page for the interview. |
 | [`docs/improve.md`](docs/improve.md) | `hh improve` and `hh improve supervise`. |
+| [`packages/cli/build.mjs`](packages/cli/build.mjs) | Bundles the CLI to `packages/cli/dist/main.js` and copies the desk files, skills, templates, and knowledge packs beside it. |
 
-The critique, the research addendum, and the prompt package are written. What is still ahead is everything past prompt 180, including a published npm package.
+The critique, the research addendum, and the prompt package are written. What is still ahead is everything past prompt 180, including a published npm package. A local bundle can be built and packed on this computer. That tarball is not published.
 
 ---
 
@@ -380,6 +381,8 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 
 `npx hitchhikers-guide` is not yet published on npm (the registry returns 404). Publishing it is a planned future note.
 
+A local tarball can be built and inspected. The steps are in [Build a local package](#build-a-local-package). Day-to-day use in this clone stays on the six steps above.
+
 **Implemented `hh` commands** (from `packages/cli/src/commands-table.ts` and `packages/grok-plugin/src/commands.ts`):
 
 | hh | Does |
@@ -402,6 +405,40 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. |
 | `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. A connected checker then writes a post-check section, and `--rollback --yes` can send the last working publish again. |
+
+## Build a local package
+
+The command you run in this clone is still `pnpm exec hh`. Its bin is [`packages/cli/src/main.ts`](packages/cli/src/main.ts), and the first line asks Node to strip types. That is valid for a source file outside `node_modules`. Node refuses the same flag for a program that lives inside `node_modules`, so a packed copy cannot ship that TypeScript file as the program.
+
+`node packages/cli/build.mjs` does the same job as `pnpm --filter hitchhikers-guide run build`. It writes [`packages/cli/dist/main.js`](packages/cli/dist/main.js). The first line asks for `node` on `PATH` and does not pass `--experimental-strip-types`. The file contains the CLI and the workspace packages it imports. Ordinary npm packages stay outside the file. Their names and versions are listed in `publishConfig.dependencies` inside [`packages/cli/package.json`](packages/cli/package.json). The source `dependencies` field stays `@hitchhiker/engine` with `workspace:*`, so installing this clone does not pull that published list.
+
+The same script copies the files the program looks up at runtime into `packages/cli/dist/shipped`:
+
+| Copied into `dist/shipped` | What it is for |
+|---|---|
+| `packages/app/public` and `packages/app/src` | Desk pages, fonts, and the server the bundle compiles beside them. |
+| `packages/grok-plugin/skills` (plus agents, hooks, rules, and `src`) | `hh install` and the command table. |
+| `packages/knowledge/packs`, galleries, the design library, and the language pack | Interview knowledge and the section library. |
+| `packages/templates` scaffolds (`astro-default`, `next-app`, `vite-react-world`, recipes, shared) | New-site templates. The templates package manifest, which uses `workspace:*`, is not copied. |
+| `packages/engine/templates` | The spine templates. |
+| `interview/tree.yaml` | The question tree, when a project has not stored its own. |
+| `samples/towel-day.hhproject` | The sample project the desk can open. |
+
+Code finds those paths by walking up from `import.meta.url`. In this repo the walk lands on `packages/`. In the built file it lands on `dist/shipped` first, because that directory sits next to `dist/main.js`. When the program is the bundle, a file-URL load prefers the compiled `.js` if that file is present. Node will not execute TypeScript from an installed package. Scaffold sources that a new site copies, and the two engine files the spacing check reads as text, stay in the tree as text.
+
+`packages/cli/package.json` keeps `"bin": { "hh": "./src/main.ts" }` on purpose. `npm pack`, run from `packages/cli`, runs `prepack`: the build, then a swap that copies `publishConfig` onto the manifest that goes into the tarball. `postpack` writes the git file back, so a finished pack does not leave the working tree on the packed bin. The tarball's bin is `./dist/main.js`, its `files` list is `dist`, and its dependencies are ordinary version numbers. There is no `workspace:` specifier in that packed manifest. Read `package/package.json` inside the tarball to see the overlay. The file in git stays on the source bin. The version is still `0.0.0`. Do not run `npm publish`. The registry package is still not published.
+
+After a build in this repo you can read the help from the bundled file:
+
+```
+node packages/cli/dist/main.js --help
+```
+
+That process resolves `pdfjs-dist` from the CLI package. This repo lists it as a dev dependency of `hitchhikers-guide`, pinned to the same version the engine uses, so the built file can start here. A packed install lists it as a normal dependency instead. If the module is missing, use `pnpm exec hh`, which runs the source bin and does not need the build.
+
+`node scripts/start.mjs` is unchanged. It still installs and then runs `pnpm exec hh app`. It does not call the bundler.
+
+Building and packing stay on this computer. They do not call a host, they do not deploy, and they do not approve a brief. Publishing a site is still `hh so-long` with a host you name and `--yes`.
 
 ## Attachments
 
@@ -552,7 +589,7 @@ From the terminal, the same preview is `hh so-long --project <dir> --host previe
 - [x] **v0.4 Improbability Drive**: the orchestrator, Zaphod the reviewer, Marvin the watchdog, and the Windows and macOS/Linux queue runners
 - [x] **v0.5 Mostly Harmless**: quality gates, the Nutrimatic Test, the jury, the Elevate loop
 - [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. `hh so-long` runs the quality check for this version first, recommends Hostinger, and waits for you to name the host and pass `--yes`. A local preview serves the built pages on this computer and writes a zip, with no account.
-- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm.
+- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm. A local bundle can be packed from `packages/cli`. That tarball is still not published.
 
 **Later, in a galaxy slightly further away**
 - [ ] Cloud mode, for when your laptop would like a nap
@@ -574,6 +611,7 @@ Good places to start:
 - **Port your favorite motion recipe**, with a mobile version and a reduced-motion version attached.
 - **Try the local preview.** The page server and the zip live in [`packages/deploy/src/preview.ts`](packages/deploy/src/preview.ts). The tests in [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) cover a real page, a missing front page, a folder outside the project, and an address that tries to climb out of the pages. Run that file, then open a pull request with one job in it.
 - **Try `hh so-long`.** The command is [`packages/cli/src/commands/so-long.ts`](packages/cli/src/commands/so-long.ts). [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts) covers a blocked check, a check for a different version, a declined yes, the local preview, and the Hostinger question you get when you leave the host off. Run that file before you open the pull request. Do not point it at a live host.
+- **Build the local CLI bundle.** From the repo root, `pnpm --filter hitchhikers-guide run build` (the script is [`packages/cli/build.mjs`](packages/cli/build.mjs)). It should leave `packages/cli/dist/main.js` asking for `node` on `PATH`, with no type-stripping flag, and it must not write this repo's absolute path into that file. Then run `node --experimental-strip-types --test packages/cli/test/hh-bin.test.ts`, the same runner on `packages/cli/test/shebang.test.ts` and `packages/cli/test/start.test.ts`, and `pnpm exec tsc -b`. Those checks keep the source bin, the shebang, and `node scripts/start.mjs` honest. Packing with `npm pack` inside `packages/cli` is local only. Do not `npm publish`.
 - **Try the live check and the Launch card.** [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts) covers the post-check section, including a page that comes back 404. [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts) keeps the launch kit on disk and checks that the desk card names the cost, Hostinger, and the yes button without publishing. [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts) checks that appending the section does not turn the checklist into a deploy. The phone screen is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run the node files with `node --experimental-strip-types --test <file>`, and that one Playwright spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/launch-card-245d.spec.ts`. Leave the rest of the Playwright suite alone unless you mean to run it.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
@@ -672,6 +710,33 @@ No. One project, one preview. Starting another closes the earlier address and ov
 **Can I point the preview at a folder outside the project?**
 No. The folder has to sit inside the project. A path that climbs out is refused, and a request that tries to climb out of the pages folder gets a not-found page. The preview is not a way to read the rest of the disk. A request that names some other computer is refused too.
 
+**Does the bundle replace `pnpm exec hh`?**
+No. In this clone the bin stays [`packages/cli/src/main.ts`](packages/cli/src/main.ts). `node scripts/start.mjs` and `pnpm exec hh` do not need a build. The bundle is the program a packed tarball runs, because Node will not strip types from a file inside `node_modules`.
+
+**I opened package.json and the bin is still `./src/main.ts`.**
+That is the file in git. It keeps the clone's command, and the install check, pointed at the source. `npm pack` inside `packages/cli` copies `publishConfig` into the tarball and then restores this file. The tarball's bin is `./dist/main.js`, its file list is `dist`, and `main` points at that same JavaScript file. If a pack is interrupted, `node packages/cli/postpack.mjs` puts the git file back.
+
+**The dependencies I see still say `workspace:`.**
+The source manifest depends on `@hitchhiker/engine` with `workspace:*`. The tarball replaces that field with the packages named in `publishConfig.dependencies`: Playwright, pdfjs, the motion libraries, and the other runtime packages the bundle leaves external. If you still see `workspace:`, you opened the git file, not `package/package.json` inside the tarball.
+
+**`node packages/cli/dist/main.js` says it cannot find pdfjs.**
+The built file resolves `pdfjs-dist` from the CLI package. This repo lists that package as a dev dependency of `hitchhikers-guide`, the same version the engine uses. Run `pnpm install` at the repo root if the module is missing, then run the built file again. A packed install lists `pdfjs-dist` as a normal dependency, so the same file finds it there. PDF text extraction uses that package. The help text does not open a PDF, but the module is loaded when the program starts.
+
+**Does building or packing deploy the site?**
+No. `node packages/cli/build.mjs` and `npm pack` stay on this computer. They do not call a host, and they do not run `hh brief --approve`. Publishing a site is still `hh so-long` with a host and `--yes`.
+
+**Will a packed install run TypeScript out of node_modules?**
+No. The packed bin is JavaScript. Loads that use a file URL prefer the compiled `.js` under `dist/shipped` when that file exists. TypeScript that a new site copies, and the two engine files the spacing check reads as text (`packages/engine/src/brand/tokens.ts` and `packages/engine/src/spec/design-outputs.ts`), stay in the tree as text. They are not the program Node executes.
+
+**Where do skills, templates, and packs live in the tarball?**
+Under `dist/shipped`. Plugin skills are `dist/shipped/packages/grok-plugin/skills`. Site templates are `dist/shipped/packages/templates`. Knowledge packs are `dist/shipped/packages/knowledge/packs`. The desk's public files are `dist/shipped/packages/app/public`. The question tree is `dist/shipped/interview/tree.yaml`. The sample project is `dist/shipped/samples/towel-day.hhproject`. In this clone, before you build, those same files are still the originals under `packages/` and `interview/`.
+
+**The built desk cannot find this repo's pnpm workspace.**
+Some tool-install routes look for `pnpm-workspace.yaml` by walking up from the file that is running. A packed copy has no workspace file, so those routes skip the workspace shim and do not invent one. The interview, the shipped skills, the templates, and the knowledge packs still resolve from `dist/shipped`. Replay of a Guide cassette looks for fixtures in a test folder the tarball does not ship. Use the source tree for that replay.
+
+**pnpm says it ignored the esbuild install script.**
+pnpm 10 skips dependency lifecycle scripts until you approve them. esbuild is a dev dependency of `hitchhikers-guide`, used only by `packages/cli/build.mjs`. The package also ships a platform binary. If `node packages/cli/build.mjs` cannot find that binary, run `pnpm approve-builds`, allow esbuild, and install again. Leave the rest of the repo's script policy alone.
+
 **What's the answer to life, the universe and everything?**
 Tier five. It gets extra-high effort.
 
@@ -681,7 +746,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`.
 
 ---
 

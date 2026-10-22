@@ -8,8 +8,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packagedPath } from "../packaged-dir.ts";
 import { styleWorldFrom } from "./art-direction.ts";
 import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
@@ -112,7 +111,7 @@ export function designLanguageFor(
 }
 
 export function knowledgeRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge");
+  return packagedPath(["knowledge"], "packs");
 }
 
 export function sectionIdOf(prompt: SitePromptSkeleton): string {

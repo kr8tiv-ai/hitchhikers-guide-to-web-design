@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { packagedModule } from "../packaged-dir.ts";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
 import {
   BILLING_TOP_UP,
@@ -723,7 +724,7 @@ async function writeLibrarySections(projectDir: string, briefMarkdown: string): 
     } catch {
       // A brief with no prompt files still renders the references it names.
     }
-    const rendererUrl = new URL("../../../templates/src/section-render.ts", import.meta.url);
+    const rendererUrl = pathToFileURL(packagedModule("templates", "src/section-render.ts"));
     const loaded: unknown = await import(rendererUrl.href);
     if (!isSectionRenderer(loaded)) throw new Error("The section renderer did not load.");
     const html = loaded.renderReferencedSections(source, {});
@@ -1891,7 +1892,7 @@ async function releaseQueuePause(projectDir: string): Promise<void> {
 
 async function attachDesignSelection(library: DesignLibrary, brief: string): Promise<DesignLibrary> {
   try {
-    const href = pathToFileURL(path.join(knowledgeRoot(), "src", "design-library.ts")).href;
+    const href = pathToFileURL(packagedModule("knowledge", "src/design-library.ts")).href;
     const mod = (await import(href)) as {
       loadDesignEntries: (dir: string) => Array<{
         id: string;

@@ -5,7 +5,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packagedPath } from "../packaged-dir.ts";
 import type { StyleWorld } from "./art-direction.ts";
 import { estimateTokens } from "./context-doc.ts";
 
@@ -41,7 +41,7 @@ const TEXT_LED_PACK = "scroll-choreography";
 const SPATIAL_PACKS = new Set(["object-showcase", "shader-recipes", "post-processing", "locked-versions", "awwwards-sotd-breakdowns"]);
 
 export function skillsRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "skills");
+  return path.join(packagedPath(["knowledge"], "packs"), "skills");
 }
 
 export function loadSkillPacks(dir = skillsRoot()): SkillPack[] {

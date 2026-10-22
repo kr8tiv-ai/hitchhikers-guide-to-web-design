@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
 import { cp, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { packagedPackage } from "@hitchhiker/engine";
 
 export const PACKAGE_NAME = "@hitchhiker/templates";
 
@@ -11,7 +13,10 @@ export type { MotionAssignment, MotionLib, MotionPlan, ScrollOwner } from "./mot
 export { renderLibrarySection, renderReferencedSections, sectionMarkupBytes } from "./section-render.ts";
 export type { LibrarySectionProps } from "./section-render.ts";
 
-const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const besideRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = existsSync(path.join(besideRoot, "astro-default"))
+  ? besideRoot
+  : packagedPackage("templates");
 
 export type TemplateId = "astro-default" | "next-app" | "vite-react-world";
 export type TemplateStack = "astro" | "next" | "vite-react";

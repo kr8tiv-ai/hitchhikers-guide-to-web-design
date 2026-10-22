@@ -5,8 +5,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { BANNED_PHRASES, BANNED_WORDS, FAMILY_STYLE, FAMILIES } from "@hitchhiker/engine";
+import { BANNED_PHRASES, BANNED_WORDS, FAMILY_STYLE, FAMILIES, packagedPath } from "@hitchhiker/engine";
 
 const STYLE_WORLDS = [...new Set(Object.values(FAMILY_STYLE))];
 
@@ -150,7 +149,7 @@ export interface SelectOptions {
 }
 
 export function libraryRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "design-library");
+  return path.join(packagedPath(["knowledge"], "packs"), "design-library");
 }
 
 export function canonicalUrl(value: string): string {

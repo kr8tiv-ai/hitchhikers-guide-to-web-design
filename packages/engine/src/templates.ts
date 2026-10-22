@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { packagedPath } from "./packaged-dir.ts";
 
 export type SpineTemplateName =
   | "project"
@@ -52,12 +53,9 @@ export class TemplateError extends Error {
 }
 
 function templateDirFromModule(): string {
-  return path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "templates",
-    "gsd",
-  );
+  const beside = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "templates", "gsd");
+  if (existsSync(path.join(beside, "project.md"))) return beside;
+  return packagedPath(["engine", "templates", "gsd"], "project.md");
 }
 
 function unknownTokens(text: string): string[] {

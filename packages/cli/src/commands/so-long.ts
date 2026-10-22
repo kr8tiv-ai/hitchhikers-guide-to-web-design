@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { hiddenChildOptions } from "@hitchhiker/engine";
+import { hiddenChildOptions, packagedModule } from "@hitchhiker/engine";
 import { runGit } from "../improve/git.ts";
 import { buildPnpmInvocation, quoteCmdArg } from "../improve/pnpm-command.ts";
 
@@ -159,7 +159,7 @@ const ROLLBACK_SENT = "The last working publish was sent again.";
 const ROLLBACK_STILL = "The live check on the earlier publish still found a problem. Nothing else was sent.";
 
 function packageSource(pkg: string, file: string): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", pkg, "src", file);
+  return packagedModule(pkg, `src/${file}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

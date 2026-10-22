@@ -62,7 +62,7 @@ export function productionRuntime(
   presentTools?: () => readonly string[],
 ): ToolRuntime {
   const platform = process.platform;
-  const workspaceDir = path.resolve(import.meta.dirname, "..", "..", "..", "..");
+  const workspaceDir = guideWorkspace() ?? import.meta.dirname;
   return {
     plan(input) {
       return buildInstallPlan(input.tool, input.modelId, {
@@ -387,8 +387,20 @@ function prepareDeskEnv(options: ToolDeskOptions): void {
   prependPlaywrightShim(env);
 }
 
+function guideWorkspace(): string | null {
+  let dir = import.meta.dirname;
+  for (let hop = 0; hop < 12; hop += 1) {
+    if (existsSync(path.join(dir, "pnpm-workspace.yaml"))) return path.resolve(dir);
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 function prependPlaywrightShim(env: NodeJS.ProcessEnv): void {
-  const workspace = path.resolve(import.meta.dirname, "..", "..", "..", "..");
+  const workspace = guideWorkspace();
+  if (workspace === null) return;
   const name = process.platform === "win32" ? "playwright.cmd" : "playwright";
   const shim = path.join(workspace, "node_modules", ".bin", name);
   if (existsSync(shim)) rememberInstallPath(env, shim);

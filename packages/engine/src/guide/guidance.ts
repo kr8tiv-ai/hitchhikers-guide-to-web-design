@@ -2,7 +2,7 @@
  * Model-only lines from interview/tree.yaml.
  * They go to the Guide prompt. They do not go on the card, in the transcript, or in the brief.
  */
-import path from "node:path";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
 
 /** Phrases that mean the sentence is an instruction to the model. */
@@ -106,7 +106,7 @@ let cachedLines: string[] | null = null;
 export function repoGuidanceLines(): string[] {
   if (cachedLines !== null) return cachedLines;
   try {
-    const file = path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+    const file = interviewTreeFile();
     cachedLines = guidanceCorpus(loadTree(file));
   } catch {
     cachedLines = [];

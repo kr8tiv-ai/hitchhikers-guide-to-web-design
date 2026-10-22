@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { DESK_REPO_REFUSAL, isInsideDeskRepo } from "@hitchhiker/engine";
+import { DESK_REPO_REFUSAL, isInsideDeskRepo, packagedModule } from "@hitchhiker/engine";
 import { cassetteNotice, cassetteRefusal } from "../cassette-guard.ts";
 import { deskPreflight, spawnCommand, type CommandRunner } from "../doctor.ts";
 
@@ -122,7 +122,8 @@ export function parseAppArgs(argv: readonly string[], cwd = process.cwd()): Pars
 /**
  * Start the companion app for a project directory.
  * The CLI package cannot depend on the app package, so the server is loaded
- * by file URL from the sibling package in this repo.
+ * by file URL. In this repo that file is the sibling package. A bundle loads
+ * the compiled server under dist/shipped.
  */
 export async function runApp(
   argv: readonly string[],
@@ -139,7 +140,7 @@ export async function runApp(
   }
   const notice = cassetteNotice(env, argv);
 
-  const serverFile = path.resolve(import.meta.dirname, "../../../app/src/server/server.ts");
+  const serverFile = packagedModule("app", "src/server/server.ts");
   if (!existsSync(serverFile)) {
     return {
       exitCode: 1,

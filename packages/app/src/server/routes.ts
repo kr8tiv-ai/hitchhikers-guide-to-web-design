@@ -97,6 +97,8 @@ import {
   type VerdictInput,
   type WalkQuery,
   type WalkState,
+  interviewTreeFile,
+  packagedPackage,
 } from "@hitchhiker/engine";
 import {
   ANSWER_HINT,
@@ -291,8 +293,9 @@ export interface DeskApp {
 }
 
 const JSON_LIMIT = 1024 * 1024;
-const SRC_ROOT = path.resolve(import.meta.dirname, "..");
-const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
+const APP_ROOT = packagedPackage("app");
+const SRC_ROOT = path.join(APP_ROOT, "src");
+const PUBLIC_ROOT = path.join(APP_ROOT, "public");
 const CARD_SOURCE = path.resolve(SRC_ROOT, "card.ts");
 const QUESTION_PARTS_SOURCE = path.resolve(SRC_ROOT, "question-parts.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
@@ -4530,7 +4533,7 @@ function buildTheatreBundle(): string {
 function treeFile(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function readAnswers(projectDir: string): AnswerRecord[] {
@@ -4816,7 +4819,7 @@ function lovesOf(state: WalkState, pack: readonly GalleryEntry[]): GalleryLoveMo
 function galleryPackFile(): string {
   const fromEnv = process.env.HH_GALLERY_FILE;
   if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "knowledge", "galleries", "curated.json");
+  return path.join(packagedPackage("knowledge"), "galleries", "curated.json");
 }
 
 function readPack(): { entries: GalleryEntry[]; error: string | null } {

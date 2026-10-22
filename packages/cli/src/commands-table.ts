@@ -6,6 +6,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { packagedPackage } from "@hitchhiker/engine";
 
 /** Dispatch order. `dispatchImplemented` in main.ts switches on every name. */
 export const IMPLEMENTED_COMMANDS = [
@@ -39,7 +40,7 @@ export function isImplementedCommand(command: string): command is ImplementedCom
 }
 
 function defaultSkillsDir(): string {
-  return path.resolve(import.meta.dirname, "..", "..", "grok-plugin", "skills");
+  return path.join(packagedPackage("grok-plugin"), "skills");
 }
 
 function unquote(value: string): string {

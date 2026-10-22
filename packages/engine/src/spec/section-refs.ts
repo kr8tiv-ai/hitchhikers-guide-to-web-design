@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packagedPath } from "../packaged-dir.ts";
 import { expandSkillIncludes, loadSkillPacks, type SkillPack } from "./skills.ts";
 
 export interface MarkupBuild {
@@ -26,15 +26,7 @@ export interface IngredientExpansion {
 const PAGE_SHELL = '<main data-landmark="page"></main>';
 
 export function sectionFixtureRoot(): string {
-  return path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "..",
-    "knowledge",
-    "design-library",
-    "sections",
-  );
+  return path.join(packagedPath(["knowledge"], "packs"), "design-library", "sections");
 }
 
 export function landmarkSequence(html: string): string[] {

@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { hiddenChildOptions, think } from "@hitchhiker/engine";
+import { hiddenChildOptions, packagedModule, think } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
@@ -490,7 +490,7 @@ async function loadTools(): Promise<ToolsApi> {
 }
 
 function toolsPath(fileName: string): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "engine", "src", "tools", fileName);
+  return packagedModule("engine", `src/tools/${fileName}`);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { packagedPackage } from "@hitchhiker/engine";
 
 const USAGE = "Usage: hh install --project <dir>";
 
@@ -21,7 +22,7 @@ interface CopyItem {
 
 /** Plugin package that `hh install` copies from, next to this CLI in the repo. */
 export function pluginSourceDir(): string {
-  return path.resolve(import.meta.dirname, "..", "..", "grok-plugin");
+  return packagedPackage("grok-plugin");
 }
 
 /**

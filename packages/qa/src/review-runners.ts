@@ -6,9 +6,8 @@
  * Heavy gates are injected so tests can stub the browser.
  */
 
-import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { assertPhoneBudgetBefore3d, type QueueFile } from "@hitchhiker/engine";
+import { assertPhoneBudgetBefore3d, packagedModule, type QueueFile } from "@hitchhiker/engine";
 import { AI_CLUSTER_VISION_KEYS, judgeAiCluster, type AiClusterVisionKey } from "./antislop.ts";
 import { applyBeautyRound, judgeBeauty, type BeautyFailure, type BeautyRoundResult, type SectionShot } from "./beauty-gate.ts";
 import {
@@ -113,7 +112,7 @@ export interface ReviewRun {
 let realGates: QualityGates | null = null;
 
 function templateHref(file: string): string {
-  return pathToFileURL(path.resolve(import.meta.dirname, "..", "..", "templates", "shared", file)).href;
+  return pathToFileURL(packagedModule("templates", `shared/${file}`)).href;
 }
 
 /** Real gate functions. Tests pass spies instead of calling this. */

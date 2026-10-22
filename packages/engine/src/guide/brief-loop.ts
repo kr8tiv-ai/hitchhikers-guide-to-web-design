@@ -24,6 +24,7 @@ import { INTERVIEW_MODEL } from "./interview-call.ts";
 import { budgetCardCopy } from "./session-state.ts";
 import { spaceAfterTerminal } from "./sentence-space.ts";
 import { loadFacts } from "./suggest.ts";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadTree } from "../tree.ts";
 import { briefTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -698,7 +699,7 @@ function hiddenQuestionIds(): Set<string> {
   if (defaultSurfaceIds !== null) return defaultSurfaceIds;
   defaultSurfaceIds = new Set();
   try {
-    const file = path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+    const file = interviewTreeFile();
     for (const question of loadTree(file)) {
       if (question.surface === "default") defaultSurfaceIds.add(question.id);
     }

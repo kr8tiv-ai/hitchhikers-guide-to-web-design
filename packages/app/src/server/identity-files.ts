@@ -4,8 +4,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { packagedPackage } from "@hitchhiker/engine";
 
-const PUBLIC_ROOT = path.resolve(import.meta.dirname, "..", "..", "public");
+const PUBLIC_ROOT = path.join(packagedPackage("app"), "public");
 
 const RELATIVE: Record<string, string> = {
   "/favicon.svg": "favicon.svg",

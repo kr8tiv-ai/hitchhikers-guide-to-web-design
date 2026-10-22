@@ -5,10 +5,10 @@
  */
 
 import { spawn } from "node:child_process";
-import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   hiddenChildOptions,
+  packagedModule,
   resolveGrokCommand,
   setSectionStillRunner,
   type SpawnLike,
@@ -35,14 +35,14 @@ interface StillModule {
 }
 
 export async function attachSectionStills(projectDir: string): Promise<void> {
-  const href = pathToFileURL(path.resolve(import.meta.dirname, "..", "..", "..", "assets", "src", "section-generate.ts")).href;
+  const href = pathToFileURL(packagedModule("assets", "src/section-generate.ts")).href;
   const mod = (await import(href)) as StillModule;
   setSectionStillRunner(projectDir, async (dir) => {
     const settings = mod.readMediaSettings(dir);
     let key = "";
     if (settings.api) {
       try {
-        const keysHref = pathToFileURL(path.resolve(import.meta.dirname, "..", "..", "..", "assets", "src", "keychain.ts")).href;
+        const keysHref = pathToFileURL(packagedModule("assets", "src/keychain.ts")).href;
         const keys = (await import(keysHref)) as { readApiKey(): Promise<string> };
         key = await keys.readApiKey();
       } catch {

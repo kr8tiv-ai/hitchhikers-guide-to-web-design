@@ -7,7 +7,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packagedPath } from "../packaged-dir.ts";
 import { styleWorldFrom } from "./art-direction.ts";
 
 export const HIGH_APPETITE = 7;
@@ -39,7 +39,7 @@ export interface LanguageQuery {
 const HERO_FAMILIES = new Set<LanguageFamily>(["camera", "material", "post"]);
 
 export function languagePackRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "language-pack");
+  return path.join(packagedPath(["knowledge"], "packs"), "language-pack");
 }
 
 export function loadLanguagePack(dir = languagePackRoot()): LanguageEntry[] {

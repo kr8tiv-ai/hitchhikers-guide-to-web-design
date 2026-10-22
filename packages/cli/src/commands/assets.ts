@@ -10,6 +10,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { packagedModule } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
 const USAGE = [
@@ -392,7 +393,7 @@ async function loadAssets(): Promise<AssetsApi> {
 }
 
 function assetPath(fileName: string): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "assets", "src", fileName);
+  return packagedModule("assets", `src/${fileName}`);
 }
 
 function assetHref(fileName: string): string {

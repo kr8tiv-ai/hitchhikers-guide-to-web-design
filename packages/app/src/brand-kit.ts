@@ -4,10 +4,11 @@
  * Logo SVG is dropped when it fails the same substring checks as assertLogoSvg.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { packagedPackage } from "@hitchhiker/engine";
 import { contrastRatio } from "./design/tokens.ts";
 
 export interface BrandKitModel {
@@ -48,7 +49,12 @@ const FONT_FILES = [
   "Literata-opsz16-wght600.woff2",
 ] as const;
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+/** Source sits next to this file. The bundle's import.meta.url is the server entry. */
+function brandKitDir(): string {
+  const beside = path.dirname(fileURLToPath(import.meta.url));
+  if (existsSync(path.join(beside, "brand-kit.css"))) return beside;
+  return path.join(packagedPackage("app"), "src");
+}
 
 interface Prepared {
   why: string;
@@ -81,7 +87,7 @@ export async function writeBrandKit(projectDir: string, model: BrandKitModel): P
   const pdfPath = path.join(dir, "brand-kit.pdf");
   await writeFile(htmlPath, html, "utf8");
   await writeFile(pdfPath, pdf);
-  const fontDir = path.join(here, "..", "public", "fonts");
+  const fontDir = path.join(brandKitDir(), "..", "public", "fonts");
   for (const name of FONT_FILES) {
     await copyFile(path.join(fontDir, name), path.join(fonts, name));
   }
@@ -424,7 +430,7 @@ function standAlone(html: string): string {
   const sheets = ["design/tokens.css", "design/type.css", "design/components.css", "brand-kit.css"];
   let next = html;
   for (const sheet of sheets) {
-    const css = readFileSync(path.join(here, sheet), "utf8").replaceAll("../../public/fonts/", "fonts/");
+    const css = readFileSync(path.join(brandKitDir(), sheet), "utf8").replaceAll("../../public/fonts/", "fonts/");
     next = next.replace(`<link rel="stylesheet" href="${sheet}" />`, `<style>${css}</style>`);
   }
   return next;

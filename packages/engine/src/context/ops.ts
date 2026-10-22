@@ -10,6 +10,7 @@ import type { think } from "../ai/think.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { missingRequired, type AnswerRecord } from "../required.ts";
 import { loadState, saveState, type GuideState } from "../state.ts";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadTree, questionsForDepth } from "../tree.ts";
 import {
   isLive,
@@ -47,7 +48,7 @@ export function phaseNames(): readonly string[] {
 function treeFile(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function questionIds(projectDir: string): Set<string> {

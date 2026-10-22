@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packagedPath } from "../packaged-dir.ts";
 import { DecisionLogError, recordDirectionChoice, rejectedDirectionNames } from "./decision-canvas.ts";
 import { isOverusedFamily } from "./tokens.ts";
 import { TYPE_LIBRARY, type TypePairing } from "./type-library.ts";
@@ -54,7 +54,7 @@ const WORLD_ALIAS: Record<string, string> = {
 };
 
 export function designLibraryRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "design-library");
+  return path.join(packagedPath(["knowledge"], "packs"), "design-library");
 }
 
 /**
@@ -580,7 +580,7 @@ function readInterviewAnswers(projectDir: string): Array<{ id: string; value: st
 }
 
 function loadGalleryPages(): ReferencePage[] {
-  const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "knowledge", "galleries", "curated.json");
+  const file = path.join(packagedPath(["knowledge"], "packs"), "galleries", "curated.json");
   if (!existsSync(file)) return [];
   let value: unknown;
   try {

@@ -6,6 +6,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { assetsFileExists, decisionsFileExists, isLive, loadAssets, loadDecisions } from "../context/disk.ts";
 import { ANSWER_SOURCES } from "../context/types.ts";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
 
 export const SESSION_TOPICS = [
@@ -163,9 +164,7 @@ export function emptySession(): SessionState {
 /** The project's tree, or the packaged tree when the project has none. */
 export function projectTree(projectDir: string): Question[] {
   const local = path.join(projectDir, "interview", "tree.yaml");
-  const file = existsSync(local)
-    ? local
-    : path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  const file = existsSync(local) ? local : interviewTreeFile();
   try {
     return loadTree(file);
   } catch {

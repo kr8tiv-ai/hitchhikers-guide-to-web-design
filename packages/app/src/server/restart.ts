@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import {
+  interviewTreeFile,
   loadConfig,
   loadState,
   loadTree,
@@ -21,7 +22,7 @@ import {
 function treeFile(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 export async function restartInterview(projectDir: string): Promise<void> {

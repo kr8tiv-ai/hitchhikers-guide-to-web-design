@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { packagedPath } from "../packaged-dir.ts";
 import { isBillingFailure } from "../ai/grok-failure.ts";
 import type { think } from "../ai/think.ts";
 import { applyContextFacts, bindPacket } from "../context/index.ts";
@@ -40,7 +41,7 @@ import { guideTextIssues } from "./validators.ts";
  */
 
 export function defaultGalleryFile(): string {
-  return path.resolve(import.meta.dirname, "..", "..", "..", "knowledge", "galleries", "curated.json");
+  return path.join(packagedPath(["knowledge"], "packs"), "galleries", "curated.json");
 }
 
 export function isTasteId(questionId: string): boolean {

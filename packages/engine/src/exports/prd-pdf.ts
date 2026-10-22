@@ -12,8 +12,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { hiddenChildOptions } from "../hidden-child.ts";
+import { packagedPackage } from "../packaged-dir.ts";
 import {
   assertExportOptions,
   ExportPdfError,
@@ -55,9 +55,11 @@ interface PlaywrightChromium {
   executablePath(): string;
 }
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-
 const CHROMIUM_FIX = "Chromium is missing. Run: pnpm exec playwright install chromium";
+
+function qaPackageFile(): string {
+  return path.join(packagedPackage("qa"), "package.json");
+}
 
 export async function exportPdf(
   kind: "prd" | "brand-kit",
@@ -190,7 +192,7 @@ async function printHtml(html: string, paper: PdfPaper): Promise<Buffer> {
 }
 
 function loadChromium(): PlaywrightChromium {
-  const qaPackage = path.resolve(here, "../../../qa/package.json");
+  const qaPackage = qaPackageFile();
   if (!existsSync(qaPackage)) {
     throw new ExportPdfError("Playwright is not installed beside the qa package. The pin is playwright 1.63.0.");
   }
@@ -235,7 +237,7 @@ async function ensureChromium(chromium: PlaywrightChromium): Promise<string> {
 }
 
 function playwrightCli(): string | null {
-  const qaPackage = path.resolve(here, "../../../qa/package.json");
+  const qaPackage = qaPackageFile();
   if (!existsSync(qaPackage)) return null;
   try {
     const requireFromQa = createRequire(qaPackage);

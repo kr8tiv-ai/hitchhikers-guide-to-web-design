@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "../config.ts";
+import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadState } from "../state.ts";
 import { questionsToAsk, loadTree, type DepthName } from "../tree.ts";
 import { readProjectDisplayName } from "./display-name.ts";
@@ -94,7 +95,7 @@ function projectIdFor(projectDir: string): string {
 function treePath(projectDir: string): string {
   const local = path.join(projectDir, "interview", "tree.yaml");
   if (existsSync(local)) return local;
-  return path.resolve(import.meta.dirname, "..", "..", "..", "..", "interview", "tree.yaml");
+  return interviewTreeFile();
 }
 
 function readDepth(settings: Record<string, unknown>): DepthName {
