@@ -201,6 +201,31 @@ test("hh so-long prints usage instead of opening Windows HTML Help", () => {
   }
 });
 
+test("hh --version prints 0.1.0 from the workspace package", () => {
+  assert.equal(existsSync(binDir), true, "node_modules/.bin is missing. pnpm install did not link bins.");
+  const manifestPath = path.join(repoRoot, "packages", "cli", "package.json");
+  const parsed: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) {
+    throw new Error("packages/cli/package.json has no version");
+  }
+  assert.equal(parsed.version, "0.1.0");
+  const env = commandEnv(binDir, "", "");
+  const resolved = resolveHh(env);
+  assert.ok(resolved, "pnpm exec would not find an hh shim ahead of Windows HTML Help");
+  assert.equal(HTML_HELP.test(resolved), false);
+  assert.equal(path.basename(resolved).toLowerCase() === "hh.exe", false);
+  const work = mkdtempSync(path.join(os.tmpdir(), "hh-bin-version-"));
+  try {
+    const result = runHidden(resolved, ["--version"], env, work);
+    assert.equal(result.status, 0, `hh --version failed\n${result.stdout}\n${result.stderr}`);
+    assert.equal(result.stdout, "0.1.0\n");
+    assert.equal(result.stdout.includes("!"), false);
+    assert.equal((result.stderr ?? "").includes("!"), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
 function runHidden(
   file: string,
   args: readonly string[],

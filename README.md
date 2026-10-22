@@ -14,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-F2EBDD?style=for-the-badge&labelColor=121110)](LICENSE)
 [![Built for Grok 4.7](https://img.shields.io/badge/built%20for-Grok%204.7-F2EBDD?style=for-the-badge&labelColor=121110)](https://x.ai)
 [![Spec-driven](https://img.shields.io/badge/spec--driven-GSD%20style-F2EBDD?style=for-the-badge&labelColor=121110)](#built-on-gsd)
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-FF5A1F?style=for-the-badge&labelColor=121110)](#roadmap)
+[![Status: alpha](https://img.shields.io/badge/status-alpha-FF5A1F?style=for-the-badge&labelColor=121110)](#roadmap)
 [![CI](https://img.shields.io/github/actions/workflow/status/kr8tiv-ai/hitchhikers-guide-to-web-design/ci.yml?style=for-the-badge&label=CI&labelColor=121110&color=F2EBDD)](https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design/actions/workflows/ci.yml)
 <br>
 [![Currently being built by the AI it describes](https://img.shields.io/badge/currently%20being%20built%20by-the%20AI%20it%20describes-FF5A1F?style=for-the-badge&labelColor=121110)](#roadmap)
@@ -31,6 +31,7 @@
 [The Guide](#meet-the-guide) ·
 [Motion](#the-motion-toolkit) ·
 [Anti-slop](#the-anti-slop-rules) ·
+[Try it](#try-it) ·
 [Quick start](#quick-start) ·
 [Preview](#look-before-you-publish) ·
 [Roadmap](#roadmap) ·
@@ -44,7 +45,7 @@
 
 Like, "the paint is still wet and the AI is holding the brush" early.
 
-The Hitchhiker's Guide to Web Design is in this repo, still pre-alpha, still being built by Grok 4.7 inside Grok Build, from a specification so thorough it has its own table of contents, its own research department and, at one point, its own opinion about kerning. The six phases are in the tree. The package version is still `0.0.0`. Repository: [github.com/kr8tiv-ai/hitchhikers-guide-to-web-design](https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design).
+The Hitchhiker's Guide to Web Design is in this repo, now alpha, still being built by Grok 4.7 inside Grok Build, from a specification so thorough it has its own table of contents, its own research department and, at one point, its own opinion about kerning. The six phases are in the tree. The publishable CLI, `packages/cli`, is `0.1.0`. The private workspace root stays `0.0.0` and is not the package npm would receive. Alpha means the desk, the gates, and a local package exist. It does not mean the registry already has a release. Repository: [github.com/kr8tiv-ai/hitchhikers-guide-to-web-design](https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design).
 
 Star the repo, watch it happen, and bring a towel. Things are about to get improbable.
 
@@ -52,7 +53,19 @@ Star the repo, watch it happen, and bring a towel. Things are about to get impro
 
 ## Try it
 
-Node.js 22 or newer is the only thing you install yourself. From a fresh clone, one command installs the workspace and opens the desk:
+Node.js 22 or newer is the only thing you install yourself. There are two doors. Neither one asks for an account until you choose to publish a site, and neither one spends money on its own.
+
+The alpha package entry, once it is on npm, is:
+
+```
+npx hitchhikers-guide
+```
+
+That command downloads `hitchhikers-guide` and starts the local desk. `npm i -g hitchhikers-guide` installs the same program, and the command after that is `hh`. `hh --version` should print `0.1.0`. A bare `hh`, with no subcommand, is that same desk.
+
+The package in this repo is prepared at `0.1.0`. It is not on the public registry yet. Putting it there, and marking the commit with a `v0.1.0` tag, are human steps, and both need Matt's explicit yes. Until that yes, `npx hitchhikers-guide` has no release to fetch, and the clone below is the door that opens today. Do not npm publish from a build session, and do not create the tag from one.
+
+From a fresh clone, one command installs the workspace and opens the desk:
 
 ```
 node scripts/start.mjs
@@ -336,7 +349,7 @@ Snapshots of [gsd-core](vendor/gsd-core), [gsd-path](vendor/gsd-path), [gsd-pi](
 
 ## What's in the repo today
 
-The app is in the repo, and so is the brain it was built from. The version in `package.json` is still `0.0.0`.
+The app is in the repo, and so is the brain it was built from. The root `package.json` is still `0.0.0` and private. The publishable CLI in [`packages/cli/package.json`](packages/cli/package.json) is `0.1.0`. `hh --version` reads the CLI file, not the root.
 
 | Path | What it is |
 |---|---|
@@ -351,8 +364,10 @@ The app is in the repo, and so is the brain it was built from. The version in `p
 | [`docs/dont-panic.md`](docs/dont-panic.md) | The short page for the interview. |
 | [`docs/improve.md`](docs/improve.md) | `hh improve` and `hh improve supervise`. |
 | [`packages/cli/build.mjs`](packages/cli/build.mjs) | Bundles the CLI to `packages/cli/dist/main.js` and copies the desk files, skills, templates, and knowledge packs beside it. |
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed in `0.1.0`, and which release steps are still waiting on a person. |
+| [`docs/RELEASE-v0.1.md`](docs/RELEASE-v0.1.md) | The v0.1 checklist. Specs 01, 02, and 03 are listed by test file. The tag and the registry upload need Matt's explicit yes. |
 
-The critique, the research addendum, and the prompt package are written. What is still ahead is everything past prompt 180, including a published npm package. A local bundle can be built and packed on this computer. That tarball is not published.
+The critique, the research addendum, and the prompt package are written. What is still ahead is everything past prompt 180, including a published npm package. A local bundle can be built and packed on this computer. That tarball is not published. The CLI version prepared for that publish is `0.1.0`. The list of changes is [CHANGELOG.md](CHANGELOG.md). The human checklist is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md).
 
 ---
 
@@ -379,7 +394,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 
 `--project` is the site folder. `--no-open` leaves the browser closed. On a first run, before any answer is stored, the desk shows the same preflight as `hh doctor`: grok, playwright, whisper, and pdftotext. That quick-start doctor does not download Chromium or WebKit. Pass `--yes` later if you want it to install the browsers the quality gates open. The longer notes are in [Check this computer](#check-this-computer).
 
-`npx hitchhikers-guide` is not yet published on npm (the registry returns 404). Publishing it is a planned future note.
+`npx hitchhikers-guide` is not yet published on npm. Publishing it, and creating the `v0.1.0` tag, need Matt's explicit yes. What the command opens after that yes is under [Try it](#try-it). Until then, use the six clone steps above.
 
 A local tarball can be built and inspected. The steps, the 25 MB cap, and the directories that stay out of the package are in [Build a local package](#build-a-local-package). Day-to-day use in this clone stays on the six steps above. The registry package is still not published.
 
@@ -398,7 +413,7 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 | `hh resume` | Where to continue. `hh resume <file>` restores a portable project file. |
 | `hh save` | Write the portable project file. |
 | `hh doctor` | Node.js 22 or newer, git, whether the Grok Build CLI is on this computer and whether you are signed in, the session id, and the effort flag. Warns if playwright, whisper, or pdftotext is missing. Also checks that Chromium and WebKit, the browsers the quality gates open, are installed, and says so in plain sentences. It does not log you in, and it does not download those browsers unless you pass `--yes`. Exit 1 only when Node is older than 22. |
-| `hh --version` | Prints the version from the `package.json` next to the program, then exits. In this clone that file is still `0.0.0`. Extra words after the flag are refused. It does not start the desk. |
+| `hh --version` | Prints the version from the `package.json` next to the program, then exits. In this clone that file is `0.1.0`. Extra words after the flag are refused. It does not start the desk. |
 | `hh improve` | Bounded loop on an improve branch. A human merges. [docs/improve.md](docs/improve.md). |
 | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
 | `hh context` | What the Guide knows: summary, decisions, and assets. `--audit` prints the last packet sections. |
@@ -449,7 +464,7 @@ The same script copies the files the program looks up at runtime into `packages/
 
 Code finds those paths by walking up from `import.meta.url`. In this repo the walk lands on `packages/`. In the built file it lands on `dist/shipped` first, because that directory sits next to `dist/main.js`. When the program is the bundle, a file-URL load prefers the compiled `.js` if that file is present. Node will not execute TypeScript from an installed package. Scaffold sources that a new site copies, and the two engine files the spacing check reads as text, stay in the tree as text.
 
-`packages/cli/package.json` keeps `"bin": { "hh": "./src/main.ts" }` on purpose. `npm pack`, run from `packages/cli`, runs `prepack`: the build, then a swap that copies `publishConfig` onto the manifest that goes into the tarball. `postpack` writes the git file back, so a finished pack does not leave the working tree on the packed bin. The tarball's bin is `./dist/main.js`, its `files` list is `dist`, and its dependencies are ordinary version numbers. There is no `workspace:` specifier in that packed manifest. Read `package/package.json` inside the tarball to see the overlay. The file in git stays on the source bin. The version is still `0.0.0`. Do not run `npm publish`. The registry package is still not published.
+`packages/cli/package.json` keeps `"bin": { "hh": "./src/main.ts" }` on purpose. `npm pack`, run from `packages/cli`, runs `prepack`: the build, then a swap that copies `publishConfig` onto the manifest that goes into the tarball. `postpack` writes the git file back, so a finished pack does not leave the working tree on the packed bin. The tarball's bin is `./dist/main.js`, its `files` list is `dist`, and its dependencies are ordinary version numbers. There is no `workspace:` specifier in that packed manifest. Read `package/package.json` inside the tarball to see the overlay. The file in git stays on the source bin. The version is `0.1.0`. Do not run `npm publish`. The registry package is still not published.
 
 `hh --version` prints that version and exits. The program reads the `package.json` one directory above the file that is running. In this clone that is [`packages/cli/package.json`](packages/cli/package.json). After a packed install it is the `package.json` inside the installed package, which carries the same version until a release changes it. `hh --version --help`, or any extra word, prints `Usage: hh --version` and exits 2. The flag does not open the desk, does not run doctor, and does not talk to a host. If the version line is missing or not a `major.minor.patch` number, the command says it could not read its version and exits 1.
 
@@ -495,10 +510,10 @@ To install the same tarball yourself, still without publishing, pack into a fold
 
 ```powershell
 npm pack --json --pack-destination $env:TEMP\hh-pack
-npm install --ignore-scripts --no-audit --no-fund --prefix $env:TEMP\hh-try (Join-Path $env:TEMP "hh-pack\hitchhikers-guide-0.0.0.tgz")
+npm install --ignore-scripts --no-audit --no-fund --prefix $env:TEMP\hh-try (Join-Path $env:TEMP "hh-pack\hitchhikers-guide-0.1.0.tgz")
 ```
 
-Create the destination folder first if it is not there (`New-Item -ItemType Directory -Force $env:TEMP\hh-pack`). On macOS and Linux, use the same two commands with a directory under `$TMPDIR` or `/tmp`, and point `--prefix` at a second directory. The `hh` shim is `node_modules/.bin/hh` under the prefix (`hh.cmd` on Windows). `hh --version` should print `0.0.0`. Then run `hh doctor`. Then, from a site folder outside this repo, run `hh app --no-open --port 46100`. If 46100 is taken, pick another free port. Do not use 4175. Do not run `npm publish`.
+Create the destination folder first if it is not there (`New-Item -ItemType Directory -Force $env:TEMP\hh-pack`). On macOS and Linux, use the same two commands with a directory under `$TMPDIR` or `/tmp`, and point `--prefix` at a second directory. The `hh` shim is `node_modules/.bin/hh` under the prefix (`hh.cmd` on Windows). `hh --version` should print `0.1.0`. Then run `hh doctor`. Then, from a site folder outside this repo, run `hh app --no-open --port 46100`. If 46100 is taken, pick another free port. Do not use 4175. Do not run `npm publish`.
 
 `postpack` puts the git `package.json` back when the pack finishes. If a pack is killed before that, `node packages/cli/postpack.mjs` restores it. The smoke test does the same restore when it finishes, including when an assertion fails, so the working tree is not left on the packed bin.
 
@@ -527,7 +542,7 @@ Either start runs the jobs in order. A confirm job checks the hand start. The CI
 
 Provenance tells npm that GitHub built this tarball. The publish job asks GitHub for a short-lived token (`id-token: write`). The workflow file does not contain an npm token. The CI and pack smoke jobs do not get that permission. Ordinary pushes never reach the publish job, because they do not start this workflow at all.
 
-Do not start the Release workflow from a build session. Do not push a `v` tag from one. Publishing still waits for a person who means to ship. The version in this clone is still `0.0.0`.
+Do not start the Release workflow from a build session. Do not push a `v` tag from one. Publishing still waits for a person who means to ship. The CLI version in this clone is `0.1.0`. The registry copy is still not published. The checklist a person walks first is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md), and the notes for this version are [CHANGELOG.md](CHANGELOG.md). Both say the tag and the registry upload need Matt's explicit yes. A green checklist is not that yes.
 
 ## Attachments
 
@@ -671,14 +686,14 @@ From the terminal, the same preview is `hh so-long --project <dir> --host previe
 - [x] The master context package
 - [x] Grok 4.7 critiques the package, the research addendum, and the build plan in `hh-build-plan/`
 
-**The build** (in the tree, version still 0.0.0)
+**The build** (in the tree; the publishable CLI is 0.1.0, alpha, and the private root stays 0.0.0)
 - [x] **v0.1 Don't Panic**: Grok Build plugin, the interview engine, save and resume, push-to-talk. Browser speech is the free default. Local whisper is used when the browser cannot listen.
 - [x] **v0.2 Babel Fish**: brand kit, voice kit, Imagine logo work, image grading
 - [x] **v0.3 Deep Thought**: PRD, spec files, framework choice, the prompt package
 - [x] **v0.4 Improbability Drive**: the orchestrator, Zaphod the reviewer, Marvin the watchdog, and the Windows and macOS/Linux queue runners
 - [x] **v0.5 Mostly Harmless**: quality gates, the Nutrimatic Test, the jury, the Elevate loop
 - [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. `hh so-long` runs the quality check for this version first, recommends Hostinger, and waits for you to name the host and pass `--yes`. A local preview serves the built pages on this computer and writes a zip, with no account.
-- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm. A local bundle can be packed from `packages/cli`. That tarball is still not published. CI pack-smokes it on Windows, macOS, and Linux, and fails the job when the tarball is over 25 MB. [`.github/workflows/release.yml`](.github/workflows/release.yml) can publish later, only from a hand start that types `publish` or from a `v` tag, and only after CI and the pack smoke. It has not been started from this repo's build sessions, and no version tag has been created for it.
+- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm. A local bundle can be packed from `packages/cli`. That tarball is still not published. CI pack-smokes it on Windows, macOS, and Linux, and fails the job when the tarball is over 25 MB. [`.github/workflows/release.yml`](.github/workflows/release.yml) can publish later, only from a hand start that types `publish` or from a `v` tag, and only after CI and the pack smoke. It has not been started from this repo's build sessions, and no version tag has been created for it. The CLI version prepared for that later publish is `0.1.0`. The checklist is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md). The notes are in [CHANGELOG.md](CHANGELOG.md).
 
 **Later, in a galaxy slightly further away**
 - [ ] Cloud mode, for when your laptop would like a nap
@@ -703,6 +718,7 @@ Good places to start:
 - **Build the local CLI bundle.** From the repo root, `pnpm --filter hitchhikers-guide run build` (the script is [`packages/cli/build.mjs`](packages/cli/build.mjs)). It should leave `packages/cli/dist/main.js` asking for `node` on `PATH`, with no type-stripping flag, and it must not write this repo's absolute path into that file. Then run `node --experimental-strip-types --test packages/cli/test/hh-bin.test.ts`, the same runner on `packages/cli/test/shebang.test.ts` and `packages/cli/test/start.test.ts`, and `pnpm exec tsc -b`. Those checks keep the source bin, the shebang, and `node scripts/start.mjs` honest. Packing with `npm pack` inside `packages/cli` is local only. Do not `npm publish`.
 - **Run the pack smoke once.** [`packages/cli/test/pack-243.test.ts`](packages/cli/test/pack-243.test.ts) packs the CLI, checks the 25 MB cap and the file allowlist, installs the tarball in a temporary folder, and runs `hh --version`, `hh doctor`, and `hh app --no-open` on a free port other than 4175. The command is `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts`. Once is enough. The package test script skips that file, so `pnpm test` does not pack. Open the pull request after it passes. Do not publish from that run.
 - **Check doctor and the release workflow.** [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts) covers Node.js 22, the Grok sign-in lines, and the browser install that waits for `--yes`. [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts) reads [`.github/workflows/release.yml`](.github/workflows/release.yml) and checks that the only triggers are a hand start and a `v` tag, and that publish waits for the pack smoke. Run each file with `node --experimental-strip-types --test <file>`, then `pnpm exec tsc -b`. Do not start the Release workflow, and do not create a tag, as part of that check. Pull requests that fix a wrong sentence in the doctor report, or that keep the release file from publishing on an ordinary push, are welcome.
+- **Read the alpha notes before you publish anything.** [`CHANGELOG.md`](CHANGELOG.md) records `0.1.0`. [`docs/RELEASE-v0.1.md`](docs/RELEASE-v0.1.md) lists the Specs 01, 02, and 03 tests by file, plus the towel sample and the ship-gate fixture. The `v0.1.0` tag and the registry upload need Matt's explicit yes. The checks for that wording are [`packages/qa/test/readme-quickstart.test.ts`](packages/qa/test/readme-quickstart.test.ts), [`packages/qa/test/release-doc.test.ts`](packages/qa/test/release-doc.test.ts), [`packages/qa/test/docs-truth.test.ts`](packages/qa/test/docs-truth.test.ts), and [`packages/cli/test/hh-bin.test.ts`](packages/cli/test/hh-bin.test.ts). Run each with `node --experimental-strip-types --test <file>`, then `pnpm exec tsc -b`. Do not npm publish, and do not create a tag, as part of that check. A pull request that fixes a stale version sentence, or that keeps the checklist from telling someone to upload, is a good first PR.
 - **Try the live check and the Launch card.** [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts) covers the post-check section, including a page that comes back 404. [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts) keeps the launch kit on disk and checks that the desk card names the cost, Hostinger, and the yes button without publishing. [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts) checks that appending the section does not turn the checklist into a deploy. The phone screen is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run the node files with `node --experimental-strip-types --test <file>`, and that one Playwright spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/launch-card-245d.spec.ts`. Leave the rest of the Playwright suite alone unless you mean to run it.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
@@ -715,7 +731,31 @@ House style, in brief: one PR, one job. Follow the spec-first habit (write down 
 Yes. MIT license, no catch, no upsell. The author has been gently advised to start charging for things. He has gently ignored this advice for years.
 
 **Does it work yet?**
-The desk, the six phases, and the queue runners are in this repo. The version is still 0.0.0, pre-alpha, and the package is not on npm. Follow the [roadmap](#roadmap) and the commit history. Both are still moving.
+The desk, the six phases, and the queue runners are in this repo. The CLI version is 0.1.0, alpha, and the package is not on npm yet. Follow the [roadmap](#roadmap), [CHANGELOG.md](CHANGELOG.md), and the commit history. The checklist is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md). All of them are still moving.
+
+**The badge says alpha. Is the package finished?**
+No. Alpha means the six phases, the desk, the gates, and a packable CLI are in this repo at `0.1.0`. It does not mean a 1.0, and it does not mean npm already has the package. The roadmap still has later items. Cloud mode is one of them. You can use the desk from a clone today.
+
+**I ran `npx hitchhikers-guide` and npm could not find the package.**
+That is the honest state until the release is sent. The command is the entry we will publish. The registry does not have `hitchhikers-guide` yet. Clone the repo and run `node scripts/start.mjs`, or follow [Quick start](#quick-start). Publishing waits for Matt's explicit yes. Do not npm publish it to unblock yourself.
+
+**`hh --version` prints 0.1.0, but the root package.json says 0.0.0. Which is right?**
+Both. The root manifest is the private workspace, and it stays `0.0.0`. `hh --version` reads [`packages/cli/package.json`](packages/cli/package.json), which is the publishable package, at `0.1.0`. A packed tarball carries `0.1.0` as well. If a note still says the CLI is `0.0.0`, that note is out of date.
+
+**Where do I see what 0.1.0 includes?**
+[CHANGELOG.md](CHANGELOG.md) is the short list. [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md) is the checklist a person walks before a tag. It names the Specs 01, 02, and 03 test files, the towel sample, and the fixture that reaches the ship gate. It does not publish, and it does not create the tag.
+
+**Can a build session tag v0.1.0 or publish?**
+No. The tag and the registry upload are human steps. Each needs Matt's explicit yes. A green checklist is not that yes. Do not start the Release workflow from a build session, and do not create the tag from one.
+
+**A gate says pass with known issues. Can 0.1.0 still ship?**
+Yes, when nothing is blocked. A blocked check keeps the ship gate closed. Known issues are allowed for this version. The report words are PASS_WITH_KNOWN_ISSUES and BLOCKER. A blocker is never a reason to publish anyway.
+
+**When does the spacing check ask for a fix?**
+When more than 10% of the measured boxes use a margin or padding that is off the project's spacing scale. Under that line, the check does not call the page broken. The check is one of the quality gates. It does not publish anything, and it does not deploy.
+
+**I still have a note that says hitchhikers-guide-0.0.0.tgz.**
+That name was the pack while the CLI version field was `0.0.0`. A pack from this tree is `hitchhikers-guide-0.1.0.tgz`. `hh --version` after you install it prints `0.1.0`. The pack still does not publish. Do not run `npm publish` on that file.
 
 **Do I need to know how to code?**
 No. Simple questions go in, very technical websites come out. If you *do* code, everything is plain files you can read, edit and argue with.
@@ -820,7 +860,7 @@ No. `node packages/cli/build.mjs` and `npm pack` stay on this computer. They do 
 No. The packed bin is JavaScript. Loads that use a file URL prefer the compiled `.js` under `dist/shipped` when that file exists. TypeScript that a new site copies, and the two engine files the spacing check reads as text (`packages/engine/src/brand/tokens.ts` and `packages/engine/src/spec/design-outputs.ts`), stay in the tree as text. They are not the program Node executes. `hh --version`, `bin`, `main`, and `exports` in the packed manifest all point at JavaScript. The pack smoke fails if any of those entry points ends in `.ts`.
 
 **What does `hh --version` print?**
-The `version` field of the `package.json` next to the program. In this clone, and in a tarball packed from it today, that is `0.0.0`, then a newline. It does not print a leading `v`. It does not start the desk. If you pass another flag or a directory after it, you get `Usage: hh --version` and exit 2.
+The `version` field of the `package.json` next to the program. In this clone, and in a tarball packed from it today, that is `0.1.0`, then a newline. It does not print a leading `v`. It does not start the desk. If you pass another flag or a directory after it, you get `Usage: hh --version` and exit 2. The root `package.json` is a different file, still `0.0.0`, and this command does not read it.
 
 **Why is the tarball capped at 25 MB?**
 So a packed Guide stays something you can download without dragging the research archive, the prompt plan, and the screenshot folders with it. The cap is the compressed `.tgz`, `25 * 1024 * 1024` bytes. The dependencies npm installs afterwards are separate. If a change pushes the tarball over the cap, [`packages/cli/test/pack-243.test.ts`](packages/cli/test/pack-243.test.ts) fails and names the byte count.
@@ -879,7 +919,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`. The pack smoke is also separate. `packages/cli` skips `pack-243.test.ts` inside its test script, so `pnpm test` does not run `npm pack`. Run that one file with `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts` when you want the tarball check. CI runs it as `pack-smoke` on Windows, macOS, and Linux. See [docs/ci.md](docs/ci.md). `hh doctor` is covered by [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts), including the browser install that runs only with `--yes`. The release file is covered by [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts). That test checks the triggers and that publish waits for the pack smoke. Neither test publishes, and neither creates a tag.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`. The pack smoke is also separate. `packages/cli` skips `pack-243.test.ts` inside its test script, so `pnpm test` does not run `npm pack`. Run that one file with `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts` when you want the tarball check. CI runs it as `pack-smoke` on Windows, macOS, and Linux. See [docs/ci.md](docs/ci.md). `hh doctor` is covered by [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts), including the browser install that runs only with `--yes`. The release file is covered by [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts). That test checks the triggers and that publish waits for the pack smoke. Neither test publishes, and neither creates a tag. The alpha version and the v0.1 checklist are covered by [`packages/qa/test/readme-quickstart.test.ts`](packages/qa/test/readme-quickstart.test.ts), [`packages/qa/test/release-doc.test.ts`](packages/qa/test/release-doc.test.ts), [`packages/qa/test/docs-truth.test.ts`](packages/qa/test/docs-truth.test.ts), and [`packages/cli/test/hh-bin.test.ts`](packages/cli/test/hh-bin.test.ts). `hh --version` in this clone prints `0.1.0` from [`packages/cli/package.json`](packages/cli/package.json). Those tests do not publish and do not create a tag.
 
 ---
 

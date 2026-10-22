@@ -55,6 +55,49 @@ test("CONTEXT-PACKAGE defers GSAP to D-001 and keeps no live fallback advice", (
   }
 });
 
+/** The 242f hero. Status and version text may change. This picture may not. */
+const HERO_BLOCK = `<picture>
+  <source srcset="docs/assets/hero.png" media="(prefers-reduced-motion: reduce)">
+  <img src="docs/assets/hero.gif" width="100%" alt="DON'T PANIC &#8212; The Hitchhiker's Guide to Web Design">
+</picture>`;
+
+function readVersion(file: string): string {
+  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+  if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) {
+    throw new Error(`${file} has no version`);
+  }
+  const version = parsed.version;
+  if (typeof version !== "string") throw new Error(`${file} version is not a string`);
+  return version;
+}
+
+test("the CLI version, the changelog, and the README agree on 0.1.0 alpha", () => {
+  const cli = readVersion(path.join(repoRoot, "packages", "cli", "package.json"));
+  const rootVersion = readVersion(path.join(repoRoot, "package.json"));
+  assert.equal(cli, "0.1.0");
+  assert.equal(rootVersion, "0.0.0");
+
+  const changelog = readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8");
+  assert.equal(changelog.includes("!"), false);
+  assert.equal(changelog.includes("\u2014"), false);
+  assert.ok(changelog.includes(`## ${cli}`), "changelog heading drifted from the CLI version");
+  assert.match(changelog, /Do not npm publish/);
+  assert.match(changelog, /Matt's explicit yes/);
+  assert.match(changelog, /not on npm/);
+  assert.match(changelog, /242f hero/);
+
+  const readme = readFileSync(path.join(repoRoot, "README.md"), "utf8");
+  assert.ok(readme.includes(HERO_BLOCK), "242f hero block changed");
+  assert.match(readme, /Status: alpha/);
+  assert.equal(readme.includes("pre-alpha"), false);
+  assert.match(readme, /docs\/RELEASE-v0\.1\.md/);
+  assert.match(readme, /CHANGELOG\.md/);
+  const tryIt = section(readme, "## Try it");
+  assert.match(tryIt, /npx hitchhikers-guide/);
+  assert.match(tryIt, /not on the public registry yet/);
+  assert.match(tryIt, new RegExp(cli.replaceAll(".", "\\.")));
+});
+
 test("the once-over report does not leave an applied fix open", () => {
   const report = readFileSync(path.join(repoRoot, "hh-build-plan", "once-over", "REPORT.md"), "utf8");
   const fixes = section(report, "## Fix prompts");
