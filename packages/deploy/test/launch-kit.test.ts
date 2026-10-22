@@ -130,3 +130,36 @@ test("the module exports renderLaunchKit and does not post", () => {
   assert.equal(/\bfunction\s+tweet\b/.test(source), false);
   assert.equal(/\btweet\s*\(/.test(source), false);
 });
+
+test("the desk launch card names the cost, the host, and a yes, and does not publish", () => {
+  const approval = readFileSync(fileURLToPath(new URL("../../app/src/approval.ts", import.meta.url)), "utf8");
+  const routes = readFileSync(fileURLToPath(new URL("../../app/src/server/routes.ts", import.meta.url)), "utf8");
+  const start = approval.indexOf("const LAUNCH_STYLE");
+  assert.ok(start > 0);
+  const card = approval.slice(start, approval.indexOf("function readUncovered", start));
+  assert.match(card, /data-launch-card/);
+  assert.match(card, /data-launch-happens/);
+  assert.match(card, /data-launch-cost/);
+  assert.match(card, /data-launch-host/);
+  assert.match(card, /data-launch-yes/);
+  assert.match(card, /Hostinger is the suggested host\./);
+  assert.match(card, /none/);
+  assert.match(card, /host plan/);
+  assert.match(card, /min-width:0/);
+  assert.match(card, /max-width:100%/);
+  assert.match(card, /min-height:44px/);
+  assert.equal(card.includes("!"), false);
+  assert.equal(card.includes("\u2014"), false);
+  assert.equal(card.includes("fetch("), false);
+  assert.equal(card.includes("child_process"), false);
+  assert.equal(card.includes("deploy("), false);
+  assert.match(routes, /renderLaunchCard\(/);
+  assert.match(routes, /action === "launch"/);
+  assert.match(routes, /launch-yes\.json/);
+  const handlerStart = routes.indexOf('if (action === "launch")');
+  assert.ok(handlerStart > 0);
+  const handler = routes.slice(handlerStart, routes.indexOf('if (action === "approve")', handlerStart));
+  assert.equal(handler.includes("fetch("), false);
+  assert.equal(handler.includes("deploy("), false);
+  assert.equal(handler.includes("HH_LIVE"), false);
+});

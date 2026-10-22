@@ -45,6 +45,8 @@ The CLI prints the deploy URL. A non-zero exit does not write a deploy record.
 
 `postDeployChecks` judges a mobile Lighthouse run with the phone floor from prompt 122: performance, accessibility, best practices, and SEO all at least 90. The injected runner owns the mobile preset and the median of three runs. Every route is requested. A 404 is reported with that route. The deploy record is left in place.
 
+`postDeployChecks` itself does not write that record. `recordLiveCheck` runs the same injected checkers and appends a `## Post-check` section to `.hitchhiker/deploy/DEPLOYS.md`. The earlier rows stay. A missing page is listed as `Page /that-path was not found (404).` The sentences are plain: phone speed, phone reading, phone care, and phone search, each meeting 90, plus the secure address and the share card. `readLastGoodDeploy` returns the newest completed row whose section did not fail. `hh so-long` uses that row when you confirm a roll back. A declined yes still writes nothing, and a missing checker fetches nothing.
+
 The contact form is posted only after its own yes, and only to the inbox address already on the page (`data-inbox`, `hh-inbox`, or a mailto link). An analytics test event is sent only after its own yes, and only when the page includes Plausible or Umami. The report asks you to confirm the event in your dashboard.
 
 HTTPS and the `strict-transport-security` header are checked. An `http` URL is expected to redirect to `https`. Open Graph tags are read and drawn as a text preview card.

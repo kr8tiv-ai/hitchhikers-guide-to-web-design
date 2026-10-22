@@ -12,6 +12,8 @@
  * Bing Webmaster Tools and is not submitted.
  */
 
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { PHONE_CATEGORY_FLOOR, postCheck, type PostCheckResult } from "./post-check.ts";
 
 const FLOOR = PHONE_CATEGORY_FLOOR;
@@ -618,4 +620,221 @@ export function judgeLaunchChecklist(
     rows,
     reasons,
   };
+}
+
+/**
+ * Plain record of a live check.
+ *
+ * The four phone scores, every route, the secure address, and the share
+ * card are the pass. A 404 names that route. This text is what a person
+ * reads. It does not mention the tools that produced the numbers.
+ */
+export interface PostCheckSummary {
+  ok: boolean;
+  lines: string[];
+}
+
+export interface LiveCheckRecord {
+  ok: boolean;
+  lines: string[];
+  closer: string;
+}
+
+export interface GoodDeploy {
+  target: "preview" | "hostinger" | "vercel" | "netlify" | "cloudflare";
+  shape: "static" | "node";
+  url: string;
+}
+
+function isGoodTarget(value: string): value is GoodDeploy["target"] {
+  return value === "preview" || value === "hostinger" || value === "vercel" || value === "netlify" || value === "cloudflare";
+}
+
+const PASSED = "The live check passed.";
+const FAILED = "The live check failed.";
+const ROW = /^- \S+ — (preview|hostinger|vercel|netlify|cloudflare) — (static|node) — (\S+) — (\S+)\s*$/;
+
+const PHONE_ROWS = [
+  ["performance", "Phone speed"],
+  ["accessibility", "Phone reading"],
+  ["bestPractices", "Phone care"],
+  ["seo", "Phone search"],
+] as const;
+
+function calm(value: string): string {
+  return value.replace(/!/g, ".").replace(/\u2014/g, ",").replace(/\s+/g, " ").trim();
+}
+
+function formatScore(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function joinAnd(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "its details";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  const last = items[items.length - 1] ?? "its details";
+  return `${items.slice(0, -1).join(", ")}, and ${last}`;
+}
+
+function phoneLines(report: PostDeployReport): string[] {
+  const scores = report.lighthouse.scores;
+  if (scores === null) return ["The phone check did not finish."];
+  return PHONE_ROWS.map(([key, label]) => {
+    const score = scores[key];
+    const shown = formatScore(score);
+    if (score < PHONE_CATEGORY_FLOOR) return `${label} is ${shown}, below ${PHONE_CATEGORY_FLOOR}.`;
+    return `${label} is ${shown}, which meets ${PHONE_CATEGORY_FLOOR}.`;
+  });
+}
+
+function routeLine(route: RouteCheck): string {
+  const label = calm(route.route) === "" ? "/" : calm(route.route);
+  if (route.status === 404) return `Page ${label} was not found (404).`;
+  if (!route.ok || route.status !== 200) return `Page ${label} answered with status ${route.status}.`;
+  return `Page ${label} answered.`;
+}
+
+function httpsLine(report: PostDeployReport): string {
+  if (report.https.ok) return "The address is secure, and browsers are asked to stay on https.";
+  if (report.https.reason.includes("not https")) return "The address is not a secure https address.";
+  return "The address is secure, and it is missing the setting that keeps browsers on https.";
+}
+
+function ogLine(report: PostDeployReport): string {
+  if (report.og.ok) return "The share card has a title, a description, and an image.";
+  const missing: string[] = [];
+  if (report.og.title.trim() === "") missing.push("a title");
+  if (report.og.description.trim() === "") missing.push("a description");
+  if (report.og.image.trim() === "") missing.push("an image");
+  return `The share card is missing ${joinAnd(missing)}.`;
+}
+
+function homeLine(result: PostCheckResult): string | null {
+  if (result.ok) return null;
+  if (result.skipped) return "The home page check waited, because the publish did not finish.";
+  if (result.reason === "site name missing") return "The home page is missing the site name.";
+  if (result.reason === "title missing") return "The home page is missing a title.";
+  if (result.reason === "too many redirects") return "The home page was redirected too many times.";
+  if (result.reason.startsWith("status ")) return `The home page answered with status ${result.reason.slice("status ".length)}.`;
+  return "The home page check did not pass.";
+}
+
+/** Sentences for the phone check, the routes, the secure address, and the share card. */
+export function summarizePostCheck(report: PostDeployReport): PostCheckSummary {
+  const lines = [...phoneLines(report), ...report.routes.map(routeLine), httpsLine(report), ogLine(report)];
+  const home = homeLine(report.homepage);
+  if (home !== null) lines.push(home);
+  if (report.redirects.some((row) => !row.ok)) {
+    lines.push("The plain address did not move to the secure one.");
+  }
+  const phoneOk =
+    report.lighthouse.status === "PASS" &&
+    report.lighthouse.scores !== null &&
+    report.lighthouse.scores.performance >= PHONE_CATEGORY_FLOOR &&
+    report.lighthouse.scores.accessibility >= PHONE_CATEGORY_FLOOR &&
+    report.lighthouse.scores.bestPractices >= PHONE_CATEGORY_FLOOR &&
+    report.lighthouse.scores.seo >= PHONE_CATEGORY_FLOOR;
+  const routesOk = report.routes.every((route) => route.ok && route.status === 200);
+  const homeOk = report.homepage.skipped === false && report.homepage.ok === true;
+  const redirectOk = report.redirects.every((row) => row.ok);
+  const ok = phoneOk && routesOk && report.https.ok === true && report.og.ok === true && homeOk && redirectOk;
+  const calmLines = lines.map(calm).filter((line) => line.length > 0);
+  if (calmLines.length === 0) calmLines.push("The live check did not report a result.");
+  return { ok, lines: calmLines };
+}
+
+/** Markdown appended under a deploy row. A 404 route is named. The earlier rows stay. */
+export function renderPostCheckSection(report: PostDeployReport): string {
+  const summary = summarizePostCheck(report);
+  const bullets = summary.lines.map((line) => `- ${line}`).join("\n");
+  const closer = summary.ok ? PASSED : FAILED;
+  return `## Post-check\n\n${bullets}\n\n${closer}\n`;
+}
+
+function isEnoent(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "ENOENT";
+}
+
+async function appendDeployText(projectDir: string, section: string): Promise<string> {
+  const dir = path.join(projectDir, ".hitchhiker", "deploy");
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, "DEPLOYS.md");
+  let previous = "";
+  try {
+    previous = await readFile(file, "utf8");
+  } catch (error) {
+    if (!isEnoent(error)) throw error;
+  }
+  const header = "# Deploys\n\nA row is written only after a deploy runs with an explicit yes.\n\n";
+  const body = section.trim();
+  const next = previous.trim() === "" ? `${header}${body}\n` : `${previous.trimEnd()}\n${body}\n`;
+  await writeFile(file, next, "utf8");
+  return file;
+}
+
+/**
+ * Append a post-check section. The deploy rows already in the file stay.
+ * This does not call a host and does not fetch.
+ */
+export async function appendPostCheckSection(projectDir: string, report: PostDeployReport): Promise<string> {
+  return appendDeployText(projectDir, renderPostCheckSection(report));
+}
+
+/** Append one plain sentence when the live check did not run. */
+export async function appendPostCheckNote(projectDir: string, note: string): Promise<string> {
+  const line = calm(note);
+  if (line === "") throw new Error("post-check note is empty");
+  return appendDeployText(projectDir, `## Post-check\n\n${line}\n`);
+}
+
+/**
+ * Run the injected checkers and append the section.
+ * The caller supplies the runners. This function does not open its own.
+ */
+export async function recordLiveCheck(
+  projectDir: string,
+  url: string,
+  routes: readonly string[],
+  deps: PostDeployDeps,
+): Promise<LiveCheckRecord> {
+  const report = await postDeployChecks(url, routes, deps);
+  const summary = summarizePostCheck(report);
+  await appendPostCheckSection(projectDir, report);
+  return {
+    ok: summary.ok,
+    lines: summary.lines,
+    closer: summary.ok ? PASSED : FAILED,
+  };
+}
+
+/**
+ * The newest completed row whose post-check did not fail.
+ * A row with no post-check section still counts. A failed section does not.
+ */
+export function readLastGoodDeploy(markdown: string): GoodDeploy | null {
+  const lines = markdown.split(/\r?\n/);
+  const starts: number[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (ROW.test(lines[index] ?? "")) starts.push(index);
+  }
+  for (let index = starts.length - 1; index >= 0; index -= 1) {
+    const start = starts[index];
+    if (start === undefined) continue;
+    const end = starts[index + 1] ?? lines.length;
+    const match = ROW.exec(lines[start] ?? "");
+    if (match === null) continue;
+    const target = match[1];
+    const shape = match[2];
+    const state = match[3];
+    const url = match[4];
+    if (target === undefined || shape === undefined || state === undefined || url === undefined) continue;
+    if (state !== "completed") continue;
+    if (shape !== "static" && shape !== "node") continue;
+    const chunk = lines.slice(start, end).join("\n");
+    if (chunk.includes(FAILED)) continue;
+    if (!isGoodTarget(target)) continue;
+    return { target, shape, url };
+  }
+  return null;
 }

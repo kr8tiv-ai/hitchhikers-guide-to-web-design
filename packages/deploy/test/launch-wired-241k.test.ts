@@ -10,6 +10,7 @@ import path from "node:path";
 import { test } from "node:test";
 import type { SpawnLike } from "@hitchhiker/engine";
 import { deploy } from "../src/cli-run.ts";
+import { appendPostCheckSection, type PostDeployReport } from "../src/post-deploy-live.ts";
 
 function stack(): string {
   return "# STACK-DECISION\n\n## Pick\n\nvite-react\n\n## Why\n\nThe record names the pick.\n";
@@ -69,6 +70,50 @@ test("a declined yes writes no checklist", async () => {
     assert.deepEqual(outcome, { declined: true });
     assert.equal(spawned, 0);
     await assert.rejects(readFile(path.join(dir, ".hitchhiker", "deploy", "launch-checklist.json"), "utf8"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a post-check section lists a 404 and does not deploy", async () => {
+  const dir = await makeProject();
+  try {
+    const outcome = await deploy("vercel", dir, {
+      yes: () => Promise.resolve(true),
+      spawnImpl: spawnOk(),
+      keychain: { getPassword: () => Promise.resolve(null) },
+    });
+    assert.equal("url" in outcome && outcome.url, "https://towels.example");
+    const checklistPath = path.join(dir, ".hitchhiker", "deploy", "launch-checklist.json");
+    const beforeChecklist = await readFile(checklistPath, "utf8");
+    const report: PostDeployReport = {
+      url: "https://towels.example",
+      lighthouse: {
+        status: "PASS",
+        scores: { performance: 95, accessibility: 96, bestPractices: 97, seo: 98 },
+        reasons: [],
+      },
+      routes: [{ route: "/missing", status: 404, ok: false }],
+      homepage: { skipped: false, ok: true, reason: "ok" },
+      form: { declined: false, ok: false, reason: "No contact form was found. Nothing was submitted." },
+      analytics: { declined: false, ok: false, confirm: "", reason: "No Plausible or Umami snippet was found. No event was sent." },
+      og: { ok: true, title: "Towels", description: "Soft", image: "https://towels.example/og.png", preview: "card" },
+      https: { ok: true, hsts: true, reason: "HTTPS and HSTS are present." },
+      redirects: [],
+      sitemap: { submitted: false, instructions: "Keep it." },
+    };
+    const deploys = path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md");
+    const before = await readFile(deploys, "utf8");
+    await appendPostCheckSection(dir, report);
+    const after = await readFile(deploys, "utf8");
+    assert.equal(after.startsWith(before.trimEnd()), true);
+    assert.match(after, /https:\/\/towels\.example/);
+    assert.match(after, /## Post-check/);
+    assert.match(after, /Page \/missing was not found \(404\)\./);
+    assert.match(after, /The live check failed\./);
+    const checklist = JSON.parse(await readFile(checklistPath, "utf8")) as { deployed: boolean };
+    assert.equal(checklist.deployed, false);
+    assert.equal(await readFile(checklistPath, "utf8"), beforeChecklist);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

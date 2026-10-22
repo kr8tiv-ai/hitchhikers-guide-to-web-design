@@ -239,6 +239,49 @@ function isGate(value: string): value is ApprovalGate {
   return (GATES as readonly string[]).includes(value);
 }
 
+const LAUNCH_STYLE =
+  "<style>.hh-launch{min-width:0;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}.hh-launch p,.hh-launch h2{min-width:0;max-width:100%;overflow-wrap:anywhere}.hh-launch form{display:flex;flex-wrap:wrap;gap:var(--space-2);min-width:0;max-width:100%}.hh-launch button{min-height:44px;max-width:100%;white-space:normal}</style>";
+
+export interface LaunchCardInput {
+  token: string;
+  /** True after the desk has recorded a yes. The card still does not publish. */
+  confirmed?: boolean;
+}
+
+/**
+ * Desk Launch card. It says what a launch does, what it costs, and which
+ * host is suggested. The yes button records a yes. It does not publish.
+ */
+export function renderLaunchCard(input: LaunchCardInput): string {
+  if (typeof input.token === "string") {
+    return renderLaunchCardBody(input.token, input.confirmed === true);
+  }
+  throw new ApprovalError("Launch token must be a string.");
+}
+
+function renderLaunchCardBody(rawToken: string, confirmed: boolean): string {
+  const token = escapeHtml(rawToken);
+  const state = confirmed
+    ? `<p data-launch-state>Yes recorded. Nothing has been sent.</p>`
+    : `<p data-launch-state>Nothing is sent until you press yes.</p>`;
+  const button = confirmed
+    ? `<button class="hh-btn hh-btn--primary" type="button" data-launch-yes disabled aria-pressed="true">Yes recorded</button>`
+    : `<button class="hh-btn hh-btn--primary" type="submit" data-launch-yes>Yes, record the launch</button>`;
+  return `<section class="hh-launch" data-launch-card aria-labelledby="launch-title">
+      <h2 class="hh-title" id="launch-title">Launch</h2>
+      <p data-launch-happens>The quality check runs first. If it is clear, a preview can open on this computer, or the site can be published to the host you confirm. A failed live check is explained in plain language, and the last working publish can go back up after another yes.</p>
+      <p data-launch-cost>Cost for a preview on this computer: none. Cost for a host: your host plan.</p>
+      <p data-launch-host>Hostinger is the suggested host.</p>
+      ${state}
+      <form method="post" action="/approve" data-launch-form>
+        <input type="hidden" name="csrf" value="${token}" />
+        <input type="hidden" name="action" value="launch" />
+        ${button}
+      </form>
+    </section>
+    ${LAUNCH_STYLE}`;
+}
+
 function readUncovered(value: readonly CoverageGap[] | undefined): CoverageGap[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new ApprovalError("Uncovered requirements must be a list.");

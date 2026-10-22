@@ -17,6 +17,16 @@ export { renderLaunchKit } from "./launch-kit.ts";
 export type { LaunchKitInput } from "./launch-kit.ts";
 export { PHONE_CATEGORY_FLOOR, postCheck } from "./post-check.ts";
 export type { PostCheckInput, PostCheckPage, PostCheckResult } from "./post-check.ts";
+export {
+  appendPostCheckNote,
+  appendPostCheckSection,
+  postDeployChecks,
+  readLastGoodDeploy,
+  recordLiveCheck,
+  renderPostCheckSection,
+  summarizePostCheck,
+} from "./post-deploy-live.ts";
+export type { GoodDeploy, LiveCheckRecord, PostCheckSummary, PostDeployReport } from "./post-deploy-live.ts";
 export { closePreview, deploy, recommendHost } from "./dispatch.ts";
 export type {
   DeployHost,

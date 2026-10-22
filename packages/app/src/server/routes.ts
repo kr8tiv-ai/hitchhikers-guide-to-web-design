@@ -152,6 +152,7 @@ import { applySplash, deferSplashModuleScripts, resolveSplashLoop, type SplashLo
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
 import { renderElevatePickCards, type ElevatePickModel } from "../brand/approve-cards.ts";
+import { renderLaunchCard } from "../approval.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
 import { approveMain, brandBriefMain, dashboardBriefNote, type ApproveStage } from "./brief-page.ts";
@@ -1888,6 +1889,17 @@ async function handleApproveForm(
     confirmFallback = params.get("confirmFallback") === "yes";
   }
   try {
+    if (action === "launch") {
+      const file = path.join(projectDir, ".hitchhiker", "deploy", "launch-yes.json");
+      await mkdir(path.dirname(file), { recursive: true });
+      await replaceViaTemp(
+        file,
+        `${JSON.stringify({ yes: true, host: "hostinger", cost: "host plan", previewCost: "none" }, null, 2)}\n`,
+      );
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
     if (action === "approve") {
       const desk = readBriefDesk(projectDir);
       if (desk.fallback && !confirmFallback) {
@@ -2385,7 +2397,7 @@ async function handleGet(
     }
     const html =
       brief.status === "idle" && !brief.buildStarted
-        ? renderApprove(token, notice, view().question?.id ?? null)
+        ? renderApprove(token, notice, view().question?.id ?? null, projectDir)
         : renderApproveBrief(token, notice, brief, "", projectDir);
     await deliverHtml(req, res, 200, html, projectDir, token, false);
     return;
@@ -3744,7 +3756,8 @@ function renderApproveBrief(
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir), stage, stageHtml),
+    main: `${approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir), stage, stageHtml)}
+        ${launchCard(token, projectDir)}`,
     script: "/client/brief-change.js",
   });
   if (html.includes("data-pick-direction") && !html.includes("/client/direction.js")) {
@@ -3753,13 +3766,37 @@ function renderApproveBrief(
   return html;
 }
 
-function renderApprove(token: string, notice: string | null = null, questionId: string | null = null): string {
+function launchYesPath(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "deploy", "launch-yes.json");
+}
+
+function readLaunchYes(projectDir: string): boolean {
+  if (projectDir.trim() === "" || !existsSync(launchYesPath(projectDir))) return false;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(launchYesPath(projectDir), "utf8"));
+    return isRecord(parsed) && parsed.yes === true;
+  } catch {
+    return false;
+  }
+}
+
+function launchCard(token: string, projectDir: string): string {
+  if (projectDir.trim() === "") return "";
+  return renderLaunchCard({ token, confirmed: readLaunchYes(projectDir) });
+}
+
+function renderApprove(
+  token: string,
+  notice: string | null = null,
+  questionId: string | null = null,
+  projectDir = "",
+): string {
   const href = escapeHtml(openQuestionHref(questionId));
   return renderPanel({
     notice,
     token,
     title: "Approvals",
-    description: "Nothing is waiting for a yes.",
+    description: "Nothing is waiting for a yes. Launch stays on this desk until you record a yes.",
     current: "/approve",
     kicker: "Approvals",
     status: "Nothing is waiting for a yes.",
@@ -3767,7 +3804,8 @@ function renderApprove(token: string, notice: string | null = null, questionId: 
         <h1 class="hh-empty__title">Nothing is waiting for a yes</h1>
         <p>A plate shows up here when a brief or a prompt is ready for a decision.</p>
         <p class="hh-empty__next"><a class="hh-btn hh-btn--primary" href="${href}" data-tip="Opens the question that is still waiting.">${APPROVE_EMPTY_ACTION}</a></p>
-      </div>`,
+      </div>
+      ${projectDir === "" ? "" : launchCard(token, projectDir)}`,
   });
 }
 

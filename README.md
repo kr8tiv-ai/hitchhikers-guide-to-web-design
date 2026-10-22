@@ -153,6 +153,8 @@ Before any of that, you can look at the built pages on this computer. The previe
 
 The command for that moment is `hh so-long --project <dir>`. It reads the quality check for the version you have now. If that check is missing, belongs to a different version, or is blocked, it stops and tells you why, and it does not call a host. When the check is clear, it recommends Hostinger and also offers to keep a preview on this computer. Nothing is published until you name the host and pass `--yes`. The walkthrough is in [Publish with hh so-long](#publish-with-hh-so-long).
 
+After a publish that actually runs, the same command can check the live address and write the result under the deploy row. A preview on this computer costs nothing. Publishing to a host uses that host's plan. The Approvals page on the desk has a Launch card that says this before you record a yes. Recording the yes does not publish by itself.
+
 ### The crew
 
 | Name | Job | Personality |
@@ -399,7 +401,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh next` | `hh next --status` prints the phase, open gates, and the next step. It does not change the project. |
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. |
-| `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. |
+| `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. A connected checker then writes a post-check section, and `--rollback --yes` can send the last working publish again. |
 
 ## Attachments
 
@@ -444,7 +446,7 @@ A local preview is already in the deploy package, and `hh so-long --host preview
 This is the moment the site can leave your computer. The command is deliberate on purpose. It will not guess the host, and it will not treat silence as a yes.
 
 ```text
-hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes]
+hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes] [--rollback]
 ```
 
 `<dir>` is the site folder, the same one you passed to `hh app`. The quality check for the current git version runs before anything else. That check is the file `.hitchhiker/qa/GATES.json`. It has to be the check for this version. A missing file, a file saved for an older commit, or a blocked check stops the command. A fix that has not finished its repair rounds stops too. A pass with known issues may launch for this version, and a blocked check never does. You get the reason in ordinary language. No host is called, no preview opens, and no deploy record is written.
@@ -465,7 +467,19 @@ Naming a host without `--yes` shows the plan and writes nothing. The pages are n
 
 A publish that runs writes a row in `.hitchhiker/deploy/DEPLOYS.md`. A declined yes does not. The command does not read `HH_LIVE`, does not call a host unless a connected client was handed to it, and does not take the desk's port.
 
-From a program, the same steps are `shipGate` in `@hitchhiker/orchestrator`, then `recommendHost` and `deploy` in `@hitchhiker/deploy`. The `hh` command loads those modules by file URL, because the published CLI package depends only on `@hitchhiker/engine`. Tests pass fake clients. A real Hostinger, Vercel, Netlify, or Cloudflare call stays out of `hh so-long` until a client is connected on purpose.
+When a checker is connected, the command then looks at the address that publish returned. Four phone scores have to meet 90: speed, reading, care, and search. Every page you handed it is requested. The address has to be secure https, and it has to ask browsers to stay there. The share card needs a title, a description, and an image. The sentences are appended as a `## Post-check` section under the deploy row. A page that is not there is listed with its path and 404, for example `Page /missing was not found (404).` The earlier row stays. If no checker is connected, nothing is fetched, and both the screen and the record say the live check did not run.
+
+A failed check is never silent. You get the sentences in ordinary language, then an offer to put the last working publish back. The last working publish is the newest completed row in `DEPLOYS.md` whose post-check did not fail. A row with no post-check section still counts. Saying yes sends that host the pages that are on disk now, through the same dispatcher, and writes another row marked as a rollback. Saying no leaves it where it is and sends nothing else. The separate command is:
+
+```text
+hh so-long --project <dir> --rollback --yes
+```
+
+`--rollback` does not take a host. It does not rebuild the site. Without `--yes` it only explains the offer and writes nothing. If there is no earlier completed publish, it says so and calls no host. A blocked quality check still stops a rollback before any host is called.
+
+The desk says the same plan before you confirm. Open Approvals (`/approve`). The Launch card tells you what will happen, the cost, and the host. A preview on this computer costs none. A host costs your host plan. Hostinger is the suggested host. The button records a yes in `.hitchhiker/deploy/launch-yes.json`. It does not build, publish, or call a host. The card wraps on a phone so the button stays on the screen.
+
+From a program, the same steps are `shipGate` in `@hitchhiker/orchestrator`, then `recommendHost` and `deploy` in `@hitchhiker/deploy`. The `hh` command loads those modules by file URL, because the published CLI package depends only on `@hitchhiker/engine`. Tests pass fake clients. A real Hostinger, Vercel, Netlify, or Cloudflare call stays out of `hh so-long` until a client is connected on purpose. `recordLiveCheck` in `@hitchhiker/deploy` runs the injected phone runner and page fetcher, then appends the post-check section. Pass those fakes in. Do not point them at a live host from a test.
 
 ---
 
@@ -560,6 +574,7 @@ Good places to start:
 - **Port your favorite motion recipe**, with a mobile version and a reduced-motion version attached.
 - **Try the local preview.** The page server and the zip live in [`packages/deploy/src/preview.ts`](packages/deploy/src/preview.ts). The tests in [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) cover a real page, a missing front page, a folder outside the project, and an address that tries to climb out of the pages. Run that file, then open a pull request with one job in it.
 - **Try `hh so-long`.** The command is [`packages/cli/src/commands/so-long.ts`](packages/cli/src/commands/so-long.ts). [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts) covers a blocked check, a check for a different version, a declined yes, the local preview, and the Hostinger question you get when you leave the host off. Run that file before you open the pull request. Do not point it at a live host.
+- **Try the live check and the Launch card.** [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts) covers the post-check section, including a page that comes back 404. [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts) keeps the launch kit on disk and checks that the desk card names the cost, Hostinger, and the yes button without publishing. [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts) checks that appending the section does not turn the checklist into a deploy. The phone screen is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run the node files with `node --experimental-strip-types --test <file>`, and that one Playwright spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/launch-card-245d.spec.ts`. Leave the rest of the Playwright suite alone unless you mean to run it.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
 
@@ -621,6 +636,24 @@ No. A blocked check keeps launch closed. A pass with known issues can still publ
 **I said no. Did it upload anything or leave a zip?**
 No. Without `--yes`, the command does not build the site, does not open a preview, does not write `.hitchhiker/deploy/preview.zip`, and does not write `.hitchhiker/deploy/DEPLOYS.md`. The same is true when the quality check fails, even if you already typed `--yes`.
 
+**A page was missing after publish. Where do I see that?**
+In the command output, and under `## Post-check` in `.hitchhiker/deploy/DEPLOYS.md`. The missing path is named, with 404. The deploy row above that section stays. The command also says the last working publish can go back up. Nothing else is sent until you confirm.
+
+**What does a roll back actually send?**
+The newest completed row in `DEPLOYS.md` whose post-check did not fail. The command publishes that host again with the pages on disk, after `--rollback --yes` or after you accept the offer from a failed check. It does not guess a host, and it does not rebuild. If every completed row failed its check, or there is no row yet, it says there is no earlier publish to put back and calls no host.
+
+**I have no checker connected. Did it call the live site?**
+No. The record says the live check did not run, because no checker was connected, and nothing was fetched. A queued or failed publish says the check waited. An address that never came back says so too. None of those are silent.
+
+**The phone scores were under 90. Is that hidden?**
+No. Each of the four is named: phone speed, phone reading, phone care, and phone search. A score under 90 is a failed check, in the same plain sentence, and the roll-back offer follows. A score of 90 meets the line.
+
+**Does the yes on the Launch card publish the site?**
+No. Approvals shows what will happen, the cost (none for a preview on this computer, your host plan for a host), and that Hostinger is the suggested host. The button writes `.hitchhiker/deploy/launch-yes.json` and the page says nothing has been sent. Publishing is still `hh so-long` with a host and `--yes`.
+
+**The Launch card is too wide on my phone.**
+The card wraps. The button stays at least 44px tall and inside the screen. If a control runs past the edge of a 375px-wide window, that is a bug in the card, not a reason to pinch-zoom the desk.
+
 **The preview says the pages are not built yet. What now?**
 The preview serves the folder the stack record already named: `dist` for Astro and Vite, `out` when a Next.js record says static export, and `build` when a SvelteKit record names finished files. If that folder is missing, or it has no front page named `index.html`, nothing is opened and no zip is written. Build the site first, then ask again. This step does not install packages and does not run the build for you.
 
@@ -648,7 +681,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). Run one file with `node --experimental-strip-types --test <file>`.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host.
 
 ---
 
