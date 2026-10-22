@@ -15,6 +15,7 @@ import {
   repairCursor,
   repairDecisions,
 } from "@hitchhiker/engine";
+import { enterCliFlow } from "./flow-entry.ts";
 
 export interface CommandResult {
   exitCode: number;
@@ -63,6 +64,8 @@ export async function runBuildCommand(argv: readonly string[], cwd: string): Pro
 }
 
 async function startBuild(projectDir: string): Promise<CommandResult> {
+  const step = await enterCliFlow(projectDir, "build");
+  if (!step.ok) return { exitCode: 1, stdout: `${step.reason}\n` };
   if (!hasProjectBuildRunner(projectDir) && getBuildRunner() === null) installLiveBuildRunner();
   const outcome = await continueSiteBuild(projectDir);
   if (outcome === "idle" || outcome === "rejected") return { exitCode: 1, stdout: "No site build is queued.\n" };

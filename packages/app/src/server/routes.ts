@@ -143,6 +143,7 @@ import {
   type InterviewMode,
 } from "./card.ts";
 import { documentHeadExtras } from "../design/document-head.ts";
+import { enterFlow, type DeskFlowPhase } from "./desk-flow.ts";
 import { applyIdentityHead } from "./head.ts";
 import { IDENTITY_CACHE, identityClaim, loadIdentity } from "./identity-files.ts";
 import { renderMotionPage } from "../motion-previews/index.ts";
@@ -1844,6 +1845,38 @@ async function approveBriefWhenFree(
   }
 }
 
+/**
+ * Desk buttons ask the one transition table before they move a step.
+ * A refusal is a plain sentence. The saved step stays where it was.
+ */
+async function allowDeskMove(
+  req: IncomingMessage,
+  res: ServerResponse,
+  mime: string,
+  token: string,
+  projectDir: string,
+  to: DeskFlowPhase,
+): Promise<boolean> {
+  const step = await enterFlow(projectDir, to);
+  if (step.ok) return true;
+  const reason = step.reason.length > 0 ? step.reason : "Finish the earlier step before moving on.";
+  if (mime === "application/json") {
+    sendJson(req, res, 409, { error: reason });
+    return false;
+  }
+  const brief = readBriefDesk(projectDir);
+  await deliverHtml(
+    req,
+    res,
+    409,
+    renderApproveBrief(token, null, brief, reason, projectDir),
+    projectDir,
+    token,
+    false,
+  );
+  return false;
+}
+
 async function handleApproveForm(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1893,6 +1926,8 @@ async function handleApproveForm(
   }
   try {
     if (action === "launch") {
+      // A yes here records intent. It does not publish and it does not move the saved step.
+      await enterFlow(projectDir, "so-long", { publish: false, write: false });
       const file = path.join(projectDir, ".hitchhiker", "deploy", "launch-yes.json");
       await mkdir(path.dirname(file), { recursive: true });
       await replaceViaTemp(
@@ -1914,6 +1949,8 @@ async function handleApproveForm(
         await deliverHtml(req, res, 409, renderApproveBrief(token, null, desk, "", projectDir, message), projectDir, token, false);
         return;
       }
+      const movingTo: DeskFlowPhase = readPromptTasks(projectDir).length === 0 ? "brief" : "design";
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, movingTo))) return;
       const markdown = desk.draft !== null ? renderSiteBrief(desk.draft) : (readSiteBrief(projectDir) ?? "");
       if (readPromptTasks(projectDir).length === 0) {
         await approveBriefWhenFree(projectDir, guideThink, confirmFallback);
@@ -1951,6 +1988,7 @@ async function handleApproveForm(
         await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, message, projectDir), projectDir, token, false);
         return;
       }
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "design"))) return;
       const brief = readBriefDesk(projectDir);
       const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
       const stageName = stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
@@ -1961,12 +1999,14 @@ async function handleApproveForm(
       return;
     }
     if (action === "start-build") {
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "build"))) return;
       await startSiteBuild(projectDir);
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;
     }
     if (action === "retry") {
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "brief"))) return;
       const job = draftSiteBrief(projectDir, guideThink);
       void job.catch((error: unknown) => logDeskError(error));
       res.writeHead(303, { location: "/approve" });
@@ -1983,6 +2023,7 @@ async function handleApproveForm(
         await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, "Write the change.", projectDir), projectDir, token, false);
         return;
       }
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "brief"))) return;
       const jump = /^DP-\d+\.\d+$/.test(correction.trim());
       const job = reviseSiteBrief(projectDir, correction, guideThink);
       if (jump) {
@@ -2071,6 +2112,7 @@ async function handleBriefPost(
 ): Promise<void> {
   if (pathname === "/api/brief/draft") {
     await readCapped(req, JSON_LIMIT);
+    if (!(await allowDeskMove(req, res, "application/json", "", projectDir, "brief"))) return;
     const job = draftSiteBrief(projectDir, guideThink, {
       onProgress(stage) {
         hub.publish("brief-progress", { stage });
@@ -2102,6 +2144,7 @@ async function handleBriefPost(
       sendJson(req, res, 409, { error: "Confirm the interview fallback before approving." });
       return;
     }
+    if (!(await allowDeskMove(req, res, "application/json", "", projectDir, "design"))) return;
     const job = approveSiteBrief(projectDir, guideThink, { confirmFallback });
     void job
       .then(() => hub.publish("session", view()))
@@ -2116,6 +2159,7 @@ async function handleBriefPost(
     sendJson(req, res, 400, { error: "Write the change." });
     return;
   }
+  if (!(await allowDeskMove(req, res, "application/json", "", projectDir, "brief"))) return;
   try {
     const jump = /^DP-\d+\.\d+$/.test(correction.trim());
     const job = reviseSiteBrief(projectDir, correction, guideThink, {

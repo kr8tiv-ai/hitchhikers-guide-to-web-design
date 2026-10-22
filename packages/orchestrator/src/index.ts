@@ -11,3 +11,13 @@ export { nextPromptId, restartPointFromProjectFile } from "./restart.ts";
 export { beginPhaseSix, shipGate } from "./ship-gate.ts";
 export type { PhaseSixHooks, ShipGateResult } from "./ship-gate.ts";
 export { noteShipRefusal } from "./progress.ts";
+export {
+  FLOW_PHASES,
+  FLOW_TRANSITIONS,
+  enterFlow,
+  flowFilePath,
+  holdGuidePhase,
+  readFlowFrom,
+  requestFlowTransition,
+} from "./phase-lock.ts";
+export type { EnterFlowOptions, FlowDecision, FlowEdge, FlowFrom, FlowPhase, FlowRequest } from "./phase-lock.ts";

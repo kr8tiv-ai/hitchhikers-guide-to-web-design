@@ -10,6 +10,10 @@
  * the per-phase cadence already used by generateSkeleton review flags.
  */
 
+import { requestFlowTransition, type FlowFrom } from "./phase-lock.ts";
+
+export { FLOW_TRANSITIONS, requestFlowTransition } from "./phase-lock.ts";
+
 export class ScheduleError extends Error {
   constructor(message: string) {
     super(message);
@@ -65,6 +69,10 @@ export function insertReviews(
 }> {
   if (!Array.isArray(prompts) || prompts.length === 0) {
     throw new ScheduleError("Schedule needs at least one prompt.");
+  }
+  const held = requestFlowTransition({ from: "build", to: "build" });
+  if (!held.ok) {
+    throw new ScheduleError(held.reason.length > 0 ? held.reason : "Finish the earlier step before moving on.");
   }
 
   const clean: PromptRef[] = [];
@@ -139,7 +147,12 @@ export const ELEVATE_DRIVE_PHASE = "improbability-drive";
  */
 export function scheduleElevatePicks(
   picks: readonly { id: string }[],
+  from: FlowFrom = "elevate",
 ): Array<{ id: string; kind: "build"; effort: "xhigh" }> {
+  const step = requestFlowTransition({ from, to: "build" });
+  if (!step.ok) {
+    throw new ScheduleError(step.reason.length > 0 ? step.reason : "Finish the brief before building.");
+  }
   if (!Array.isArray(picks)) {
     throw new ScheduleError("Elevate picks must be a list.");
   }

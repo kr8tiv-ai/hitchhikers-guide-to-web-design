@@ -20,6 +20,7 @@ import {
   type GateId,
   type GateStatus,
 } from "@hitchhiker/qa";
+import { enterFlow } from "./phase-lock.ts";
 import { noteShipRefusal } from "./progress.ts";
 
 export interface ShipGateResult {
@@ -84,10 +85,19 @@ export async function beginPhaseSix(
   head: string,
   hooks: PhaseSixHooks,
 ): Promise<ShipGateResult> {
+  const place = await enterFlow(projectDir, "so-long", { publish: false, write: false });
+  if (!place.ok) {
+    return { ok: false, reasons: [place.reason] };
+  }
   const gate = await shipGate(projectDir, head);
   if (!gate.ok) {
     await noteShipRefusal(projectDir, gate.reasons);
     return gate;
+  }
+  const publishing = await enterFlow(projectDir, "so-long", { publish: true, shipGateOk: true });
+  if (!publishing.ok) {
+    await noteShipRefusal(projectDir, [publishing.reason]);
+    return { ok: false, reasons: [publishing.reason] };
   }
   if (typeof hooks.deploy !== "function" || typeof hooks.launchKit !== "function") {
     throw new Error("Phase 6 needs a deploy hook and a launch kit hook.");

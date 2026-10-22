@@ -24,6 +24,7 @@ import { pathToFileURL } from "node:url";
 import { hiddenChildOptions, packagedModule } from "@hitchhiker/engine";
 import { runGit } from "../improve/git.ts";
 import { buildPnpmInvocation, quoteCmdArg } from "../improve/pnpm-command.ts";
+import { enterCliFlow } from "./flow-entry.ts";
 
 export const SO_LONG_USAGE =
   "hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes] [--rollback]";
@@ -641,6 +642,8 @@ async function offerRollback(projectDir: string, deps: SoLongDeps, lines: string
 }
 
 async function runParsed(parsed: ParsedSoLong, deps: SoLongDeps): Promise<CommandResult> {
+  const place = await enterCliFlow(parsed.projectDir, "so-long", { publish: false, write: false });
+  if (!place.ok) return { exitCode: 1, stdout: `${place.reason}\n` };
   const head = deps.head !== undefined ? deps.head : readHead(parsed.projectDir);
   const shipGate = await importNamed(packageSource("orchestrator", "ship-gate.ts"), "shipGate");
   if (typeof shipGate !== "function") throw new Error(CLOSED);
@@ -652,6 +655,8 @@ async function runParsed(parsed: ParsedSoLong, deps: SoLongDeps): Promise<Comman
     const reasons = gate.reasons.length > 0 ? gate.reasons : [CLOSED];
     return { exitCode: 1, stdout: `${reasons.join("\n")}\n` };
   }
+  const publishing = await enterCliFlow(parsed.projectDir, "so-long", { publish: true, shipGateOk: true });
+  if (!publishing.ok) return { exitCode: 1, stdout: `${publishing.reason}\n` };
 
   const recommendHost = await importNamed(packageSource("deploy", "dispatch.ts"), "recommendHost");
   if (typeof recommendHost !== "function") throw new Error(CLOSED);

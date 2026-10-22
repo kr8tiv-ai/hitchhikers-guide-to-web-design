@@ -23,6 +23,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { requestFlowTransition, type FlowFrom } from "./phase-lock.ts";
+
+export { FLOW_TRANSITIONS, requestFlowTransition } from "./phase-lock.ts";
+
 export const DEFAULT_MODEL = "grok-4.7";
 
 /**
@@ -260,7 +264,12 @@ export async function runElevatePicks(
   spawnImpl: SpawnImpl,
   commit: (req: RunRequest) => Promise<void>,
   readImpl?: ReadImpl,
+  from: FlowFrom = "elevate",
 ): Promise<{ ran: number; committed: number }> {
+  const step = requestFlowTransition({ from, to: "build" });
+  if (!step.ok) {
+    throw new RunConfigError(step.reason.length > 0 ? step.reason : "Finish the brief before building.");
+  }
   if (!Array.isArray(requests)) {
     throw new RunConfigError("Elevate picks must be a list.");
   }

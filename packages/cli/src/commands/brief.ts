@@ -12,6 +12,7 @@ import {
   think,
 } from "@hitchhiker/engine";
 import { projectFrom, type CommandResult } from "./context.ts";
+import { enterCliFlow } from "./flow-entry.ts";
 
 const USAGE = "hh brief [--approve] [--project <dir>]\n";
 
@@ -31,6 +32,8 @@ export async function runBriefCommand(
     if (arg !== "--approve") return { exitCode: 2, stdout: USAGE };
   }
   const approve = argv.includes("--approve");
+  const step = await enterCliFlow(project.dir, approve ? "design" : "brief");
+  if (!step.ok) return { exitCode: 1, stdout: `${step.reason}\n` };
   try {
     const current = readBriefDesk(project.dir);
     const drafted = approve

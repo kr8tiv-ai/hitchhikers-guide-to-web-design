@@ -16,6 +16,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packagedModule, spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
+import { enterCliFlow } from "./flow-entry.ts";
 
 /** Exact usage text. The Elevate skill must include this string unchanged. */
 export const ELEVATE_USAGE = [
@@ -133,6 +134,8 @@ export async function runElevateCommand(
   if (parsed.help) return { exitCode: 0, stdout: `${USAGE}\n` };
   const refusal = cassetteRefusal(process.env, argv);
   if (refusal !== null) return { exitCode: 2, stdout: "", stderr: refusal };
+  const step = await enterCliFlow(parsed.projectDir, "elevate");
+  if (!step.ok) return { exitCode: 1, stdout: `${step.reason}\n` };
   const model = deps.think ?? think;
   try {
     if (parsed.mode === "detail") return await runDetail(parsed);

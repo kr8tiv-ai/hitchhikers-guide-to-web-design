@@ -22,7 +22,10 @@ import {
   withStateLock,
   type GuideState,
 } from "@hitchhiker/engine";
+import { holdGuidePhase } from "./phase-lock.ts";
 import type { QueueFile, QueueStatus } from "./queue-file.ts";
+
+export { FLOW_TRANSITIONS, requestFlowTransition } from "./phase-lock.ts";
 
 export class ProgressError extends Error {
   constructor(message: string) {
@@ -117,6 +120,11 @@ function applyAdvance(
 ): { items: QueueFile["items"]; state: GuideState; nextId: string | null } {
   if (queue.pause !== undefined || queue.items.some((item) => item.status === "paused")) {
     throw new ProgressError("Queue is paused. Resume the drive before advancing.");
+  }
+  const guidePhase = existing?.phase && existing.phase.length > 0 ? existing.phase : "Improbability Drive";
+  const held = holdGuidePhase(guidePhase);
+  if (!held.ok) {
+    throw new ProgressError(held.reason.length > 0 ? held.reason : "Finish the earlier step before moving on.");
   }
   const index = queue.items.findIndex((item) => item.id === input.finishedId);
   if (index < 0) {
