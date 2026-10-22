@@ -348,11 +348,16 @@ export function mountTooltips(doc: Document): void {
       if (event.key !== "Escape") return;
       const open = doc.querySelector(".hh-tip:not([hidden])");
       if (open === null) return;
+      // Read the open trigger before hideAll marks every tip hidden.
+      const onOpenTrigger = escapeOnOpenTrigger(event);
       hideAll();
       if (escapeShouldPass(doc, event)) return;
-      event.preventDefault();
       // The tour listens on this same document, in capture, registered later.
-      // stopPropagation still lets that listener skip the tour and reload.
+      // While it is open, swallow Escape only for the open tip's trigger.
+      // A body or desk target still reaches the tour and closes it.
+      if (doc.querySelector("[data-tour]") !== null && !onOpenTrigger) return;
+      event.preventDefault();
+      // stopPropagation still lets that later listener skip the tour and reload.
       event.stopImmediatePropagation();
     },
     true,
@@ -361,9 +366,23 @@ export function mountTooltips(doc: Document): void {
 }
 
 /**
+ * True when Escape was pressed on the trigger that owns a visible tip, or inside it.
+ * Call before hideAll. A hidden tip does not own the key.
+ */
+function escapeOnOpenTrigger(event: KeyboardEvent): boolean {
+  const target = event.target;
+  if (!(target instanceof Node)) return false;
+  for (const pair of pairs) {
+    if (pair.tip.hidden) continue;
+    if (target === pair.trigger || pair.trigger.contains(target)) return true;
+  }
+  return false;
+}
+
+/**
  * A dialog, the splash, and an active mic already use Escape. Let that key through.
- * An open tip owns Escape otherwise. The tour's listener still runs when no tip
- * is open, so one press does not both dismiss the tip and skip the tour.
+ * An open tip owns Escape otherwise. The keydown listener above makes one exception:
+ * while a tour is open, only the open tip's trigger swallows the key.
  */
 function escapeShouldPass(doc: Document, event: KeyboardEvent): boolean {
   if (doc.querySelector("dialog[open]") !== null) return true;
