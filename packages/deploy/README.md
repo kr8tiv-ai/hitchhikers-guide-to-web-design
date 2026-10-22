@@ -6,6 +6,16 @@ The stack record is `.hitchhiker/research/STACK-DECISION.md`. Astro and Vite upl
 
 A deploy that runs writes `.hitchhiker/deploy/DEPLOYS.md`. A declined yes writes nothing.
 
+## Preview on this computer
+
+`openPreview({ projectDir, outputDir })` serves a folder of built pages on `127.0.0.1` and writes `.hitchhiker/deploy/preview.zip`. The port is a free one. Port 4175 belongs to the desk and is never used. The zip is the same pages, with `index.html` at the top, stored so the text stays in the file. `previewZipPath(projectDir)` is that zip.
+
+`deploy("preview", projectDir, deps)` uses this preview when `deps.clients.preview` is omitted and `yes` returns true. The folder comes from the stack record: `dist` for Astro and Vite, `out` for a Next.js static export, `build` for static SvelteKit. A site that needs a server to answer each visit is refused in plain language, and no zip is written, because there is no folder of finished pages. Pass a `preview` client when a test should not open a port. A declined yes returns before any page is served and before the zip is written.
+
+Call `closePreview(projectDir)` when you are done with the page `deploy` opened. `openPreview` returns its own `close` for a direct call. Starting another preview for the same project closes the earlier address and overwrites the zip.
+
+This step does not install packages, does not run the site build, does not read the keychain, and does not call a host. The page folder has to exist, and it needs a front page named `index.html`. A folder outside the project is refused. A request that tries to climb out of the page folder is a not-found page.
+
 ## Hostinger
 
 Connect the official MCP server, then pass that client in. The hosted server is `https://mcp.hostinger.com` (OAuth). The local server is `npx -y @hostinger/mcp`. The adapter lists tools at runtime and calls a deploy tool only when that list contains it. Agency tools are not called. If the list has no deploy tool, the adapter uses the API. The API token is the keychain item service `hitchhikers-guide`, account `hostinger`.

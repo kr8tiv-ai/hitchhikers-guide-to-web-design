@@ -8,16 +8,20 @@
  * asks before it calls deploy. This file does not ask.
  *
  * deploy runs one already-confirmed choice through the matching adapter.
- * The caller injects the client. Preview stays on this computer: the
- * handoff is injected, and this file does not open a port or build a zip.
+ * The caller injects the client. Preview stays on this computer. An
+ * injected preview handoff is used when one is passed. Otherwise the
+ * local preview serves the built pages and writes the zip. This file
+ * does not open a port or build a zip itself.
  * Netlify and Cloudflare reject a server site with their existing messages.
  */
 
+import path from "node:path";
 import { deployCloudflare } from "./cloudflare.ts";
 import { listDeployFiles } from "./cli-run.ts";
 import { deployHostinger, type HostingerClient } from "./hostinger.ts";
 import { deployNetlify } from "./netlify.ts";
 import type { StaticDeployClient, StaticDeployResult } from "./poll.ts";
+import { openPreview, type PreviewSession } from "./preview.ts";
 import { readSiteShape, type ShapeDecision, type SiteShape, type StackPick } from "./shape.ts";
 import { deployVercel } from "./vercel.ts";
 
@@ -203,11 +207,25 @@ async function runDirectoryHost(
   return ran(host, result, null);
 }
 
-async function runPreview(dir: string, decision: ShapeDecision, deps: DispatchDeps): Promise<DispatchRun> {
-  const client = deps.clients.preview;
-  if (client === undefined) {
-    throw new Error("A preview on this computer is not ready yet. Nothing was sent.");
-  }
+const previews = new Map<string, PreviewSession>();
+
+/** Stop the preview `deploy` opened for this project. A second call does nothing. */
+export async function closePreview(projectDir: string): Promise<void> {
+  const key = path.resolve(projectDir);
+  const session = previews.get(key);
+  if (session === undefined) return;
+  previews.delete(key);
+  await session.close();
+}
+
+async function trackPreview(projectDir: string, session: PreviewSession): Promise<void> {
+  const key = path.resolve(projectDir);
+  const prior = previews.get(key);
+  previews.set(key, session);
+  if (prior !== undefined && prior !== session) await prior.close();
+}
+
+async function runInjectedPreview(dir: string, decision: ShapeDecision, client: PreviewClient): Promise<DispatchRun> {
   const handed = await client.handoff({
     projectDir: dir,
     pick: decision.pick,
@@ -219,6 +237,19 @@ async function runPreview(dir: string, decision: ShapeDecision, deps: DispatchDe
     throw new Error("The preview did not give an address. Nothing was sent.");
   }
   return { host: "preview", state: "completed", uploads: 0, url };
+}
+
+async function runPreview(dir: string, decision: ShapeDecision, deps: DispatchDeps): Promise<DispatchRun> {
+  const client = deps.clients.preview;
+  if (client !== undefined) return runInjectedPreview(dir, decision, client);
+  if (decision.shape !== "static") {
+    throw new Error(
+      "This site needs a server to answer each visit, so there is no folder of finished pages to open on this computer. Nothing was sent.",
+    );
+  }
+  const session = await openPreview({ projectDir: dir, outputDir: decision.outputDir });
+  await trackPreview(dir, session);
+  return { host: "preview", state: "completed", uploads: 0, url: session.url };
 }
 
 /**

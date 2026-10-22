@@ -32,6 +32,7 @@
 [Motion](#the-motion-toolkit) ·
 [Anti-slop](#the-anti-slop-rules) ·
 [Quick start](#quick-start) ·
+[Preview](#look-before-you-publish) ·
 [Roadmap](#roadmap) ·
 [FAQ](#faq)
 
@@ -147,6 +148,8 @@ Hard quality gates, an anti-slop audit, and a jury of three Awwwards-style judge
 > *Your site leaves the nest. We wave a small, sentimental towel.*
 
 Deploys to Hostinger, Vercel, Netlify or Cloudflare with your explicit go-ahead, and writes a `DEPLOY.md` with the manual steps too. Then it runs post-deploy checks on the live site, puts together a launch kit (OG images, launch posts in your brand voice, an announcement email), writes a handoff doc, and leaves you a ranked list of post-launch upgrades for when you're ready for round two.
+
+Before any of that, you can look at the built pages on this computer. The preview picks a free port, leaves the desk's port alone, and writes a zip of those pages under `.hitchhiker/deploy/`. No account, no keychain, and nothing leaves the machine. A site that still needs a server to answer each visit is told so, in plain language, instead of being pretended into a folder of pages. The details are in [Look before you publish](#look-before-you-publish).
 
 ### The crew
 
@@ -353,7 +356,7 @@ The critique, the research addendum, and the prompt package are written. What is
 - **A SuperGrok subscription.** Grok Build usage runs on your plan.
 - **[Grok Build](https://x.ai) CLI** (`grok`), installed and logged in.
 - **Git**, and **Node.js**. Root `engines.node` is `>=22`. The quick start below uses Node >=22.18, which strips types without a flag. The `hh` bin also starts with `node --experimental-strip-types`. `packageManager` is `pnpm@10.32.1`.
-- **Optional extras:** an xAI API key for speech-to-text or Imagine API jobs, and a Hostinger API token (or Vercel, Netlify or Cloudflare) when you're ready to launch. Nothing that costs money ever runs without you setting a budget first, and a paid batch waits for a yes.
+- **Optional extras:** an xAI API key for speech-to-text or Imagine API jobs, and a Hostinger API token (or Vercel, Netlify or Cloudflare) when you're ready to launch. A local preview of the built pages needs none of those accounts. Nothing that costs money ever runs without you setting a budget first, and a paid batch waits for a yes.
 - **A towel.** Optional, but you'll feel better.
 
 ---
@@ -432,6 +435,60 @@ The file includes a plain-language brief and a short resume prompt. Another codi
 
 The companion app is that local dashboard: a chat-style desk with a push-to-talk mic, uploads, example-site cards, approval buttons, and the prompt queue. Open it with `pnpm exec hh app`.
 
+A local preview is already in the deploy package, for when you want to look before `/hh-so-long` sends anything. See [Look before you publish](#look-before-you-publish).
+
+---
+
+## Look before you publish
+
+You can see the site on this computer before you create a hosting account, buy a domain, or say yes to anything that leaves the machine.
+
+The preview does two quiet things:
+
+1. It serves the folder of built pages at `http://127.0.0.1:<port>/`. The port is a free one chosen for you. The desk already uses port 4175. The preview never takes that port, never stops whatever is using it, and never listens on any address except `127.0.0.1`.
+2. It writes `.hitchhiker/deploy/preview.zip`. That zip is the same pages, packed so you can hand the folder to a person or to a host later. The front page is `index.html`. Other built files keep their paths (`assets/app.css` stays `assets/app.css`).
+
+Nothing in this step reads the OS keychain, calls Hostinger, Vercel, Netlify, or Cloudflare, or opens a connection off this computer. A declined yes stops first: no page is served and no zip is written.
+
+The pages have to exist already. This step does not install packages and does not run the site build. The stack record at `.hitchhiker/research/STACK-DECISION.md` names the folder:
+
+| Record | Folder of pages |
+|---|---|
+| Astro, or Vite | `dist` |
+| Next.js, when the record says static export | `out` |
+| SvelteKit, when the record names finished files rather than a server | `build` |
+
+If that folder is missing, the preview says the pages are not built yet and writes nothing. If the folder has no `index.html`, it says there is no front page and writes nothing. If you point it outside the project, it refuses. A request that tries to climb out of the pages folder (a `../` in the address, including one written as `%2e%2e`) is a not-found page, not a look at the rest of the disk. A request that names some other computer in the Host header is refused as well.
+
+A site that needs a server to answer each visit has no folder of finished pages. The preview does not invent one. It stops, in plain language, and it does not write a zip. Publishing that site still waits for your yes, on a host that can run it.
+
+One project keeps one preview. Starting another closes the earlier address and overwrites `.hitchhiker/deploy/preview.zip`. Closing the preview stops the address. The zip stays on disk until the next preview replaces it.
+
+Programmers call it from `@hitchhiker/deploy`:
+
+```ts
+import { closePreview, deploy, openPreview, previewZipPath } from "@hitchhiker/deploy";
+
+const session = await openPreview({ projectDir, outputDir: "dist" });
+// session.url is http://127.0.0.1:<port>/
+// session.zipPath is previewZipPath(projectDir)
+// session.port is never 4175
+await session.close();
+
+const outcome = await deploy("preview", projectDir, {
+  yes: async () => true,
+  clients: {},
+});
+if ("url" in outcome && outcome.url !== null) {
+  // Open outcome.url in a browser on this computer.
+}
+await closePreview(projectDir);
+```
+
+Pass `clients.preview` only when a test should not open a real port. An injected handoff is used as given, and the real preview stays quiet. Omit it, return yes, and the built pages open.
+
+`openPreview` returns when the page is listening and the zip is on disk. `close` is safe to call twice. `closePreview` stops the preview that `deploy` started for that project. The zip uses stored file bytes and UTF-8 names, so the page text is in the file and a normal unzip tool can open it.
+
 ---
 
 ## Roadmap
@@ -448,7 +505,7 @@ The companion app is that local dashboard: a chat-style desk with a push-to-talk
 - [x] **v0.3 Deep Thought**: PRD, spec files, framework choice, the prompt package
 - [x] **v0.4 Improbability Drive**: the orchestrator, Zaphod the reviewer, Marvin the watchdog, and the Windows and macOS/Linux queue runners
 - [x] **v0.5 Mostly Harmless**: quality gates, the Nutrimatic Test, the jury, the Elevate loop
-- [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes
+- [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. A local preview serves the built pages on this computer and writes a zip, with no account.
 - [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm.
 
 **Later, in a galaxy slightly further away**
@@ -469,6 +526,7 @@ Good places to start:
 - **Write a knowledge pack.** Sales psychology, SEO, typography, color, accessibility and so on. Every claim needs a source. We don't invent statistics, not even funny ones.
 - **Contribute evals.** Sample brands and golden interviews help keep the Guide honest.
 - **Port your favorite motion recipe**, with a mobile version and a reduced-motion version attached.
+- **Try the local preview.** The page server and the zip live in [`packages/deploy/src/preview.ts`](packages/deploy/src/preview.ts). The tests in [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) cover a real page, a missing front page, a folder outside the project, and an address that tries to climb out of the pages. Run that file, then open a pull request with one job in it.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
 
@@ -512,6 +570,27 @@ Grok proposes one per project (Astro, Next.js, SvelteKit and so on), explains wh
 **What happens when something breaks?**
 Marvin notices. Marvin always notices. Marvin fixes it, files a short and deeply weary report, and only bothers you if it genuinely needs a decision.
 
+**Can I see the site before I have a hosting account?**
+Yes. Once the pages are built, the preview opens them on this computer at an address that starts with `http://127.0.0.1:`. It also writes `.hitchhiker/deploy/preview.zip`, a copy of those pages you can hand to someone. No Hostinger, Vercel, Netlify, or Cloudflare account is used, and nothing is sent off the machine. Say no, and neither the page nor the zip is created. The full notes are in [Look before you publish](#look-before-you-publish).
+
+**The preview says the pages are not built yet. What now?**
+The preview serves the folder the stack record already named: `dist` for Astro and Vite, `out` when a Next.js record says static export, and `build` when a SvelteKit record names finished files. If that folder is missing, or it has no front page named `index.html`, nothing is opened and no zip is written. Build the site first, then ask again. This step does not install packages and does not run the build for you.
+
+**Why won't a site that needs a server open as pages?**
+Some sites answer each visit from a server. There is no folder of finished pages to open, so the preview stops and says so. A zip of that build would not be a site you can open. Use a host that can run the site, and confirm before anything is sent.
+
+**Will the preview take the desk's port or call a host?**
+No. It asks the operating system for a free port and refuses port 4175, which is the desk. It binds to `127.0.0.1` only. It does not read the keychain, does not call a host, and does not run when you decline.
+
+**I unzipped the preview and double-clicked index.html. The page looks broken.**
+The zip is a copy of the built folder, with `index.html` at the top and the other files beside it under the same paths. Many pages ask for files from the site root, a path that starts with `/`. A double-clicked file does not have that root, so those files are missing even though they are in the zip. Use the `http://127.0.0.1:` address while the preview is open. Closing the preview stops the address. The zip stays until the next preview overwrites it.
+
+**Does a second preview keep the first address?**
+No. One project, one preview. Starting another closes the earlier address and overwrites `.hitchhiker/deploy/preview.zip`. `close` on the session, or `closePreview(projectDir)` after `deploy`, stops the page. Calling close twice is safe.
+
+**Can I point the preview at a folder outside the project?**
+No. The folder has to sit inside the project. A path that climbs out is refused, and a request that tries to climb out of the pages folder gets a not-found page. The preview is not a way to read the rest of the disk. A request that names some other computer is refused too.
+
 **What's the answer to life, the universe and everything?**
 Tier five. It gets extra-high effort.
 
@@ -521,7 +600,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). Run one file with `node --experimental-strip-types --test <file>`.
 
 ---
 

@@ -17,7 +17,7 @@ export { renderLaunchKit } from "./launch-kit.ts";
 export type { LaunchKitInput } from "./launch-kit.ts";
 export { PHONE_CATEGORY_FLOOR, postCheck } from "./post-check.ts";
 export type { PostCheckInput, PostCheckPage, PostCheckResult } from "./post-check.ts";
-export { deploy, recommendHost } from "./dispatch.ts";
+export { closePreview, deploy, recommendHost } from "./dispatch.ts";
 export type {
   DeployHost,
   DispatchClients,
@@ -29,3 +29,5 @@ export type {
   PreviewHandoff,
   PublishHost,
 } from "./dispatch.ts";
+export { openPreview, previewZipPath } from "./preview.ts";
+export type { PreviewRequest, PreviewSession } from "./preview.ts";

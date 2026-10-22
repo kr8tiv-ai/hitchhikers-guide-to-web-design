@@ -1,26 +1,31 @@
 import assert from "node:assert/strict";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { deployCloudflare as cloudflareFromFile } from "../src/cloudflare.ts";
-import { deploy as deployFromFile, recommendHost as recommendFromFile } from "../src/dispatch.ts";
+import { closePreview as closeFromFile, deploy as deployFromFile, recommendHost as recommendFromFile } from "../src/dispatch.ts";
 import { deployHostinger as hostingerFromFile, prepareNodeArchive as archiveFromFile } from "../src/hostinger.ts";
 import { renderLaunchKit as kitFromFile } from "../src/launch-kit.ts";
 import { deployNetlify as netlifyFromFile } from "../src/netlify.ts";
 import { postCheck as postCheckFromFile } from "../src/post-check.ts";
+import { openPreview as previewFromFile, previewZipPath as zipFromFile } from "../src/preview.ts";
 import { deployVercel as vercelFromFile } from "../src/vercel.ts";
 import {
   PHONE_CATEGORY_FLOOR,
+  closePreview,
   deploy,
   deployCloudflare,
   deployHostinger,
   deployNetlify,
   deployVercel,
+  openPreview,
   postCheck,
   prepareNodeArchive,
+  previewZipPath,
   recommendHost,
   renderLaunchKit,
 } from "../src/index.ts";
@@ -152,6 +157,9 @@ test("the package entry re-exports the adapters, the launch kit, and the post-ch
   assert.equal(renderLaunchKit, kitFromFile);
   assert.equal(postCheck, postCheckFromFile);
   assert.equal(prepareNodeArchive, archiveFromFile);
+  assert.equal(openPreview, previewFromFile);
+  assert.equal(previewZipPath, zipFromFile);
+  assert.equal(closePreview, closeFromFile);
   assert.equal(PHONE_CATEGORY_FLOOR, 90);
 });
 
@@ -164,6 +172,7 @@ test("the dispatcher does not spawn, fetch, or open a port", () => {
   assert.equal(source.includes("HH_LIVE"), false);
   assert.equal(source.includes("node:http"), false);
   assert.equal(source.includes("node:net"), false);
+  assert.match(source, /from "\.\/preview\.ts"/);
 });
 
 test("a static record suggests Hostinger and allows all four hosts", async () => {
@@ -491,16 +500,137 @@ test("a server site can still ask for a local preview", async () => {
   }
 });
 
-test("preview without a handoff sends nothing", async () => {
-  const dir = await makeProject(stack("astro"));
+test("preview without an injected handoff serves the built pages and writes a zip", async () => {
+  const dir = await makeProject(stack("vite-react"), {
+    "dist/index.html": "<title>Milliways</title>",
+    "dist/assets/app.css": "body{color:#111}",
+    "secret.txt": "DO_NOT_LEAK",
+  });
+  const vercel = scriptedStatic();
   try {
-    await assert.rejects(
-      () => deploy("preview", dir, { yes, clients: {} }),
-      /A preview on this computer is not ready yet\. Nothing was sent\./,
-    );
-    const stackText = await readFile(path.join(dir, ".hitchhiker", "research", "STACK-DECISION.md"), "utf8");
-    assert.match(stackText, /# STACK-DECISION/);
+    const outcome = await deploy("preview", dir, {
+      yes,
+      clients: { vercel: vercel.client },
+    });
+    assert.equal("host" in outcome, true);
+    if (!("host" in outcome)) return;
+    assert.equal(outcome.host, "preview");
+    assert.equal(outcome.state, "completed");
+    assert.equal(outcome.uploads, 0);
+    assert.match(outcome.url ?? "", /^http:\/\/127\.0\.0\.1:\d+\/$/);
+    const port = Number(new URL(outcome.url ?? "").port);
+    assert.notEqual(port, 4175);
+    const page = await textGet(outcome.url ?? "");
+    assert.equal(page.status, 200);
+    assert.match(page.body, /Milliways/);
+    assert.match(page.type, /text\/html/);
+    const zip = await readFile(previewZipPath(dir));
+    assert.equal(zip.subarray(0, 4).toString("hex"), "504b0304");
+    assert.equal(zip.subarray(-22, -18).toString("hex"), "504b0506");
+    assert.equal(zip.includes(Buffer.from("index.html")), true);
+    assert.equal(zip.includes(Buffer.from("Milliways")), true);
+    assert.equal(zip.includes(Buffer.from("DO_NOT_LEAK")), false);
+    assert.equal(vercel.uploads, 0);
+    await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
+    await closePreview(dir);
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a declined preview writes no zip and does not ask a host", async () => {
+  const dir = await makeProject(stack("astro"), { "dist/index.html": "<title>Milliways</title>" });
+  const vercel = scriptedStatic();
+  try {
+    const outcome = await deploy("preview", dir, {
+      yes: () => Promise.resolve(false),
+      clients: { vercel: vercel.client },
+    });
+    assert.deepEqual(outcome, { declined: true });
+    assert.equal(vercel.uploads, 0);
+    await absent(previewZipPath(dir));
+    await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
+  } finally {
+    await closePreview(dir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a server site without a handoff does not open a preview", async () => {
+  const dir = await makeProject(stack("next"), { "package.json": "{}\n" });
+  try {
+    await assert.rejects(
+      () => deploy("preview", dir, { yes, clients: {} }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal(
+          error.message,
+          "This site needs a server to answer each visit, so there is no folder of finished pages to open on this computer. Nothing was sent.",
+        );
+        assertPlain(error.message);
+        return true;
+      },
+    );
+    await absent(previewZipPath(dir));
+  } finally {
+    await closePreview(dir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a static export is previewed from its page folder", async () => {
+  const dir = await makeProject(stack("next", "This Next.js site is a static export."), {
+    "out/index.html": "<title>Export</title>",
+  });
+  try {
+    const outcome = await deploy("preview", dir, { yes, clients: {} });
+    if (!("url" in outcome) || outcome.url === null) {
+      assert.fail("preview did not return an address");
+    }
+    const page = await textGet(outcome.url);
+    assert.equal(page.status, 200);
+    assert.match(page.body, /Export/);
+    assert.equal((await readFile(previewZipPath(dir))).includes(Buffer.from("Export")), true);
+  } finally {
+    await closePreview(dir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a second preview closes the earlier address and overwrites the zip", async () => {
+  const dir = await makeProject(stack("astro"), { "dist/index.html": "<title>First</title>" });
+  try {
+    const first = await deploy("preview", dir, { yes, clients: {} });
+    if (!("url" in first) || first.url === null) assert.fail("first preview missing");
+    await writeFile(path.join(dir, "dist", "index.html"), "<title>Second</title>", "utf8");
+    const second = await deploy("preview", dir, { yes, clients: {} });
+    if (!("url" in second) || second.url === null) assert.fail("second preview missing");
+    assert.notEqual(first.url, second.url);
+    await assert.rejects(() => textGet(first.url));
+    const page = await textGet(second.url);
+    assert.equal(page.status, 200);
+    assert.match(page.body, /Second/);
+    assert.equal((await readFile(previewZipPath(dir))).includes(Buffer.from("Second")), true);
+    assert.equal((await readFile(previewZipPath(dir))).includes(Buffer.from("First")), false);
+  } finally {
+    await closePreview(dir);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+function textGet(url: string): Promise<{ status: number; body: string; type: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString("utf8"),
+          type: String(res.headers["content-type"] ?? ""),
+        });
+      });
+    });
+    req.on("error", reject);
+  });
+}
