@@ -377,7 +377,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 5. `pnpm exec hh doctor`
 6. `pnpm exec hh app --project <dir> --no-open`
 
-`--project` is the site folder. `--no-open` leaves the browser closed. On a first run, before any answer is stored, the desk shows the same preflight as `hh doctor`: grok, playwright, whisper, and pdftotext.
+`--project` is the site folder. `--no-open` leaves the browser closed. On a first run, before any answer is stored, the desk shows the same preflight as `hh doctor`: grok, playwright, whisper, and pdftotext. That quick-start doctor does not download Chromium or WebKit. Pass `--yes` later if you want it to install the browsers the quality gates open. The longer notes are in [Check this computer](#check-this-computer).
 
 `npx hitchhikers-guide` is not yet published on npm (the registry returns 404). Publishing it is a planned future note.
 
@@ -397,7 +397,7 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 | `hh pause` | Save the next action. |
 | `hh resume` | Where to continue. `hh resume <file>` restores a portable project file. |
 | `hh save` | Write the portable project file. |
-| `hh doctor` | Node, git, grok, an auth classification, session id, effort. Warns if playwright, whisper, or pdftotext is missing. It does not log you in. Exit 1 only when Node is older than 22. |
+| `hh doctor` | Node.js 22 or newer, git, whether the Grok Build CLI is on this computer and whether you are signed in, the session id, and the effort flag. Warns if playwright, whisper, or pdftotext is missing. Also checks that Chromium and WebKit, the browsers the quality gates open, are installed, and says so in plain sentences. It does not log you in, and it does not download those browsers unless you pass `--yes`. Exit 1 only when Node is older than 22. |
 | `hh --version` | Prints the version from the `package.json` next to the program, then exits. In this clone that file is still `0.0.0`. Extra words after the flag are refused. It does not start the desk. |
 | `hh improve` | Bounded loop on an improve branch. A human merges. [docs/improve.md](docs/improve.md). |
 | `hh improve supervise` | Standing loop. A kept commit is pushed to origin main and checked. [docs/improve.md](docs/improve.md). |
@@ -406,6 +406,28 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. |
 | `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. A connected checker then writes a post-check section, and `--rollback --yes` can send the last working publish again. |
+
+## Check this computer
+
+`hh doctor` is the check you run before the interview, and again when a quality gate says it cannot open a browser. The machine lines stay at the top (`node:`, `git:`, `grok:`, `auth:`). Under them, four short sentences say the same thing in everyday language.
+
+1. **Node.js.** The Guide needs Node.js 22 or newer. An older Node is the only check that exits 1. Install Node.js 22 or newer, then run `hh doctor` again.
+2. **Git.** A missing git is a warning. Saves and the queue need it. The desk still starts.
+3. **Grok Build.** The `grok` command has to be on this computer, and you have to be signed in, because the interview and the build call it. When `grok --help` offers a status flag, doctor runs that flag and says whether you are signed in or signed out. When the help text has no such flag, doctor says it cannot tell. It never runs `grok login`, never types a password, and never sends a token.
+4. **Browsers for the quality gates.** The device gate opens Chromium (desktop, and Android Chrome) and WebKit (iPhone and iPad). Doctor looks in Playwright's browser cache for those two programs. A headless-shell build does not count. Whisper and pdftotext stay optional warnings, the same as before. A missing Playwright command is still a warning, and the desk still has an Install button for it.
+
+Doctor does not download Chromium or WebKit unless you pass `--yes`. Without that flag it only names what is missing and the command you can run yourself: `pnpm exec playwright install chromium webkit` (or just the one that is missing). With `--yes`, and with pnpm on the computer, it runs that install for the browsers that are actually missing. If both are already there, `--yes` downloads nothing. If pnpm is missing, `--yes` still downloads nothing and says so. There is no question prompt, so a pack smoke and any other non-interactive run cannot download a browser by accident.
+
+```powershell
+pnpm exec hh doctor
+pnpm exec hh doctor --yes
+pnpm exec hh doctor --project <dir>
+pnpm exec hh doctor --project <dir> --yes
+```
+
+`--project` still records whether this Grok build wants a session id that is a UUID or an alias. `--yes` only covers the browser install. It does not approve a brief, publish a site, or sign you in. `hh doctor --help` still prints the short usage line and installs nothing.
+
+The pack smoke runs `hh doctor` from an installed tarball without `--yes`. That run does not download a browser, and it still exits 0 when Node.js is 22 or newer.
 
 ## Build a local package
 
@@ -491,6 +513,21 @@ That process resolves `pdfjs-dist` from the CLI package. This repo lists it as a
 `node scripts/start.mjs` is unchanged. It still installs and then runs `pnpm exec hh app`. It does not call the bundler.
 
 Building and packing stay on this computer. They do not call a host, they do not deploy, and they do not approve a brief. Publishing a site is still `hh so-long` with a host you name and `--yes`.
+
+## Release to npm
+
+The package is still not on npm. A release file now exists so a person can publish it later, on purpose. The file is [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
+It does not run when you push a branch. It does not run on a pull request. Nothing in the ordinary CI workflow publishes. Two starts are allowed:
+
+- **By hand.** In GitHub, open Actions, choose Release, and run the workflow. The confirm box has to be the word `publish`. Any other word stops the run before lint and tests, and npm receives nothing.
+- **A version tag.** Pushing a tag whose name starts with `v` (for example `v0.1.0`) starts the same workflow. A person creates that tag. This repo's workflow does not create one.
+
+Either start runs the jobs in order. A confirm job checks the hand start. The CI job then runs the same lint, typecheck, unit tests, and cassette evals as [`.github/workflows/ci.yml`](.github/workflows/ci.yml), on Windows, macOS, and Linux. The pack smoke job runs [`packages/cli/test/pack-243.test.ts`](packages/cli/test/pack-243.test.ts) on those same three systems. The publish job waits for both. Only then does it run `npm publish --provenance --access public` inside `packages/cli`.
+
+Provenance tells npm that GitHub built this tarball. The publish job asks GitHub for a short-lived token (`id-token: write`). The workflow file does not contain an npm token. The CI and pack smoke jobs do not get that permission. Ordinary pushes never reach the publish job, because they do not start this workflow at all.
+
+Do not start the Release workflow from a build session. Do not push a `v` tag from one. Publishing still waits for a person who means to ship. The version in this clone is still `0.0.0`.
 
 ## Attachments
 
@@ -641,7 +678,7 @@ From the terminal, the same preview is `hh so-long --project <dir> --host previe
 - [x] **v0.4 Improbability Drive**: the orchestrator, Zaphod the reviewer, Marvin the watchdog, and the Windows and macOS/Linux queue runners
 - [x] **v0.5 Mostly Harmless**: quality gates, the Nutrimatic Test, the jury, the Elevate loop
 - [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. `hh so-long` runs the quality check for this version first, recommends Hostinger, and waits for you to name the host and pass `--yes`. A local preview serves the built pages on this computer and writes a zip, with no account.
-- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm. A local bundle can be packed from `packages/cli`. That tarball is still not published. CI pack-smokes it on Windows, macOS, and Linux, and fails the job when the tarball is over 25 MB.
+- [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm. A local bundle can be packed from `packages/cli`. That tarball is still not published. CI pack-smokes it on Windows, macOS, and Linux, and fails the job when the tarball is over 25 MB. [`.github/workflows/release.yml`](.github/workflows/release.yml) can publish later, only from a hand start that types `publish` or from a `v` tag, and only after CI and the pack smoke. It has not been started from this repo's build sessions, and no version tag has been created for it.
 
 **Later, in a galaxy slightly further away**
 - [ ] Cloud mode, for when your laptop would like a nap
@@ -665,6 +702,7 @@ Good places to start:
 - **Try `hh so-long`.** The command is [`packages/cli/src/commands/so-long.ts`](packages/cli/src/commands/so-long.ts). [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts) covers a blocked check, a check for a different version, a declined yes, the local preview, and the Hostinger question you get when you leave the host off. Run that file before you open the pull request. Do not point it at a live host.
 - **Build the local CLI bundle.** From the repo root, `pnpm --filter hitchhikers-guide run build` (the script is [`packages/cli/build.mjs`](packages/cli/build.mjs)). It should leave `packages/cli/dist/main.js` asking for `node` on `PATH`, with no type-stripping flag, and it must not write this repo's absolute path into that file. Then run `node --experimental-strip-types --test packages/cli/test/hh-bin.test.ts`, the same runner on `packages/cli/test/shebang.test.ts` and `packages/cli/test/start.test.ts`, and `pnpm exec tsc -b`. Those checks keep the source bin, the shebang, and `node scripts/start.mjs` honest. Packing with `npm pack` inside `packages/cli` is local only. Do not `npm publish`.
 - **Run the pack smoke once.** [`packages/cli/test/pack-243.test.ts`](packages/cli/test/pack-243.test.ts) packs the CLI, checks the 25 MB cap and the file allowlist, installs the tarball in a temporary folder, and runs `hh --version`, `hh doctor`, and `hh app --no-open` on a free port other than 4175. The command is `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts`. Once is enough. The package test script skips that file, so `pnpm test` does not pack. Open the pull request after it passes. Do not publish from that run.
+- **Check doctor and the release workflow.** [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts) covers Node.js 22, the Grok sign-in lines, and the browser install that waits for `--yes`. [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts) reads [`.github/workflows/release.yml`](.github/workflows/release.yml) and checks that the only triggers are a hand start and a `v` tag, and that publish waits for the pack smoke. Run each file with `node --experimental-strip-types --test <file>`, then `pnpm exec tsc -b`. Do not start the Release workflow, and do not create a tag, as part of that check. Pull requests that fix a wrong sentence in the doctor report, or that keep the release file from publishing on an ordinary push, are welcome.
 - **Try the live check and the Launch card.** [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts) covers the post-check section, including a page that comes back 404. [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts) keeps the launch kit on disk and checks that the desk card names the cost, Hostinger, and the yes button without publishing. [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts) checks that appending the section does not turn the checklist into a deploy. The phone screen is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run the node files with `node --experimental-strip-types --test <file>`, and that one Playwright spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/launch-card-245d.spec.ts`. Leave the rest of the Playwright suite alone unless you mean to run it.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
@@ -808,6 +846,30 @@ Some tool-install routes look for `pnpm-workspace.yaml` by walking up from the f
 **pnpm says it ignored the esbuild install script.**
 pnpm 10 skips dependency lifecycle scripts until you approve them. esbuild is a dev dependency of `hitchhikers-guide`, used only by `packages/cli/build.mjs`. The package also ships a platform binary. If `node packages/cli/build.mjs` cannot find that binary, run `pnpm approve-builds`, allow esbuild, and install again. Leave the rest of the repo's script policy alone.
 
+**What does hh doctor actually decide?**
+Node.js older than 22 is a failure, and the command exits 1. A missing git, a missing Grok CLI, a signed-out Grok, and missing Chromium or WebKit are explained in sentences. Those stay warnings, and the command exits 0, so a pack smoke on a clean machine can still run. The interview needs Grok signed in before a build will get anywhere. Doctor does not sign you in.
+
+**Will hh doctor download Playwright browsers on its own?**
+No. It only looks. Chromium and WebKit are the pair the quality gates open. If either is missing, the report names it and tells you the install command. Pass `--yes` when you want doctor to run that install. Without `--yes`, nothing is downloaded. Without pnpm, `--yes` still downloads nothing.
+
+**I passed --yes and the browsers were already installed. Did it download them again?**
+No. `--yes` installs only the ones that are missing. When both Chromium and WebKit are already in Playwright's cache, the report says nothing was downloaded.
+
+**Grok is installed and doctor says it cannot tell whether I am signed in.**
+Some builds of the Grok CLI have no status flag in `grok --help`. Doctor will not guess, and it will not run `grok login`. Sign in yourself in a terminal if a later session asks, then run `hh doctor` again.
+
+**Does a normal push publish the npm package?**
+No. Pushing a branch runs CI, the pack smoke, the end-to-end workflow, and the audit. None of those publish. The release workflow is not in that list. It starts only from the Actions tab, after you type `publish`, or from a tag whose name starts with `v`.
+
+**I started the Release workflow and typed the wrong word. Did it upload?**
+No. The confirm job stops before lint, tests, and the pack smoke. The publish job never starts. npm is not called. Run it again and type `publish` if you meant to.
+
+**Who creates the version tag?**
+A person does, when a version is ready. The workflow does not create the tag, and it does not open a GitHub release. A build session must not create the tag and must not start the workflow.
+
+**The pack smoke and the release workflow both pack the CLI. Do they publish?**
+The pack smoke installs the tarball in a temporary folder and does not publish. The release workflow runs that same smoke, and publishes only after it passes, and only from a hand start or a `v` tag. A local `npm pack` still does not publish.
+
 **What's the answer to life, the universe and everything?**
 Tier five. It gets extra-high effort.
 
@@ -817,7 +879,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`. The pack smoke is also separate. `packages/cli` skips `pack-243.test.ts` inside its test script, so `pnpm test` does not run `npm pack`. Run that one file with `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts` when you want the tarball check. CI runs it as `pack-smoke` on Windows, macOS, and Linux. See [docs/ci.md](docs/ci.md).
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`. The pack smoke is also separate. `packages/cli` skips `pack-243.test.ts` inside its test script, so `pnpm test` does not run `npm pack`. Run that one file with `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts` when you want the tarball check. CI runs it as `pack-smoke` on Windows, macOS, and Linux. See [docs/ci.md](docs/ci.md). `hh doctor` is covered by [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts), including the browser install that runs only with `--yes`. The release file is covered by [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts). That test checks the triggers and that publish waits for the pack smoke. Neither test publishes, and neither creates a tag.
 
 ---
 

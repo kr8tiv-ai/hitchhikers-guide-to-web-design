@@ -1,6 +1,6 @@
 # CI
 
-Three GitHub Actions workflows run on push and on pull request. They need no repository secrets. They do not deploy and they do not publish.
+Three GitHub Actions workflows run on push and on pull request: CI, E2E, and Audit. They need no repository secrets. They do not deploy and they do not publish. A fourth file, `release.yml`, does not run on those events. It is described at the end of this page.
 
 Every third-party action is pinned to a 40-character commit SHA. The version tag sits in a trailing comment. Workflow permissions are `contents: read`.
 
@@ -119,3 +119,13 @@ gitleaks detect --source . --redact
 ```
 
 Use gitleaks 8.30.1 so the local scan matches CI. If `gitleaks` is not on `PATH`, download `gitleaks_8.30.1_windows_x64.zip` from the gitleaks releases page, check it against `gitleaks_8.30.1_checksums.txt` (SHA-256 `d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e`), and run the binary in the repo root. No package manager is required.
+
+## release.yml
+
+`.github/workflows/release.yml` publishes `hitchhikers-guide` from `packages/cli`. It does not run on an ordinary branch push, and it does not run on a pull request. Two starts are allowed: a hand start (`workflow_dispatch`) and a tag whose name matches `v*`.
+
+A hand start has to type `publish` in the confirm box. Any other word fails the confirm job before lint, tests, or the pack smoke, and npm is not called. A `v*` tag skips that refusal and continues.
+
+The CI job then runs the same lint, typecheck, `pnpm -r test`, and cassette eval as the `unit` job above, on Windows, macOS, and Linux. The pack smoke job runs the same one file as the `pack-smoke` job above. The publish job needs both. Its only publish command is `npm publish --provenance --access public`, with `working-directory: packages/cli`. Provenance uses GitHub's short-lived token (`id-token: write` on that job only). The file has no npm token.
+
+The workflow does not create a version tag and does not open a GitHub release. Do not start it from a build session, and do not create a tag from one. The local checks are `node --experimental-strip-types --test packages/engine/test/release-workflow.test.ts` and the doctor file named in the README. Neither command publishes.

@@ -8,9 +8,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 const workflowDir = path.join(repoRoot, ".github", "workflows");
 
-type YamlScalar = string | number | boolean | null;
-type YamlValue = YamlScalar | YamlValue[] | YamlMap;
-interface YamlMap {
+export type YamlScalar = string | number | boolean | null;
+export type YamlValue = YamlScalar | YamlValue[] | YamlMap;
+export interface YamlMap {
   [key: string]: YamlValue;
 }
 
@@ -310,7 +310,7 @@ interface Line {
   index: number;
 }
 
-function parseYaml(source: string): YamlMap {
+export function parseYaml(source: string): YamlMap {
   const text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   let cursor = 0;

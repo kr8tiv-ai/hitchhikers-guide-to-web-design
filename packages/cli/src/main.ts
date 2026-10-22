@@ -13,7 +13,13 @@ import {
   renderCommandTable,
   type ImplementedCommand,
 } from "./commands-table.ts";
-import { doctor, formatDoctor, type CommandRunner, type DoctorOptions } from "./doctor.ts";
+import {
+  doctor,
+  formatDoctor,
+  type CommandRunner,
+  type DoctorOptions,
+  type GateBrowserSnapshot,
+} from "./doctor.ts";
 import { runImprove } from "./improve/run.ts";
 import { runSupervise } from "./improve/supervisor.ts";
 import { runInstall } from "./install.ts";
@@ -28,7 +34,7 @@ const USAGE =
   "Usage: hh progress --project <dir> | hh pause --project <dir> --message <text> | hh resume --project <dir>";
 
 export type ParsedArgs =
-  | { ok: true; projectDir?: string }
+  | { ok: true; projectDir?: string; yes?: boolean }
   | { ok: false };
 
 export interface ParsedCli {
@@ -37,17 +43,38 @@ export interface ParsedCli {
   message?: string;
 }
 
-/** `hh doctor` and `hh doctor --project <dir>` are the only successful doctor forms. */
+/**
+ * `hh doctor`, with an optional `--project <dir>` and an optional `--yes`.
+ * `--yes` is the only permission to install missing gate browsers.
+ * `--help` stays a usage line and does not install anything.
+ */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  if (argv.length === 1 && argv[0] === "doctor") return { ok: true };
-  if (argv.length === 3 && argv[0] === "doctor" && argv[1] === "--project") {
-    const dir = argv[2];
-    if (dir === undefined || dir.length === 0 || dir.startsWith("-")) {
-      return { ok: false };
+  if (argv.length === 0 || argv[0] !== "doctor") return { ok: false };
+  let projectDir: string | undefined;
+  let yes = false;
+  let sawProject = false;
+  for (let index = 1; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--yes") {
+      if (yes) return { ok: false };
+      yes = true;
+      continue;
     }
-    return { ok: true, projectDir: dir };
+    if (arg === "--project") {
+      if (sawProject) return { ok: false };
+      const dir = argv[index + 1];
+      if (dir === undefined || dir.length === 0 || dir.startsWith("-")) return { ok: false };
+      sawProject = true;
+      projectDir = dir;
+      index += 1;
+      continue;
+    }
+    return { ok: false };
   }
-  return { ok: false };
+  const parsed: { ok: true; projectDir?: string; yes?: boolean } = { ok: true };
+  if (projectDir !== undefined) parsed.projectDir = projectDir;
+  if (yes) parsed.yes = true;
+  return parsed;
 }
 
 /**
@@ -388,11 +415,17 @@ export function cliEntryArgs(argv: readonly string[]): string[] {
   return [...argv];
 }
 
+type CliDeps = RunAppOptions & {
+  soLong?: SoLongDeps;
+  /** Stand-in for the Playwright browser cache. Tests pass this. */
+  readGateBrowsers?: (env: NodeJS.ProcessEnv) => GateBrowserSnapshot;
+};
+
 async function dispatchImplemented(
   command: ImplementedCommand,
   argv: readonly string[],
   runner: CommandRunner | undefined,
-  deps: RunAppOptions & { soLong?: SoLongDeps },
+  deps: CliDeps,
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   switch (command) {
     case "install":
@@ -426,7 +459,9 @@ async function dispatchImplemented(
       if (!parsed.ok) return { exitCode: 2, stdout: `${HELP}\n` };
       const options: DoctorOptions = {
         ...(parsed.projectDir === undefined ? {} : { projectDir: parsed.projectDir }),
+        ...(parsed.yes === true ? { yes: true } : {}),
         ...(runner === undefined ? {} : { runner }),
+        ...(deps.readGateBrowsers === undefined ? {} : { readGateBrowsers: deps.readGateBrowsers }),
         env: deps.env ?? process.env,
       };
       const outcome = await doctor(options);
@@ -462,7 +497,7 @@ async function dispatchImplemented(
 export async function runCli(
   argv: readonly string[],
   runner?: CommandRunner,
-  deps: RunAppOptions & { soLong?: SoLongDeps } = {},
+  deps: CliDeps = {},
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const command = argv[0];
   // Bare `hh` is rewritten to `app` before this runs. `--help` stays the old usage line.

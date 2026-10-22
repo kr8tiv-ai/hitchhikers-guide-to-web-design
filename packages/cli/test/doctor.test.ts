@@ -16,9 +16,11 @@ import {
   doctor,
   formatDoctor,
   nodeIsSupported,
+  readGateBrowsers,
   spawnCommand,
   type CommandResult,
   type CommandRunner,
+  type GateBrowserSnapshot,
 } from "../src/doctor.ts";
 import { parseArgs, runCli } from "../src/main.ts";
 
@@ -336,6 +338,22 @@ test("hh doctor is the only successful command", async () => {
   assert.equal(run.calls.includes("playwright --version"), true);
   assert.equal(run.calls.includes("whisper --version"), true);
   assert.equal(run.calls.includes("pdftotext -v"), true);
+  assert.equal(run.calls.some((call) => call.includes("install")), false);
+
+  const project = path.join("sites", "towel");
+  assert.deepEqual(parseArgs(["doctor", "--yes"]), { ok: true, yes: true });
+  assert.deepEqual(parseArgs(["doctor", "--project", project, "--yes"]), {
+    ok: true,
+    projectDir: project,
+    yes: true,
+  });
+  assert.deepEqual(parseArgs(["doctor", "--yes", "--project", project]), {
+    ok: true,
+    projectDir: project,
+    yes: true,
+  });
+  assert.deepEqual(parseArgs(["doctor", "--yes", "--yes"]), { ok: false });
+  assert.deepEqual(parseArgs(["doctor", "--yes", "--help"]), { ok: false });
 });
 
 const NO_AUTH_HELP = [
@@ -462,4 +480,235 @@ test("doctor does not require whisper, playwright, or pdftotext", () => {
   const missing = spawnCommand("hh-not-a-real-binary-009", ["--version"]);
   assert.equal(missing.status, null);
   assert.equal(missing.errorCode, "ENOENT");
+  assert.equal(source.includes("readline"), false);
+  assert.equal(source.includes("createInterface"), false);
+  assert.equal(source.includes("npm publish"), false);
+});
+
+function browserCache(present: { chromium?: boolean; webkit?: boolean }): {
+  dir: string;
+  snapshot: GateBrowserSnapshot;
+} {
+  const dir = tempDir();
+  if (present.chromium === true) {
+    const folder = path.join(dir, "chromium-1200", "chrome-win64");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, "chrome.exe"), "");
+  }
+  if (present.webkit === true) {
+    const folder = path.join(dir, "webkit-2100");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(path.join(folder, "pw_run.sh"), "");
+  }
+  const shell = path.join(dir, "chromium_headless_shell-1200", "chrome-headless-shell-win64");
+  mkdirSync(shell, { recursive: true });
+  writeFileSync(path.join(shell, "chrome-headless-shell.exe"), "");
+  const dashed = path.join(dir, "chromium-headless-shell-1200");
+  mkdirSync(dashed, { recursive: true });
+  writeFileSync(path.join(dashed, "chrome.exe"), "");
+  return {
+    dir,
+    snapshot: { cacheDir: dir, chromium: present.chromium === true, webkit: present.webkit === true },
+  };
+}
+
+function pnpmDir(): string {
+  const dir = tempDir();
+  const name = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  writeFileSync(path.join(dir, name), "");
+  return dir;
+}
+
+function envWith(dir: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return { ...extra, PATH: dir, Path: dir, PLAYWRIGHT_BROWSERS_PATH: extra.PLAYWRIGHT_BROWSERS_PATH ?? "" };
+}
+
+test("readGateBrowsers sees Chromium and WebKit and ignores the headless shell", () => {
+  const cache = browserCache({ chromium: true, webkit: true });
+  try {
+    const seen = readGateBrowsers({ PLAYWRIGHT_BROWSERS_PATH: cache.dir });
+    assert.equal(seen.cacheDir, cache.dir);
+    assert.equal(seen.chromium, true);
+    assert.equal(seen.webkit, true);
+    const empty = tempDir();
+    try {
+      const none = readGateBrowsers({ PLAYWRIGHT_BROWSERS_PATH: empty });
+      assert.equal(none.chromium, false);
+      assert.equal(none.webkit, false);
+    } finally {
+      rmSync(empty, { recursive: true, force: true });
+    }
+    const shellOnly = browserCache({});
+    try {
+      const onlyShell = readGateBrowsers({ PLAYWRIGHT_BROWSERS_PATH: shellOnly.dir });
+      assert.equal(onlyShell.chromium, false);
+      assert.equal(onlyShell.webkit, false);
+    } finally {
+      rmSync(shellOnly.dir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(cache.dir, { recursive: true, force: true });
+  }
+});
+
+test("doctor describes missing gate browsers and does not install without yes", async () => {
+  const cache = browserCache({ webkit: true });
+  const pnpm = pnpmDir();
+  try {
+    const run = scripted({
+      ...gitOk(),
+      "grok --version": command(0, "grok 1.2.3\n"),
+      "grok --help": command(0, AUTH_STATUS_HELP),
+      "grok --auth-status": command(0, "signed in\n"),
+      "pnpm exec playwright install chromium": command(0, "installed\n"),
+    });
+    const outcome = await doctor({
+      nodeVersion: "v22.0.0",
+      runner: run,
+      env: envWith(pnpm, { PLAYWRIGHT_BROWSERS_PATH: cache.dir }),
+    });
+    assert.equal(outcome.exitCode, 0);
+    assert.equal(outcome.report.auth, "signed-in");
+    assert.equal(outcome.report.gateBrowsers?.chromium, false);
+    assert.equal(outcome.report.gateBrowsers?.webkit, true);
+    assert.equal(outcome.report.gateBrowsers?.yes, false);
+    assert.equal(outcome.report.gateBrowsers?.installAttempted, false);
+    const text = formatDoctor(outcome.report);
+    assert.match(text, /^Node\.js 22\.0\.0 is new enough\. The Guide needs Node\.js 22 or newer\.$/m);
+    assert.match(text, /^Grok is on this computer, and you are signed in\.$/m);
+    assert.match(text, /Chromium is missing/);
+    assert.match(text, /Nothing was downloaded/);
+    assert.match(text, /hh doctor --yes/);
+    assert.match(text, /pnpm exec playwright install chromium/);
+    assert.equal(text.includes(cache.dir), false);
+    assert.equal(text.includes("!"), false);
+    assert.equal(run.calls.some((call) => call.includes("install")), false);
+    assert.equal(run.calls.includes("grok login"), false);
+  } finally {
+    rmSync(cache.dir, { recursive: true, force: true });
+    rmSync(pnpm, { recursive: true, force: true });
+  }
+});
+
+test("doctor installs only the missing gate browsers when yes is passed", async () => {
+  const cache = browserCache({});
+  const pnpm = pnpmDir();
+  try {
+    const both = scripted({
+      ...gitOk(),
+      "pnpm exec playwright install chromium webkit": command(0, "ok\n"),
+    });
+    const installed = await doctor({
+      nodeVersion: "v22.14.0",
+      runner: both,
+      env: envWith(pnpm, { PLAYWRIGHT_BROWSERS_PATH: cache.dir }),
+      yes: true,
+    });
+    assert.equal(installed.exitCode, 0);
+    assert.equal(installed.report.gateBrowsers?.installAttempted, true);
+    assert.equal(installed.report.gateBrowsers?.installOk, true);
+    assert.equal(installed.report.gateBrowsers?.chromium, true);
+    assert.equal(installed.report.gateBrowsers?.webkit, true);
+    assert.deepEqual(installed.report.gateBrowsers?.missing, ["chromium", "webkit"]);
+    const text = formatDoctor(installed.report);
+    assert.match(text, /^You said yes\. The missing browsers are installed\. Chromium and WebKit are ready for the quality gates\.$/m);
+    assert.equal(text.includes("!"), false);
+    assert.equal(both.calls.filter((call) => call.includes("install")).length, 1);
+    assert.equal(both.calls.includes("grok login"), false);
+
+    const present = browserCache({ chromium: true, webkit: true });
+    try {
+      const idle = scripted({
+        ...gitOk(),
+        "pnpm exec playwright install chromium webkit": command(0, "ok\n"),
+      });
+      const skipped = await doctor({
+        nodeVersion: "v22.0.0",
+        runner: idle,
+        env: envWith(pnpm, { PLAYWRIGHT_BROWSERS_PATH: present.dir }),
+        yes: true,
+      });
+      assert.equal(skipped.report.gateBrowsers?.installAttempted, false);
+      assert.match(formatDoctor(skipped.report), /Nothing was downloaded/);
+      assert.equal(idle.calls.some((call) => call.includes("install")), false);
+    } finally {
+      rmSync(present.dir, { recursive: true, force: true });
+    }
+
+    const failed = scripted({
+      ...gitOk(),
+      "pnpm exec playwright install webkit": command(1, "", "no network"),
+    });
+    const webkitOnly = browserCache({ chromium: true });
+    try {
+      const broken = await doctor({
+        nodeVersion: "v22.0.0",
+        runner: failed,
+        env: envWith(pnpm, { PLAYWRIGHT_BROWSERS_PATH: webkitOnly.dir }),
+        yes: true,
+      });
+      assert.equal(broken.report.gateBrowsers?.installOk, false);
+      assert.equal(broken.report.gateBrowsers?.webkit, false);
+      assert.match(formatDoctor(broken.report), /the browser install did not finish/);
+      assert.match(formatDoctor(broken.report), /pnpm exec playwright install webkit/);
+      assert.equal(formatDoctor(broken.report).includes("!"), false);
+    } finally {
+      rmSync(webkitOnly.dir, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(cache.dir, { recursive: true, force: true });
+    rmSync(pnpm, { recursive: true, force: true });
+  }
+});
+
+test("doctor does not download browsers when pnpm is missing, even with yes", async () => {
+  const run = scripted({
+    ...gitOk(),
+    "pnpm exec playwright install chromium webkit": command(0, "should-not-run\n"),
+  });
+  const outcome = await doctor({
+    nodeVersion: "v18.0.0",
+    runner: run,
+    yes: true,
+    env: { PATH: "", Path: "" },
+    readGateBrowsers: () => ({ cacheDir: "hidden-cache", chromium: false, webkit: false }),
+  });
+  assert.equal(outcome.exitCode, 1);
+  assert.equal(outcome.report.nodeOk, false);
+  assert.equal(outcome.report.gateBrowsers?.installAttempted, false);
+  const text = formatDoctor(outcome.report);
+  assert.match(text, /^Node\.js 18\.0\.0 is too old\. Install Node\.js 22 or newer, then run hh doctor again\.$/m);
+  assert.match(text, /pnpm is not on this machine/);
+  assert.equal(text.includes("hidden-cache"), false);
+  assert.equal(text.includes("!"), false);
+  assert.equal(run.calls.some((call) => call.includes("install")), false);
+  assert.equal(run.calls.includes("grok login"), false);
+});
+
+test("hh doctor --yes installs from the CLI only when the flag is present", async () => {
+  const missing: GateBrowserSnapshot = { cacheDir: "hidden-cache", chromium: false, webkit: true };
+  const pnpm = pnpmDir();
+  try {
+    const refused = await runCli(["doctor", "--help"], scripted(gitOk()));
+    assert.equal(refused.exitCode, 2);
+    assert.equal(refused.stdout, "hh doctor [--project <dir>]\n");
+
+    const run = scripted({
+      ...gitOk(),
+      "pnpm exec playwright install chromium": command(0, "ok\n"),
+    });
+    const accepted = await runCli(["doctor", "--yes"], run, {
+      env: envWith(pnpm),
+      readGateBrowsers: () => missing,
+    });
+    assert.equal(accepted.exitCode, nodeIsSupported(process.version) ? 0 : 1);
+    assert.match(accepted.stdout, /^node: /);
+    assert.match(accepted.stdout, /You said yes/);
+    assert.equal(accepted.stdout.includes("hidden-cache"), false);
+    assert.equal(accepted.stdout.includes("!"), false);
+    assert.equal(run.calls.includes("pnpm exec playwright install chromium"), true);
+    assert.equal(run.calls.includes("grok login"), false);
+  } finally {
+    rmSync(pnpm, { recursive: true, force: true });
+  }
 });
