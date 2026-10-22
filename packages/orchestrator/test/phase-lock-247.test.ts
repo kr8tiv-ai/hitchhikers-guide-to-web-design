@@ -1,6 +1,7 @@
 /**
  * One transition table owns discovery, brief, design, build, Elevate, and So long.
- * Legal edges pass. A skip returns a plain sentence. CLI and desk entries call the table.
+ * Legal edges pass. A skip returns a plain sentence. Desk entries call the table.
+ * The brief, Elevate, so-long, and build commands are tested in the CLI package.
  */
 
 import assert from "node:assert/strict";
@@ -11,10 +12,6 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { GATE_IDS, gatesJsonPath, type GateId, type GateStatus } from "@hitchhiker/qa";
-import { runBriefCommand } from "../../cli/src/commands/brief.ts";
-import { runBuildCommand } from "../../cli/src/commands/context.ts";
-import { runElevateCommand } from "../../cli/src/commands/elevate.ts";
-import { runSoLongCommand } from "../../cli/src/commands/so-long.ts";
 import { beginPhaseSix, FLOW_PHASES, FLOW_TRANSITIONS, enterFlow, flowFilePath, readFlowFrom, requestFlowTransition, type FlowFrom, type FlowPhase, type FlowRequest } from "../src/index.ts";
 import { advance } from "../src/progress.ts";
 import { FLOW_TRANSITIONS as progressTable } from "../src/progress.ts";
@@ -305,15 +302,10 @@ test("Elevate picks and a finished prompt use the same table", async () => {
   }
 });
 
-test("hh brief, hh elevate, hh so-long, and hh build call the table", async () => {
+test("the orchestrator sources and the desk call the table", () => {
   const progress = readFileSync(path.join(root, "packages/orchestrator/src/progress.ts"), "utf8");
   const runner = readFileSync(path.join(root, "packages/orchestrator/src/runner.ts"), "utf8");
   const schedule = readFileSync(path.join(root, "packages/orchestrator/src/schedule.ts"), "utf8");
-  const brief = readFileSync(path.join(root, "packages/cli/src/commands/brief.ts"), "utf8");
-  const elevate = readFileSync(path.join(root, "packages/cli/src/commands/elevate.ts"), "utf8");
-  const soLong = readFileSync(path.join(root, "packages/cli/src/commands/so-long.ts"), "utf8");
-  const context = readFileSync(path.join(root, "packages/cli/src/commands/context.ts"), "utf8");
-  const flowEntry = readFileSync(path.join(root, "packages/cli/src/commands/flow-entry.ts"), "utf8");
   const routes = readFileSync(path.join(root, "packages/app/src/server/routes.ts"), "utf8");
   const desk = readFileSync(path.join(root, "packages/app/src/server/desk-flow.ts"), "utf8");
 
@@ -325,9 +317,6 @@ test("hh brief, hh elevate, hh so-long, and hh build call the table", async () =
   assert.match(schedule, /requestFlowTransition/);
   assert.doesNotMatch(schedule, /node:fs/);
   assert.doesNotMatch(schedule, /from ["'].*runner/);
-  for (const source of [brief, elevate, soLong, context]) assert.match(source, /enterCliFlow\(/);
-  assert.match(flowEntry, /phase-lock\.ts/);
-  assert.match(flowEntry, /enterFlow/);
   assert.match(desk, /phase-lock\.ts/);
   assert.match(routes, /from "\.\/desk-flow\.ts"/);
   assert.match(routes, /allowDeskMove\(/);
@@ -343,65 +332,6 @@ test("hh brief, hh elevate, hh so-long, and hh build call the table", async () =
   const directionFn = routes.indexOf("async function handleDirectionPost");
   const directionBody = routes.slice(directionFn, routes.indexOf("postDirectionChoice", directionFn));
   assert.equal(directionBody.includes("enterFlow"), false);
-
-  const dir = tempProject();
-  try {
-    await saveState(dir, guide("Don't Panic"));
-    writeFileSync(flowFilePath(dir), `${JSON.stringify({ phase: "so-long" }, null, 2)}\n`, "utf8");
-    const shown = await runBriefCommand(["--project", dir], dir, (async () => {
-      throw new Error("think should not run");
-    }) as never);
-    assert.equal(shown.exitCode, 1);
-    assert.match(shown.stdout, /Go back one step at a time/);
-    assert.equal(savedPhase(dir), "so-long");
-
-    const usage = await runBriefCommand(["--nope"], dir);
-    assert.equal(usage.exitCode, 2);
-    assert.doesNotMatch(usage.stdout, /Finish the/);
-
-    await saveState(dir, guide("Don't Panic"));
-    rmSync(flowFilePath(dir));
-    const approved = await runBriefCommand(["--approve", "--project", dir], dir, (async () => {
-      throw new Error("think should not run");
-    }) as never);
-    assert.equal(approved.exitCode, 1);
-    assert.equal(approved.stdout, "Finish the brief before the design.\n");
-    assert.equal(existsSync(flowFilePath(dir)), false);
-
-    const elevated = await runElevateCommand(["--project", dir], { cwd: dir });
-    assert.equal(elevated.exitCode, 1);
-    assert.equal(elevated.stdout, "Finish the brief before Elevate.\n");
-    const help = await runElevateCommand(["--help"], { cwd: dir });
-    assert.equal(help.exitCode, 0);
-    assert.match(help.stdout, /Usage: hh elevate/);
-
-    const publish = await runSoLongCommand(["--project", dir], { cwd: dir });
-    assert.equal(publish.exitCode, 1);
-    assert.equal(publish.stdout, "Finish the brief before publishing.\n");
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md")), false);
-    const soLongHelp = await runSoLongCommand(["--help"], { cwd: dir });
-    assert.equal(soLongHelp.exitCode, 0);
-    assert.match(soLongHelp.stdout, /hh so-long/);
-
-    const buildUsage = await runBuildCommand(["--project", dir], dir);
-    assert.equal(buildUsage.exitCode, 2);
-    assert.doesNotMatch(buildUsage.stdout, /Finish the/);
-    const build = await runBuildCommand(["--resume", "--project", dir], dir);
-    assert.equal(build.exitCode, 1);
-    assert.equal(build.stdout, "Finish the brief before building.\n");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-
-  const fresh = tempProject();
-  try {
-    const resumed = await runBuildCommand(["--resume", "--project", fresh], fresh);
-    assert.equal(resumed.exitCode, 1);
-    assert.equal(resumed.stdout, "No site build is queued.\n");
-    assert.equal(savedPhase(fresh), "build");
-  } finally {
-    rmSync(fresh, { recursive: true, force: true });
-  }
 });
 
 test("a missing folder and an unreadable saved step do not move", async () => {
