@@ -8,7 +8,9 @@ These pages tell you how to run the same commands on your machine.
 
 ## ci.yml
 
-Job `unit` runs on `ubuntu-latest`, `windows-latest`, and `macos-latest` with Node.js 22.
+Job `unit` runs on `ubuntu-latest`, `windows-latest`, and `macos-latest` with Node.js 22. Job `pack-smoke` runs on those same three operating systems. It is a separate job so a normal unit run does not pack.
+
+The `unit` job:
 
 1. On Windows, set `git config --global core.longpaths true` before checkout so long paths do not break the runner.
 2. Install pnpm from the `packageManager` field, then Node 22 with the pnpm store cache.
@@ -36,6 +38,28 @@ $env:HH_CASSETTE = "replay"
 pnpm -r test
 pnpm -r run --if-present eval
 ```
+
+### Pack smoke
+
+Job `pack-smoke` uses the same checkout, pnpm, Node 22, and frozen install as `unit`. Its last step runs one file, and only that file:
+
+```
+node --experimental-strip-types --test packages/cli/test/pack-243.test.ts
+```
+
+The file calls `npm pack` once in `packages/cli`. The tarball has to be at most 25 MB (25 × 1024 × 1024 bytes). The packed `package.json` must not contain a `workspace:` specifier, and its bin, `main`, and `exports` must point at JavaScript, not TypeScript. The `files` allowlist must not name `vendor/`, `context/`, `hh-build-plan/`, or `docs/assets/ui-*`, and those paths must not appear at the root of the tarball. The test then installs the tarball in a temporary directory and runs the installed `hh --version`, `hh doctor`, and `hh app --no-open --port <free port>`. The port is never 4175. A request for `/` must return 200.
+
+The package test script skips this file, so `pnpm -r test` does not pack. Run the file on its own when you want the check. It needs network access for the temporary install. It does not publish, and it does not call a host.
+
+### Local equivalent (Windows PowerShell)
+
+Run from the repo root, after dependencies are installed.
+
+```powershell
+node --experimental-strip-types --test packages/cli/test/pack-243.test.ts
+```
+
+Give it time. Packing builds the bundle, and the install step downloads the ordinary runtime dependencies into a temporary folder. `--ignore-scripts` is inside the test, so Playwright does not download a browser. Nothing listens on port 4175.
 
 ## e2e.yml
 

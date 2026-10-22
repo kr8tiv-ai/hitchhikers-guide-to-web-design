@@ -58,7 +58,7 @@
     "build": "node build.mjs",
     "prepack": "node prepack.mjs",
     "postpack": "node postpack.mjs",
-    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+    "test": "node --experimental-strip-types --test --test-skip-pattern pack-243[.]test[.]ts test/**/*.test.ts"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

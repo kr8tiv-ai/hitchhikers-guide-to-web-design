@@ -1,5 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadState, packagedModule, saveState, type GuideState } from "@hitchhiker/engine";
@@ -22,6 +22,7 @@ import { runBuildCommand, runContextCommand, runDoctorContext, runNextCommand } 
 import { runSoLongCommand, type SoLongDeps } from "./commands/so-long.ts";
 
 const HELP = "hh doctor [--project <dir>]";
+const VERSION_USAGE = "Usage: hh --version";
 
 const USAGE =
   "Usage: hh progress --project <dir> | hh pause --project <dir> --message <text> | hh resume --project <dir>";
@@ -468,10 +469,30 @@ export async function runCli(
   if (command === undefined || command === "--help" || command === "-h") {
     return { exitCode: 2, stdout: `${HELP}\n` };
   }
+  if (command === "--version") {
+    if (argv.length !== 1) return { exitCode: 2, stdout: `${VERSION_USAGE}\n` };
+    const version = readPackageVersion();
+    if (version === null) return { exitCode: 1, stdout: "The Guide could not read its version.\n" };
+    return { exitCode: 0, stdout: `${version}\n` };
+  }
   if (!isImplementedCommand(command)) {
     return { exitCode: 2, stdout: "", stderr: renderCommandTable(command) };
   }
   return dispatchImplemented(command, argv, runner, deps);
+}
+
+/** Version from the package.json next to this file. Source and the packed bin both qualify. */
+function readPackageVersion(): string | null {
+  try {
+    const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const version = (parsed as { version?: unknown }).version;
+    if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(version)) return null;
+    return version;
+  } catch {
+    return null;
+  }
 }
 
 function isDirectRun(): boolean {
