@@ -454,7 +454,7 @@ The compressed tarball, the `.tgz` file `npm pack` writes, has to be at most 25 
 
 1. `npm pack` in `packages/cli`, which builds the bundle and writes the tarball into a temporary directory.
 2. The `.tgz` must be within the 25 MB cap.
-3. `package/package.json` inside the tarball has no `workspace:` specifier. `bin.hh`, `main`, and `exports` point at `./dist/main.js`. None of those entry points end in `.ts`. The first line of that file is `#!/usr/bin/env node`.
+3. `package/package.json` inside the tarball has no `workspace:` specifier. `bin.hh`, `main`, and `exports` point at `./dist/main.js`. None of those entry points end in `.ts`. The first line of that file is the Node shebang (`#` then `/usr/bin/env node`).
 4. No tarball path starts at `vendor/`, `context/`, `hh-build-plan/`, or `docs/assets/ui-*`.
 5. `npm install` of that tarball into a temporary folder, with `--ignore-scripts`, so Playwright does not download a browser.
 6. The linked `hh` runs `--version`, then `doctor`, then `app --no-open --port <free port>`. The port is chosen from 46100 upward. 4175 is never opened and never closed. The test requests `http://127.0.0.1:<port>/` and expects status 200.

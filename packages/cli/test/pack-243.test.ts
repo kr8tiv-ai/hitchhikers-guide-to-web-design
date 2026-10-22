@@ -6,10 +6,12 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -99,12 +101,17 @@ test("npm pack stays within 25 MB and the installed hh serves the desk", { timeo
     );
 
     const binDir = path.join(prefix, "node_modules", ".bin");
-    const shim = path.join(binDir, process.platform === "win32" ? "hh.cmd" : "hh");
-    assert.equal(statSync(shim).isFile(), true, "npm did not link the hh bin");
-    const shimText = readFileSync(shim, "utf8");
-    assert.match(shimText, /dist[/\\]main\.js/);
-    assert.equal(shimText.includes("main.ts"), false);
-    assert.equal(shimText.includes("--experimental-strip-types"), false);
+    if (process.platform === "win32") {
+      const shim = path.join(binDir, "hh.cmd");
+      assert.equal(statSync(shim).isFile(), true, "npm did not link the hh bin");
+      const shimText = readFileSync(shim, "utf8");
+      assert.match(shimText, /dist[/\\]main\.js/);
+      assert.equal(shimText.includes("main.ts"), false);
+      assert.equal(shimText.includes("--experimental-strip-types"), false);
+    } else {
+      // npm links the POSIX bin as a symlink. Reading it returns the bundle, not a cmd shim.
+      assertPosixHhBin(path.join(binDir, "hh"), prefix, manifest);
+    }
 
     const env = smokeEnv(binDir);
     const version = runCommand("hh", ["--version"], { cwd: project, env, timeout: 60_000 });
@@ -265,6 +272,20 @@ function runtimeTargets(value: unknown): string[] {
     return Object.values(value as Record<string, unknown>).flatMap((item) => runtimeTargets(item));
   }
   return [];
+}
+
+function assertPosixHhBin(shim: string, prefix: string, manifest: Record<string, unknown>): void {
+  assert.equal(lstatSync(shim).isSymbolicLink(), true, "npm did not link the hh bin");
+  const resolved = realpathSync(shim);
+  const pkgName = manifest.name;
+  assert.equal(typeof pkgName, "string");
+  const installedPkg = realpathSync(path.join(prefix, "node_modules", pkgName));
+  const rel = path.relative(installedPkg, resolved).replaceAll("\\", "/");
+  assert.equal(rel, "dist/main.js", `hh bin resolves to ${resolved}`);
+  const targetText = readFileSync(resolved, "utf8");
+  const shebang = targetText.split("\n", 1)[0] ?? "";
+  assert.equal(shebang, "#!/usr/bin/env node");
+  assert.equal(shebang.includes("--experimental-strip-types"), false);
 }
 
 function binPath(manifest: Record<string, unknown>): string {
