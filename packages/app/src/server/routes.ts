@@ -151,6 +151,7 @@ import { renderShell } from "../shell.ts";
 import { applySplash, deferSplashModuleScripts, resolveSplashLoop, type SplashLoop } from "../splash/markup.ts";
 import { renderFriendly, splitPublicError } from "../friendly.ts";
 import { renderReplayControl, renderTour } from "../tour.ts";
+import { renderElevatePickCards, type ElevatePickModel } from "../brand/approve-cards.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
 import { approveMain, brandBriefMain, dashboardBriefNote, type ApproveStage } from "./brief-page.ts";
@@ -296,6 +297,7 @@ const QUESTION_PARTS_SOURCE = path.resolve(SRC_ROOT, "question-parts.ts");
 const BRAND_SOURCE = path.resolve(SRC_ROOT, "client", "brand.ts");
 const DIRECTION_SOURCE = path.resolve(SRC_ROOT, "client", "direction.ts");
 const APPROVE_CARDS_SOURCE = path.resolve(SRC_ROOT, "brand", "approve-cards.ts");
+const PICK_CARDS_SOURCE = path.resolve(SRC_ROOT, "client", "pick-cards.ts");
 const DESK_SOURCE = path.resolve(SRC_ROOT, "client", "desk.ts");
 const DRAFT_STORE_SOURCE = path.resolve(SRC_ROOT, "client", "draft-store.ts");
 const ATTACH_SOURCE = path.resolve(SRC_ROOT, "client", "attach.ts");
@@ -1014,6 +1016,10 @@ async function handlePost(
   const header = req.headers["x-hh-csrf"];
   if (typeof header !== "string" || !tokensMatch(token, header)) {
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
+    return;
+  }
+  if (pathname === "/api/approve/picks") {
+    await handlePickDecision(req, res, projectDir);
     return;
   }
   if (pathname === "/api/effort") {
@@ -2363,6 +2369,14 @@ async function handleGet(
     await sendBrandLogo(req, res, projectDir);
     return;
   }
+  if (pathname === "/approve/picks/shot") {
+    await sendPickShot(req, res, projectDir, queryValue(rawUrl, "name") ?? "");
+    return;
+  }
+  if (pathname === "/approve/picks") {
+    await deliverHtml(req, res, 200, renderPickDesk(token, notice, projectDir), projectDir, token, false);
+    return;
+  }
   if (pathname === "/approve") {
     const brief = readBriefDesk(projectDir);
     if (brief.planApproved || brief.buildStarted) {
@@ -2507,6 +2521,10 @@ async function handleGet(
   }
   if (pathname === "/client/approve-cards.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(APPROVE_CARDS_SOURCE)));
+    return;
+  }
+  if (pathname === "/client/pick-cards.js") {
+    sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(PICK_CARDS_SOURCE)));
     return;
   }
   if (pathname === "/client/theme.js") {
@@ -3470,6 +3488,224 @@ function brandMarkdown(projectDir: string): string {
   } catch {
     return "";
   }
+}
+
+const PICK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/;
+const SHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/;
+
+function pickShotUrl(name: string): string {
+  return `/approve/picks/shot?name=${encodeURIComponent(name)}`;
+}
+
+function calmPick(value: string): string {
+  return value.replaceAll("!", ".").replaceAll("\u2014", "-").replace(/[\r\n]+/g, " ").trim();
+}
+
+function safeShotName(value: string): string | null {
+  const name = value.trim();
+  if (!SHOT_NAME.test(name) || name.includes("..") || name.includes("/") || name.includes("\\")) return null;
+  if (path.basename(name) !== name) return null;
+  return name;
+}
+
+function shotsDir(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "elevate", "shots");
+}
+
+function decisionsPath(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "elevate", "decisions.json");
+}
+
+type PickDecision = "approved" | "rejected";
+
+function readDecisions(projectDir: string): Record<string, PickDecision> {
+  let text: string;
+  try {
+    text = readFileSync(decisionsPath(projectDir), "utf8");
+  } catch {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return {};
+  }
+  if (!isRecord(parsed) || !isRecord(parsed.decisions)) return {};
+  const decisions: Record<string, PickDecision> = {};
+  for (const [id, status] of Object.entries(parsed.decisions)) {
+    if (!PICK_ID.test(id)) continue;
+    if (status === "approved" || status === "rejected") decisions[id] = status;
+  }
+  return decisions;
+}
+
+interface RawPick {
+  id: string;
+  file: string;
+  change: string;
+  before: string;
+  after: string;
+}
+
+function readCardsFile(projectDir: string): { ok: true; picks: RawPick[] } | { ok: false } | null {
+  const file = path.join(projectDir, ".hitchhiker", "elevate", "cards.json");
+  if (!existsSync(file)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { ok: false };
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.picks)) return { ok: false };
+  const picks: RawPick[] = [];
+  const seen = new Set<string>();
+  for (const row of parsed.picks) {
+    if (!isRecord(row)) return { ok: false };
+    if (typeof row.id !== "string" || typeof row.file !== "string" || typeof row.change !== "string") return { ok: false };
+    if (typeof row.before !== "string" || typeof row.after !== "string") return { ok: false };
+    const id = row.id.trim();
+    const before = safeShotName(row.before);
+    const after = safeShotName(row.after);
+    const fileName = calmPick(row.file).slice(0, 240);
+    const change = calmPick(row.change).slice(0, 400);
+    if (!PICK_ID.test(id) || fileName === "" || change === "" || before === null || after === null) return { ok: false };
+    if (seen.has(id)) continue;
+    seen.add(id);
+    picks.push({ id, file: fileName, change, before, after });
+  }
+  return { ok: true, picks };
+}
+
+function readRoundPicks(projectDir: string): RawPick[] {
+  const file = path.join(projectDir, ".hitchhiker", "elevate", "rounds.json");
+  if (!existsSync(file)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.rounds) || parsed.rounds.length === 0) return [];
+  const last = parsed.rounds[parsed.rounds.length - 1];
+  if (!isRecord(last) || !Array.isArray(last.picks)) return [];
+  const picks: RawPick[] = [];
+  const seen = new Set<string>();
+  for (const row of last.picks) {
+    if (!isRecord(row) || typeof row.id !== "string") continue;
+    const id = row.id.trim();
+    if (!PICK_ID.test(id) || seen.has(id)) continue;
+    const before = `${id}-before.png`;
+    const after = `${id}-after.png`;
+    if (safeShotName(before) === null || safeShotName(after) === null) continue;
+    const fileName = typeof row.file === "string" ? calmPick(row.file).slice(0, 240) : "";
+    const change = typeof row.change === "string" ? calmPick(row.change).slice(0, 400) : "";
+    if (fileName === "" || change === "") continue;
+    seen.add(id);
+    picks.push({ id, file: fileName, change, before, after });
+  }
+  return picks;
+}
+
+function shotOnDisk(projectDir: string, name: string): boolean {
+  return existsSync(path.join(shotsDir(projectDir), name));
+}
+
+function loadPickModels(projectDir: string): { items: ElevatePickModel[]; note: string } {
+  const stored = readCardsFile(projectDir);
+  if (stored !== null && !stored.ok) {
+    return { items: [], note: "The pick list could not be read." };
+  }
+  const raw = stored === null ? readRoundPicks(projectDir) : stored.picks;
+  const decisions = readDecisions(projectDir);
+  const items: ElevatePickModel[] = [];
+  for (const pick of raw) {
+    if (!shotOnDisk(projectDir, pick.before) || !shotOnDisk(projectDir, pick.after)) continue;
+    const decided = decisions[pick.id];
+    items.push({
+      itemId: pick.id,
+      file: pick.file,
+      change: pick.change,
+      status: decided ?? "pending",
+      beforeSrc: pickShotUrl(pick.before),
+      afterSrc: pickShotUrl(pick.after),
+    });
+  }
+  return { items, note: "" };
+}
+
+function renderPickDesk(token: string, notice: string | null, projectDir: string): string {
+  const loaded = loadPickModels(projectDir);
+  const cards = loaded.note === "" ? renderElevatePickCards(loaded.items) : renderElevatePickCards([], loaded.note);
+  const waiting = loaded.items.length === 0 ? "Nothing is waiting for a yes." : "A pick stays here until you approve it.";
+  return renderPanel({
+    notice,
+    token,
+    title: "Before and after",
+    description: "Each pick shows the page before the change and after it. Nothing changes until you approve it.",
+    current: "/approve",
+    kicker: "Before and after",
+    status: waiting,
+    script: "/client/pick-cards.js",
+    main: `<div data-pick-deck>
+        <p class="hh-dek">Nothing changes until you approve a pick.</p>
+        <p class="hh-dek" data-pick-note hidden></p>
+        ${cards}
+      </div>`,
+  });
+}
+
+async function sendPickShot(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  name: string,
+): Promise<void> {
+  const safe = safeShotName(name);
+  const ext = safe === null ? "" : path.extname(safe).toLowerCase();
+  const type = ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".webp" || ext === ".gif" ? STATIC_TYPES[ext] : undefined;
+  if (safe === null || type === undefined) {
+    sendJson(req, res, 404, { error: "That shot is not on the desk." });
+    return;
+  }
+  const bytes = await readInside(shotsDir(projectDir), safe);
+  if (bytes === null) {
+    sendJson(req, res, 404, { error: "That shot is not on the desk." });
+    return;
+  }
+  sendBytes(req, res, 200, type, bytes);
+}
+
+async function handlePickDecision(req: IncomingMessage, res: ServerResponse, projectDir: string): Promise<void> {
+  const body = await readJsonBody(req, res);
+  if (body === null) return;
+  if (!isRecord(body) || typeof body.id !== "string" || (body.decision !== "approved" && body.decision !== "rejected")) {
+    sendJson(req, res, 400, { error: "Choose approve or reject for one pick." });
+    return;
+  }
+  const id = body.id.trim();
+  const decision: PickDecision = body.decision;
+  const known = loadPickModels(projectDir).items.some((item) => item.itemId === id);
+  if (!known) {
+    sendJson(req, res, 404, { error: "That pick is not on the desk." });
+    return;
+  }
+  try {
+    await withStateLock(projectDir, async () => {
+      const decisions = readDecisions(projectDir);
+      decisions[id] = decision;
+      const file = decisionsPath(projectDir);
+      await mkdir(path.dirname(file), { recursive: true });
+      await replaceViaTemp(file, `${JSON.stringify({ decisions }, null, 2)}\n`);
+    });
+  } catch (error: unknown) {
+    if (error instanceof LockHeld) {
+      sendJson(req, res, 409, { error: "The desk is saving. Try again." });
+      return;
+    }
+    throw error;
+  }
+  sendJson(req, res, 200, { ok: true, id, decision });
 }
 
 function renderApproveBrief(

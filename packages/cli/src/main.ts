@@ -348,12 +348,14 @@ function isRoundElevate(rest: readonly string[]): boolean {
   const head = rest[0];
   if (head === "detail" || head === "copy" || head === "--help" || head === "-h") return true;
   for (const arg of rest) {
-    if (arg === "--url" || arg === "--pick" || arg === "--approve") return true;
+    if (arg === "--url" || arg === "--pick" || arg === "--approve" || arg === "--rounds") return true;
   }
   return false;
 }
 
 function roundWouldApply(rest: readonly string[]): boolean {
+  // `--rounds` uses `--pick` as the yes. A separate `--yes` is not required.
+  if (rest.includes("--rounds")) return false;
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
     if (arg === "--approve") return true;

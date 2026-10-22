@@ -2,10 +2,12 @@
  * hh elevate, hh elevate detail, and hh elevate copy.
  *
  * The CLI package cannot depend on the QA package, so the round, the detail
- * pass, and the copy cards load by file URL. One round plans ranked upgrades
- * with no fixed count. A visual pass may add a treatment, an effect, or an
- * image. A pick runs only when a preview URL is set. Copy is printed as
- * approve or reject cards and is written only when --approve names the ids.
+ * pass, the copy cards, and the bounded loop load by file URL. One round
+ * plans ranked upgrades with no fixed count. `--rounds N` repeats that round
+ * until a stop rule fires. `--pick all|none|1,2` is the yes. A pick with no
+ * preview URL still needs the four review shots on disk when more than one
+ * round is asked for. Copy is printed as approve or reject cards and is
+ * written only when --approve names the ids.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -15,12 +17,20 @@ import { pathToFileURL } from "node:url";
 import { spawnGrok, think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { cassetteRefusal } from "../cassette-guard.ts";
 
-const USAGE = [
-  "Usage: hh elevate --project <dir> [--url <url>] [--pick all|none|1,2]",
+/** Exact usage text. The Elevate skill must include this string unchanged. */
+export const ELEVATE_USAGE = [
+  "Usage: hh elevate --project <dir> [--url <url>] [--rounds N] [--pick all|none|1,2]",
   "       hh elevate detail --project <dir> --url <url>",
   "       hh elevate copy --project <dir> [--approve id,id]",
   "       --cassette keeps HH_CASSETTE=replay or record. HH_ALLOW_CASSETTE=1 does the same.",
 ].join("\n");
+
+const USAGE = ELEVATE_USAGE;
+
+const REVIEW_SHOT_WIDTHS = [375, 768, 1440, 1920] as const;
+
+const MEASUREMENTS_MISSING = "The quality check needs its measurements before a round can finish.";
+const SCORES_MISSING = "Each round needs a design score, a jury score, and a review result.";
 
 const SOURCE_EXT = new Set([".astro", ".css", ".html", ".md", ".svelte", ".ts", ".tsx", ".vue"]);
 
@@ -64,6 +74,13 @@ interface ParsedRound {
   projectDir: string;
   url: string | null;
   pick: string;
+  /** Null keeps the single round. A number runs the bounded loop. */
+  rounds: number | null;
+}
+
+interface ScorePoint {
+  beauty: number;
+  jury: number;
 }
 
 interface ParsedDetail {
@@ -94,6 +111,16 @@ export interface ElevateCommandDeps {
   think?: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>;
   /** Test double for gateProblems. Omitted on a real round, so the full gates run. */
   qualityGates?: object;
+  /** Spec 01 runners for `--rounds`. Omitted, the loop stops instead of inventing a pass. */
+  runners?: object;
+  /** Design score and jury score after each round of `--rounds`. */
+  scores?: (round: number) => ScorePoint | Promise<ScorePoint>;
+  /** Review result after each round of `--rounds`. */
+  verdict?: (round: number) => string | Promise<string>;
+  /** Replaces the drive for one pick. Tests use this so a round does not spawn. */
+  runPrompt?: (file: string) => Promise<void>;
+  /** Replaces the live gate read. Tests use this so a round does not open a browser. */
+  gates?: () => Promise<GateResult>;
 }
 
 /** `hh elevate`. */
@@ -110,7 +137,7 @@ export async function runElevateCommand(
   try {
     if (parsed.mode === "detail") return await runDetail(parsed);
     if (parsed.mode === "copy") return await runCopy(parsed, model);
-    return await runRound(parsed, model, deps.qualityGates);
+    return await runRound(parsed, model, deps);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Elevate failed.";
     return { exitCode: 1, stdout: `${message.replaceAll("!", ".")}\n` };
@@ -131,9 +158,11 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
   let url: string | null = null;
   let pick = "none";
   let approve: string[] | null = null;
+  let rounds: number | null = null;
   let sawPick = false;
   let sawApprove = false;
   let sawCassette = false;
+  let sawRounds = false;
   for (let index = start; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--project") {
@@ -158,6 +187,18 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
       index = value.next;
       continue;
     }
+    if (arg === "--rounds") {
+      if (sawRounds) return fail("Flag --rounds was given twice.");
+      const value = readValue(argv, index);
+      if (value === null) return fail("Missing --rounds.");
+      if (!/^[1-9][0-9]{0,1}$/.test(value.value)) {
+        return fail("Choose a whole number of rounds from 1 to 99.");
+      }
+      rounds = Number(value.value);
+      sawRounds = true;
+      index = value.next;
+      continue;
+    }
     if (arg === "--cassette") {
       if (sawCassette) return fail("Flag --cassette was given twice.");
       sawCassette = true;
@@ -176,23 +217,28 @@ export function parseElevateArgs(argv: readonly string[], cwd: string): Parsed {
   if (project === undefined) return fail("Missing --project.");
   const projectDir = path.resolve(cwd, project);
   if (mode === "detail") {
-    if (sawPick || sawApprove) return fail("Unexpected argument.");
+    if (sawPick || sawApprove || sawRounds) return fail("Unexpected argument.");
     if (url === null) return fail("Missing --url.");
     return { ok: true, help: false, mode, projectDir, url };
   }
   if (mode === "copy") {
-    if (sawPick || url !== null) return fail("Unexpected argument.");
+    if (sawPick || url !== null || sawRounds) return fail("Unexpected argument.");
     return { ok: true, help: false, mode, projectDir, approve };
   }
   if (sawApprove) return fail("Unexpected argument.");
-  if (pick !== "none" && url === null) return fail("A preview URL is required before a pick can run.");
-  return { ok: true, help: false, mode, projectDir, url, pick };
+  if (rounds === null && pick !== "none" && url === null) {
+    return fail("A preview URL is required before a pick can run.");
+  }
+  if (rounds !== null && pick !== "none" && url === null && !hasReviewShots(projectDir)) {
+    return fail("A preview URL is required before a pick can run.");
+  }
+  return { ok: true, help: false, mode, projectDir, url, pick, rounds };
 }
 
 async function runRound(
   parsed: ParsedRound,
   model: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>,
-  qualityGates?: object,
+  deps: ElevateCommandDeps,
 ): Promise<{ exitCode: number; stdout: string }> {
   const review = await loadReview(parsed.projectDir);
   if (!review.ok) return { exitCode: 1, stdout: `${review.message}\n` };
@@ -201,6 +247,8 @@ async function runRound(
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, `${parsed.url}\n`, "utf8");
   }
+  if (parsed.rounds !== null) return runRounds(parsed, model, deps, review.project);
+  const qualityGates = deps.qualityGates;
   const api = await loadLoop();
   const lines: string[] = [];
   const roundDeps = {
@@ -214,8 +262,9 @@ async function runRound(
       }
       return choose(parsed.pick, items);
     },
-    runPrompt: (file: string) => runLive(parsed.projectDir, file),
-    gates: () => loadGates(parsed.projectDir, parsed.url),
+    runPrompt: (file: string) =>
+      deps.runPrompt !== undefined ? deps.runPrompt(file) : runLive(parsed.projectDir, file),
+    gates: () => (deps.gates !== undefined ? deps.gates() : loadGates(parsed.projectDir, parsed.url)),
     review: review.project,
     ...(qualityGates === undefined ? {} : { qualityGates }),
   };
@@ -226,6 +275,66 @@ async function runRound(
     lines.push("No picks. This round changes nothing.");
   }
   return { exitCode: 0, stdout: `${lines.join("\n")}\n` };
+}
+
+async function runRounds(
+  parsed: ParsedRound,
+  model: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>,
+  deps: ElevateCommandDeps,
+  review: object,
+): Promise<{ exitCode: number; stdout: string }> {
+  if (parsed.rounds === null) throw new Error("Choose at least one round of improvements.");
+  if (deps.runners === undefined) return { exitCode: 1, stdout: `${MEASUREMENTS_MISSING}\n` };
+  if (deps.scores === undefined || deps.verdict === undefined) return { exitCode: 1, stdout: `${SCORES_MISSING}\n` };
+  const api = await loadRounds();
+  const menus: string[][] = [];
+  const roundDeps = {
+    think: model,
+    pick: async (items: Item[]) => {
+      const block = [`Round ${menus.length + 1}`];
+      if (items.length === 0) block.push("No upgrades this round.");
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        if (item === undefined) continue;
+        block.push(`${index + 1}. ${item.file}: ${item.change}`);
+      }
+      menus.push(block);
+      return choose(parsed.pick, items);
+    },
+    runPrompt: (file: string) =>
+      deps.runPrompt !== undefined ? deps.runPrompt(file) : runLive(parsed.projectDir, file),
+    gates: () => (deps.gates !== undefined ? deps.gates() : loadGates(parsed.projectDir, parsed.url)),
+    review,
+    ...(deps.qualityGates === undefined ? {} : { qualityGates: deps.qualityGates }),
+  };
+  const result = await api.runElevateLoop({
+    projectDir: parsed.projectDir,
+    maxRounds: parsed.rounds,
+    deps: roundDeps,
+    runners: deps.runners,
+    scores: deps.scores,
+    verdict: deps.verdict,
+  });
+  const lines: string[] = [];
+  for (let index = 0; index < result.snapshots.length; index += 1) {
+    const snap = result.snapshots[index];
+    if (snap === undefined) continue;
+    const menu = menus[index];
+    if (menu !== undefined) lines.push(...menu);
+    else lines.push(`Round ${index + 1}`);
+    for (const id of snap.applied) lines.push(`Applied: ${id}`);
+    for (const row of snap.refused) lines.push(`Refused: ${row.id} ${row.reason}`);
+    if (snap.applied.length === 0 && snap.refused.length === 0) {
+      lines.push("No picks. This round changes nothing.");
+    }
+  }
+  lines.push(result.stop.reason);
+  return { exitCode: 0, stdout: `${lines.join("\n")}\n` };
+}
+
+function hasReviewShots(projectDir: string): boolean {
+  const dir = path.join(projectDir, ".hitchhiker", "elevate", "shots");
+  return REVIEW_SHOT_WIDTHS.every((width) => existsSync(path.join(dir, `full-${width}.png`)));
 }
 
 async function runDetail(parsed: ParsedDetail): Promise<{ exitCode: number; stdout: string }> {
@@ -346,6 +455,66 @@ async function loadLoop(): Promise<{
         qualityGates?: object;
       },
     ) => Promise<RoundResult>,
+  };
+}
+
+interface LoopSnapshot {
+  applied: string[];
+  refused: Array<{ id: string; reason: string }>;
+}
+
+interface LoopOutcome {
+  stop: { reason: string };
+  snapshots: LoopSnapshot[];
+}
+
+async function loadRounds(): Promise<{
+  runElevateLoop: (input: {
+    projectDir: string;
+    maxRounds: number;
+    deps: {
+      think: (request: ThinkRequest<unknown>) => Promise<ThinkResult<unknown>>;
+      pick: (items: Item[]) => Promise<Item[]>;
+      runPrompt: (file: string) => Promise<void>;
+      gates: () => Promise<GateResult>;
+      review: object;
+      qualityGates?: object;
+    };
+    runners: object;
+    scores: (round: number) => ScorePoint | Promise<ScorePoint>;
+    verdict: (round: number) => string | Promise<string>;
+  }) => Promise<LoopOutcome>;
+}> {
+  const mod = asRecord(await import(pathToFileURL(qaFile("elevate-rounds.ts")).href));
+  const runElevateLoop = mod?.runElevateLoop;
+  if (typeof runElevateLoop !== "function") throw new Error("The improvements could not start.");
+  return {
+    runElevateLoop: async (input) => {
+      const value: unknown = await (runElevateLoop as (body: unknown) => Promise<unknown>)(input);
+      const record = asRecord(value);
+      const stop = asRecord(record?.stop);
+      if (record === null || stop === null || typeof stop.reason !== "string" || !Array.isArray(record.snapshots)) {
+        throw new Error("The improvements could not finish.");
+      }
+      const snapshots: LoopSnapshot[] = [];
+      for (const row of record.snapshots) {
+        const snap = asRecord(row);
+        if (snap === null || !Array.isArray(snap.applied) || !Array.isArray(snap.refused)) {
+          throw new Error("The improvements could not finish.");
+        }
+        const applied = snap.applied.filter((id): id is string => typeof id === "string");
+        const refused: Array<{ id: string; reason: string }> = [];
+        for (const item of snap.refused) {
+          const refusal = asRecord(item);
+          if (refusal === null || typeof refusal.id !== "string" || typeof refusal.reason !== "string") {
+            throw new Error("The improvements could not finish.");
+          }
+          refused.push({ id: refusal.id, reason: refusal.reason });
+        }
+        snapshots.push({ applied, refused });
+      }
+      return { stop: { reason: stop.reason }, snapshots };
+    },
   };
 }
 

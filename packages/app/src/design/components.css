@@ -634,6 +634,60 @@ textarea {
   color: var(--color-muted);
 }
 
+/* Before and after pairs. One column on a phone, two from 40rem. Inline style is blocked by the desk policy, so the sheet owns the fit. */
+.hh-shot-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.hh-shot {
+  margin: 0;
+  min-width: 0;
+}
+
+.hh-shot img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.hh-approval-card--pair {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.hh-approval-card--pair .hh-approval {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hh-approval-card--pair .hh-approval__note {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hh-approval-card--pair .hh-approval__note input {
+  flex: 1 1 8rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 40rem) {
+  .hh-shot-pair {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
 .hh-table-wrap {
   min-width: 0;
   overflow-x: auto;

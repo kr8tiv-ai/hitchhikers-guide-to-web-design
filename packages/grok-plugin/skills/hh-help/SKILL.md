@@ -13,7 +13,7 @@ The hh CLI can run these today:
 - `hh assets <plan|run|diy|import> --project <dir>` plans, runs, writes prompts, or imports. `hh assets run` spends only with `--yes` after a yes. `hh assets import` needs `--file <path>`.
 - `hh tools <search|install> --project <dir>` searches or installs. `hh tools install` needs `--yes`.
 - `hh mostly-harmless --project <dir>` runs the gates and the jury. Do not pass `--yes`.
-- `hh elevate --project <dir>` plans one Elevate round. Applying a pick needs `--yes`.
+- `hh elevate --project <dir> [--rounds N] [--pick all|none|1,2]` plans Elevate rounds. `--pick` is the yes. Nothing is applied when the pick is `none`.
 - `hh progress --project <dir>` shows phase, slice, prompt, and next action.
 - `hh pause --project <dir> --message <text>` saves one next-action line.
 - `hh save --project <dir>` writes the portable project file. `--to <path>` chooses the place.
