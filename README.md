@@ -479,7 +479,7 @@ const outcome = await deploy("preview", projectDir, {
   yes: async () => true,
   clients: {},
 });
-if ("url" in outcome && outcome.url !== null) {
+if ("url" in outcome && typeof outcome.url === "string") {
   // Open outcome.url in a browser on this computer.
 }
 await closePreview(projectDir);
