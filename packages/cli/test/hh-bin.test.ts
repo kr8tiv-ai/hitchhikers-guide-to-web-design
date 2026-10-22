@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { hiddenChildOptions } from "@hitchhiker/engine";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const binDir = path.join(repoRoot, "node_modules", ".bin");
@@ -171,6 +172,68 @@ function writeStubs(dir: string): void {
   for (const tool of TOOLS) {
     writeFileSync(path.join(dir, tool), launcher, { encoding: "utf8", mode: 0o755 });
   }
+}
+
+test("hh so-long prints usage instead of opening Windows HTML Help", () => {
+  assert.equal(existsSync(binDir), true, "node_modules/.bin is missing. pnpm install did not link bins.");
+  const work = mkdtempSync(path.join(os.tmpdir(), "hh-bin-so-long-"));
+  try {
+    const stubDir = path.join(work, "stubs");
+    const logPath = path.join(work, "calls.txt");
+    writeFileSync(logPath, "", "utf8");
+    writeStubs(stubDir);
+    const env = commandEnv(binDir, stubDir, logPath);
+    const resolved = resolveHh(env);
+    assert.ok(resolved, "pnpm exec would not find an hh shim ahead of Windows HTML Help");
+    assert.equal(HTML_HELP.test(resolved), false);
+    const cwd = path.join(work, "project");
+    mkdirSync(cwd);
+    const result = runHidden(resolved, ["so-long"], env, cwd);
+    const stdout = result.stdout ?? "";
+    const stderr = result.stderr ?? "";
+    assert.equal(result.status, 2, `hh so-long failed\n${stdout}\n${stderr}`);
+    assert.match(stdout, /hh so-long --project <dir>/);
+    assert.equal(stdout.includes("!"), false);
+    assert.equal(stderr.toLowerCase().includes("html help"), false);
+    assert.equal(HTML_HELP.test(stdout), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+function runHidden(
+  file: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): { status: number | null; stdout: string; stderr: string } {
+  if (process.platform === "win32") {
+    const comspec = env.ComSpec ?? "cmd.exe";
+    const shellCommand = [quoteCmd(file), ...args.map(quoteCmd)].join(" ");
+    const result = spawnSync(
+      comspec,
+      ["/d", "/s", "/c", `"${shellCommand}"`],
+      hiddenChildOptions({
+        cwd,
+        env,
+        encoding: "utf8" as const,
+        windowsVerbatimArguments: true,
+        timeout: 30_000,
+      }),
+    );
+    return { status: result.status, stdout: text(result.stdout), stderr: text(result.stderr) };
+  }
+  const result = spawnSync(
+    file,
+    [...args],
+    hiddenChildOptions({
+      cwd,
+      env,
+      encoding: "utf8" as const,
+      timeout: 30_000,
+    }),
+  );
+  return { status: result.status, stdout: text(result.stdout), stderr: text(result.stderr) };
 }
 
 function stubSource(): string {

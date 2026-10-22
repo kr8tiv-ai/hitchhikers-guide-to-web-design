@@ -135,7 +135,8 @@ export async function listDeployFiles(projectDir: string, decision: ShapeDecisio
 }
 
 interface RecordEntry {
-  target: DeployTarget;
+  /** Preview is the local handoff. The four hosts are the publish targets. */
+  target: DeployTarget | "preview";
   shape: SiteShape;
   state: string;
   url: string;

@@ -14,6 +14,7 @@ The hh CLI can run these today:
 - `hh tools <search|install> --project <dir>` searches or installs. `hh tools install` needs `--yes`.
 - `hh mostly-harmless --project <dir>` runs the gates and the jury. Do not pass `--yes`.
 - `hh elevate --project <dir> [--rounds N] [--pick all|none|1,2]` plans Elevate rounds. `--pick` is the yes. Nothing is applied when the pick is `none`.
+- `hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes]` checks the quality record for this version, then asks before anything is sent. Leave `--host` off and it recommends Hostinger and offers a preview on this computer. Pass `--yes` only after the user says yes. Without that yes, nothing is written.
 - `hh progress --project <dir>` shows phase, slice, prompt, and next action.
 - `hh pause --project <dir> --message <text>` saves one next-action line.
 - `hh save --project <dir>` writes the portable project file. `--to <path>` chooses the place.

@@ -62,6 +62,7 @@ test("the table lists every skill-only slash command from the plugin", () => {
   assert.equal(skills.includes("hh-dont-panic"), true);
   assert.equal(skills.includes("hh-drive"), true);
   assert.equal(skills.includes("hh-help"), true);
+  assert.equal(skills.includes("hh-so-long"), false);
   assert.equal(skills.includes("hh-doctor"), false);
   assert.equal(skills.includes("hh-dashboard"), false);
   assert.equal(skills.includes("hh-assets"), false);
@@ -124,8 +125,9 @@ test("implemented names are the dispatch cases in main.ts", () => {
     (match) => match[1] ?? "",
   );
   assert.deepEqual(cases, [...IMPLEMENTED_COMMANDS]);
-  assert.equal(IMPLEMENTED_COMMANDS.length, 16);
+  assert.equal(IMPLEMENTED_COMMANDS.length, 17);
   assert.equal(IMPLEMENTED_COMMANDS.includes("save"), true);
+  assert.equal(IMPLEMENTED_COMMANDS.includes("so-long"), true);
 });
 
 test("hh doctor still runs and hh --help stays the usage line", async () => {

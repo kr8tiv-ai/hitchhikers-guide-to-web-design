@@ -151,6 +151,8 @@ Deploys to Hostinger, Vercel, Netlify or Cloudflare with your explicit go-ahead,
 
 Before any of that, you can look at the built pages on this computer. The preview picks a free port, leaves the desk's port alone, and writes a zip of those pages under `.hitchhiker/deploy/`. No account, no keychain, and nothing leaves the machine. A site that still needs a server to answer each visit is told so, in plain language, instead of being pretended into a folder of pages. The details are in [Look before you publish](#look-before-you-publish).
 
+The command for that moment is `hh so-long --project <dir>`. It reads the quality check for the version you have now. If that check is missing, belongs to a different version, or is blocked, it stops and tells you why, and it does not call a host. When the check is clear, it recommends Hostinger and also offers to keep a preview on this computer. Nothing is published until you name the host and pass `--yes`. The walkthrough is in [Publish with hh so-long](#publish-with-hh-so-long).
+
 ### The crew
 
 | Name | Job | Personality |
@@ -397,6 +399,7 @@ The desk needs this clone. `hh app` and `hh install` resolve the sibling `packag
 | `hh next` | `hh next --status` prints the phase, open gates, and the next step. It does not change the project. |
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. |
+| `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. |
 
 ## Attachments
 
@@ -425,17 +428,44 @@ The file includes a plain-language brief and a short resume prompt. Another codi
 | `/hh-drive` | Run the queue when you type it. The CLI does not implement this name. |
 | `/hh-review` | Review the current build. |
 | `/hh-fix` | One specified fix. |
-| `/hh-so-long` | Deploy and launch kit after a yes. |
 | `/hh-undo` | Revert the last prompt commit when you type it. |
 | `/hh-budget` | Spend caps. |
 | `/hh-settings` | Model, effort, voice, deploy, depth. The desk screen is `/settings`. |
 | `/hh-help` | Which commands `hh` can run today. |
 
-`/hh-assets`, `/hh-mostly-harmless`, `/hh-elevate`, `/hh-progress`, `/hh-pause`, `/hh-resume`, `/hh-doctor`, `/hh-dashboard`, `/hh-context`, `/hh-next`, and `/hh-brief` are skills that also have an `hh` command in the table above.
+`/hh-assets`, `/hh-mostly-harmless`, `/hh-elevate`, `/hh-so-long`, `/hh-progress`, `/hh-pause`, `/hh-resume`, `/hh-doctor`, `/hh-dashboard`, `/hh-context`, `/hh-next`, and `/hh-brief` are skills that also have an `hh` command in the table above.
 
 The companion app is that local dashboard: a chat-style desk with a push-to-talk mic, uploads, example-site cards, approval buttons, and the prompt queue. Open it with `pnpm exec hh app`.
 
-A local preview is already in the deploy package, for when you want to look before `/hh-so-long` sends anything. See [Look before you publish](#look-before-you-publish).
+A local preview is already in the deploy package, and `hh so-long --host preview` is how you open it after the quality check. It still asks before it writes the zip or serves the pages. See [Publish with hh so-long](#publish-with-hh-so-long) and [Look before you publish](#look-before-you-publish).
+
+## Publish with hh so-long
+
+This is the moment the site can leave your computer. The command is deliberate on purpose. It will not guess the host, and it will not treat silence as a yes.
+
+```text
+hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes]
+```
+
+`<dir>` is the site folder, the same one you passed to `hh app`. The quality check for the current git version runs before anything else. That check is the file `.hitchhiker/qa/GATES.json`. It has to be the check for this version. A missing file, a file saved for an older commit, or a blocked check stops the command. A fix that has not finished its repair rounds stops too. A pass with known issues may launch for this version, and a blocked check never does. You get the reason in ordinary language. No host is called, no preview opens, and no deploy record is written.
+
+When the check is clear, the command reads `.hitchhiker/research/STACK-DECISION.md` and tells you which hosts can publish this site. Hostinger is always the suggestion. A site of finished pages can also go to Vercel, Netlify, or Cloudflare. A site that still needs a server to answer each visit can go to Hostinger or Vercel. Netlify and Cloudflare are refused for that site, in the same plain language, and nothing is sent.
+
+Leave `--host` off, even if you also pass `--yes`, and the command only asks. It prints the suggestion, offers a preview on this computer, and shows the two commands that would confirm a choice. It writes nothing.
+
+Naming a host without `--yes` shows the plan and writes nothing. The pages are not built, the zip is not created, and no host is called. `--yes` is the confirm. Pass it only when you mean that host.
+
+| Confirm | What happens |
+|---|---|
+| `--host preview --yes` | Builds the site if it has a build script, then serves the finished pages on this computer and writes `.hitchhiker/deploy/preview.zip`. No account, no keychain, nothing leaves the machine. |
+| `--host hostinger --yes` | Builds, then publishes to Hostinger through the deploy dispatcher. |
+| `--host vercel --yes` | Builds, then publishes to Vercel. A server site can use this host. |
+| `--host netlify --yes` | Builds, then publishes to Netlify when the site is finished pages. |
+| `--host cloudflare --yes` | Builds, then publishes to Cloudflare when the site is finished pages. |
+
+A publish that runs writes a row in `.hitchhiker/deploy/DEPLOYS.md`. A declined yes does not. The command does not read `HH_LIVE`, does not call a host unless a connected client was handed to it, and does not take the desk's port.
+
+From a program, the same steps are `shipGate` in `@hitchhiker/orchestrator`, then `recommendHost` and `deploy` in `@hitchhiker/deploy`. The `hh` command loads those modules by file URL, because the published CLI package depends only on `@hitchhiker/engine`. Tests pass fake clients. A real Hostinger, Vercel, Netlify, or Cloudflare call stays out of `hh so-long` until a client is connected on purpose.
 
 ---
 
@@ -487,6 +517,8 @@ await closePreview(projectDir);
 
 Pass `clients.preview` only when a test should not open a real port. An injected handoff is used as given, and the real preview stays quiet. Omit it, return yes, and the built pages open.
 
+From the terminal, the same preview is `hh so-long --project <dir> --host preview --yes`, and only after the quality check for this version is clear. Leaving off `--yes`, or leaving off `--host`, writes no zip and opens no page. The command runs the project's build script after that yes, then asks the preview to serve the folder the stack record already named. The preview module itself still does not install packages and does not run the build. A site that needs a server is refused in the same plain language as the module, and no zip is written.
+
 `openPreview` returns when the page is listening and the zip is on disk. `close` is safe to call twice. `closePreview` stops the preview that `deploy` started for that project. The zip uses stored file bytes and UTF-8 names, so the page text is in the file and a normal unzip tool can open it.
 
 ---
@@ -505,7 +537,7 @@ Pass `clients.preview` only when a test should not open a real port. An injected
 - [x] **v0.3 Deep Thought**: PRD, spec files, framework choice, the prompt package
 - [x] **v0.4 Improbability Drive**: the orchestrator, Zaphod the reviewer, Marvin the watchdog, and the Windows and macOS/Linux queue runners
 - [x] **v0.5 Mostly Harmless**: quality gates, the Nutrimatic Test, the jury, the Elevate loop
-- [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. A local preview serves the built pages on this computer and writes a zip, with no account.
+- [x] **v0.6 So Long**: Hostinger, Vercel, Netlify and Cloudflare deploy clients, plus the launch kit, each behind a yes. `hh so-long` runs the quality check for this version first, recommends Hostinger, and waits for you to name the host and pass `--yes`. A local preview serves the built pages on this computer and writes a zip, with no account.
 - [x] **Companion app**: the local dashboard (`hh app`), knowledge packs, and golden evals. Not a 1.0 release. Not on npm.
 
 **Later, in a galaxy slightly further away**
@@ -527,6 +559,7 @@ Good places to start:
 - **Contribute evals.** Sample brands and golden interviews help keep the Guide honest.
 - **Port your favorite motion recipe**, with a mobile version and a reduced-motion version attached.
 - **Try the local preview.** The page server and the zip live in [`packages/deploy/src/preview.ts`](packages/deploy/src/preview.ts). The tests in [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) cover a real page, a missing front page, a folder outside the project, and an address that tries to climb out of the pages. Run that file, then open a pull request with one job in it.
+- **Try `hh so-long`.** The command is [`packages/cli/src/commands/so-long.ts`](packages/cli/src/commands/so-long.ts). [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts) covers a blocked check, a check for a different version, a declined yes, the local preview, and the Hostinger question you get when you leave the host off. Run that file before you open the pull request. Do not point it at a live host.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
 
@@ -571,7 +604,22 @@ Grok proposes one per project (Astro, Next.js, SvelteKit and so on), explains wh
 Marvin notices. Marvin always notices. Marvin fixes it, files a short and deeply weary report, and only bothers you if it genuinely needs a decision.
 
 **Can I see the site before I have a hosting account?**
-Yes. Once the pages are built, the preview opens them on this computer at an address that starts with `http://127.0.0.1:`. It also writes `.hitchhiker/deploy/preview.zip`, a copy of those pages you can hand to someone. No Hostinger, Vercel, Netlify, or Cloudflare account is used, and nothing is sent off the machine. Say no, and neither the page nor the zip is created. The full notes are in [Look before you publish](#look-before-you-publish).
+Yes. Once the pages are built, the preview opens them on this computer at an address that starts with `http://127.0.0.1:`. It also writes `.hitchhiker/deploy/preview.zip`, a copy of those pages you can hand to someone. No Hostinger, Vercel, Netlify, or Cloudflare account is used, and nothing is sent off the machine. Say no, and neither the page nor the zip is created. The command is `hh so-long --project <dir> --host preview --yes`, after the quality check for this version is clear. The full notes are in [Look before you publish](#look-before-you-publish) and [Publish with hh so-long](#publish-with-hh-so-long).
+
+**How do I publish the site?**
+`hh so-long --project <dir>`. The quality check for the current version runs first. If it is missing, saved for a different version, or blocked, the command stops and tells you why. Nothing is sent. When the check is clear, Hostinger is the suggestion, and a preview on this computer is the other offer. The command waits. Name the host and pass `--yes` only when you mean it. `hh so-long --project <dir> --host hostinger --yes` is the confirm for Hostinger.
+
+**I left the host off and passed `--yes`. Did it publish?**
+No. `--yes` confirms a host you already named. With no `--host`, the command still asks, recommends Hostinger, and offers the preview. It writes nothing and calls no host.
+
+**The publish command says the quality check is for a different version.**
+The check is saved for one commit. If the site changed after that check, launch stays closed until the check is run again for the version you have now. No host is called and no deploy record is written.
+
+**A check is blocked. Can I publish anyway?**
+No. A blocked check keeps launch closed. A pass with known issues can still publish for this version when nothing is blocked. The command prints the reason and stops, and it does not call a host.
+
+**I said no. Did it upload anything or leave a zip?**
+No. Without `--yes`, the command does not build the site, does not open a preview, does not write `.hitchhiker/deploy/preview.zip`, and does not write `.hitchhiker/deploy/DEPLOYS.md`. The same is true when the quality check fails, even if you already typed `--yes`.
 
 **The preview says the pages are not built yet. What now?**
 The preview serves the folder the stack record already named: `dist` for Astro and Vite, `out` when a Next.js record says static export, and `build` when a SvelteKit record names finished files. If that folder is missing, or it has no front page named `index.html`, nothing is opened and no zip is written. Build the site first, then ask again. This step does not install packages and does not run the build for you.
@@ -600,7 +648,7 @@ Tier five. It gets extra-high effort.
 GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugins. The toolkit also ships Three.js, raw WebGL and GLSL via OGL or WebGL2, Motion, anime.js, Theatre.js core (`@theatre/core` only), Lenis, CSS scroll-driven animations, and vanilla JS. The picker chooses per effect. Generated sites import only what they use. There is no second engine.
 ## Develop
 
-Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). Run one file with `node --experimental-strip-types --test <file>`.
+Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). Run one file with `node --experimental-strip-types --test <file>`.
 
 ---
 

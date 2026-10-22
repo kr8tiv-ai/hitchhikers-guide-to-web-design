@@ -19,6 +19,7 @@ export const COMMANDS: readonly HhCommand[] = [
   { name: "tools", skillDir: "", cli: ["tools"], sideEffect: false },
   { name: "mostly-harmless", skillDir: "hh-mostly-harmless", cli: ["mostly-harmless"], sideEffect: false },
   { name: "elevate", skillDir: "hh-elevate", cli: ["elevate"], sideEffect: false },
+  { name: "so-long", skillDir: "hh-so-long", cli: ["so-long"], sideEffect: false },
   { name: "progress", skillDir: "hh-progress", cli: ["progress"], sideEffect: false },
   { name: "pause", skillDir: "hh-pause", cli: ["pause"], sideEffect: false },
   { name: "resume", skillDir: "hh-resume", cli: ["resume"], sideEffect: false },

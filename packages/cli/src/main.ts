@@ -19,6 +19,7 @@ import { runSupervise } from "./improve/supervisor.ts";
 import { runInstall } from "./install.ts";
 import { runBriefCommand } from "./commands/brief.ts";
 import { runBuildCommand, runContextCommand, runDoctorContext, runNextCommand } from "./commands/context.ts";
+import { runSoLongCommand, type SoLongDeps } from "./commands/so-long.ts";
 
 const HELP = "hh doctor [--project <dir>]";
 
@@ -390,7 +391,7 @@ async function dispatchImplemented(
   command: ImplementedCommand,
   argv: readonly string[],
   runner: CommandRunner | undefined,
-  deps: RunAppOptions,
+  deps: RunAppOptions & { soLong?: SoLongDeps },
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   switch (command) {
     case "install":
@@ -449,13 +450,18 @@ async function dispatchImplemented(
       return runBriefCommand(argv.slice(1), deps.cwd ?? process.cwd());
     case "build":
       return runBuildCommand(argv.slice(1), deps.cwd ?? process.cwd());
+    case "so-long":
+      return runSoLongCommand(argv.slice(1), {
+        cwd: deps.cwd ?? process.cwd(),
+        ...(deps.soLong ?? {}),
+      });
   }
 }
 
 export async function runCli(
   argv: readonly string[],
   runner?: CommandRunner,
-  deps: RunAppOptions = {},
+  deps: RunAppOptions & { soLong?: SoLongDeps } = {},
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const command = argv[0];
   // Bare `hh` is rewritten to `app` before this runs. `--help` stays the old usage line.
