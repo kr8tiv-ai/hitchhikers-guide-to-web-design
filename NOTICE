@@ -508,7 +508,7 @@ astro 7.3.6
   License field: MIT
   Same project as astro. Direct dependency of hh-starter-astro only.
 
-next 16.4.0
+next 16.4.3
   Registry: https://www.npmjs.com/package/next
   Repository: https://github.com/vercel/next.js
   License field: MIT
