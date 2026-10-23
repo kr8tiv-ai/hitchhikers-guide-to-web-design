@@ -16,6 +16,7 @@ import { aggregatePhaseCosts } from "../src/cost.ts";
 import {
   assertCanAdvance,
   auditContext,
+  awaitPendingSummary,
   buildContextPacket,
   loadAssets,
   loadDecisions,
@@ -170,6 +171,7 @@ async function recordCalls(dir: string): Promise<Map<string, string>> {
   await suggestOffer("DP-1.2", facts, { think: model, projectDir: dir });
   await judgePushback(byId("DP-1.2"), COLOURS, 0, { think: model, projectDir: dir });
   await draftVoiceKit({ name: "Paradise Found", answers: [], projectDir: dir }, { think: model }).catch(() => undefined);
+  await awaitPendingSummary(dir);
   return seen;
 }
 

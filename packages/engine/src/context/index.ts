@@ -30,6 +30,7 @@ export {
 } from "./disk.ts";
 export {
   applyContextFacts,
+  awaitPendingSummary,
   bindPacket,
   buildContextPacket,
   emptyContextPacket,

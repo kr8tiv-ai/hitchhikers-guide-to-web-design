@@ -100,6 +100,7 @@ export type { GuideState } from "./state.ts";
 export {
   assertCanAdvance,
   auditContext,
+  awaitPendingSummary,
   bindPacket,
   buildContextPacket,
   emptyContextPacket,

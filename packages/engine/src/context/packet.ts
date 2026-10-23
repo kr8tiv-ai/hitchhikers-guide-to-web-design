@@ -3,10 +3,11 @@
  * out. On-disk notes stay as the person wrote them.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { redact } from "../ai/redact.ts";
-import type { think, ThinkRequest } from "../ai/think.ts";
+import { appendAiOutcome, type think, type ThinkRequest } from "../ai/think.ts";
+import { INTERVIEW_EFFORT_DEFAULT, INTERVIEW_MODEL } from "../guide/interview-call.ts";
 import type { Facts } from "../guide/schemas.ts";
 import {
   assetsFileExists,
@@ -319,6 +320,8 @@ export function bindPacket(
 ): typeof think {
   if (projectDir.trim() === "") return thinkFn;
   const wrapped: typeof think = async (req, deps) => {
+    // The summary call builds its own incremental prompt. A second packet would paste the history back on.
+    if (req.task === "context-summary") return thinkFn(req, deps);
     const next = await withContextPacket(projectDir, purpose, req, undefined, options);
     return thinkFn(next, deps);
   };
@@ -371,30 +374,122 @@ function summaryText(value: unknown): string {
   return "";
 }
 
+const summaryChains = new Map<string, Promise<string>>();
+
+/** Wait for a summary already started for this project. A settled or missing job waits for nothing. */
+export function awaitPendingSummary(projectDir: string): Promise<void> {
+  const pending = summaryChains.get(path.resolve(projectDir));
+  if (pending === undefined) return Promise.resolve();
+  return pending.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+/**
+ * One summary write at a time per project. The answer turn starts this and
+ * does not wait. The next turn waits, then reads whatever file is still good.
+ */
 export async function refreshSummary(projectDir: string, thinkFn?: typeof think): Promise<string> {
+  const key = path.resolve(projectDir);
+  const previous = summaryChains.get(key) ?? Promise.resolve("");
+  const run = previous.then(
+    () => summarizeOnce(projectDir, thinkFn),
+    () => summarizeOnce(projectDir, thinkFn),
+  );
+  summaryChains.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (summaryChains.get(key) === run) summaryChains.delete(key);
+  }
+}
+
+async function summarizeOnce(projectDir: string, thinkFn?: typeof think): Promise<string> {
+  try {
+    return await writeRunningSummary(projectDir, thinkFn);
+  } catch (error) {
+    await logSummaryFailure(projectDir, error);
+    try {
+      return loadSummary(projectDir);
+    } catch {
+      return "";
+    }
+  }
+}
+
+async function writeRunningSummary(projectDir: string, thinkFn?: typeof think): Promise<string> {
+  if (!existsSync(projectDir)) return "";
   const decisions = loadDecisions(projectDir).filter(isLive);
   const assets = liveAssets(projectDir);
   const previous = loadSummary(projectDir);
   let candidate = "";
   if (thinkFn !== undefined) {
     try {
-      const packet = buildContextPacket(projectDir, "summary");
       const result = await thinkFn(
         {
           task: "context-summary",
           schema: SUMMARY_SCHEMA,
-          input: redact(
-            `${renderContextPacket(packet)}\nWrite a summary of at most 400 words. Keep every decision id and every asset file name.`,
-          ),
+          input: redact(summaryPrompt(previous, decisions, assets)),
         },
         { projectDir },
       );
       candidate = summaryText(result.value);
-    } catch {
-      candidate = "";
+    } catch (error) {
+      await logSummaryFailure(projectDir, error);
+      return previous;
     }
   }
+  if (!existsSync(projectDir)) return previous;
   const next = summaryAccepts(candidate, decisions, assets) ? candidate : fallbackSummary(previous, decisions, assets);
   await writeSummaryFile(projectDir, next);
   return next;
+}
+
+function summaryPrompt(previous: string, decisions: readonly DecisionRecord[], assets: readonly AssetRecord[]): string {
+  const known = previous.trim();
+  const freshDecisions = known === "" ? [...decisions] : decisions.filter((record) => !known.includes(record.id));
+  const freshAssets = assets.filter((asset) => assetIsNew(known, asset));
+  const lines: string[] = [];
+  for (const record of freshDecisions) {
+    lines.push(`- ${record.id} ${record.questionId} ${record.source}: ${record.text}`);
+  }
+  for (const asset of freshAssets) {
+    const original = path.basename(asset.original);
+    const saved = path.basename(asset.saved);
+    lines.push(`- ${original} saved ${saved} role ${asset.role} question ${asset.questionId}`);
+  }
+  return [
+    "Previous summary:",
+    known === "" ? "none" : known,
+    "",
+    "New turn:",
+    lines.length === 0 ? "none" : lines.join("\n"),
+    "",
+    "Write a summary of at most 400 words. Keep every decision id and every asset file name.",
+  ].join("\n");
+}
+
+function assetIsNew(known: string, asset: AssetRecord): boolean {
+  if (known === "") return true;
+  const original = path.basename(asset.original);
+  const saved = path.basename(asset.saved);
+  if (original !== "" && !known.includes(original)) return true;
+  return saved !== "" && saved !== original && !known.includes(saved);
+}
+
+async function logSummaryFailure(projectDir: string, error: unknown): Promise<void> {
+  if (!existsSync(projectDir)) return;
+  const message = error instanceof Error ? error.message : "summary failed";
+  try {
+    await appendAiOutcome(projectDir, {
+      task: "context-summary",
+      outcome: "error",
+      error: message,
+      model: INTERVIEW_MODEL,
+      effort: INTERVIEW_EFFORT_DEFAULT,
+    });
+  } catch {
+    // A log problem must not lose the answer.
+  }
 }

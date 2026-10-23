@@ -16,7 +16,7 @@ import { validateJson } from "../ai/schema-validate.ts";
 import { InterviewError, openInterview } from "../interview.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
-import { bindPacket, refreshSummary, syncInterviewFacts } from "../context/index.ts";
+import { awaitPendingSummary, bindPacket, refreshSummary, syncInterviewFacts } from "../context/index.ts";
 import { interviewTreeFile, packagedPackage } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
@@ -274,6 +274,7 @@ async function perform(
   input: GuideTurnInput,
   deps: GuideTurnDeps,
 ): Promise<GuideTurn> {
+  await awaitPendingSummary(s.projectDir);
   if (input.kind === "answer" && (input.text ?? "").trim() === "") {
     throw new InterviewError("empty-answer", "An empty answer is not stored. Skip to keep the assumption.");
   }
@@ -456,12 +457,12 @@ async function advance(
     projectDir: s.projectDir,
     language: s.language,
   });
-  const summary = refreshSummary(s.projectDir, deps.think);
   let guide: { message: string; calm: boolean };
   try {
     guide = await askGuide(s, next, current, facts, deps);
   } finally {
-    await summary;
+    // The card uses the summary already on disk. Record this turn after the card is chosen.
+    void refreshSummary(s.projectDir, deps.think).catch(() => undefined);
   }
   let message = guide.message;
   if (!guide.calm && lines !== null) {
