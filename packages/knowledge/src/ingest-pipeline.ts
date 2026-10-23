@@ -17,6 +17,7 @@ import {
   buildDesignIndex,
   canonicalUrl,
   loadDesignEntries,
+  isSiteReference,
   nearDuplicate,
   quotaAllows,
   validateDesignEntry,
@@ -201,8 +202,10 @@ async function ingestOne(
     if (duplicate) {
       return { ...itemFrom(candidate.url, "done", policy, 0, deps), reason: "Duplicate canonical URL or technique cluster." };
     }
-    if (!quotaAllows(existing, entry.styleWorld, deps.quotaFloor ?? 8, deps.quotaShare ?? 0.34)) {
-      return { ...itemFrom(candidate.url, "pending", policy, 0, deps), reason: "Style-world quota." };
+    // Award ingest balances the site-reference set only; flagged docs/library notes are not sites.
+    const pool = awardSite ? existing.filter(isSiteReference) : existing;
+    if (!quotaAllows(pool, entry.styleWorld, deps.quotaFloor ?? 8, deps.quotaShare ?? 0.34)) {
+      return { ...itemFrom(candidate.url, "pending", policy, 0, deps), reason: `Style-world quota (${entry.styleWorld}).` };
     }
     writeEntry(deps.root, entry, policy.mode === "code" ? draft.snippet ?? "" : "", license);
     return { ...itemFrom(candidate.url, "done", policy, 0, deps), entryId: entry.id, mode: policy.mode };

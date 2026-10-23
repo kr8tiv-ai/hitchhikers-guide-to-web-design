@@ -319,7 +319,7 @@ test("ingest fixtures honour license, feeds, robots, quota, resume, and the host
       { version: 1, items: {} },
       quotaDeps,
     );
-    assert.equal(quota.items["https://example.com/another-editorial"]?.reason, "Style-world quota.");
+    assert.equal(quota.items["https://example.com/another-editorial"]?.reason, "Style-world quota (editorial).");
 
     const skipCalls: string[] = [];
     const state: IngestState = { version: 1, items: { "https://example.com/done": { url: "https://example.com/done", status: "done", reason: "done", failures: 0 } } };

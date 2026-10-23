@@ -264,3 +264,25 @@ test("robots through the crawler parser: our agent's block, server errors, and f
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("award ingest: flagged docs/library entries do not count toward the site style-world quota", async () => {
+  const dir = libraryDir();
+  try {
+    const seed = JSON.parse(readFileSync(path.join(libraryRoot(), "entries", "astro-images.json"), "utf8")) as DesignEntry;
+    mkdirSync(path.join(dir, "entries"), { recursive: true });
+    for (let index = 0; index < 10; index += 1) {
+      const url = `https://docs.example/page-${index}`;
+      writeFileSync(
+        path.join(dir, "entries", `doc-${index}.json`),
+        JSON.stringify({ ...seed, id: `doc-${index}`, url, sourcePage: url, sourceUrl: url, styleWorld: "3d-world", siteReference: false }),
+      );
+    }
+    const fetchImpl: typeof fetch = async (input) => (String(input).endsWith("/robots.txt") ? okRobots() : new Response("ok"));
+    const state = await runIngest([award("https://studio.example/", "Studio")], { version: 1, items: {} }, deps(dir, fetchImpl));
+    assert.equal(state.items["https://studio.example/"]?.status, "done");
+    const flagged = loadDesignEntries(dir).filter((entry) => !isSiteReference(entry));
+    assert.equal(flagged.length, 10);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
