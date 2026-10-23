@@ -79,6 +79,8 @@ export interface IngestItemState {
   failures: number;
   checked?: string;
   entryId?: string;
+  /** A link-only entry held back by the style-world quota, placed later without another Grok call. */
+  held?: DesignEntry;
 }
 
 export interface IngestState {
@@ -141,6 +143,20 @@ export async function runIngest(
   };
   const lanes = Math.max(1, Math.floor(deps.concurrency ?? 1));
   await Promise.all(Array.from({ length: Math.min(lanes, Math.max(queue.length, 1)) }, () => worker()));
+  // Entries held by the quota get another try now that the mix has moved. No fetch, no Grok.
+  let placed = true;
+  while (placed) {
+    placed = false;
+    for (const [key, item] of Object.entries(next.items)) {
+      if (item.status !== "pending" || item.held === undefined) continue;
+      const after = placeHeld(item.held, item, deps);
+      if (after.status !== "pending") {
+        next.items[key] = after;
+        deps.onProgress?.(next, after);
+        placed = true;
+      }
+    }
+  }
   rebuildIndex(deps.root, day(deps));
   return next;
 }
@@ -166,6 +182,7 @@ async function ingestOne(
     const gate = awardGate(candidate);
     if (gate !== null) return { url: candidate.url, status: "refused", reason: gate, failures: 0, checked: day(deps) };
   }
+  if (prior?.status === "pending" && prior.held !== undefined) return placeHeld(prior.held, prior, deps);
   const robots = await readRobots(candidate.url, deps, hosts);
   if (!robots.allowed) {
     const policy = ingestPolicy(candidate.source, candidate.url, candidate.license ?? null, { allowed: false, via: candidate.via });
@@ -205,7 +222,9 @@ async function ingestOne(
     // Award ingest balances the site-reference set only; flagged docs/library notes are not sites.
     const pool = awardSite ? existing.filter(isSiteReference) : existing;
     if (!quotaAllows(pool, entry.styleWorld, deps.quotaFloor ?? 8, deps.quotaShare ?? 0.34)) {
-      return { ...itemFrom(candidate.url, "pending", policy, 0, deps), reason: `Style-world quota (${entry.styleWorld}).` };
+      const pending: IngestItemState = { ...itemFrom(candidate.url, "pending", policy, 0, deps), reason: `Style-world quota (${entry.styleWorld}).` };
+      if (entry.ingestMode !== "code") pending.held = entry;
+      return pending;
     }
     writeEntry(deps.root, entry, policy.mode === "code" ? draft.snippet ?? "" : "", license);
     return { ...itemFrom(candidate.url, "done", policy, 0, deps), entryId: entry.id, mode: policy.mode };
@@ -287,6 +306,22 @@ export async function recheckLibrary(deps: IngestDeps, state: IngestState): Prom
 
 export async function addLibraryUrl(url: string, deps: IngestDeps, state: IngestState): Promise<IngestState> {
   return runIngest([{ url, source: hostSource(url), via: "add" }], state, deps);
+}
+
+/** Place a held link-only entry if the quota allows it now; otherwise it stays pending with its draft. */
+function placeHeld(held: DesignEntry, prior: IngestItemState, deps: IngestDeps): IngestItemState {
+  const existing = safeEntries(deps.root);
+  const base: IngestItemState = { url: prior.url, status: "done", reason: prior.reason, failures: 0, checked: day(deps) };
+  if (prior.mode !== undefined) base.mode = prior.mode;
+  if (existing.some((item) => canonicalUrl(item.sourceUrl) === canonicalUrl(held.sourceUrl))) {
+    return { ...base, reason: "Duplicate canonical URL or technique cluster." };
+  }
+  const awardSite = held.kind === "site" && (held.provenance?.length ?? 0) > 0;
+  const pool = awardSite ? existing.filter(isSiteReference) : existing;
+  if (!quotaAllows(pool, held.styleWorld, deps.quotaFloor ?? 8, deps.quotaShare ?? 0.34)) return prior;
+  const entry: DesignEntry = { ...held, id: uniqueId(held.id, held.sourceUrl, existing, deps.root) };
+  writeEntry(deps.root, entry, "", entry.license);
+  return { ...base, reason: "The automated path stores a link and our notes when the host is allowed.", entryId: entry.id };
 }
 
 function itemFrom(url: string, status: IngestItemState["status"], policy: PolicyResult, failures: number, deps: IngestDeps): IngestItemState {

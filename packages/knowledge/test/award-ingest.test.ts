@@ -286,3 +286,36 @@ test("award ingest: flagged docs/library entries do not count toward the site st
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("award ingest: a quota-held entry keeps its draft and is placed later without another Grok call", async () => {
+  const dir = libraryDir();
+  try {
+    const fetchImpl: typeof fetch = async (input) => (String(input).endsWith("/robots.txt") ? okRobots() : new Response("ok"));
+    const asked: string[] = [];
+    const grok: IngestDeps["grok"] = async (input) => {
+      asked.push(input.url);
+      return input.url.includes("ed-") ? draft({ family: "editorial" }) : draft();
+    };
+    const urls = ["https://a.example/", "https://b.example/", "https://c.example/", "https://ed-d.example/", "https://ed-e.example/"];
+    const state = await runIngest(
+      urls.map((url, index) => award(url, `Site ${index}`)),
+      { version: 1, items: {} },
+      deps(dir, fetchImpl, { grok, quotaFloor: 2, quotaShare: 0.61 }),
+    );
+    assert.equal(asked.length, 5);
+    for (const url of urls) assert.equal(state.items[url]?.status, "done", url);
+    assert.equal(state.items["https://c.example/"]?.held, undefined);
+    assert.ok(state.items["https://c.example/"]?.entryId);
+    assert.equal(readdirSync(path.join(dir, "entries")).length, 5);
+
+    const held = { ...state, items: { ...state.items } };
+    const entry = JSON.parse(readFileSync(path.join(dir, "entries", `${state.items["https://c.example/"]?.entryId}.json`), "utf8")) as DesignEntry;
+    rmSync(path.join(dir, "entries", `${entry.id}.json`));
+    held.items["https://c.example/"] = { url: "https://c.example/", status: "pending", reason: "Style-world quota (3d-world).", failures: 0, held: entry };
+    const resumed = await runIngest([award("https://c.example/", "Site 2")], held, deps(dir, fetchImpl, { grok, quotaFloor: 2, quotaShare: 0.61 }));
+    assert.equal(asked.length, 5);
+    assert.equal(resumed.items["https://c.example/"]?.status, "done");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
