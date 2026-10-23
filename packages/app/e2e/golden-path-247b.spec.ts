@@ -9,13 +9,26 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { hiddenChildOptions, restoreProject } from "@hitchhiker/engine";
+import { hiddenChildOptions, packagedModule, restoreProject } from "@hitchhiker/engine";
 import { expect, test, type Page } from "@playwright/test";
-import { runGoldenPath } from "../../orchestrator/src/golden-path.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sample = path.resolve(here, "../../../samples/towel-day.hhproject");
 const WIDTHS = [375, 1440] as const;
+
+/** Public orchestrator entry. A relative import of that package is an escape. */
+async function runGoldenPath(input: { projectDir: string; samplePath: string }): Promise<void> {
+  const href = pathToFileURL(packagedModule("orchestrator", "src/index.ts")).href;
+  const loaded: unknown = await import(href);
+  if (loaded === null || typeof loaded !== "object" || !("runGoldenPath" in loaded)) {
+    throw new Error("The golden path is not on the orchestrator entry.");
+  }
+  const run = loaded.runGoldenPath;
+  if (typeof run !== "function") {
+    throw new Error("The golden path is not on the orchestrator entry.");
+  }
+  await run(input);
+}
 
 test.describe("golden path on the desk", () => {
   test.describe.configure({ timeout: 300_000 });

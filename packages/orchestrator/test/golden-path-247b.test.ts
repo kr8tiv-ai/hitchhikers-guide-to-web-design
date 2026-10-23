@@ -1,7 +1,8 @@
 /**
- * 247b. Fixture walk of the towel sample, then a real local preview.
+ * 247b. Fixture walk of the towel sample.
  * The brief is approved in the harness. This file does not run
  * `hh brief --approve`, does not set HH_LIVE, and does not call a host.
+ * The preview command lives in the cli package, which this package cannot depend on.
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -13,16 +14,13 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { hiddenChildOptions } from "@hitchhiker/engine";
 import { readElevateLedger } from "@hitchhiker/qa";
-import { runSoLongCommand } from "../../cli/src/commands/so-long.ts";
-import { closePreview } from "../../deploy/src/dispatch.ts";
 import { readFlowFrom, runGoldenPath } from "../src/index.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-test("towel sample walks every phase and the preview serves the page", async () => {
+test("towel sample walks every phase", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "hh-golden-247b-"));
   const sample = path.resolve(here, "../../../samples/towel-day.hhproject");
-  let opened = false;
   try {
     const walked = await runGoldenPath({ projectDir: dir, samplePath: sample });
     assert.equal(walked.applied.length, 1);
@@ -46,28 +44,10 @@ test("towel sample walks every phase and the preview serves the page", async () 
     assert.equal(kept?.file, "src/hero.tsx");
     assert.equal(reverted?.file, "src/footer.tsx");
     assert.equal(readFlowFrom(dir), "elevate");
-
-    const result = await runSoLongCommand(["--project", dir, "--host", "preview", "--yes"]);
-    opened = true;
-    assert.equal(result.exitCode, 0, result.stdout);
-    assert.equal(result.stdout.includes("!"), false);
-    assert.equal(result.stdout.includes("\u2014"), false);
-    assert.equal(result.stdout.includes("HH_LIVE"), false);
-    const address = result.stdout.match(/Address: (http:\/\/127\.0\.0\.1:\d+\/)/);
-    assert.ok(address !== null && address[1] !== undefined, result.stdout);
-    const url = new URL(address[1]);
-    assert.notEqual(url.port, "4175");
-    const response = await fetch(url);
-    assert.equal(response.status, 200);
-    const body = await response.text();
-    assert.match(body, /Mostly Towels/);
-    assert.equal(existsSync(path.join(dir, ".hitchhiker", "deploy", "preview.zip")), true);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "hostinger-yes.json")), false);
-    assert.equal(readFlowFrom(dir), "so-long");
     const head = await gitHead(dir);
     assert.equal(head, walked.head);
   } finally {
-    if (opened) await closePreview(dir).catch(() => undefined);
     await rm(dir, { recursive: true, force: true });
   }
 });

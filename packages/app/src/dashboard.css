@@ -21,6 +21,13 @@
   text-wrap: pretty;
 }
 
+/* Next-step line sits under the footer so the mast keeps its measured height. */
+.hh-drive > p[data-journey] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .hh-drive__main,
 .hh-drive__rest {
   display: grid;

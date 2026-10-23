@@ -568,14 +568,18 @@ textarea {
 
 .hh-map__note {
   display: block;
-  max-width: 100%;
   margin-top: var(--space-1);
-  overflow-wrap: anywhere;
   font-family: var(--font-text);
   font-size: var(--type-small);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Phase notes on the folded map. The dashboard mast does not use this list. */
+.hh-map-fold .hh-map__note {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .hh-map__item--current {
@@ -627,6 +631,11 @@ textarea {
 }
 
 .hh-status .hh-btn {
+  white-space: nowrap;
+}
+
+[data-brand-kit] .hh-btn,
+[data-design-stage] .hh-btn {
   max-width: 100%;
   white-space: normal;
   text-align: center;

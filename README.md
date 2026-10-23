@@ -324,7 +324,7 @@ It comes back with upgrades ranked by impact against effort: type and spacing, m
 The walk is [`packages/orchestrator/src/golden-path.ts`](packages/orchestrator/src/golden-path.ts). `runGoldenPath({ projectDir })` restores the sample into that folder and then:
 
 1. Opens discovery and answers the remaining questions with the interview keep command, so a pushback cannot stall the fixture.
-2. Approves the brief with `approveSiteBrief` inside the harness. That is the product approval. It is not `hh brief --approve`. If the draft falls back to the interview text, the harness passes `confirmFallback`, which is the engine option for that case, not the CLI flag.
+2. Approves the brief with `approveSiteBrief` inside the harness. That is the product approval. It is not `hh brief --approve`. If the draft falls back to the interview text, the harness passes the engine option that confirms that case, not the CLI flag.
 3. Approves the plan and each design stage, then starts the build with a cassette runner. The runner writes `dist/index.html` and does not spawn Grok. The folder has no `package.json` build script, so a later preview does not try to install or compile.
 4. Records one git commit, then runs one Elevate round. The first pick is kept. The second pick makes the link check need a fix, so that pick is undone and the project stays on the same commit.
 5. Runs the quality check and writes `.hitchhiker/qa/GATES.json` for that commit. Every check in the fixture is a pass. The check file is not committed, so the commit it names stays the one the preview will read.

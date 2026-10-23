@@ -319,7 +319,6 @@ export function renderDriveDocument(
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">${DRIVE_DEK}</p>
-        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </header>
 
       <main id="drive-main" data-hh-ready>
@@ -404,6 +403,7 @@ export function renderDriveDocument(
         <span class="hh-status__spacer"></span>
         <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
       </footer>
+      <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
     </div>`;
   return documentShell("Drive", body, options);
 }
@@ -419,7 +419,6 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">${DRIVE_DEK}</p>
-        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </header>
       <main id="drive-main" data-hh-ready>
       <article class="hh-error" id="drive-error" role="alert">
@@ -437,6 +436,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <span class="hh-status__spacer"></span>
         <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
       </footer>
+      <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
     </div>`;
   return documentShell("Drive", body, options, false);
 }
