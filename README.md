@@ -438,7 +438,7 @@ Phase changes go through one table in [`packages/orchestrator/src/phase-lock.ts`
 discovery -> brief -> design -> build -> elevate -> so-long
 ```
 
-A step may stay, move forward one, or move back one. The opening edge is start to discovery. Elevate may return to the build, which is how an accepted pick becomes one prompt and one commit. so-long is the only step that can require the ship gate, and only when the entry would publish or open a preview. Desk buttons and `hh brief`, `hh elevate` (the round path), `hh build`, `hh next --run`, and `hh so-long` call `enterFlow`. A skip returns a sentence and does not write `.hitchhiker/flow.json`.
+A step may stay, move forward one, or move back one. The opening edge is start to discovery. Elevate may return to the build, which is how an accepted pick becomes one prompt and one commit. so-long is the only step that can require the ship gate, and only when the entry would publish or open a preview. Desk buttons and `hh brief`, the elevate command (the round path), `hh build`, `hh next --run`, and `hh so-long` call `enterFlow`. A skip returns a sentence and does not write `.hitchhiker/flow.json`.
 
 Two queues exist, and they are not the same queue. `.hh-driver` walks `hh-build-plan/prompts` to build this repository: [`run-build.ps1`](.hh-driver/run-build.ps1) on Windows, `node .hh-driver/run-build.mjs` on macOS and Linux. One prompt, one session, a normal `git push`, never a force push. The notes are in [`.hh-driver/README.md`](.hh-driver/README.md). A site you are designing uses `hh build --resume` and the Drive page. `/hh-drive` is a skill. It is not an `hh` subcommand, and it is not the driver script.
 
@@ -457,7 +457,7 @@ The app is in the repo, and so is the brain it was built from. The root `package
 | [`context/miro/`](context/miro) | The original interview skeleton, sketched on a whiteboard. |
 | [`context/sources/`](context/sources) | Reference material: Matt's free AntiHero guides, Grok Build and xAI docs, spec-driven tool READMEs, award-site references. |
 | [`vendor/`](vendor) | MIT-licensed GSD snapshots, the spec-driven backbone. |
-| [`hh-build-plan/INDEX.md`](hh-build-plan/INDEX.md) | The build plan. The index table lists prompts 001 through 180. Later prompt files are in [`hh-build-plan/prompts/`](hh-build-plan/prompts) as well. [`.hh-driver/STATE.json`](.hh-driver/STATE.json) records the last finished prompt. |
+| [`hh-build-plan/INDEX.md`](hh-build-plan/INDEX.md) | The build plan. The index table lists prompts 001 through 180. Later prompt files are in [`hh-build-plan/prompts/`](hh-build-plan/prompts) as well. The queue runner writes `.hh-driver/STATE.json` on the computer that is building this repo, and that file records the last finished prompt. A clean checkout does not contain it. The field list is in [`.hh-driver/README.md`](.hh-driver/README.md#resume-pause-and-stop). |
 | [`docs/dont-panic.md`](docs/dont-panic.md) | The short page for the interview. |
 | [`docs/improve.md`](docs/improve.md) | `hh improve` and `hh improve supervise`. |
 | [`packages/cli/build.mjs`](packages/cli/build.mjs) | Bundles the CLI to `packages/cli/dist/main.js` and copies the desk files, skills, templates, and knowledge packs beside it. |
