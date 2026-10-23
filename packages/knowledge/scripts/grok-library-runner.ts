@@ -3,13 +3,28 @@
  * Manual commands only. Tests inject their own runner and never import this file.
  */
 import { spawn } from "node:child_process";
-import type { GrokEntryDraft } from "../src/ingest-pipeline.ts";
+import type { GrokEntryDraft, GrokVocabulary } from "../src/ingest-pipeline.ts";
 
-export function grokLibraryRunner(input: { url: string; mode: string; material: string }): Promise<GrokEntryDraft> {
+/** A spec build that has not answered in this long is stopped and recorded as failed. */
+const GROK_TIMEOUT_MS = 15 * 60 * 1000;
+
+export function grokLibraryRunner(input: { url: string; mode: string; material: string; vocabulary?: GrokVocabulary }): Promise<GrokEntryDraft> {
+  const vocab = input.vocabulary;
   const prompt = [
     "Write a design-library entry as JSON.",
     "Fields: title, techniques, promptLanguage, notes, perfCost, reducedMotion, moods, sectionTypes, libraries, styleWorld, family, kind, source.",
     "Prompt language is one or two sentences in our own words. Remix the idea. Do not copy the page.",
+    "notes is one or two sentences of our own observation. reducedMotion is exactly one sentence. No URL, no exclamation mark, no em dash in prose fields.",
+    ...(vocab === undefined
+      ? []
+      : [
+          `techniques: one to four, only from: ${vocab.techniques.join(", ")}`,
+          `moods: two to six, only from: ${vocab.moods.join(", ")}`,
+          `sectionTypes: one or more, only from: ${vocab.sectionTypes.join(", ")}`,
+          `libraries: only from: ${vocab.libraries.join(", ")}`,
+          `family: one of: ${Object.keys(vocab.families).join(", ")}. styleWorld follows the family: ${Object.entries(vocab.families).map(([family, world]) => `${family}=${world}`).join(", ")}`,
+          "perfCost: low, medium, or high. kind: site.",
+        ]),
     `Mode: ${input.mode}`,
     `URL: ${input.url}`,
     "Material:",
@@ -22,14 +37,23 @@ export function grokLibraryRunner(input: { url: string; mode: string; material: 
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
     let stdout = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("Grok timed out."));
+    }, GROK_TIMEOUT_MS);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
     });
-    child.on("error", reject);
+    child.stderr.resume();
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
     child.on("close", (code) => {
+      clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error("Grok did not write an entry."));
+        reject(new Error(`Grok did not write an entry (exit ${code}).`));
         return;
       }
       const start = stdout.indexOf("{");
@@ -38,7 +62,11 @@ export function grokLibraryRunner(input: { url: string; mode: string; material: 
         reject(new Error("Grok did not return JSON."));
         return;
       }
-      resolve(JSON.parse(stdout.slice(start, end + 1)) as GrokEntryDraft);
+      try {
+        resolve(JSON.parse(stdout.slice(start, end + 1)) as GrokEntryDraft);
+      } catch {
+        reject(new Error("Grok returned JSON that could not be parsed."));
+      }
     });
   });
 }

@@ -35,5 +35,6 @@
   "shots": [],
   "checked": "2026-10-19",
   "verified": "human",
-  "retired": false
+  "retired": false,
+  "siteReference": false
 }

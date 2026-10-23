@@ -34,6 +34,7 @@ function main(): void {
   for (const entry of entries) {
     problems.push(
       ...validateDesignEntry(entry, {
+        requireSiteProvenance: true,
         techniqueNames: techniques,
         seenUrls: seen,
         snippetText: (relative) => readMaybe(path.join(root, relative)),

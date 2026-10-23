@@ -67,7 +67,25 @@ export const ENTRY_SOURCES = [
   "official-docs",
   "original-note",
   "direct",
+  "webby",
+  "cssda",
 ] as const;
+
+/** Award or curation showcases an auto-ingested site reference must trace back to. */
+export const PROVENANCE_SOURCES = ["fwa", "awwwards", "webby", "cssda", "godly", "gsap-showcase"] as const;
+
+export interface Provenance {
+  /** Showcase that gave the award or curated the site. */
+  source: (typeof PROVENANCE_SOURCES)[number];
+  /** Award type as the showcase names it, for example FOTD, FOTM, SOTD, Honorable Mention. */
+  award: string;
+  /** ISO date of the award, or of the human check when the showcase gives no date. */
+  date: string;
+  /** Public showcase page that records the award. */
+  url: string;
+  /** How we learned it: the showcase listing, or the repo's human-curated gallery. */
+  via: "listing" | "curated-gallery";
+}
 
 export const CODE_LICENSES = [
   "MIT",
@@ -118,6 +136,10 @@ export interface DesignEntry {
   checked: string;
   verified: "auto" | "human";
   retired: boolean;
+  /** Award or curation provenance. Required for auto-verified site entries. */
+  provenance?: Provenance[];
+  /** False keeps the entry's technique language but drops it from the award site-reference set. */
+  siteReference?: boolean;
 }
 
 export interface DesignIndex {
@@ -296,6 +318,8 @@ export function nearDuplicate(left: DesignEntry, right: DesignEntry): boolean {
 }
 
 export interface ValidateContext {
+  /** When true, an auto-verified site entry needs award or curation provenance. */
+  requireSiteProvenance?: boolean;
   techniqueNames?: ReadonlySet<string>;
   snippetText?: (relativePath: string) => string;
   licenseText?: (relativePath: string) => string;
@@ -364,6 +388,7 @@ export function validateDesignEntry(entry: DesignEntry, context: ValidateContext
     if (text.split(/\r?\n/).length > SNIPPET_LINE_CAP) problems.push(`${entry.id}: snippet over the cap`);
     if (isCopyleft(text)) problems.push(`${entry.id}: copyleft snippet`);
   }
+  problems.push(...provenanceProblems(entry, context.requireSiteProvenance === true));
   if (context.seenUrls !== undefined) {
     const key = canonicalUrl(entry.sourceUrl);
     if (context.seenUrls.has(key)) problems.push(`${entry.id}: duplicate canonical URL`);
@@ -456,3 +481,48 @@ function sentenceCount(value: string): number {
 function isCopyleft(value: string): boolean {
   return /\bAGPL\b|\bGPL-\d|\bGNU General Public License\b|\bGPL\b/i.test(value) && !/\bLGPL\b/i.test(value);
 }
+
+/** Entries in the award site-reference set: sites with provenance that are not flagged out. */
+export function isSiteReference(entry: DesignEntry): boolean {
+  return entry.kind === "site" && entry.siteReference !== false && !entry.retired && (entry.provenance?.length ?? 0) > 0;
+}
+
+export function provenanceProblems(entry: DesignEntry, requireForAutoSites: boolean): string[] {
+  const problems: string[] = [];
+  const list = entry.provenance;
+  if (entry.siteReference !== undefined && typeof entry.siteReference !== "boolean") problems.push(`${entry.id}: siteReference`);
+  if (list === undefined || list.length === 0) {
+    if (requireForAutoSites && entry.kind === "site" && entry.verified === "auto") {
+      problems.push(`${entry.id}: provenance required for an auto-verified site`);
+    }
+    return problems;
+  }
+  for (const item of list) {
+    if (!(PROVENANCE_SOURCES as readonly string[]).includes(item.source)) problems.push(`${entry.id}: provenance source`);
+    if (typeof item.award !== "string" || item.award.trim() === "") problems.push(`${entry.id}: provenance award`);
+    if (typeof item.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) problems.push(`${entry.id}: provenance date`);
+    if (item.via !== "listing" && item.via !== "curated-gallery") problems.push(`${entry.id}: provenance via`);
+    let host = "";
+    try {
+      const parsed = new URL(item.url);
+      if (parsed.protocol !== "https:") problems.push(`${entry.id}: provenance URL must be https`);
+      host = parsed.hostname.replace(/^www\./, "");
+    } catch {
+      problems.push(`${entry.id}: provenance URL`);
+    }
+    const expected = PROVENANCE_HOSTS[item.source];
+    if (host !== "" && expected !== undefined && !expected.some((name) => host === name || host.endsWith(`.${name}`))) {
+      problems.push(`${entry.id}: provenance URL is not on the ${item.source} showcase`);
+    }
+  }
+  return problems;
+}
+
+const PROVENANCE_HOSTS: Record<string, readonly string[]> = {
+  fwa: ["thefwa.com"],
+  awwwards: ["awwwards.com"],
+  webby: ["webbyawards.com"],
+  cssda: ["cssdesignawards.com"],
+  godly: ["godly.website", "recent.design"],
+  "gsap-showcase": ["gsap.com"],
+};

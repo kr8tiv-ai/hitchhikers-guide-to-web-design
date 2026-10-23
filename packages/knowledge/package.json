@@ -21,7 +21,8 @@
     "validate:design-library": "node --experimental-strip-types scripts/validate-design-library.ts",
     "library:ingest": "node --experimental-strip-types scripts/ingest-design-library.ts",
     "library:add": "node --experimental-strip-types scripts/library-add.ts",
-    "library:packs-check": "node --experimental-strip-types scripts/packs-check.ts"
+    "library:packs-check": "node --experimental-strip-types scripts/packs-check.ts",
+    "library:discover": "node --experimental-strip-types scripts/discover-award-candidates.ts"
   },
   "dependencies": {
     "@hitchhiker/crawler": "workspace:*",
