@@ -1,0 +1,64 @@
+{
+  "id": "elimar",
+  "kind": "site",
+  "title": "Elimar",
+  "url": "https://elimar.lmigroupintl.com/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/elimar",
+  "styleWorld": "editorial",
+  "family": "culture-art",
+  "moods": [
+    "cinematic",
+    "editorial",
+    "dark",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "gallery",
+    "transition",
+    "contact",
+    "footer"
+  ],
+  "techniques": [
+    "three-hero",
+    "split-text-reveal",
+    "scrolltrigger-pin-timeline",
+    "typographic-scale"
+  ],
+  "libraries": [
+    "three",
+    "glsl",
+    "vanilla"
+  ],
+  "promptLanguage": "Pin each chapter of a long art story and reveal the opening line as split letters, while a WebGL field holds one figure that stays whole at a distance. Dates and captions stay small under the pictures, and a still frame remains when motion is off.",
+  "notes": "The public page is a five-chapter reading with a scroll cue on each chapter, spaced letters in the opening lines, and dated picture rows. An inquiry and a long credit list close the page as ordinary text.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion keeps every chapter, caption, and the inquiry in place and shows the figure as a still frame.",
+  "sourceUrl": "https://elimar.lmigroupintl.com/",
+  "license": "link-only",
+  "creditLine": "OddCommon, Elimar (https://thefwa.com/cases/elimar)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2025-03-17",
+      "url": "https://thefwa.com/cases/elimar",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2025-04-01",
+      "url": "https://thefwa.com/cases/elimar",
+      "via": "listing"
+    }
+  ]
+}

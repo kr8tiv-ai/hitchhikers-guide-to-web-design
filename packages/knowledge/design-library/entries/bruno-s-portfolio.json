@@ -1,0 +1,72 @@
+{
+  "id": "bruno-s-portfolio",
+  "kind": "site",
+  "title": "Bruno's Portfolio",
+  "url": "https://bruno-simon.com/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/brunos-portfolio",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "playful",
+    "cinematic",
+    "technical",
+    "bold"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "contact"
+  ],
+  "techniques": [
+    "three-hero",
+    "ambient-sound-toggle"
+  ],
+  "libraries": [
+    "three",
+    "howler"
+  ],
+  "promptLanguage": "A small world rendered in Three.js is the portfolio, with one vehicle to move between places and an HTML panel for the map. Sound stays off until a labelled control starts it.",
+  "notes": "The public page is one continuous scene with overlays for options, a map, and contact, and the sound control is explicit. A quality switch and a renderer choice show that the scene is built to be throttled.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows a still of the world, skips the render loop, and leaves sound off until the visitor turns it on.",
+  "sourceUrl": "https://bruno-simon.com/",
+  "license": "link-only",
+  "creditLine": "Bruno Simon, Bruno's Portfolio (https://thefwa.com/cases/brunos-portfolio)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2025-12-13",
+      "url": "https://thefwa.com/cases/brunos-portfolio",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-01-01",
+      "url": "https://thefwa.com/cases/brunos-portfolio",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTY",
+      "date": "2026-01-15",
+      "url": "https://thefwa.com/cases/brunos-portfolio",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "PCA",
+      "date": "2026-01-15",
+      "url": "https://thefwa.com/cases/brunos-portfolio",
+      "via": "listing"
+    }
+  ]
+}

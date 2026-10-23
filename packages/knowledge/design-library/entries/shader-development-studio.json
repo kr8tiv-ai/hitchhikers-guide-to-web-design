@@ -1,0 +1,64 @@
+{
+  "id": "shader-development-studio",
+  "kind": "site",
+  "title": "Shader Development Studio",
+  "url": "https://www.shader.se/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/shader-development-studio",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "bold",
+    "playful",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "gallery",
+    "story",
+    "contact",
+    "footer",
+    "transition"
+  ],
+  "techniques": [
+    "three-hero",
+    "lenis-smooth-scroll",
+    "grain-and-grade"
+  ],
+  "libraries": [
+    "three",
+    "r3f",
+    "glsl",
+    "lenis"
+  ],
+  "promptLanguage": "Drive one full-viewport Three.js scene with a Lenis scroll value, and let the current frame sample the next scene so a monitor or a torn edge reveals what follows. Render only the sections in view, and finish the composite with a light film grain.",
+  "notes": "The studio page is one canvas from the opening scene through a work reel, a story, and a contact close, with smooth scroll snapping between the first two and a grain grade on the final composite. Scenes outside the scroll window do not draw, and the next one starts a little early so the handoff has a texture to sample.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows the hero, work, story, and contact as still frames in order and skips the scroll snap, the scene sampling, and the grain pass.",
+  "sourceUrl": "https://www.shader.se/",
+  "license": "link-only",
+  "creditLine": "Shader Development Studio, Andreas Antonsson, Shader Development Studio (https://thefwa.com/cases/shader-development-studio)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2026-04-02",
+      "url": "https://thefwa.com/cases/shader-development-studio",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-05-01",
+      "url": "https://thefwa.com/cases/shader-development-studio",
+      "via": "listing"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "id": "lusion-v3",
+  "kind": "site",
+  "title": "Lusion v3",
+  "url": "https://lusion.co/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/lusion-v3",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "technical",
+    "bold",
+    "dark"
+  ],
+  "sectionTypes": [
+    "hero",
+    "gallery",
+    "story",
+    "contact",
+    "footer",
+    "transition"
+  ],
+  "techniques": [
+    "three-hero",
+    "layered-parallax",
+    "ambient-sound-toggle"
+  ],
+  "libraries": [
+    "three",
+    "glsl",
+    "vanilla"
+  ],
+  "promptLanguage": "Set a WebGL hero behind a short project list and let scroll move the scene and the type at different rates. Sound waits for a visible play control, and a still frame remains when motion is off.",
+  "notes": "The live page scrolls from a spatial hero into a project list, a short story, and a contact close, with play and mute on the page. The list stays readable where the 3D layer is doing the showing.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion holds the project list, story, and contact in place and shows the hero as a still frame.",
+  "sourceUrl": "https://lusion.co/",
+  "license": "link-only",
+  "creditLine": "Lusion, Lusion v3 (https://thefwa.com/cases/lusion-v3)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2023-09-21",
+      "url": "https://thefwa.com/cases/lusion-v3",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2023-10-01",
+      "url": "https://thefwa.com/cases/lusion-v3",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTY",
+      "date": "2024-01-15",
+      "url": "https://thefwa.com/cases/lusion-v3",
+      "via": "listing"
+    }
+  ]
+}

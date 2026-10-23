@@ -1,0 +1,62 @@
+{
+  "id": "awards-racing",
+  "kind": "site",
+  "title": "Awards Racing",
+  "url": "https://awards.racing/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/awards-racing",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "playful",
+    "bold",
+    "dark",
+    "cinematic",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "cards",
+    "footer",
+    "transition"
+  ],
+  "techniques": [
+    "three-hero",
+    "ambient-sound-toggle",
+    "typographic-scale"
+  ],
+  "libraries": [
+    "three",
+    "gsap",
+    "howler"
+  ],
+  "promptLanguage": "Put one glossy car in a full-viewport Three.js scene and keep the play control, the driver, and the car choice as real HTML on top. Sound stays silent until a labelled control turns it on, and the type jumps once from the play word to the small status line.",
+  "notes": "Choosing sound off opens a dark lobby where a single car sits in the WebGL view and the play control, driver card, and car card stay in the page. A sound control remains in the corner, and the frame rate readout shows the scene is doing real-time work.",
+  "perfCost": "high",
+  "reducedMotion": "When motion is reduced, keep the driver, the car name, and the play control as still HTML and leave the canvas on a single frame with sound off.",
+  "sourceUrl": "https://awards.racing/",
+  "license": "link-only",
+  "creditLine": "Ecofuture, Awards Racing (https://thefwa.com/cases/awards-racing)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2026-09-09",
+      "url": "https://thefwa.com/cases/awards-racing",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-10-01",
+      "url": "https://thefwa.com/cases/awards-racing",
+      "via": "listing"
+    }
+  ]
+}

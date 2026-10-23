@@ -1,0 +1,65 @@
+{
+  "id": "lando-norris",
+  "kind": "site",
+  "title": "Lando Norris",
+  "url": "https://landonorris.com/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/lando-norris",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "bold",
+    "dark",
+    "cinematic",
+    "playful",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "gallery",
+    "cards",
+    "footer"
+  ],
+  "techniques": [
+    "three-hero",
+    "lenis-smooth-scroll",
+    "scrolltrigger-pin-timeline",
+    "typographic-scale"
+  ],
+  "libraries": [
+    "lenis",
+    "gsap",
+    "scrolltrigger",
+    "three"
+  ],
+  "promptLanguage": "Ease a tall page with Lenis and pin one stretch so a row of dated stills travels sideways, while a single helmet sits in a WebGL hero with a still behind it. The name and the results stay real text, and the type scale jumps once, from the name to a quiet line.",
+  "notes": "A fixed canvas draws the opening face and the helmet only while those blocks are near the screen, and the eased scroll shares that frame. The photo run locks sideways until the visitor asks to scroll again, and the dates stay written in the page.",
+  "perfCost": "high",
+  "reducedMotion": "When motion is reduced, keep the portrait still, the dates, and the helmet photos, and leave the scroll native.",
+  "sourceUrl": "https://landonorris.com/",
+  "license": "link-only",
+  "creditLine": "off brand., Lando Norris (https://thefwa.com/cases/lando-norris)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2025-11-20",
+      "url": "https://thefwa.com/cases/lando-norris",
+      "via": "listing"
+    },
+    {
+      "source": "awwwards",
+      "award": "SOTY 2025",
+      "date": "2026-10-12",
+      "url": "https://www.awwwards.com/sites/lando-norris",
+      "via": "curated-gallery"
+    }
+  ]
+}

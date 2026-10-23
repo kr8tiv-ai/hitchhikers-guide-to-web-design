@@ -1,0 +1,64 @@
+{
+  "id": "ivress-spin-a-tale",
+  "kind": "site",
+  "title": "IVRESS Spin a Tale",
+  "url": "https://brand.ivress.co.jp/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/ivress-spin-a-tale",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "dark",
+    "technical",
+    "bold",
+    "organic"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "transition",
+    "footer"
+  ],
+  "techniques": [
+    "three-hero",
+    "scrolltrigger-pin-timeline",
+    "ambient-sound-toggle",
+    "typographic-scale"
+  ],
+  "libraries": [
+    "three",
+    "glsl",
+    "web-audio",
+    "vanilla"
+  ],
+  "promptLanguage": "Set a dark WebGL scene that stays still until a click, then let scroll move through a short run of held chapters while a visible control owns the sound. Keep a large tracked title and a small chapter index in front of the picture, with a still frame when motion is off.",
+  "notes": "Nine numbered scenes share one dark canvas, with a start gate, a sound control, and a hold gesture in a later scene. Chapter names and closing links stay readable while the canvas carries the pictures.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion keeps the chapter index and story lines in place and shows the scene as a still frame.",
+  "sourceUrl": "https://brand.ivress.co.jp/",
+  "license": "link-only",
+  "creditLine": "Laugh Mind, Utsubo, IVRESS SPIN A TALE (https://thefwa.com/cases/ivress-spin-a-tale)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2026-05-12",
+      "url": "https://thefwa.com/cases/ivress-spin-a-tale",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-06-01",
+      "url": "https://thefwa.com/cases/ivress-spin-a-tale",
+      "via": "listing"
+    }
+  ]
+}

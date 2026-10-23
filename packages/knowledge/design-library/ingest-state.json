@@ -1,4 +1,182 @@
 {
   "version": 1,
-  "items": {}
+  "items": {
+    "https://bruno-simon.com/": {
+      "url": "https://bruno-simon.com/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "bruno-s-portfolio"
+    },
+    "http://getty.edu/persepolis": {
+      "url": "http://www.getty.edu/persepolis",
+      "status": "failed",
+      "reason": "fetch failed",
+      "failures": 2,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://landonorris.com/": {
+      "url": "https://landonorris.com/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "lando-norris"
+    },
+    "https://lusion.co/": {
+      "url": "https://lusion.co/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "lusion-v3"
+    },
+    "https://awards.racing/": {
+      "url": "https://awards.racing/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "awards-racing"
+    },
+    "https://foodforfish.org/": {
+      "url": "https://foodforfish.org/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "food-for-fish"
+    },
+    "https://why.zero.university/": {
+      "url": "https://why.zero.university/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "why-zero"
+    },
+    "https://brand.ivress.co.jp/": {
+      "url": "https://brand.ivress.co.jp/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "ivress-spin-a-tale"
+    },
+    "https://shader.se/": {
+      "url": "https://www.shader.se/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "shader-development-studio"
+    },
+    "https://members-play.lacoste.com/ace-breaker-rg": {
+      "url": "https://members-play.lacoste.com/ace-breaker-rg",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://santionispirits.com/": {
+      "url": "https://santionispirits.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://shopify.com/editions/winter2026": {
+      "url": "https://www.shopify.com/editions/winter2026",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "the-renaissance-edition"
+    },
+    "https://explore.ownprimland.com/": {
+      "url": "https://explore.ownprimland.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://oryzo.ai/": {
+      "url": "https://oryzo.ai/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://themonolithproject.net/": {
+      "url": "https://themonolithproject.net/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://powster.com/case-study/welcome-to-berk": {
+      "url": "https://powster.com/case-study/welcome-to-berk/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "http://samsy.ninja/": {
+      "url": "http://samsy.ninja/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://messenger.abeto.co/": {
+      "url": "https://messenger.abeto.co/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://nvg8.io/": {
+      "url": "https://nvg8.io/",
+      "status": "refused",
+      "reason": "robots.txt returned 525, so the site is skipped.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://elimar.lmigroupintl.com/": {
+      "url": "https://elimar.lmigroupintl.com/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "elimar"
+    },
+    "https://arinastory.com/": {
+      "url": "https://arinastory.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    }
+  }
 }

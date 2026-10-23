@@ -1,0 +1,68 @@
+{
+  "id": "food-for-fish",
+  "kind": "site",
+  "title": "Food for Fish",
+  "url": "https://foodforfish.org/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/food-for-fish",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "playful",
+    "warm",
+    "organic",
+    "technical",
+    "cinematic"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "footer"
+  ],
+  "techniques": [
+    "three-hero",
+    "ambient-sound-toggle",
+    "grain-and-grade"
+  ],
+  "libraries": [
+    "gsap",
+    "howler",
+    "vanilla"
+  ],
+  "promptLanguage": "A small walkable world fills the screen, moving from a room to an outdoor set, while GSAP only eases the menu. Music and effects sit on labelled sliders, and a fine grain rests on the grade.",
+  "notes": "The public page is one canvas that swaps an interior for an outdoor set, with inventory and a menu drawn in the scene. Piano and effects run through Howler, and the menu gives each its own slider.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion holds a still of the room, skips the walk, and leaves the music off until the visitor raises the slider.",
+  "sourceUrl": "https://foodforfish.org/",
+  "license": "link-only",
+  "creditLine": "Kris Temmerman, Food for Fish (https://thefwa.com/cases/food-for-fish)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2024-05-07",
+      "url": "https://thefwa.com/cases/food-for-fish",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2024-06-01",
+      "url": "https://thefwa.com/cases/food-for-fish",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTY",
+      "date": "2025-01-15",
+      "url": "https://thefwa.com/cases/food-for-fish",
+      "via": "listing"
+    }
+  ]
+}

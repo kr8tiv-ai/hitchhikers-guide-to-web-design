@@ -1,32 +1,50 @@
 {
-  "built": "2026-10-19",
+  "built": "2026-10-23",
   "entries": [
     "astro-images",
     "astro-view-transitions",
+    "awards-racing",
     "awwwards-sites",
     "awwwards-sotd",
+    "bruno-s-portfolio",
     "chrome-autoplay",
     "codrops-interlude",
     "dark-luxury-grade",
+    "elimar",
+    "food-for-fish",
     "framer-agents",
     "gsap-a11y",
     "gsap-standard-license",
     "howler-sound",
+    "ivress-spin-a-tale",
+    "lando-norris",
     "lenis-smooth",
+    "lusion-v3",
     "motion-split",
     "r3f-docs",
+    "shader-development-studio",
     "stitch",
+    "the-renaissance-edition",
     "threejs-examples",
     "threejs-home",
-    "unicorn-faq"
+    "unicorn-faq",
+    "why-zero"
   ],
   "by": {
     "styleWorld": {
       "3d-world": [
+        "awards-racing",
+        "bruno-s-portfolio",
+        "food-for-fish",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
         "r3f-docs",
+        "shader-development-studio",
         "threejs-examples",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
       ],
       "editorial": [
         "astro-images",
@@ -34,6 +52,7 @@
         "awwwards-sites",
         "awwwards-sotd",
         "codrops-interlude",
+        "elimar",
         "lenis-smooth",
         "stitch"
       ],
@@ -48,17 +67,25 @@
         "chrome-autoplay",
         "gsap-a11y",
         "gsap-standard-license",
-        "motion-split"
+        "motion-split",
+        "the-renaissance-edition"
       ]
     },
     "moods": {
       "bold": [
+        "awards-racing",
         "awwwards-sotd",
+        "bruno-s-portfolio",
         "chrome-autoplay",
         "framer-agents",
         "gsap-standard-license",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
         "motion-split",
-        "threejs-examples"
+        "shader-development-studio",
+        "threejs-examples",
+        "why-zero"
       ],
       "calm": [
         "astro-images",
@@ -70,16 +97,32 @@
         "stitch"
       ],
       "cinematic": [
+        "awards-racing",
+        "bruno-s-portfolio",
         "chrome-autoplay",
+        "elimar",
+        "food-for-fish",
         "gsap-standard-license",
         "howler-sound",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
         "r3f-docs",
+        "shader-development-studio",
+        "the-renaissance-edition",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
       ],
       "dark": [
+        "awards-racing",
         "dark-luxury-grade",
-        "howler-sound"
+        "elimar",
+        "howler-sound",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
+        "why-zero"
       ],
       "editorial": [
         "astro-images",
@@ -87,11 +130,14 @@
         "awwwards-sotd",
         "codrops-interlude",
         "dark-luxury-grade",
+        "elimar",
         "lenis-smooth",
-        "stitch"
+        "stitch",
+        "the-renaissance-edition"
       ],
       "luxurious": [
-        "dark-luxury-grade"
+        "dark-luxury-grade",
+        "the-renaissance-edition"
       ],
       "minimal": [
         "astro-view-transitions",
@@ -101,88 +147,175 @@
         "lenis-smooth",
         "stitch"
       ],
+      "organic": [
+        "food-for-fish",
+        "ivress-spin-a-tale"
+      ],
       "playful": [
-        "framer-agents"
+        "awards-racing",
+        "bruno-s-portfolio",
+        "food-for-fish",
+        "framer-agents",
+        "lando-norris",
+        "shader-development-studio"
       ],
       "technical": [
+        "awards-racing",
+        "bruno-s-portfolio",
+        "elimar",
+        "food-for-fish",
         "gsap-a11y",
         "gsap-standard-license",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
         "motion-split",
         "r3f-docs",
+        "shader-development-studio",
+        "the-renaissance-edition",
         "threejs-examples",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
+      ],
+      "warm": [
+        "food-for-fish",
+        "the-renaissance-edition"
       ]
     },
     "sectionTypes": {
       "cards": [
-        "framer-agents"
+        "awards-racing",
+        "framer-agents",
+        "lando-norris",
+        "the-renaissance-edition",
+        "why-zero"
+      ],
+      "contact": [
+        "bruno-s-portfolio",
+        "elimar",
+        "lusion-v3",
+        "shader-development-studio",
+        "why-zero"
       ],
       "footer": [
-        "howler-sound"
+        "awards-racing",
+        "elimar",
+        "food-for-fish",
+        "howler-sound",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
+        "shader-development-studio",
+        "the-renaissance-edition"
       ],
       "gallery": [
         "astro-images",
         "awwwards-sites",
         "awwwards-sotd",
+        "elimar",
+        "lando-norris",
+        "lusion-v3",
+        "shader-development-studio",
         "stitch",
+        "the-renaissance-edition",
         "threejs-examples"
       ],
       "hero": [
+        "awards-racing",
         "awwwards-sotd",
+        "bruno-s-portfolio",
         "chrome-autoplay",
         "codrops-interlude",
         "dark-luxury-grade",
+        "elimar",
+        "food-for-fish",
         "framer-agents",
         "gsap-a11y",
         "gsap-standard-license",
         "howler-sound",
+        "ivress-spin-a-tale",
+        "lando-norris",
         "lenis-smooth",
+        "lusion-v3",
         "motion-split",
         "r3f-docs",
+        "shader-development-studio",
+        "the-renaissance-edition",
         "threejs-examples",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
       ],
       "story": [
         "astro-images",
+        "bruno-s-portfolio",
         "dark-luxury-grade",
+        "elimar",
+        "food-for-fish",
         "gsap-a11y",
         "gsap-standard-license",
+        "ivress-spin-a-tale",
+        "lando-norris",
         "lenis-smooth",
+        "lusion-v3",
         "motion-split",
-        "stitch"
+        "shader-development-studio",
+        "stitch",
+        "the-renaissance-edition",
+        "why-zero"
       ],
       "transition": [
         "astro-view-transitions",
-        "codrops-interlude"
+        "awards-racing",
+        "codrops-interlude",
+        "elimar",
+        "ivress-spin-a-tale",
+        "lusion-v3",
+        "shader-development-studio",
+        "the-renaissance-edition",
+        "why-zero"
       ]
     },
     "techniques": {
       "ambient-sound-toggle": [
-        "howler-sound"
+        "awards-racing",
+        "bruno-s-portfolio",
+        "food-for-fish",
+        "howler-sound",
+        "ivress-spin-a-tale",
+        "lusion-v3"
       ],
       "asymmetric-editorial-grid": [
         "awwwards-sotd",
         "stitch"
       ],
       "glsl-gradient-noise": [
-        "threejs-examples"
+        "threejs-examples",
+        "why-zero"
       ],
       "grain-and-grade": [
         "astro-images",
-        "dark-luxury-grade"
+        "dark-luxury-grade",
+        "food-for-fish",
+        "shader-development-studio",
+        "why-zero"
       ],
       "image-distortion-hover": [
         "threejs-examples"
       ],
       "layered-parallax": [
         "framer-agents",
-        "lenis-smooth"
+        "lenis-smooth",
+        "lusion-v3",
+        "the-renaissance-edition"
       ],
       "lenis-smooth-scroll": [
         "dark-luxury-grade",
-        "lenis-smooth"
+        "lando-norris",
+        "lenis-smooth",
+        "shader-development-studio",
+        "the-renaissance-edition"
       ],
       "r3f-island": [
         "r3f-docs",
@@ -192,24 +325,42 @@
         "chrome-autoplay"
       ],
       "scrolltrigger-pin-timeline": [
-        "gsap-standard-license"
+        "elimar",
+        "gsap-standard-license",
+        "ivress-spin-a-tale",
+        "lando-norris"
       ],
       "split-text-reveal": [
+        "elimar",
         "gsap-a11y",
         "motion-split"
       ],
       "three-hero": [
+        "awards-racing",
+        "bruno-s-portfolio",
+        "elimar",
+        "food-for-fish",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
+        "shader-development-studio",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
       ],
       "typographic-scale": [
+        "awards-racing",
         "awwwards-sites",
         "dark-luxury-grade",
+        "elimar",
+        "ivress-spin-a-tale",
+        "lando-norris",
         "stitch"
       ],
       "view-transitions": [
         "astro-view-transitions",
-        "codrops-interlude"
+        "codrops-interlude",
+        "the-renaissance-edition"
       ]
     },
     "libraries": {
@@ -219,38 +370,64 @@
         "stitch"
       ],
       "glsl": [
-        "threejs-examples"
+        "elimar",
+        "ivress-spin-a-tale",
+        "lusion-v3",
+        "shader-development-studio",
+        "threejs-examples",
+        "why-zero"
       ],
       "gsap": [
+        "awards-racing",
+        "food-for-fish",
         "gsap-a11y",
         "gsap-standard-license",
-        "lenis-smooth"
+        "lando-norris",
+        "lenis-smooth",
+        "why-zero"
       ],
       "howler": [
-        "howler-sound"
+        "awards-racing",
+        "bruno-s-portfolio",
+        "food-for-fish",
+        "howler-sound",
+        "why-zero"
       ],
       "lenis": [
         "dark-luxury-grade",
-        "lenis-smooth"
+        "lando-norris",
+        "lenis-smooth",
+        "shader-development-studio",
+        "the-renaissance-edition"
       ],
       "motion": [
         "motion-split"
       ],
       "r3f": [
         "r3f-docs",
+        "shader-development-studio",
         "unicorn-faq"
       ],
       "scrolltrigger": [
-        "gsap-standard-license"
+        "gsap-standard-license",
+        "lando-norris"
       ],
       "splittext": [
         "gsap-a11y"
       ],
       "three": [
+        "awards-racing",
+        "bruno-s-portfolio",
+        "elimar",
+        "ivress-spin-a-tale",
+        "lando-norris",
+        "lusion-v3",
         "r3f-docs",
+        "shader-development-studio",
         "threejs-examples",
         "threejs-home",
-        "unicorn-faq"
+        "unicorn-faq",
+        "why-zero"
       ],
       "vanilla": [
         "astro-images",
@@ -258,15 +435,22 @@
         "chrome-autoplay",
         "codrops-interlude",
         "dark-luxury-grade",
+        "elimar",
+        "food-for-fish",
         "framer-agents",
-        "stitch"
+        "ivress-spin-a-tale",
+        "lusion-v3",
+        "stitch",
+        "why-zero"
       ],
       "view-transitions": [
         "astro-view-transitions",
-        "codrops-interlude"
+        "codrops-interlude",
+        "the-renaissance-edition"
       ],
       "web-audio": [
-        "howler-sound"
+        "howler-sound",
+        "ivress-spin-a-tale"
       ]
     }
   }

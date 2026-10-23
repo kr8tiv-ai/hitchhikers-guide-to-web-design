@@ -1,0 +1,63 @@
+{
+  "id": "the-renaissance-edition",
+  "kind": "site",
+  "title": "The Renaissance Edition",
+  "url": "https://www.shopify.com/editions/winter2026",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/the-renaissance-edition",
+  "styleWorld": "scroll-film",
+  "family": "scroll-gsap",
+  "moods": [
+    "cinematic",
+    "warm",
+    "editorial",
+    "luxurious",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "gallery",
+    "cards",
+    "transition",
+    "footer"
+  ],
+  "techniques": [
+    "lenis-smooth-scroll",
+    "layered-parallax",
+    "view-transitions"
+  ],
+  "libraries": [
+    "lenis",
+    "view-transitions"
+  ],
+  "promptLanguage": "Ease a long chaptered page with Lenis, and let two picture planes move at different rates while a named view transition carries one figure from the opening scene into the next chapter. The feature names stay real text under the pictures.",
+  "notes": "A painted opening becomes the first product chapter as the visitor scrolls, with Lenis easing the page and a view transition joining later chapters. The updates stay in readable cards, and one scene includes an object that can be bought on the page.",
+  "perfCost": "medium",
+  "reducedMotion": "Reduced motion keeps each chapter as a still picture in order, uses native scroll, and skips the view transition.",
+  "sourceUrl": "https://www.shopify.com/editions/winter2026",
+  "license": "link-only",
+  "creditLine": "Shopify Design, The Renaissance Edition (https://thefwa.com/cases/the-renaissance-edition)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2026-02-05",
+      "url": "https://thefwa.com/cases/the-renaissance-edition",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-03-01",
+      "url": "https://thefwa.com/cases/the-renaissance-edition",
+      "via": "listing"
+    }
+  ]
+}

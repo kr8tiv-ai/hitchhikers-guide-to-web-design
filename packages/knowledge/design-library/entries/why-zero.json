@@ -1,0 +1,64 @@
+{
+  "id": "why-zero",
+  "kind": "site",
+  "title": "Why Zero",
+  "url": "https://why.zero.university/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/why-zero",
+  "styleWorld": "3d-world",
+  "family": "3d-webgl",
+  "moods": [
+    "cinematic",
+    "bold",
+    "technical",
+    "dark"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "transition",
+    "cards",
+    "contact"
+  ],
+  "techniques": [
+    "three-hero",
+    "glsl-gradient-noise",
+    "grain-and-grade"
+  ],
+  "libraries": [
+    "three",
+    "glsl",
+    "gsap",
+    "howler",
+    "vanilla"
+  ],
+  "promptLanguage": "Scrub one Three.js scene with a custom eased scroll value, and open it with a drawn loop that seeds a frost shader. Procedural gradients, grain, and a short hold gate carry the argument from a promise, through a break, into a city the visitor can pan.",
+  "notes": "The public build is one canvas from the opening stroke to a pannable city, with hold gates between stages and type composited after the grade. Wheel and touch feed a virtual scroll value, and GSAP, shaders, and Howler ride that number rather than a document scroller.",
+  "perfCost": "high",
+  "reducedMotion": "Reduced motion shows the stages as still frames in order, skips the hold gates and the render loop, and leaves sound off.",
+  "sourceUrl": "https://why.zero.university/",
+  "license": "link-only",
+  "creditLine": "Sindhur Dutta, Zero Design, Atul Khola, Why Zero (https://thefwa.com/cases/why-zero)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2026-07-17",
+      "url": "https://thefwa.com/cases/why-zero",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2026-08-01",
+      "url": "https://thefwa.com/cases/why-zero",
+      "via": "listing"
+    }
+  ]
+}
