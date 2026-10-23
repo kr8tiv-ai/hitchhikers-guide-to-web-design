@@ -1,0 +1,6 @@
+# Run 11 PROGRESS.md (main d529dde5)
+
+- 3:08 PM CR: 4175 desk was serving 92134533 (pid 53768, started 10/21 8:14). Checked out hh-desk-run detached at d529dde5 (clean tree), pnpm install --frozen-lockfile, stopped pid 53768 + parent cmd, restarted via start-desk.cmd (pnpm exec hh app --port 4175 --no-open). HTTP 200.
+- 3:10 PM CR: driver11 pid 53820 (headed Chromium, profile11). Splash OK (DON'T PANIC, skip links, Enter -> H1#desk-heading, sy=900). Project 'Paradise Found Run Eleven' created in run11\site. Tour: Esc with body focus closes it (PASS); tour y=2392 at 1440x900, Replay tour does not scroll/focus it (FAIL). Interview loop L11 started at cmd 010.
+- 3:41 PM CR: interview at DP-1.3 (9 of 61 answered, ~3 min/turn). Loop L11 (pid 35876) running autonomously; A11 now attaches assets\ logo/hero/mark when a logo or image input is on a logo/photo question (DP-1.1 had already been answered in text). Approve plan verified in code = approval only (brief-desk.ts runPlanApprove -> advanceDesignStages writes sitemap.md; no startBuild). Start build: NOT pressed (Matt 3:10 PM: no billed build).
+- 3:51 PM CR: 11 of 61 answered (DP-1.4 done, ~4-7 min/turn now). DP-1.4 photo upload missed (A11 regex lacked 'picture'; fixed for later cards) - interview has brand text but no uploaded hero/logo file. Interim report sent; loop continues unattended.

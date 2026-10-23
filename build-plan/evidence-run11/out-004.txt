@@ -1,0 +1,27 @@
+{
+ "url": "http://127.0.0.1:4175/",
+ "h": [
+  "DON'T\nPANIC",
+  "THE HITCHHIKER'S GUIDE TO WEB DESIGN",
+  "Restart the interview",
+  "Is this website for your own business, or for a client?",
+  "",
+  "The desk",
+  "The sample",
+  "The brief",
+  "Suggest for me",
+  "The approval step",
+  "Where saves live",
+  "whisper",
+  "pdftotext"
+ ],
+ "tour": 1,
+ "tb": {
+  "x": 71,
+  "y": 2392.737548828125,
+  "width": 640,
+  "height": 434.22509765625
+ },
+ "act": "BODY# sy=0",
+ "main": "Question 1 of 61\n\nRestart the interview\n\nDP-0.1 · 1 OF 61 · DON'T PANIC\n\n6 required still open\n\nDeep interview\n\nQuestion 1 of 61\n\nIs this website for your own business, or for a client?\n\nA client job needs its own workspace and a brief you can hand over. Your own site does not.\n\nYOUR ANSWER\nClick to talk\n\nVoice: browser (free)\n\nBrowser speech recognition is free to you, and the browser vendor processes it. For example, Google does this in Chrome and Microsoft does this in Edge, so audio may leave this device.\n\nEnter sends the answer. Shift+Enter adds a line.\n\nAnswer\nSuggest: I'll mark it as assumed\nSkip: we'll assume\n\nIs this website for your own business, or for a client?\n\nParadise Found Run Eleven\n\nSaved · Today 15:09 · Desktop\n\nCopy path\nMedium\nHigh\nExtra high\n\nHigher is more thorough and slower.\n\nSave project\nNew project\nResume project\n\nThe sample is a towel shop you can open without leaving the desk.\n\nOpen the sample\nProject file path\nOpen project folder\nCopy resume prompt\n\nFIRST FIVE MINUTES\n\nThe desk\n\nThis cream page is the interview. One question sits in the card. The rust rule on the left is the Don't Panic mark. Answer, Suggest for me, or Skip. Nothing else is required to begin.\n\n1 of 6\n\nBack\nNext\nSkip tour\nCHECK\tRESULT\tSTATE\tACTION\ngrok\tgrok: grok 1.0.67 (2fe064390d07) [stable]\tPresent\t\nplaywright\tplaywright: installed\tPresent\t\nwhisper\twhisper: not installed\tMissing\tInstall whisper\npdftotext\tpdftotext: not installed\tMissing\tInstall pdftotext\nwhisper\n\nWhat it means:"
+}

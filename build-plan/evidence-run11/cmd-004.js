@@ -1,0 +1,10 @@
+await page.locator('input[name=name]').fill('Paradise Found Run Eleven');
+await page.locator('input[name=dir]').fill('C:\\Users\\lucid\\Desktop\\desk-e2e-run11\\site');
+await page.getByRole('button',{name:'Create project'}).click({timeout:5000,noWaitAfter:true});
+await page.waitForTimeout(5000);
+const h=await page.locator('h1,h2,h3').allInnerTexts();
+const tour=await page.locator('[data-tour]').count();
+const tb=tour?await page.locator('[data-tour]').first().boundingBox():null;
+const act=await page.evaluate(()=>(document.activeElement?.tagName||'')+'#'+(document.activeElement?.id||'')+' sy='+scrollY);
+const main=(await page.locator('main').innerText().catch(()=>'')).slice(0,1500);
+return JSON.stringify({url:page.url(),h:h.slice(0,15),tour,tb,act,main},null,1);
