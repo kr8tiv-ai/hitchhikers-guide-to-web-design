@@ -15,7 +15,15 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { loadState, replaceViaTemp } from "@hitchhiker/engine";
-import { gatesJsonPath } from "@hitchhiker/qa";
+
+/**
+ * `.hitchhiker/qa/GATES.json`. Inlined so this file does not import
+ * `@hitchhiker/qa`. That barrel loads Playwright, and the desk imports
+ * this file on the brief draft POST.
+ */
+function gatesJsonPath(root: string): string {
+  return path.join(root, ".hitchhiker", "qa", "GATES.json");
+}
 
 export const FLOW_PHASES = ["discovery", "brief", "design", "build", "elevate", "so-long"] as const;
 
