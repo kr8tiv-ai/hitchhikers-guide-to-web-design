@@ -31,10 +31,20 @@
 [The Guide](#meet-the-guide) ·
 [Motion](#the-motion-toolkit) ·
 [Anti-slop](#the-anti-slop-rules) ·
+[Overview](#overview) ·
+[Who it's for](#who-its-for) ·
 [Try it](#try-it) ·
 [Quick start](#quick-start) ·
+[Install](#install) ·
+[Desk walkthrough](#desk-walkthrough) ·
+[Commands](#commands-and-flags) ·
+[Configuration](#configuration) ·
+[Architecture](#architecture) ·
+[Testing](#testing) ·
+[Troubleshooting](#troubleshooting) ·
 [Preview](#look-before-you-publish) ·
 [Roadmap](#roadmap) ·
+[Contributing](#contributing) ·
 [FAQ](#faq)
 
 </div>
@@ -48,6 +58,20 @@ Like, "the paint is still wet and the AI is holding the brush" early.
 The Hitchhiker's Guide to Web Design is in this repo, now alpha, still being built by Grok 4.7 inside Grok Build, from a specification so thorough it has its own table of contents, its own research department and, at one point, its own opinion about kerning. The six phases are in the tree. The publishable CLI, `packages/cli`, is `0.1.0`. The private workspace root stays `0.0.0` and is not the package npm would receive. Alpha means the desk, the gates, and a local package exist. It does not mean the registry already has a release. Repository: [github.com/kr8tiv-ai/hitchhikers-guide-to-web-design](https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design).
 
 Star the repo, watch it happen, and bring a towel. Things are about to get improbable.
+
+---
+
+## Overview
+
+The Guide is two programs that share one project folder.
+
+The desk is a local site on `127.0.0.1`. It interviews you, then shows the brief, the brand, the design stages, the queue, and the launch card. `hh` is the same work from a terminal. A bare `hh`, with no subcommand, opens that desk. `hh --help` does not. It prints `hh doctor [--project <dir>]` and exits 2.
+
+This tree is alpha. The publishable CLI is `0.1.0`. The private workspace root stays `0.0.0`. The six phases, the gates, and a packable CLI are here. npm does not have the package yet. The exact commands, and the reason a registry fetch fails today, are in [Try it](#try-it) and [Install](#install).
+
+Once a project exists, its memory is a `.hitchhiker/` folder of plain files: the interview, the brand, the plan, the queue, the quality check, and the deploy record. Close the laptop. Open the same folder tomorrow. Nothing important lived only in the chat.
+
+Read this file in two passes if you like. Newcomers can stay with [Who it's for](#who-its-for), [Quick start](#quick-start), [Install](#install), and [Desk walkthrough](#desk-walkthrough). Programmers can jump to [Commands and flags](#commands-and-flags), [Configuration](#configuration), [Architecture](#architecture), and [Testing](#testing). When a command refuses, start at [Troubleshooting](#troubleshooting), then the [FAQ](#faq).
 
 ---
 
@@ -387,6 +411,37 @@ On top of GSD's spine (`PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`
 
 Snapshots of [gsd-core](vendor/gsd-core), [gsd-path](vendor/gsd-path), [gsd-pi](vendor/gsd-pi) and [gsd-spec-build-loop](vendor/gsd-spec-build-loop) live in [`vendor/`](vendor) for reference, each under its own MIT license (see [`vendor/VENDORED.md`](vendor/VENDORED.md)). `vendor/gsd-core` is templates. It is not a runtime dependency. Huge thanks to the Open GSD folks for proving that "spec first" and "fun" can live in the same sentence.
 
+## Architecture
+
+This repo is a pnpm workspace (`pnpm@10.32.1`). The root `package.json` is private and `0.0.0`. The only package npm would receive is `hitchhikers-guide` in `packages/cli`, at `0.1.0`. Every other workspace package is private. Import a package through its package index. A deep path such as `@hitchhiker/engine/src/...` is rejected by [`eslint.config.js`](eslint.config.js) and by `packages/engine/test/boundaries.test.ts`. `vendor/gsd-core` is templates. It is not a runtime dependency, and the same boundary forbids importing it.
+
+| Package | Job |
+|---|---|
+| `@hitchhiker/engine` | Interview, brand, specs, config, state, cassettes, and the Grok adapter. In this clone the CLI depends on it with `workspace:*`. |
+| `@hitchhiker/app` | The desk server and the pages. `hh app` loads the server by file URL. The packed CLI does not list this package as an npm dependency. |
+| `@hitchhiker/orchestrator` | The phase lock, the queue, the handoff from an accepted Elevate pick back to the Drive, the golden path, and the ship gate. |
+| `@hitchhiker/qa` | Gates, the Nutrimatic check, the jury report, and the Elevate round. |
+| `@hitchhiker/deploy` | Local preview, the zip, and the host dispatcher. A live client is injected. The command does not construct one by itself. |
+| `@hitchhiker/assets` | Imagine and 3D jobs, under the budget in config. |
+| `@hitchhiker/voice` | whisper.cpp lookup and the xAI REST guard. The desk's browser-first order lives in the app. |
+| `@hitchhiker/knowledge` | Packs, the gallery, the design library, and the language pack. |
+| `@hitchhiker/crawler` | Public pages, `robots.txt`, and competitor notes. |
+| `@hitchhiker/templates` | Scaffolds: `astro-default`, `next-app`, `vite-react-world`, plus recipes and shared files. |
+| `@hitchhiker/grok-plugin` | Skills, agents, hooks, and rules. `hh install` copies them into `.grok`. |
+| `hitchhikers-guide` | The `hh` bin. Dispatch is [`packages/cli/src/main.ts`](packages/cli/src/main.ts). |
+
+The pack step bundles workspace code into `packages/cli/dist/main.js` and copies the files the program looks up at runtime into `dist/shipped`. Ordinary libraries stay outside that file. Their names are `publishConfig.dependencies` in the CLI manifest. Orchestrator, deploy, qa, and app are loaded by file URL so a packed install can still find the copies under `dist/shipped`. Node will not execute TypeScript from an installed package. The source bin in git stays `./src/main.ts` so this clone can.
+
+Phase changes go through one table in [`packages/orchestrator/src/phase-lock.ts`](packages/orchestrator/src/phase-lock.ts):
+
+```text
+discovery -> brief -> design -> build -> elevate -> so-long
+```
+
+A step may stay, move forward one, or move back one. The opening edge is start to discovery. Elevate may return to the build, which is how an accepted pick becomes one prompt and one commit. so-long is the only step that can require the ship gate, and only when the entry would publish or open a preview. Desk buttons and `hh brief`, `hh elevate` (the round path), `hh build`, `hh next --run`, and `hh so-long` call `enterFlow`. A skip returns a sentence and does not write `.hitchhiker/flow.json`.
+
+Two queues exist, and they are not the same queue. `.hh-driver` walks `hh-build-plan/prompts` to build this repository: [`run-build.ps1`](.hh-driver/run-build.ps1) on Windows, `node .hh-driver/run-build.mjs` on macOS and Linux. One prompt, one session, a normal `git push`, never a force push. The notes are in [`.hh-driver/README.md`](.hh-driver/README.md). A site you are designing uses `hh build --resume` and the Drive page. `/hh-drive` is a skill. It is not an `hh` subcommand, and it is not the driver script.
+
 ---
 
 ## What's in the repo today
@@ -402,14 +457,14 @@ The app is in the repo, and so is the brain it was built from. The root `package
 | [`context/miro/`](context/miro) | The original interview skeleton, sketched on a whiteboard. |
 | [`context/sources/`](context/sources) | Reference material: Matt's free AntiHero guides, Grok Build and xAI docs, spec-driven tool READMEs, award-site references. |
 | [`vendor/`](vendor) | MIT-licensed GSD snapshots, the spec-driven backbone. |
-| [`hh-build-plan/INDEX.md`](hh-build-plan/INDEX.md) | The build plan. Prompts 001 through 180 are in the tree. Later prompts are still ahead. |
+| [`hh-build-plan/INDEX.md`](hh-build-plan/INDEX.md) | The build plan. The index table lists prompts 001 through 180. Later prompt files are in [`hh-build-plan/prompts/`](hh-build-plan/prompts) as well. [`.hh-driver/STATE.json`](.hh-driver/STATE.json) records the last finished prompt. |
 | [`docs/dont-panic.md`](docs/dont-panic.md) | The short page for the interview. |
 | [`docs/improve.md`](docs/improve.md) | `hh improve` and `hh improve supervise`. |
 | [`packages/cli/build.mjs`](packages/cli/build.mjs) | Bundles the CLI to `packages/cli/dist/main.js` and copies the desk files, skills, templates, and knowledge packs beside it. |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in `0.1.0`, and which release steps are still waiting on a person. |
 | [`docs/RELEASE-v0.1.md`](docs/RELEASE-v0.1.md) | The v0.1 checklist. Specs 01, 02, and 03 are listed by test file. The tag and the registry upload need Matt's explicit yes. |
 
-The critique, the research addendum, and the prompt package are written. What is still ahead is everything past prompt 180, including a published npm package. A local bundle can be built and packed on this computer. That tarball is not published. The CLI version prepared for that publish is `0.1.0`. The list of changes is [CHANGELOG.md](CHANGELOG.md). The human checklist is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md).
+The critique, the research addendum, and the prompt package are written. Prompt files after 180 are in the tree, and the queue has moved past that index. What is still ahead is a published npm package. A local bundle can be built and packed on this computer. That tarball is not published. The CLI version prepared for that publish is `0.1.0`. The list of changes is [CHANGELOG.md](CHANGELOG.md). The human checklist is [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md).
 
 ---
 
@@ -446,7 +501,7 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 |---|---|
 | `hh install` | Copy skills, agents, hooks, and rules into `.grok`. |
 | `hh app` | Local dashboard. `/hh-dashboard` is this command. |
-| `hh assets` | Imagine and 3D under the cap. `run` needs a yes. |
+| `hh assets` | Imagine and 3D under the cap. `run` accepts `--yes` and ignores it. The billed path runs when you ask for `run` and a key is set. |
 | `hh tools` | Search or install. Install needs a yes. |
 | `hh mostly-harmless` | Gates and jury. The CLI rejects `--yes`. |
 | `hh elevate` | One Elevate round. A pick needs the user's yes. The phase lock has to be on the build, or already on Elevate, before the round starts. An earlier step stops the command with a plain sentence, and no pick is written. |
@@ -463,6 +518,168 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. The command asks the phase lock first. A draft or a show stays on the brief. `--approve` moves to the design only from the brief, and it still does not start the billed build. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. The resume asks the same phase lock, so a build cannot start before the design. |
 | `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. A connected checker then writes a post-check section, and `--rollback --yes` can send the last working publish again. The phase lock runs before the quality check. Publishing from an earlier step stops with a plain sentence, and the check is not treated as passed. |
+
+Every flag on those commands is written out in [Commands and flags](#commands-and-flags).
+
+## Install
+
+Two installs get mixed up. One puts `hh` on the computer. The other copies Guide skills into `.grok`. They are different commands.
+
+### From this clone
+
+The six steps in [Quick start](#quick-start) are the supported door today. `node scripts/start.mjs` is the short form. It refuses Node older than 22, runs `corepack pnpm install`, then `corepack pnpm exec hh app`, and prints the localhost URL that command writes. `--print-plan` lists the step ids and exits. It does not call a host.
+
+```text
+node scripts/start.mjs
+node scripts/start.mjs --print-plan
+```
+
+The desk listens on `127.0.0.1` only. With no `--port`, the CLI passes `0` and the operating system picks a free port. The first line of `hh app` is that URL. Port 4175 stays reserved so a preview will not take it. Pass `--port 4175` when you want the desk on that port. Pass any other free port the same way.
+
+`node scripts/start.mjs` does not pass `--project`, so the desk opens on the current directory. From this clone, that directory is the repo, and the empty desk can open the sample. Passing `--project` to this repo, or to a folder inside it, or to a worktree of it, is refused. A site lives outside the source tree. The refusal names a Hitchhiker Sites folder as the example.
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\Hitchhiker Sites\mostly-towels"
+pnpm exec hh app --project "$env:USERPROFILE\Hitchhiker Sites\mostly-towels" --no-open
+```
+
+```sh
+mkdir -p "$HOME/Hitchhiker Sites/mostly-towels"
+pnpm exec hh app --project "$HOME/Hitchhiker Sites/mostly-towels" --no-open
+```
+
+`--no-open` leaves the browser closed. Drop it when you want the desk to try to open one. If the opener fails, the URL is still printed.
+
+### npm
+
+The package name is `hitchhikers-guide`. The bin name is `hh`. The version in [`packages/cli/package.json`](packages/cli/package.json) is `0.1.0`.
+
+```text
+npx hitchhikers-guide
+npm i -g hitchhikers-guide
+hh --version
+```
+
+Those lines are the entry a release will publish. The public registry does not have the package yet, so the first line has nothing to fetch. Publishing it, and creating the `v0.1.0` tag, need Matt's explicit yes. Do not npm publish from a build session. Until that yes, use the clone.
+
+A local tarball can be packed and installed with npm without a registry. The 25 MB cap, the allowlist, and the Windows `npm pack` example are in [Build a local package](#build-a-local-package). After that install, `hh --version` prints `0.1.0`. The packed program is `dist/main.js`. It does not pass `--experimental-strip-types`, because Node refuses that flag for a file inside `node_modules`.
+
+### hh install
+
+`hh install` does not download the CLI and does not publish it. It copies skills, agents, hooks, and rules from `packages/grok-plugin` into the project's `.grok` directory, so Grok Build can see the slash names.
+
+```text
+hh install --project <dir>
+```
+
+`--project` is required. An unknown flag is rejected. The command does not start the desk.
+
+### Node and pnpm
+
+Root `engines.node` is `>=22`. Quick start asks for Node >=22.18, which can strip types without a flag. The source bin still starts with `node --experimental-strip-types`, so an older 22.x can run the TypeScript entry in this clone. `packageManager` is `pnpm@10.32.1`, activated with corepack as in the quick start. pnpm 10 skips dependency lifecycle scripts until you approve them. If a later bundle build cannot find the esbuild binary, the FAQ has the `pnpm approve-builds` step.
+
+## Desk walkthrough
+
+The pictures are in [A look at the desk](#a-look-at-the-desk). This is the path those pictures sit on. Nothing in the early steps publishes, and nothing spends money until a later confirm.
+
+The nav is nine routes:
+
+| Route | What you do there |
+|---|---|
+| `/` | The interview. One question, then the next. |
+| `/context` | What the Guide already believes: summary, decisions, assets. |
+| `/brand` | The brand kit after the brief is approved. Palette, type, voice. |
+| `/approve` | Yes cards: the plan, the design stages, Elevate picks, and Launch. |
+| `/hh-dashboard` | Drive. The queue, pause, and the line that says what happens next. |
+| `/settings` | Model, effort, and voice for this project. |
+| `/tools` | Which tools are on this machine, and how to install a missing one. |
+| `/gallery` | Reference sites. Keep the ones that fit. |
+| `/motion` | Short motion loops, then a number from 1 to 10. |
+
+A request whose Host header is not this process's loopback port is refused. The desk does not answer on a public address.
+
+### Interview
+
+Open the sample, or start a folder outside this repo. The first question is how comfortable you are with web stuff. After that, one card at a time. The kicker shows the question id, where it sits in the list, the phase, how many required questions are still open, and the interview mode. The client does not recount those.
+
+Answer, Suggest, and Skip are the three replies. A Suggest or a Skip that writes a stand-in is labelled `Assumed:`. A required question asks you to choose Skip again before that assumption is stored. An unsent draft stays in this browser and in the project folder. Answer or Skip clears it after the interview moves on. A failed Answer leaves the words.
+
+Files you attach land in `<project>/.hitchhiker/uploads/<question-id>/`. Sizes and types are in [docs/attachments.md](docs/attachments.md). Voice is in [Talk to it](#talk-to-it) and [docs/voice.md](docs/voice.md).
+
+`/hh-dont-panic` is the slash skill for this interview. It is not an `hh` subcommand. Typing `hh dont-panic` prints the command table on stderr and exits 2.
+
+### Brief
+
+When the interview has enough, the desk drafts a Site Brief and asks what it got wrong. Approving that brief is a product yes. From the terminal:
+
+```text
+hh brief --project <dir>
+hh brief --approve --project <dir>
+```
+
+The first command drafts or shows. It stays on the brief step. `--approve` may move to design only from the brief, and it still does not start the billed build. The phase lock is asked first. A skip stops, and the sentence names the step that is still open.
+
+On the desk, the same approval is the brief card, then Approve plan. Approve plan opens the design stages. It does not spawn Grok, and it does not start the queue.
+
+The towel fixture does not use `hh brief --approve`. It calls `approveSiteBrief` inside the harness. Leave the CLI flag out of that check.
+
+### Design stages
+
+Five stages, in order. A blank note is not an approval. A change request edits the artefact and leaves the stage waiting. None of these stages call a model.
+
+1. **Sitemap.** Written to `.hitchhiker/sitemap.md`. Approve it with a non-blank note.
+2. **Wireframe.** Written to `.hitchhiker/wireframe.md` once the sitemap is approved.
+3. **Style guide.** Writes `DESIGN.md` at the project root once the wireframe is approved.
+4. **Direction.** Pick one dealt pair and give a reason, then approve. The pick regenerates `DESIGN.md` from the brand kit and that pair, and the style-guide approval clears so you approve the guide again. The palette stays the kit. A direction hue does not replace it.
+5. **Pre-build checks.** A failing check blocks the build. A warning has to be acknowledged, then the stage approved. The record is `.hitchhiker/design-stages.json`.
+
+Start build is a separate button. It stays closed until `designReadyForBuild` is true: every stage approved, no failing check, warnings acknowledged when any exist. The button and `hh build --resume` both ask the phase lock. The build is legal from design, not from the interview.
+
+### Deep Thought
+
+Deep Thought is the plan. It writes the PRD, the requirements, the roadmap, the motion spec, the section plan, the visual direction, the framework choice, and the prompt package. You approve that package before a queue runs. The file list is under [Built on GSD](#built-on-gsd). The framework record is `.hitchhiker/research/STACK-DECISION.md`. Publish reads that file later.
+
+`/hh-deep-thought` is a skill you type. The skill says the command is not implemented in the `hh` CLI yet. There is no `hh deep-thought` subcommand. The desk and the spec modules still write the files. An unknown terminal name prints the command table and exits 2.
+
+### Elevate rounds
+
+Elevate reads a built site. The phase lock allows the round from the build, or when the project is already on Elevate. From discovery, the brief, or design, the round stops and no pick is written. Accepted picks go back to the Drive as one prompt and one commit. That is the dotted arrow in the phase map: Elevate (repeat as desired) -> Drive. Accept nothing, and the queue gains nothing.
+
+```text
+hh elevate --project <dir> --url http://127.0.0.1:9/ --pick none
+hh elevate --project <dir> --url http://127.0.0.1:9/ --pick 1 --yes
+hh elevate detail --project <dir> --url http://127.0.0.1:9/
+hh elevate copy --project <dir>
+hh elevate copy --project <dir> --approve hero,footer --yes
+```
+
+The round parser runs when the command includes `--url`, `--pick`, `--approve`, `--rounds`, `detail`, `copy`, or `--help`. The phase lock runs on that path.
+
+`--pick` defaults to `none`, which changes nothing. A pick other than `none` needs `--yes` before the CLI will forward it, and it needs a preview URL unless `--rounds` is set and the four review shots (`375`, `768`, `1440`, `1920`) are already on disk. `--rounds N` is a whole number from 1 to 99 and does not ask for a separate `--yes`. From a terminal, after the page is found, `--rounds` stops with `The quality check needs its measurements before a round can finish.` The CLI does not invent gate runners, scores, or a verdict. Tests inject those. One round, without `--rounds`, is the path that calls the Elevate loop.
+
+`hh elevate --project <dir>` with none of those round flags is a different, shorter command. It prints `No planned items.` and, without `--yes`, exits 2 with `Elevate does not run without --yes.` With `--yes` and no injected apply step, it prints `Nothing was written.` It does not ask the phase lock and it does not rank upgrades. Use the `--url` form for a round.
+
+`detail` is the fjords pass. It needs `--url` and does not take `--pick`, `--approve`, or `--rounds`. `copy` prints approve or reject cards and writes only the ids named by `--approve`. That write needs `--yes`.
+
+`hh mostly-harmless --project <dir>` prints a report path and a blocker when no gate results were supplied. It does not write `.hitchhiker/QA-REPORT.md` on that path, and it rejects `--yes`. The gates themselves run from the orchestrator and the desk. Exit 1 means the rendered report blocks.
+
+### Deploy
+
+The Launch card on `/approve` tells you the cost and that Hostinger is the suggestion. The button writes `.hitchhiker/deploy/launch-yes.json`. It does not build, it does not call a host, and it does not move the saved step.
+
+Publishing is still the terminal:
+
+```text
+hh so-long --project <dir>
+hh so-long --project <dir> --host preview --yes
+hh so-long --project <dir> --host hostinger --yes
+```
+
+The first line only asks. The second serves built pages on this computer after the quality check for this git version is clear. The third is the Hostinger confirm. `--yes` with no `--host` does not publish. The long version is [Publish with hh so-long](#publish-with-hh-so-long).
+
+### npm, from the desk
+
+The desk does not publish `hitchhikers-guide`. Install tools, and `hh tools search` / `hh tools install`, look up an MCP server or an npm package for the site you are building. That package is a dependency of the site, not a release of this repo. Installing the Guide is [Install](#install). Releasing it is [Release to npm](#release-to-npm). That workflow has not been started from a build session.
 
 ## Check this computer
 
@@ -624,6 +841,252 @@ The companion app is that local dashboard: a chat-style desk with a push-to-talk
 
 A local preview is already in the deploy package, and `hh so-long --host preview` is how you open it after the quality check. It still asks before it writes the zip or serves the pages. See [Publish with hh so-long](#publish-with-hh-so-long) and [Look before you publish](#look-before-you-publish).
 
+## Commands and flags
+
+This is the CLI reference. The short table in [Quick start](#quick-start) names each command. The flags below are the ones the parsers accept. A repeated flag is an error unless a command says the flag is repeatable. A missing value, or a value that starts with `-`, is a usage error.
+
+Unknown subcommands print the implemented names and the skill-only slash names on stderr and exit 2. The names come from `IMPLEMENTED_COMMANDS` in [`packages/cli/src/commands-table.ts`](packages/cli/src/commands-table.ts). `hh --help` and `hh -h` are not that table. They print `hh doctor [--project <dir>]` and exit 2. They install nothing.
+
+| Invocation | Result |
+|---|---|
+| `hh` | Rewritten to `hh app` before dispatch. Opens the desk. |
+| `hh --version` | Prints `0.1.0` and exits 0. Any extra word exits 2 with `Usage: hh --version`. A version line that is missing or not `major.minor.patch` exits 1 with `The Guide could not read its version.` |
+| `hh --help`, `hh -h` | The doctor usage line. Exit 2. |
+| `hh <unknown>` | The command table on stderr. Exit 2. No doctor report. |
+
+### hh install
+
+```text
+hh install --project <dir>
+```
+
+Copies plugin skills, agents, hooks, and rules into `.grok`. `--project` is required.
+
+### hh app
+
+```text
+hh app [--project <dir>] [--port <n>] [--no-open] [--cassette]
+hh app --help
+```
+
+| Flag | Meaning |
+|---|---|
+| `--project` | Site folder. Omitted, the current directory is used. When the flag is present and the folder is this repo, a folder inside it, or a worktree of it, the command refuses and names Hitchhiker Sites as an example of a folder outside. |
+| `--port` | An integer from 0 to 65535. `0`, the default, asks the operating system for a free port. |
+| `--no-open` | Do not launch a browser. The URL is still printed. |
+| `--cassette` | Keep `HH_CASSETTE` when it is `replay` or `record`. Without this flag, or `HH_ALLOW_CASSETTE=1`, a leftover cassette value is refused. |
+| `--help`, `-h` | Prints the usage. The function result is 0. |
+
+The process stays up while the desk listens. A successful `hh app`, including `--help`, is kept alive by the bin until SIGINT or SIGTERM, because that is how the desk process stays up. Ctrl+C closes it. A failed start sets a non-zero exit and does not wait. Stdout on a real start is the URL, then `Voice input needs Chrome or Edge. Open this address there to talk.` If you asked for a browser and it did not open, a third line says to use the URL.
+
+### hh assets
+
+```text
+hh assets <plan|run|diy|import> --project <dir>
+hh assets run --project <dir> --yes
+hh assets import --project <dir> --file <path>
+```
+
+`--project` is required. `import` requires at least one `--file`. `--yes` is accepted on `run` and ignored. There is no separate confirm. The xAI path is billed per use when you ask for `run` and a key is set. `--cassette` is the same opt-in as `hh app`. `--help` and `-h` print the usage and exit 0.
+
+### hh tools
+
+```text
+hh tools search --project <dir> --feature <text>
+hh tools install --project <dir> --name <package> --yes
+```
+
+Search reads the MCP Registry and npm, then writes a shortlist in the project. `--feature` is required. Install flags other than `--project`, `--name`, `--yes`, and `--cassette` are rejected on a search.
+
+Install runs only after `--yes`. With no shortlist entry for that name, pass `--kind` (`mcp`, `npm`, or `api`), `--licence` (or `--license`), `--repo`, `--published`, and `--downloads` (a whole number, zero or more). Optional manual fields are `--explain`, `--secret` (repeatable), `--command`, `--arg` (repeatable), `--url`, and `--package`. A secret is an environment name or a keychain account. It is not written into the project. Declining, or omitting `--yes` when the confirmer is that flag, installs nothing. `--cassette` is the same opt-in.
+
+### hh mostly-harmless
+
+```text
+hh mostly-harmless --project <dir>
+```
+
+`--project` is required. `--yes` is rejected with `--yes is rejected for mostly-harmless.` `--help` is an unexpected argument on this command. From a terminal, no gate report is injected, so the printed report is a blocker (`No gate results were supplied.`) and the process exits 1. The path is printed. The file is not written. When a caller injects a passing report, the exit is 0.
+
+### hh elevate
+
+```text
+hh elevate --project <dir> [--url <url>] [--rounds N] [--pick all|none|1,2] [--yes] [--cassette]
+hh elevate detail --project <dir> --url <url>
+hh elevate copy --project <dir> [--approve id,id] [--yes]
+hh elevate --help
+```
+
+The behaviour of each form is in [Desk walkthrough](#desk-walkthrough). Short rules:
+
+- `--url` has to start with `http://` or `https://`.
+- `--pick` defaults to `none`. Any other pick needs `--yes`, except when `--rounds` is present. `--rounds` treats `--pick` as the yes.
+- `--rounds` is 1 to 99. A second `--rounds` is an error.
+- `detail` needs `--url` and rejects `--pick`, `--approve`, and `--rounds`.
+- `copy` rejects `--pick`, `--url`, and `--rounds`. `--approve` is a comma-separated list of ids. Writing those ids needs `--yes`.
+- `--help` and `-h` print `ELEVATE_USAGE` and exit 0.
+- The phase lock runs only on the round path (the flags and subcommands listed above). `hh elevate --project <dir>` alone does not enter that path.
+
+### hh progress, hh pause, hh resume, hh save
+
+```text
+hh progress --project <dir>
+hh pause --project <dir> --message <text>
+hh resume --project <dir>
+hh resume <file> [--project <dir>] [--prefer file|live|newer]
+hh save [--project <dir>] [--to <path>]
+```
+
+`--project` is required for `progress`, `pause`, and the state form of `resume`. A missing `STATE.md` exits 1 with `No project state yet.`
+
+`progress` prints `phase`, `slice`, `prompt`, and `next`.
+
+`pause` stores the message as the next action. The message cannot be empty, cannot contain a newline (including the Unicode line separators), and cannot start with `## `, because that would become a `STATE.md` heading. `--message` on `progress` or `resume` is rejected.
+
+`hh resume --project <dir>` prints `resume: <prompt id>` and does not rewrite state. `hh resume <file>` rebuilds a project from a `.hhproject` file, or from the single `.hhproject` in a directory. More than one file in that directory is an error, and so is a name that matches more than one recent project. `--prefer` is `file`, `live`, or `newer`.
+
+`save` may omit `--project` (the current directory). The default file lands on the Desktop, or in the home folder when the Desktop is missing. `--to` chooses the path and remembers it. The file includes a plain-language brief and a resume prompt. It does not include API keys.
+
+### hh doctor
+
+```text
+hh doctor [--project <dir>] [--yes]
+hh doctor --context [--project <dir>]
+hh doctor --help
+```
+
+Exit 1 only when Node is older than 22. Other gaps are warnings and exit 0. `--yes` may run `pnpm exec playwright install` for the Chromium or WebKit build that is actually missing. It does not sign you in, approve a brief, or publish. If both browsers are present, `--yes` downloads nothing. If pnpm is missing, `--yes` downloads nothing and says so. `--help` prints `hh doctor [--project <dir>]` and installs nothing.
+
+`--context` anywhere in the arguments takes the audit path instead. It prints `Context files agree.` or one line per finding with a fix, and exits 1 when any finding is listed. It does not install browsers. The sentences for the machine check are in [Check this computer](#check-this-computer).
+
+### hh improve
+
+```text
+hh improve [--program <path>] [--max-experiments N] [--branch <name>] [--minutes M] [--turns T] [--dry-run]
+hh improve supervise [--program <path>] [--max-experiments N] [--branch <name>] [--minutes M] [--turns T] [--max-failures N] [--wall-minutes N] [--in-place] [--always-approve] [--dry-run]
+```
+
+| Flag | `hh improve` | `hh improve supervise` |
+|---|---|---|
+| `--program` | Default `improve/program.md`. | Same default. |
+| `--max-experiments` | Default 5. Integer 1 to 50. | Same. |
+| `--branch` | Default `improve/YYYY-MM-DD-<tag>`. Must start with `improve/`. | Default `main`. |
+| `--minutes` | Default 10. Ceiling 180. One grok process. | Same ceiling. |
+| `--turns` | Default 40. Ceiling 600. Passed as `--max-turns`. | Same. |
+| `--dry-run` | Prints the plan. Does not spawn or branch. | Prints the plan, including a refusal. Does not spawn, push, or write the log. |
+| `--max-failures` | Not accepted. | Default 3. Ceiling 50. |
+| `--wall-minutes` | Not accepted. | Default 60. Ceiling 180. The whole run. |
+| `--in-place` | Not accepted. | Run in the current tree. Default is a worktree. |
+| `--always-approve` | Not accepted on this command. | Accepted, and already on. There is no off switch. Deny rules still go out with the agent. |
+| `--no-verify` | Not accepted. It is an unknown flag. | Refused with `Refusing --no-verify.` |
+
+A human merges an `hh improve` branch. Supervise may push a kept commit with a normal `git push`. It does not pass `--force`, `-f`, or `--force-with-lease`. The full rules are in [docs/improve.md](docs/improve.md).
+
+### hh context, hh next, hh brief, hh build
+
+```text
+hh context [--audit] [--project <dir>]
+hh context repair --decisions|--assets|--cursor [--project <dir>]
+hh next --status [--project <dir>]
+hh next --run [--project <dir>]
+hh next --resume [--project <dir>]
+hh brief [--approve] [--project <dir>]
+hh build --resume [--project <dir>]
+```
+
+For these four, an omitted `--project` is the current directory. A `--project` with a missing value exits 2.
+
+`context` prints the summary. `--audit` adds the last packet sections. `repair` is the only write, and you name exactly one of `--decisions`, `--assets`, or `--cursor`. Any other repair shape prints `hh context repair --decisions|--assets|--cursor [--project <dir>]` and exits 2.
+
+`next` with neither `--status` nor `--run` nor `--resume` prints its three usage lines and exits 2. `--status` does not change the project. `--run` and `--resume` both call the build, and only when the phase lock allows the build. No queued build exits 1 with `No site build is queued.`
+
+`brief` accepts only `--approve` and `--project`. `--approve` approves the brief and the plan. That opens the design stages. It does not start the billed build. The success lines are `status`, `phase`, `next`, and the markdown. When the build has started, a line says `The build is started.`
+
+`build` requires `--resume`. Anything else prints `hh build --resume [--project <dir>]` and exits 2. A second call while a run is live does not start another. The phase lock runs first, so a build cannot start before design.
+
+### hh so-long
+
+```text
+hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] [--yes] [--rollback]
+```
+
+`--project` is required. `--host` is one of those five names. Omit it, even with `--yes`, and the command only recommends Hostinger and a local preview. `--rollback` does not take a host, does not rebuild, and writes nothing until `--yes`. The phase lock runs before the quality check. A blocked or stale `.hitchhiker/qa/GATES.json` stops the command before any host. The walkthrough is [Publish with hh so-long](#publish-with-hh-so-long).
+
+### Exit codes
+
+| Code | When |
+|---|---|
+| 0 | The command did the thing it was asked to do. `hh elevate --help` uses 0 and returns. A successful `hh app`, including `--help`, is kept alive by the bin until Ctrl+C. |
+| 1 | A check failed, state was missing, the phase lock or the ship gate refused the step, or Node is older than 22 on `hh doctor`. |
+| 2 | Usage. Unknown command, missing flag, or a yes that was required and absent. `hh --help` uses 2. |
+
+## Configuration
+
+The Guide does not read a committed dotenv file. The root `.gitignore` ignores `.env`, `.env.local`, and every `.env*` name. A real key belongs in the OS keychain or in an untracked `.env.local`. The shapes the secret scanner looks for are in [docs/secrets.md](docs/secrets.md). Do not commit a key to prove the scanner.
+
+### Environment variables
+
+| Name | Set it when | What it does |
+|---|---|---|
+| `HH_CASSETTE` | A recorded test. `replay`, `record`, or `off`. | Selects cassette mode. `replay` or `record` left in the shell makes `hh app`, `hh assets`, `hh tools`, and `hh elevate` refuse until you pass `--cassette` or set `HH_ALLOW_CASSETTE=1`. In PowerShell, `Remove-Item Env:HH_CASSETTE` clears it. Any other value is an error from the cassette reader. |
+| `HH_ALLOW_CASSETTE` | You mean to keep a cassette. Set to `1`. | Same opt-in as `--cassette`. |
+| `HH_LIVE` | You mean a live model call. Set to exactly `1`. | Opts in. CI leaves it unset. `hh so-long` does not read it. The desk uses it to call Grok. Any other value, including unset, stays off. `evals/dogfood-live/run.ts` spawns `grok` only on this exact value. |
+| `HH_PROJECT_HOME` | You want the project index somewhere else. | Overrides the directory that holds the home index and the default save folder. Unset, that directory is under `os.homedir()`. |
+| `HH_GALLERY_FILE` | A test needs a fixture gallery. | Replaces `packages/knowledge/galleries/curated.json`. The field rules are in [docs/gallery.md](docs/gallery.md). |
+| `HH_SKIP_INSTALL_VERIFY` | CI. Set to `1`. | [`scripts/verify-installs.ts`](scripts/verify-installs.ts) prints `skipped` and exits 0. A local audit leaves it unset. See [docs/installs.md](docs/installs.md). |
+| `HH_QA_BASE` | Template Playwright. | Base URL of a built site. The template specs default to `http://127.0.0.1:4173`. |
+| `WHISPER_CPP_BIN` | Local whisper, optional. | Path to the whisper.cpp binary. Otherwise the app looks for `whisper-cli`, then `main`, on `PATH` (with `.exe` on Windows). It does not download the binary. |
+| `WHISPER_CPP_MODEL` | Local whisper, optional. | Path to the weights you downloaded. The weights are not in git and are not bundled. |
+| `XAI_API_KEY` | Imagine or another billed xAI call, optional. | Wins over the OS keychain. When it is empty, the keychain service is `hitchhikers-guide` and the account is `xai`. The project folder and the `.hhproject` file do not store it. |
+| `GROK_HOME` | Usually leave it alone. | The build driver clears it for its own Grok child. `hh improve supervise` points the `cli-explorer` agent at the real `.grok` folder so that agent stays signed in. The driver does not run `grok login`. |
+
+`HH_E2E_SERVER`, `HH_E2E_PROJECT`, `HH_GUIDE_REPLAY`, `HH_GUIDE_CASSETTE`, and `HH_OPTIMISTIC` are harness switches for tests and the desk. Leave them unset when you are interviewing a real project. `HH_OPTIMISTIC=1` lets the first typed answer advance before the guide check returns. It does not publish, and it does not skip the phase lock.
+
+### `.hitchhiker/config.json`
+
+One file per project. A missing file means the factory defaults, and reading it writes nothing. Unknown keys throw. The defaults from `defaultConfig()` in [`packages/engine/src/config.ts`](packages/engine/src/config.ts):
+
+| Field | Default | Allowed |
+|---|---|---|
+| `model` | `grok-4.7` | A string. |
+| `effort` | `medium` | `medium`, `high`, `xhigh`. |
+| `interviewDepth` | `deep` | `express`, `standard`, `deep`. |
+| `voiceEngine` | `local` | `local` or `xai`. The desk still tries browser speech first. [docs/voice.md](docs/voice.md) is the order. |
+| `sessionIdMode` | `unknown` | `unknown`, `uuid`, `alias`. `hh doctor --project` records which shape this Grok build wants. |
+| `deployTarget` | `undecided` | `hostinger`, `vercel`, `netlify`, `cloudflare`, `undecided`. |
+| `worktrees` | `false` | Boolean. |
+| `imagineBudgetUsd` | `0` | `0` means DIY until you raise it. The cap in code is 1000. |
+| `tokenBudget` | `200000` | The per-request cap. |
+| `gates.phonePerfMin`, `a11yMin`, `bestPracticesMin`, `seoMin` | `90` | 0 to 100. |
+| `gates.desktopFpsMin` | `30` | 1 to 120. |
+| `ai.model` | `grok-4.7` | A string. |
+| `ai.effort.default` | `medium` | An effort name. Per-task keys sit beside `default`. |
+| `ai.timeoutMs` | `120000` | 1000 to 3600000. Then the child tree is killed. |
+| `integrations.pinterestCapture` | `false` | Public-board scroll. It does not log in. Off until the project opts in. |
+| `toolInstalls` | `[]` | Records from Install tools. |
+| `tourSeen` | `false` | `true` after the first-five-minutes tour is skipped or finished. |
+
+The Settings screen at `/settings` writes the model, the effort, and the voice choice for the project. `/hh-settings` is the matching skill. It is not a separate `hh` subcommand.
+
+### Other files the commands read and write
+
+| Path | Role |
+|---|---|
+| `.hitchhiker/STATE.md` | Resume spine. Writes take `STATE.md.lock`. |
+| `.hitchhiker/flow.json` | The saved step. The FAQ says what a missing or unreadable file means. |
+| `.hitchhiker/queue.json` | The Drive queue. |
+| `.hitchhiker/sitemap.md`, `.hitchhiker/wireframe.md`, `.hitchhiker/design-stages.json` | Design stages. |
+| `DESIGN.md` | Style guide. Regenerated when a direction is picked. |
+| `.hitchhiker/qa/GATES.json` | Quality check for one git commit. |
+| `.hitchhiker/deploy/DEPLOYS.md` | Publish rows, plus a `## Post-check` section when a checker ran. |
+| `.hitchhiker/deploy/launch-yes.json` | The Launch card yes. Not a publish. |
+| `.hitchhiker/deploy/preview.zip` | The local preview archive. |
+| `.hitchhiker/uploads/<question-id>/` | Attachments. |
+| `.hitchhiker/browser-profile` | Optional embedded browser profile. The desk does not read cookies or tokens out of it. |
+| `~/.hitchhiker/index.json` | Home index of projects, unless `HH_PROJECT_HOME` points somewhere else. |
+
+The spec files (`PROJECT.md`, `SITE-BRIEF.md`, `BRAND.md`, and the rest) are listed under [Built on GSD](#built-on-gsd).
+
 ## Publish with hh so-long
 
 This is the moment the site can leave your computer. The command is deliberate on purpose. It will not guess the host, and it will not treat silence as a yes.
@@ -748,6 +1211,21 @@ From the terminal, the same preview is `hh so-long --project <dir> --host previe
 
 Pull requests, issues, ideas and strongly worded opinions about easing curves are all welcome. It's early, which means your fingerprints can end up on the foundations.
 
+### Set up, then send a change
+
+Clone the repo and follow [Quick start](#quick-start). You need Node >=22.18, corepack, and pnpm 10.32.1. From the repo root:
+
+```powershell
+pnpm exec tsc -b --pretty false
+pnpm test
+```
+
+`pnpm test` runs every workspace package that has a test script. Run the one file you touched with `node --experimental-strip-types --test <file>`. Playwright is one spec at a time, as the list below already says. `pnpm lint` runs a package lint script when that package has one. The boundary rule also lives in `packages/engine/test/boundaries.test.ts`, so a machine without ESLint still catches a deep import.
+
+Issues and pull requests go to [github.com/kr8tiv-ai/hitchhikers-guide-to-web-design](https://github.com/kr8tiv-ai/hitchhikers-guide-to-web-design/issues). Open an issue before a large change if you want a second pair of eyes. One pull request, one job. Say what you ran, and say what you could not run. Do not npm publish, and do not push a `v` tag, as part of a contribution. A person does those, and each one needs Matt's explicit yes.
+
+If you are new to the codebase, a good first change is a wrong sentence. The README, [CHANGELOG.md](CHANGELOG.md), and [docs/RELEASE-v0.1.md](docs/RELEASE-v0.1.md) are checked by the tests named in the list below. Fix the sentence, run that test file, and open the pull request. The towel is optional. The kindness is not.
+
 Good places to start:
 
 - **Open an issue** with an idea, a bug or a site you think the Guide should learn from.
@@ -768,6 +1246,35 @@ Good places to start:
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
 
 ---
+
+## Troubleshooting
+
+Match the sentence, then run the next command. Longer answers are in the [FAQ](#faq). `hh doctor` is the first check for the machine rows. It changes nothing unless you pass `--yes`, and that yes only installs missing Chromium or WebKit.
+
+| You saw | What it means | Next |
+|---|---|---|
+| `Node.js is older than 22, so the desk will not start.` | `node scripts/start.mjs` stopped before install. | Install Node.js 22 or newer, then run it again. |
+| Doctor exits 1 | Node is older than 22. Every other doctor line is a warning and exits 0. | Install Node.js 22 or newer, then `pnpm exec hh doctor`. |
+| `This folder is the Hitchhiker desk's own source repo` | `--project` points at this checkout, a folder inside it, or a worktree of it. | Point `--project` at a folder outside the repo. Omitting `--project` uses the current directory, which is how `node scripts/start.mjs` opens this clone. |
+| `HH_CASSETTE=replay is set in this shell` (or `record`) | A test shell leaked. The desk will not interview on a cassette by accident. | `Remove-Item Env:HH_CASSETTE`, or pass `--cassette` when you meant to replay. |
+| `The companion app is not next to the CLI.` | `hh app` could not find the app package beside the program. | Run it from this clone, or from a packed install whose `dist/shipped` tree is intact. |
+| `No project state yet.` | `progress`, `pause`, or `resume --project` found no `STATE.md`. | Answer one interview step, or `hh resume <file>.hhproject`. |
+| `Pause message cannot contain a newline.` | The message would add a heading to `STATE.md`. | One line, and not a line that starts with `## `. |
+| `Finish the brief before building.` (or another step sentence) | The phase lock refused a skip. | `hh next --status --project <dir>`, then do the named step. |
+| `Elevate does not run without --yes.` | A pick would be applied, or you used the short elevate form. | Add `--yes`, or use `--pick none` on a round. `--rounds` does not ask for a separate `--yes`. |
+| `--yes is rejected for mostly-harmless.` | That command does not take a confirm flag. | `hh mostly-harmless --project <dir>` with no `--yes`. Expect a printed blocker when no report is injected. |
+| `Launch stays closed.` | No saved git version, an unclear stack record, or the ship gate. | Read the sentence above it. Re-run the quality check for this commit before `hh so-long`. |
+| `The pages are not built yet` | The preview could not find the folder the stack record named. | Build, then `hh so-long --project <dir> --host preview --yes`. |
+| `Usage: hh --version` | Extra words after the flag. | `hh --version` alone. |
+| `Unknown command:` on stderr | That word is not an `hh` subcommand. Deep Thought, drive, and undo are slash skills. | Read the table the command printed. Exit 2. |
+| `The Guide could not read its version.` | The `package.json` next to the program has no `major.minor.patch` version. | In this clone that file is `packages/cli/package.json`, at `0.1.0`. |
+| Chromium or WebKit is missing | Doctor looked and did not download. | `pnpm exec hh doctor --yes`, or `pnpm exec playwright install chromium webkit`. |
+| Doctor cannot tell whether you are signed in | This `grok --help` has no status flag. Doctor will not guess and will not run `grok login`. | Sign in yourself, then `hh doctor`. |
+| Voice says unavailable | This browser has no speech recognition. | Chrome or Edge, or type. Whisper is only when the browser cannot listen and the binary is already installed. |
+| pnpm ignored the esbuild script | pnpm 10 skipped the lifecycle script. | `pnpm approve-builds`, allow esbuild, install again. |
+| Git `bin` points at `dist/main.js` after a pack | `postpack` did not restore the source manifest. | `node packages/cli/postpack.mjs` |
+| `The quality check needs its measurements before a round can finish.` | `hh elevate --rounds` has no injected gate runners. | Use one round with `--url` and `--pick`. The CLI does not invent the measurements. |
+| Two `.hh-driver` runners at once | They share `driver.pid`. | Run one of `run-build.ps1` or `node .hh-driver/run-build.mjs`. A live pid blocks the other. |
 
 ## FAQ
 
@@ -975,6 +1482,54 @@ A person does, when a version is ready. The workflow does not create the tag, an
 **The pack smoke and the release workflow both pack the CLI. Do they publish?**
 The pack smoke installs the tarball in a temporary folder and does not publish. The release workflow runs that same smoke, and publishes only after it passes, and only from a hand start or a `v` tag. A local `npm pack` still does not publish.
 
+**I pointed `hh app --project` at this repository. Why did it refuse?**
+The desk will not use its own source tree, a folder inside it, or a worktree of it, as a site, when you pass `--project`. The sentence names a Hitchhiker Sites folder as an example that lives outside the repo. Create that folder and pass it. `node scripts/start.mjs` does not pass `--project`, so it can still open the desk on this clone and offer the sample.
+
+**`hh --help` did not list the commands.**
+`hh --help` and `hh -h` print `hh doctor [--project <dir>]` and exit 2. They install nothing. An unknown word, such as `hh help`, prints the implemented commands and the skill-only slash names on stderr and exits 2. The full flag list is [Commands and flags](#commands-and-flags).
+
+**There is no `hh deep-thought` command.**
+Correct. `/hh-deep-thought` is a skill, and the skill says it is not implemented in the CLI yet. The plan files are still written from the desk and from the spec modules. Typing the name as an `hh` subcommand prints the command table.
+
+**I left `HH_CASSETTE` set and the desk would not start.**
+A replay or record value must not silently answer a real interview. Clear it, or pass `--cassette`, or set `HH_ALLOW_CASSETTE=1`, when you mean to keep it. The only legal values are `replay`, `record`, and `off`.
+
+**What port does the desk bind?**
+With no `--port`, the CLI passes 0 and the operating system chooses a free port. The URL `hh app` prints is the one that is open. Port 4175 is reserved: the preview refuses it, so a desk you started with `--port 4175` is left alone. Both bind `127.0.0.1` only.
+
+**A design stage will not approve.**
+The note has to contain text that is not blank. A change request edits the file and leaves the stage waiting. Direction needs a picked id and a reason before that approval is stored. A failing pre-build check blocks Start build. A warning needs an acknowledgement, then an approval. Approving the style guide does not call a model and does not start the queue.
+
+**`hh context repair` printed usage.**
+Name one of `--decisions`, `--assets`, or `--cursor`. Without one of those, the command exits 2. `--audit` only prints. `hh doctor --context` is the read-only agreement check and exits 1 when it lists a finding. It does not install browsers.
+
+**Can I pass `--yes` to `mostly-harmless` to force a pass?**
+No. The flag is rejected. From a terminal the command prints a blocker because no gate results were supplied, names `.hitchhiker/QA-REPORT.md`, and does not write that file. Exit 1 is that blocker. A caller that injects a passing report can exit 0. The flag is not how you inject one.
+
+**`hh assets run` accepted `--yes`. Did that confirm a spend?**
+On `run`, `--yes` is accepted and ignored. There is no second confirm flag. The billed xAI path runs when you ask for `run` and a key is available (`XAI_API_KEY`, or the OS keychain under service `hitchhikers-guide` and account `xai`). `plan` and `diy` do not need the flag. `import` needs `--file`. Imagine budget in config starts at 0, which means DIY until you raise `imagineBudgetUsd`.
+
+**`hh elevate --project` did not rank anything.**
+That form, with no `--url`, `--pick`, `--rounds`, `detail`, or `copy`, is the short plan line. It prints `No planned items.` and asks for `--yes`. With `--yes` and no injected apply step it prints `Nothing was written.` The round that ranks upgrades is the `--url` form, and that form asks the phase lock. `--pick none` changes nothing. A real pick also needs `--yes`.
+
+**`hh elevate --rounds` stopped and asked for measurements.**
+The bounded loop does not invent gate runners, a design score, a jury score, or a review verdict. From a terminal, after the page is found, the command stops with `The quality check needs its measurements before a round can finish.` One round, without `--rounds`, is the path that calls the Elevate loop. `--rounds` still does not require a separate `--yes`. A missing `index.html` is refused before that sentence, with `Elevate refused.`
+
+**The improve supervisor refused `--no-verify`.**
+`hh improve supervise --no-verify` throws `Refusing --no-verify.` The supervisor also does not pass `--force`, `-f`, or `--force-with-lease` to git. A keep is a normal push. `hh improve --no-verify` is an unknown flag, not that sentence.
+
+**Two queue runners are fighting.**
+`.hh-driver/run-build.ps1` and `node .hh-driver/run-build.mjs` share `.hh-driver/driver.pid`. Do not start both. A live pid blocks the other launch. A stale pid is replaced. A `PAUSE` file lets the current prompt finish, then waits. `BLOCKED.md` means you read it, fix the cause, delete it, and relaunch. That driver builds this repository. A site queue is `hh build --resume`.
+
+**Where is the xAI key read from?**
+`XAI_API_KEY` when it is set. Otherwise the OS keychain, service `hitchhikers-guide`, account `xai`. Not from the project folder, and not from the `.hhproject` file. Speech-to-text on xAI also needs the Settings switch and an accepted rate. The desk does not turn that on by itself.
+
+**`interviewDepth` says `deep`. Did Skip stop working?**
+The factory default in `.hitchhiker/config.json` is `deep`. `express` and `standard` are allowed when you set them. The interview still asks how comfortable you are, and every question can still be skipped. Depth is a setting. It is not a lock on Skip.
+
+**`voiceEngine` is `local`, but the label says browser.**
+Both are true. Config stores `local` or `xai`. The desk selector still tries browser speech first, because that path is free to you. Local whisper is next, and only when the browser cannot listen and whisper.cpp is already installed. `xai` in config is not enough on its own. The rate has to be accepted too. [docs/voice.md](docs/voice.md) is the order.
+
 **What's the answer to life, the universe and everything?**
 Tier five. It gets extra-high effort.
 
@@ -985,6 +1540,41 @@ GSAP is the base engine, with ScrollTrigger, SplitText, and the other free plugi
 ## Develop
 
 Node 22 and pnpm. The root `pnpm test` script runs `pnpm -r test`, so `pnpm test` and `pnpm -w test` run every workspace package that ships a test script. Run one package with `pnpm --filter @hitchhiker/engine test`. The local preview tests are [`packages/deploy/test/preview-243.test.ts`](packages/deploy/test/preview-243.test.ts) and [`packages/deploy/test/dispatch-243.test.ts`](packages/deploy/test/dispatch-243.test.ts). `hh so-long` is covered by [`packages/cli/test/so-long-243.test.ts`](packages/cli/test/so-long-243.test.ts). The post-check record is covered by [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts), the launch kit and the desk card copy by [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts), and the checklist-plus-section case by [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts). The Launch card on a phone is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). The phase lock is [`packages/orchestrator/src/phase-lock.ts`](packages/orchestrator/src/phase-lock.ts), covered by [`packages/orchestrator/test/phase-lock-247.test.ts`](packages/orchestrator/test/phase-lock-247.test.ts). Run one file with `node --experimental-strip-types --test <file>`. Run that one Playwright spec on its own. Do not point any of them at a live host. The CLI bundle is separate from those tests. `pnpm --filter hitchhikers-guide run build` runs [`packages/cli/build.mjs`](packages/cli/build.mjs) and writes `packages/cli/dist/main.js`. `pnpm exec tsc -b` typechecks the workspace. Neither command publishes, and neither one is a substitute for `pnpm test`. The pack smoke is also separate. `packages/cli` skips `pack-243.test.ts` inside its test script, so `pnpm test` does not run `npm pack`. Run that one file with `node --experimental-strip-types --test packages/cli/test/pack-243.test.ts` when you want the tarball check. CI runs it as `pack-smoke` on Windows, macOS, and Linux. See [docs/ci.md](docs/ci.md). `hh doctor` is covered by [`packages/cli/test/doctor.test.ts`](packages/cli/test/doctor.test.ts), including the browser install that runs only with `--yes`. The release file is covered by [`packages/engine/test/release-workflow.test.ts`](packages/engine/test/release-workflow.test.ts). That test checks the triggers and that publish waits for the pack smoke. Neither test publishes, and neither creates a tag. The alpha version and the v0.1 checklist are covered by [`packages/qa/test/readme-quickstart.test.ts`](packages/qa/test/readme-quickstart.test.ts), [`packages/qa/test/release-doc.test.ts`](packages/qa/test/release-doc.test.ts), [`packages/qa/test/docs-truth.test.ts`](packages/qa/test/docs-truth.test.ts), and [`packages/cli/test/hh-bin.test.ts`](packages/cli/test/hh-bin.test.ts). `hh --version` in this clone prints `0.1.0` from [`packages/cli/package.json`](packages/cli/package.json). Those tests do not publish and do not create a tag.
+
+## Testing
+
+`pnpm test` at the repo root runs `pnpm -r test`. Each package uses Node's built-in runner, `node --experimental-strip-types --test`. The file list, the engine filter, and the pack-smoke exception live in [Develop](#develop). This section is how to choose a run so you do not start the full browser suite by accident.
+
+```powershell
+pnpm install
+pnpm exec tsc -b --pretty false
+pnpm test
+pnpm --filter @hitchhiker/engine test
+node --experimental-strip-types --test packages/qa/test/readme-quickstart.test.ts
+node --experimental-strip-types --test packages/qa/test/docs-truth.test.ts
+```
+
+`pnpm lint` is `pnpm -r run --if-present lint`. A package with no lint script is skipped. [`eslint.config.js`](eslint.config.js) blocks deep `@hitchhiker/*` imports and any import of `vendor/gsd-core`. The same rule is a unit test, so CI still catches it when ESLint is not installed.
+
+Playwright is the `e2e` script on `@hitchhiker/app`:
+
+```text
+pnpm --filter @hitchhiker/app exec playwright test e2e/<one-spec>.spec.ts
+```
+
+Run the spec you changed. Leave the rest of the suite alone unless you mean to run it. Do not bind port 4175. Do not set `HH_LIVE` for a unit run. Do not point a test at a live host.
+
+Cassettes: the CI notes in [docs/ci.md](docs/ci.md) and [docs/release.md](docs/release.md) set `HH_CASSETTE=replay` for `pnpm -r test` and for a package `eval` script. A shell that still has that variable set makes `hh app` refuse until you clear it or pass `--cassette`. That refusal is the guard working.
+
+The pack smoke is not part of `pnpm test`. The CLI test script skips `pack-243.test.ts`. Run it once, on purpose:
+
+```text
+node --experimental-strip-types --test packages/cli/test/pack-243.test.ts
+```
+
+It packs, checks the 25 MB cap, installs into a temporary folder with `--ignore-scripts`, and requests a free port from 46100 upward. It does not publish, and it does not call a host.
+
+`evals/dogfood-live/run.ts` spawns a real `grok` only when `HH_LIVE` is exactly `1`. Leave the variable unset on a normal day. The towel compilers under `evals/towel-and-tea` replay through recorded JSON. They are not that live script.
 
 ---
 
