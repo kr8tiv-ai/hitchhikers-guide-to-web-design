@@ -4,7 +4,7 @@ description: List the Guide commands and which ones the hh CLI can run today.
 user-invocable: true
 ---
 
-There is no `hh help` subcommand. This skill is the help. Commands with no CLI subcommand yet are not implemented.
+`hh help`, `hh --help`, and `hh -h` print one line for each command the hh CLI runs, then exit 0. This skill says what each one does. Commands with no CLI subcommand yet are not implemented.
 
 The hh CLI can run these today:
 

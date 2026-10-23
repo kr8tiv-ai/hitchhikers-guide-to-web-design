@@ -256,7 +256,8 @@ test("COMMANDS matches the hh CLI subcommands", () => {
         command.name === "install" ||
           command.name === "tools" ||
           command.name === "improve" ||
-          command.name === "build",
+          command.name === "build" ||
+          command.name === "help",
       );
     } else {
       assert.equal(SKILL_NAMES.includes(command.skillDir), true, command.name);
