@@ -297,6 +297,8 @@ export function applyGalleryWalk(
 function lovedSiteNames(answer: string): string[] {
   const text = answer.replace(/^ASSUMED:\s*/i, "").replace(/\s+/g, " ").trim();
   if (text === "" || NO_LOVED_SITES.test(text)) return [];
+  const hosts = hostSiteNames(text);
+  if (hosts.length > 0) return hosts;
   const found: string[] = [];
   const seen = new Set<string>();
   const push = (raw: string): void => {
@@ -330,6 +332,49 @@ function lovedSiteNames(answer: string): string[] {
   }
   for (const part of splitSiteList(text)) push(part);
   return found;
+}
+
+const HOST_TLDS = ["com", "org", "net", "io", "co"] as const;
+
+/** Labels before a known host suffix, in the order written, at most four. */
+function hostSiteNames(text: string): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const lower = text.toLowerCase();
+  let from = 0;
+  while (from < lower.length && found.length < 4) {
+    const dot = lower.indexOf(".", from);
+    if (dot < 0) break;
+    let tldLength = 0;
+    for (const tld of HOST_TLDS) {
+      if (!lower.startsWith(tld, dot + 1)) continue;
+      const after = lower[dot + 1 + tld.length] ?? " ";
+      if (isHostChar(after)) continue;
+      tldLength = tld.length;
+      break;
+    }
+    if (tldLength === 0) {
+      from = dot + 1;
+      continue;
+    }
+    let start = dot - 1;
+    while (start >= 0 && isHostChar(lower[start] ?? "")) start -= 1;
+    start += 1;
+    const label = text.slice(start, dot);
+    from = dot + 1 + tldLength;
+    if (label.toLowerCase() === "www") continue;
+    const name = cleanSiteName(label);
+    if (name === null) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push(name);
+  }
+  return found;
+}
+
+function isHostChar(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "-";
 }
 
 function splitSiteList(clause: string): string[] {
@@ -917,9 +962,53 @@ const FOLLOW_STOP = new Set([
   "something",
 ]);
 
+/** Joins a follow-up reply onto the answer it continues. The transcript keeps the two apart. */
+export const FOLLOW_UP_MARK = "\nFollow-up: ";
+
+export function joinFollowUpReply(original: string, reply: string): string {
+  const base = original.trim();
+  const next = reply.trim();
+  if (base === "") return next;
+  if (next === "") return base;
+  if (next.startsWith(base)) {
+    const rest = next.slice(base.length).trim();
+    if (rest === "") return base;
+    if (rest.startsWith("Follow-up:")) return `${base}\n${rest}`;
+    return `${base}${FOLLOW_UP_MARK}${rest}`;
+  }
+  if (next.startsWith("Follow-up:")) return `${base}\n${next}`;
+  return `${base}${FOLLOW_UP_MARK}${next}`;
+}
+
+const GENERIC_DETAIL = "one concrete detail the site should use";
+const RECAP_MARKERS = ["you said", "your sentence", "to confirm", "you wrote", "already"] as const;
+const CONFIRM_START = new Set(["should", "do", "is", "can", "will"]);
+const DEADLINE_WORDS = [
+  "week",
+  "weeks",
+  "month",
+  "months",
+  "day",
+  "days",
+  "season",
+  "deadline",
+  "january",
+  "february",
+  "march",
+  "april",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+] as const;
+
 /**
- * "repeat" when this line was already shown for the decision point.
- * "covered" when most of its content words are already in an answer.
+ * "repeat" when this line was already shown, or it contains that question.
+ * "covered" when it only restates the answer, or it is the generic detail
+ * line on a date or deadline. A longer question that adds a new fact stays.
  */
 export function followUpRejected(
   proposed: string,
@@ -928,9 +1017,11 @@ export function followUpRejected(
 ): "repeat" | "covered" | null {
   const asked = normalizeAsk(proposed);
   if (asked === "") return null;
-  for (const item of history) {
-    if (normalizeAsk(item.ask) === asked) return "repeat";
-  }
+  if (repeatsKnownAsk(asked, history)) return "repeat";
+  if (isGenericDetailLine(proposed) && looksLikeDeadline(currentAnswer)) return "covered";
+  if (echoesAnswer(proposed, currentAnswer)) return "covered";
+  if (recapsAnswer(proposed, currentAnswer)) return "covered";
+  if (confirmsAnswer(proposed, currentAnswer)) return "covered";
   const proposedWords = contentWords(proposed);
   if (proposedWords.length === 0) return null;
   const covered = new Set<string>();
@@ -944,6 +1035,109 @@ export function followUpRejected(
   }
   if (hits >= 3 && hits * 2 >= proposedWords.length) return "covered";
   return null;
+}
+
+function repeatsKnownAsk(asked: string, history: readonly FollowHistory[]): boolean {
+  for (const item of history) {
+    const prior = normalizeAsk(item.ask);
+    if (prior === "") continue;
+    if (asked === prior) return true;
+    if (prior.length >= 24 && asked.includes(prior)) return true;
+  }
+  return false;
+}
+
+function isGenericDetailLine(message: string): boolean {
+  return message.trim().toLowerCase().replaceAll("\u2019", "'").indexOf(GENERIC_DETAIL) !== -1;
+}
+
+function looksLikeDeadline(text: string): boolean {
+  const lower = text.toLowerCase().replaceAll("\u2019", "'");
+  if (lower.indexOf("in about") !== -1) return true;
+  if (lower.indexOf("holiday season") !== -1) return true;
+  for (const word of DEADLINE_WORDS) {
+    if (hasFollowWord(lower, word)) return true;
+  }
+  return false;
+}
+
+function echoesAnswer(proposed: string, answer: string): boolean {
+  const answerWords = contentWords(answer);
+  const proposedWords = contentWords(proposed);
+  if (answerWords.length === 0 || proposedWords.length === 0) return false;
+  if (proposedWords.length > answerWords.length * 2) return false;
+  const hits = sharedHits(proposedWords, answerWords);
+  return hits >= 3 && hits * 2 >= answerWords.length;
+}
+
+function recapsAnswer(proposed: string, answer: string): boolean {
+  const lower = proposed.toLowerCase().replaceAll("\u2019", "'");
+  let marked = false;
+  for (const marker of RECAP_MARKERS) {
+    if (lower.indexOf(marker) !== -1) {
+      marked = true;
+      break;
+    }
+  }
+  if (!marked) return false;
+  return sharedHits(contentWords(proposed), contentWords(answer)) >= 2;
+}
+
+function confirmsAnswer(proposed: string, answer: string): boolean {
+  const answerWords = contentWords(answer).filter((word) => word.length >= 5);
+  if (answerWords.length === 0) return false;
+  for (const sentence of sentencesOf(proposed)) {
+    if (!CONFIRM_START.has(firstWord(sentence))) continue;
+    if (sharedHits(contentWords(sentence), answerWords) >= 2) return true;
+  }
+  return false;
+}
+
+function sharedHits(proposedWords: readonly string[], answerWords: readonly string[]): number {
+  const forms = new Set<string>();
+  for (const word of proposedWords) {
+    for (const form of wordForms(word)) forms.add(form);
+  }
+  let hits = 0;
+  for (const word of answerWords) {
+    if (wordForms(word).some((form) => forms.has(form))) hits += 1;
+  }
+  return hits;
+}
+
+function wordForms(word: string): string[] {
+  const forms = [word];
+  if (word.length > 4 && word.endsWith("s")) forms.push(word.slice(0, -1));
+  if (word.length > 5 && word.endsWith("es")) forms.push(word.slice(0, -2));
+  if (word.length > 5 && word.endsWith("ed")) {
+    forms.push(word.slice(0, -2));
+    forms.push(word.slice(0, -1));
+  }
+  if (word.length > 6 && word.endsWith("ing")) forms.push(word.slice(0, -3));
+  return forms;
+}
+
+function sentencesOf(text: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  for (const ch of text) {
+    if (ch === "." || ch === "?" || ch === "!" || ch === "\n") {
+      if (current.trim() !== "") parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() !== "") parts.push(current.trim());
+  return parts;
+}
+
+function firstWord(text: string): string {
+  let index = 0;
+  while (index < text.length && !isFollowLetter(text[index] ?? "")) index += 1;
+  const start = index;
+  while (index < text.length && isFollowLetter(text[index] ?? "")) index += 1;
+  return text.slice(start, index).toLowerCase();
 }
 
 /**

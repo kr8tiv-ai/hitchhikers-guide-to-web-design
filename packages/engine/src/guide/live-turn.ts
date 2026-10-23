@@ -28,6 +28,7 @@ import {
   gateQuestion,
   guardLogoText,
   guardPriorSiteText,
+  joinFollowUpReply,
   loadSessionState,
   projectMentionsQuotes,
   sessionBlock,
@@ -343,19 +344,19 @@ async function answerText(
     s.lastFallback = undefined;
   }
   if (judgement.unchecked === true) {
-    await storePlain(s, text);
+    await storePlain(s, textForStore(s, current, text));
     const turn = await advanceAnswer(s, current, false, deps);
     turn.calm = true;
     turn.message = judgement.message;
     return turn;
   }
   if (judgement.action === "push" && bound && !judgement.floor) {
-    await storePlain(s, text);
+    await storePlain(s, textForStore(s, current, text));
     return advanceAnswer(s, current, false, deps);
   }
   if (judgement.action === "push") {
     rememberAsk(s, current, text, judgement.message);
-    if (judgement.floor) await storeFloorHold(s, text);
+    if (judgement.floor) await storeFloorHold(s, textForStore(s, current, text));
     s.pushes[current.id] = judgement.count;
     const turn: GuideTurn = {
       message: judgement.message,
@@ -370,8 +371,8 @@ async function answerText(
     }
     return turn;
   }
-  if (judgement.action === "soft" && judgement.floor) await storeSoftFloor(s, text);
-  else await storePlain(s, text);
+  if (judgement.action === "soft" && judgement.floor) await storeSoftFloor(s, textForStore(s, current, text));
+  else await storePlain(s, textForStore(s, current, text));
   if (judgement.action === "soft" && !judgement.floor) await markLatestSoft(s.projectDir, current.id);
   if (judgement.action === "soft") s.pushes[current.id] = judgement.count;
   const turn = await advanceAnswer(s, current, judgement.action === "soft", deps);
@@ -683,6 +684,17 @@ async function markLatestSoft(projectDir: string, id: string): Promise<void> {
       "utf8",
     );
   });
+}
+
+/** A follow-up reply keeps the earlier attempt, on a new line that starts with Follow-up:. */
+function textForStore(s: GuideSession, question: Question, text: string): string {
+  const attempts = s.attemptAnswers?.[question.id] ?? [];
+  const incoming = text.trim();
+  let end = attempts.length;
+  while (end > 0 && (attempts[end - 1] ?? "").trim() === incoming) end -= 1;
+  const prior = end > 0 ? (attempts[end - 1] ?? "").trim() : "";
+  if (prior === "") return text;
+  return joinFollowUpReply(prior, text);
 }
 
 async function storePlain(s: GuideSession, text: string): Promise<void> {

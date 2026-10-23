@@ -170,7 +170,7 @@ export async function judgePushback(
     return { action: "soft", count: prior, quote: safeQuote, message: "", floor };
   }
   let message = sharperLine(sharper, question, text, language, facts);
-  if (advanceSubstantive(question, text, sharper, concreteLikely, override, modelVague)) {
+  if (advanceSubstantive(text, sharper, concreteLikely, override, modelVague)) {
     return { action: "accept", count: prior, quote: "", message: "", floor: false };
   }
   const named = namedPartFollowUp(question, text);
@@ -187,7 +187,9 @@ export async function judgePushback(
       ...(prior >= 1 ? { note: ACCEPTED_AFTER_FOLLOW_UP } : {}),
     };
   }
-  if (deps.history !== undefined && followUpRejected(message, deps.history, text) !== null) {
+  const rejectHistory =
+    deps.history === undefined || deps.history.length === 0 ? [{ ask: question.ask, answer: "" }] : deps.history;
+  if (followUpRejected(message, rejectHistory, text) !== null) {
     return {
       action: "accept",
       count: prior,
@@ -244,10 +246,11 @@ function isGenericDetailAsk(message: string): boolean {
 
 /**
  * A long, specific answer already covers the question.
- * A cited gap on a concrete-likely answer still pushes. A phrase-floor hit still pushes.
+ * A cited gap on a concrete-likely answer still pushes. A global soft phrase still pushes.
+ * A question-specific phrase list does not keep that long answer soft.
+ * A short one-sided love or wince answer is not substantive, so the other side is still asked.
  */
 function advanceSubstantive(
-  question: Question,
   text: string,
   sharper: string,
   concreteLikely: boolean,
@@ -256,7 +259,6 @@ function advanceSubstantive(
 ): boolean {
   if (!isSubstantiveAnswer(text)) return false;
   if (globalSoft(text)) return false;
-  if (pushbackFor(question, text) !== null) return false;
   if (concreteLikely && !override && modelVague && citesMissing(sharper) && !isGenericDetailAsk(sharper)) return false;
   return true;
 }
