@@ -24,6 +24,6 @@
     "playwright": "1.63.0"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+    "test": "node --experimental-strip-types --test test/**/*.test.ts && node --experimental-strip-types --test --test-concurrency=1 test-serial/*.test.ts"
   }
 }
