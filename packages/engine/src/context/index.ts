@@ -45,6 +45,7 @@ export {
   wordCount,
 } from "./packet.ts";
 export {
+  answersForGate,
   assertCanAdvance,
   auditContext,
   formatStatusLine,
@@ -56,6 +57,7 @@ export {
   readLedger,
   readPhaseStats,
   readStatus,
+  shownPhase,
   recordDiscussNote,
   recordLookahead,
   recordVerification,

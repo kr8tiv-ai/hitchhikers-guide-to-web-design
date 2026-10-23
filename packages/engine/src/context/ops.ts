@@ -8,10 +8,11 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { think } from "../ai/think.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
+import { loadConfig } from "../config.ts";
 import { missingRequired, type AnswerRecord } from "../required.ts";
 import { loadState, saveState, type GuideState } from "../state.ts";
 import { interviewTreeFile } from "../packaged-dir.ts";
-import { loadTree, questionsForDepth } from "../tree.ts";
+import { loadTree, questionsForDepth, questionsToAsk } from "../tree.ts";
 import {
   isLive,
   loadAssets,
@@ -59,7 +60,8 @@ function questionIds(projectDir: string): Set<string> {
   }
 }
 
-function answersForGate(projectDir: string): AnswerRecord[] {
+/** Saved interview answers, or live decision answers when interview.json is empty. */
+export function answersForGate(projectDir: string): AnswerRecord[] {
   const interview = readInterviewFacts(projectDir);
   if (interview.length > 0) {
     return interview.map((row) => ({
@@ -73,6 +75,53 @@ function answersForGate(projectDir: string): AnswerRecord[] {
     .map((record) => ({ id: record.questionId, status: "ANSWERED" as const, value: record.text }));
 }
 
+/**
+ * True when the interview prompt is done, or every asked question has a
+ * non-empty row in interview.json. A bad tree or config does not count.
+ */
+function interviewFinished(projectDir: string, state: GuideState | null): boolean {
+  if (state?.promptId === "interview:done") return true;
+  try {
+    const facts = readInterviewFacts(projectDir);
+    if (facts.length === 0) return false;
+    const depth = loadConfig(projectDir).interviewDepth;
+    const questions = questionsToAsk(loadTree(treeFile(projectDir)), depth);
+    if (questions.length === 0) return false;
+    const present = new Set<string>();
+    for (const row of facts) {
+      if (row.value.trim() !== "") present.add(row.id);
+    }
+    return questions.every((question) => present.has(question.id));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Phase name for the status line and the context panel.
+ * readStatus().phase stays the raw STATE.md value, which may be empty.
+ * Don't Panic is used only when the interview has actually started.
+ */
+export function shownPhase(projectDir: string): string {
+  try {
+    const state = loadState(projectDir);
+    const named = state?.phase.trim() ?? "";
+    if (named !== "") return named;
+    const live = loadDecisions(projectDir).filter(isLive);
+    for (let index = live.length - 1; index >= 0; index -= 1) {
+      const phase = live[index]?.phase.trim() ?? "";
+      if (phase !== "") return phase;
+    }
+    if (state?.promptId.startsWith("interview:") === true) return "Don't Panic";
+    if (readInterviewFacts(projectDir).length > 0) return "Don't Panic";
+    const fromDecision = live.filter((record) => ANSWER_SOURCES.has(record.source)).at(-1)?.questionId ?? "";
+    if (fromDecision !== "") return "Don't Panic";
+    return "No phase yet";
+  } catch {
+    return "No phase yet";
+  }
+}
+
 export function readStatus(projectDir: string): RouterStatus {
   const state = loadState(projectDir);
   const decisions = loadDecisions(projectDir).filter(isLive);
@@ -81,11 +130,15 @@ export function readStatus(projectDir: string): RouterStatus {
   const questionId = state?.promptId.startsWith("interview:")
     ? state.promptId.slice("interview:".length)
     : (decisions.filter((record) => ANSWER_SOURCES.has(record.source)).at(-1)?.questionId ?? "");
+  const finished = interviewFinished(projectDir, state);
   let gate: RouterStatus["gate"] = "continue";
   let next = `Continue ${state?.phase ?? "the interview"}.`;
   if (unanswered.length > 0) {
     gate = "answer";
     next = `Answer ${unanswered.join(", ")}.`;
+  } else if (finished) {
+    next = "review the Site Brief.";
+    if (openDecisions.length > 0) gate = "decision";
   } else if (openDecisions.length > 0) {
     gate = "decision";
     next = `Settle ${openDecisions.map((record) => record.id).join(", ")}.`;
@@ -116,7 +169,7 @@ export function formatStatusLine(projectDir: string): string {
     const status = readStatus(projectDir);
     const blockers = status.blockers.length === 0 ? "none" : status.blockers.join(", ");
     const open = status.openDecisions.length === 0 ? "none" : status.openDecisions.map((record) => record.id).join(", ");
-    const phase = status.phase === "" ? "No phase yet" : status.phase;
+    const phase = shownPhase(projectDir);
     return `${phase}. Next: ${status.next} Blockers: ${blockers}. Open decisions: ${open}.`;
   } catch {
     return "Context status is unreadable.";

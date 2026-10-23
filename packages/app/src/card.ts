@@ -343,17 +343,13 @@ function heading(title: string, why: string, done: boolean): string {
 </article>`;
 }
 
-/** Finished interview. The action is absent until the desk names a brief status. */
-function doneCard(brief: CardState["brief"], counts: CardCounts | null | undefined): string {
-  const progress =
-    counts !== undefined && counts !== null && counts.total > 0
-      ? `  <p class="hh-progress" data-card-progress>Interview done (${counts.total} of ${counts.total})</p>\n`
-      : "";
+/** Finished interview. The action is absent until the desk names a brief status. Progress stays on the interview head. */
+function doneCard(brief: CardState["brief"]): string {
   if (brief === undefined || brief === null) {
     return `<article class="hh-qcard" data-done="true" aria-labelledby="hh-card-ask">
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
   <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
-${progress}</article>`;
+</article>`;
   }
   const status = brief.status;
   let action = "";
@@ -373,7 +369,7 @@ ${progress}</article>`;
   return `<article class="hh-qcard" data-done="true" data-brief-status="${status}" aria-labelledby="hh-card-ask">
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
   <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
-${progress}${action}</article>`;
+${action}</article>`;
 }
 
 function kickerBlock(question: Question, counts: CardCounts | null | undefined): string {
@@ -586,7 +582,7 @@ function timeoutRetry(error: string | null): string {
 
 /** HTML for the current question only. Mounts inside data-region="question". */
 export function renderCard(state: CardState): string {
-  if (state.done) return doneCard(state.brief, state.counts);
+  if (state.done) return doneCard(state.brief);
   const question = state.question;
   if (question === null) return heading(EMPTY_TITLE, EMPTY_WHY, false);
 

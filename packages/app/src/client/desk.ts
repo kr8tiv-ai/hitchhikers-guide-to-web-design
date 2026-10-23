@@ -97,11 +97,28 @@ const HOLD_BUTTON =
 /** Accessible name for the desk panel that lists what the Guide carries forward. */
 export const CONTEXT_LABEL = "What the Guide knows";
 
-/** Latest Guide line for the polite region. Empty when the desk has not asked. */
+/**
+ * Latest Guide line for the polite region.
+ * Empty when the desk has not asked. A finished interview stays empty here
+ * so the card heading is the only "Guide Entry is next."
+ */
 export function guideTurnText(ask: string | null, done: boolean): string {
   if (ask !== null && ask !== "") return ask;
-  if (done) return "Guide Entry is next.";
+  if (done) return "";
   return "";
+}
+
+/** Writes the live status line and the open-required count from the latest session. */
+export function paintLiveStatus(
+  document: { querySelector(selector: string): { textContent?: string | null } | null },
+  session: { routerLine: string; counts: { openRequired: number } | null },
+): void {
+  const router = document.querySelector("[data-router-status]");
+  if (router !== null && session.routerLine !== "") router.textContent = session.routerLine;
+  const open = document.querySelector("[data-open-required]");
+  if (open !== null && session.counts !== null) {
+    open.textContent = `${session.counts.openRequired} required still open`;
+  }
 }
 
 /**
@@ -571,6 +588,8 @@ export interface SessionView {
   mapHtml: string;
   transcriptHtml: string;
   statusHtml: string;
+  /** Router sentence from the saved answers. Empty when this session has no project. */
+  routerLine: string;
   counts: CardCounts | null;
   assumption: CardAssumption | null;
   required: boolean;
@@ -826,6 +845,7 @@ export function parseSession(value: unknown): SessionView | null {
     mapHtml: typeof value.mapHtml === "string" ? value.mapHtml : "",
     transcriptHtml: typeof value.transcriptHtml === "string" ? value.transcriptHtml : "",
     statusHtml: typeof value.statusHtml === "string" ? value.statusHtml : "",
+    routerLine: typeof value.routerLine === "string" ? value.routerLine : "",
     counts: parseCounts(value.counts),
     assumption: parseAssumption(value.assumption),
     required: value.required === true,
@@ -2853,6 +2873,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const session = parseSession(payload);
     if (session === null || view === null) return;
+    absorbLiveStatus(session);
     if (cardHold) {
       if (view.question === null) return;
       const questionId = suggestHold?.questionId ?? view.question.id;
@@ -4205,7 +4226,10 @@ export function mountDesk(env: DeskEnv): () => void {
       }
       const session = parseSession(payload);
       if (session === null || view === null) continue;
-      if (signature(session) === signature(view)) continue;
+      if (signature(session) === signature(view)) {
+        absorbLiveStatus(session);
+        continue;
+      }
       view = session;
       paint();
       if (session.briefStatus === "pending" || session.briefStatus === "approved") {
@@ -4356,6 +4380,17 @@ export function mountDesk(env: DeskEnv): () => void {
     ensureWriter();
     maybeDraftBrief();
     syncAnswerWait();
+    if (view !== null) paintLiveStatus(env.document, view);
+  }
+
+  function absorbLiveStatus(session: SessionView): void {
+    if (view === null) return;
+    view = {
+      ...view,
+      routerLine: session.routerLine !== "" ? session.routerLine : view.routerLine,
+      ...(session.counts === null ? {} : { counts: session.counts }),
+    };
+    paintLiveStatus(env.document, view);
   }
 
   function formatSavedAt(iso: string): string {

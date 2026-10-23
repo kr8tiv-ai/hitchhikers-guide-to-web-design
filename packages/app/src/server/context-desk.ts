@@ -13,6 +13,7 @@ import {
   readLedger,
   readPhaseStats,
   readStatus,
+  shownPhase,
   type AssetRecord,
   type DecisionRecord,
 } from "@hitchhiker/engine";
@@ -27,7 +28,7 @@ export function renderContextMain(projectDir: string, token: string): string {
   const decisions = loadDecisions(projectDir);
   const assets = loadAssets(projectDir);
   const notes = loadNotes(projectDir);
-  const phase = status.phase === "" ? "No phase yet" : status.phase;
+  const phase = shownPhase(projectDir);
   const question = status.questionId === "" ? "none" : status.questionId;
   return `<section class="hh-context" aria-label="${escapeHtml(CONTEXT_LABEL)}">
     <h1 class="hh-title">${escapeHtml(CONTEXT_LABEL)}</h1>

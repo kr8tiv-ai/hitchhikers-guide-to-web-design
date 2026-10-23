@@ -61,6 +61,7 @@ import {
   seedExpressAssumptions,
   think,
   writeReferences,
+  answersForGate,
   formatStatusLine,
   inferAssetRole,
   approveSiteBrief,
@@ -256,6 +257,8 @@ export interface DeskSession {
   guideHtml: string;
   transcriptHtml: string;
   statusHtml: string;
+  /** Status sentence from interview.json at this render. Empty when no project is open. */
+  routerLine: string;
   cardHtml: string;
   /** Picks for choices.forId. The card renders them only when that id is current. */
   choices: CardChoiceSet | null;
@@ -597,6 +600,7 @@ function holdingView(): DeskSession {
     guideHtml: "",
     transcriptHtml: "",
     statusHtml: "",
+    routerLine: "",
     cardHtml: "",
     choices: null,
     projectKey: "",
@@ -2796,6 +2800,8 @@ function buildSession(
   const briefDesk = done && answers.length > 0 ? readBriefDesk(projectDir) : null;
   const briefStatus = briefDesk?.status ?? null;
   const requiredList = requiredIds();
+  const counted = projectDir === "" ? answers : answersForGate(projectDir);
+  const openRequired = openRequiredCount(questions, counted, requiredList);
   const questionId = question?.id ?? null;
   const index = questionId === null ? 0 : questions.findIndex((item) => item.id === questionId) + 1;
   const counts: CardCounts | null =
@@ -2804,7 +2810,7 @@ function buildSession(
           index,
           total: questions.length,
           phase: state.phase,
-          openRequired: openRequiredCount(questions, answers, requiredList),
+          openRequired,
           mode: depth,
           modeNote: modeNote(depth),
         }
@@ -2813,7 +2819,7 @@ function buildSession(
             index: questions.length,
             total: questions.length,
             phase: state.phase,
-            openRequired: 0,
+            openRequired,
             mode: depth,
             modeNote: modeNote(depth),
           }
@@ -2965,6 +2971,7 @@ function buildSession(
     guideHtml: renderGuideMap(answers, [...questions]),
     transcriptHtml: transcript,
     statusHtml: statusSpans(footerText, notice, overlay.calm),
+    routerLine: projectDir.trim() === "" ? "" : formatStatusLine(projectDir),
     cardHtml,
     // The held card can still be the question that was just suggested, after the
     // cursor has moved. Send that choice set. The rendered card only shows a set
@@ -3287,7 +3294,7 @@ function renderDesk(
         <p class="hh-mast__line" data-mast-line${lineHidden}>${escapeHtml(session.mastLine)}</p>
         ${deskMenu(token)}
         ${routeNav("/")}
-        ${routerLine(projectDir)}`,
+        ${routerMarkup(session.routerLine)}`,
     "mast",
   );
   html = mustReplace(
@@ -3478,9 +3485,14 @@ function withDirectionDesk(html: string, projectDir: string): string {
   return next;
 }
 
+function routerMarkup(line: string): string {
+  if (line.trim() === "") return "";
+  return `<p class="hh-router" data-router-status>${escapeHtml(line)}</p>`;
+}
+
 function routerLine(projectDir: string): string {
   if (projectDir.trim() === "") return "";
-  return `<p class="hh-router" data-router-status>${escapeHtml(formatStatusLine(projectDir))}</p>`;
+  return routerMarkup(formatStatusLine(projectDir));
 }
 
 function renderBrand(

@@ -98,6 +98,7 @@ export type { LockInfo } from "./lock.ts";
 export { loadState, saveState } from "./state.ts";
 export type { GuideState } from "./state.ts";
 export {
+  answersForGate,
   assertCanAdvance,
   auditContext,
   awaitPendingSummary,
@@ -118,6 +119,7 @@ export {
   readLedger,
   readPhaseStats,
   readStatus,
+  shownPhase,
   recordAsset,
   recordDiscussNote,
   recordLookahead,
