@@ -120,6 +120,7 @@ export type { RankedBeautyIssue } from "./beauty-gate.ts";
 export {
   SCREENSHOT_FIX_MAX_ROUNDS,
   SCREENSHOT_FIX_TOP,
+  elevateRound,
   judgeSectionLock,
   recordElevateDefectRetest,
   runElevateAfterJurorFloor,
@@ -128,6 +129,9 @@ export {
   screenshotFixWidths,
 } from "./elevate-loop.ts";
 export type {
+  ElevateRoundDeps,
+  ElevateRoundResult,
+  ElevateRoundScores,
   ScreenshotFixCapture,
   ScreenshotFixReport,
   SectionEditScope,

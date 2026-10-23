@@ -578,6 +578,22 @@ interface DeskEvent {
   } | null;
 }
 
+/**
+ * A live refresh replaces the map markup. On a phone the list sits in a
+ * disclosure, and that refresh used to close it. Keep it open when the
+ * person had opened it.
+ */
+function replaceMap(map: DeskElement, html: string): void {
+  const fold = map.querySelector(".hh-map-fold");
+  const wasOpen = fold !== null && (fold.open === true || fold.getAttribute("open") !== null);
+  map.innerHTML = html;
+  if (!wasOpen) return;
+  const next = map.querySelector(".hh-map-fold");
+  if (next === null) return;
+  next.open = true;
+  next.setAttribute("open", "");
+}
+
 /** The draft and the choice list. Typing there closes a tip without a second document listener. */
 function inAnswer(target: DeskElement | null): boolean {
   let node = target;
@@ -4169,7 +4185,7 @@ export function mountDesk(env: DeskEnv): () => void {
       question.innerHTML = publicCardError(error);
     }
     const map = env.document.querySelector('[data-region="map"]');
-    if (map !== null && view !== null) map.innerHTML = view.mapHtml;
+    if (map !== null && view !== null) replaceMap(map, view.mapHtml);
     const transcript = env.document.querySelector('[data-region="transcript"]');
     if (transcript !== null && view !== null) transcript.innerHTML = view.transcriptHtml;
     const status = env.document.querySelector('[data-region="status"]');

@@ -89,6 +89,8 @@ const THEME_MODULE = `<script type="module" src="/client/theme.js"></script>`;
 
 /** Route name stays /hh-dashboard. The old xAI disclaimer is not part of the plate. */
 const DRIVE_DEK = "The queue on this machine.";
+const DRIVE_NEXT =
+  "The build runs one prompt at a time. When it finishes, the quality check is next, then you keep or undo each pick.";
 
 export const DRIVE_EMPTY_COPY = "No queue yet. The plan lands here after you approve the prompts.";
 
@@ -317,6 +319,7 @@ export function renderDriveDocument(
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">${DRIVE_DEK}</p>
+        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </header>
 
       <main id="drive-main" data-hh-ready>
@@ -416,6 +419,7 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <div class="hh-wordmark hh-wordmark--quiet" role="img" aria-label="Don't Panic"></div>
         <h1 class="hh-headline" id="drive-title">Drive</h1>
         <p class="hh-dek">${DRIVE_DEK}</p>
+        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </header>
       <main id="drive-main" data-hh-ready>
       <article class="hh-error" id="drive-error" role="alert">

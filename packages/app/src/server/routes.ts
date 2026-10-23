@@ -3201,7 +3201,9 @@ const MAP_FOLD_CSS = `.hh-map-fold { margin: 0; min-width: 0; }
   .hh-map-fold > summary {
     display: list-item;
     min-height: 44px;
+    max-width: 100%;
     cursor: pointer;
+    overflow-wrap: anywhere;
     color: var(--color-ink);
     font-family: var(--font-display);
     font-weight: 600;

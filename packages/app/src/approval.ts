@@ -271,6 +271,7 @@ function renderLaunchCardBody(rawToken: string, confirmed: boolean): string {
   return `<div class="hh-launch" data-launch-card role="region" aria-labelledby="launch-title">
       <h2 class="hh-title" id="launch-title">Launch</h2>
       <p data-launch-happens>The quality check runs first. If it is clear, a preview can open on this computer, or the site can be published to the host you confirm. A failed live check is explained in plain language, and the last working publish can go back up after another yes.</p>
+      <p data-journey>When the quality check is clear, a preview can open on this computer. Publishing still waits for you to name the host.</p>
       <p data-launch-cost>Cost for a preview on this computer: none. Cost for a host: your host plan.</p>
       <p data-launch-host>Hostinger is the suggested host.</p>
       ${state}

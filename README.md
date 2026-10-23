@@ -317,6 +317,42 @@ Then comes the fun part. Press `/hh-elevate` and Grok 4.7, on extra-high effort,
 
 It comes back with upgrades ranked by impact against effort: type and spacing, motion, imagery, copy, or a standout feature. A visual pass may add a section treatment, an effect, or an image. You pick the ones you want, they run through the same reviewed build loop, every gate runs again, and nothing merges if a gate gets worse. Press it again. And again. There's a dedicated detail pass, **Slartibartfast's Fjords**, for the obsessive finishing touches: kerning, optical alignment, hover and focus states, the 404 page, the favicon. Somebody has to care about the fjords.
 
+### One walk of the towel sample
+
+[`samples/towel-day.hhproject`](samples/towel-day.hhproject) is a Mostly Towels shop caught in the middle of the interview. A fixture walk proves the whole path a person takes, without calling Grok and without publishing.
+
+The walk is [`packages/orchestrator/src/golden-path.ts`](packages/orchestrator/src/golden-path.ts). `runGoldenPath({ projectDir })` restores the sample into that folder and then:
+
+1. Opens discovery and answers the remaining questions with the interview keep command, so a pushback cannot stall the fixture.
+2. Approves the brief with `approveSiteBrief` inside the harness. That is the product approval. It is not `hh brief --approve`. If the draft falls back to the interview text, the harness passes `confirmFallback`, which is the engine option for that case, not the CLI flag.
+3. Approves the plan and each design stage, then starts the build with a cassette runner. The runner writes `dist/index.html` and does not spawn Grok. The folder has no `package.json` build script, so a later preview does not try to install or compile.
+4. Records one git commit, then runs one Elevate round. The first pick is kept. The second pick makes the link check need a fix, so that pick is undone and the project stays on the same commit.
+5. Runs the quality check and writes `.hitchhiker/qa/GATES.json` for that commit. Every check in the fixture is a pass. The check file is not committed, so the commit it names stays the one the preview will read.
+
+The walk stops before publish. The node test then runs the real command, with no injected preview stand-in:
+
+```text
+hh so-long --project <dir> --host preview --yes
+```
+
+The page server opens on this computer. The response for `/` is HTTP 200 and the body contains Mostly Towels. The address is `http://127.0.0.1:<port>/`. The port is not 4175. Hostinger is not called, and `.hitchhiker/hostinger-yes.json` is not written. `closePreview(projectDir)` stops the page. The zip at `.hitchhiker/deploy/preview.zip` stays until the next preview overwrites it.
+
+The desk check is [`packages/app/e2e/golden-path-247b.spec.ts`](packages/app/e2e/golden-path-247b.spec.ts). It opens the sample at 375 and 1440, checks that the question line says which question this is, and checks that the phase list, the Drive next-step line, and the Launch card stay inside the screen. The node check is [`packages/orchestrator/test/golden-path-247b.test.ts`](packages/orchestrator/test/golden-path-247b.test.ts).
+
+Run only those two, then the type build:
+
+```text
+node --experimental-strip-types --test packages/orchestrator/test/golden-path-247b.test.ts
+pnpm --filter @hitchhiker/app exec playwright test e2e/golden-path-247b.spec.ts
+pnpm exec tsc -b
+```
+
+Do not run `hh brief --approve` as part of this check. Do not set `HH_LIVE`. Do not publish, and do not start or stop anything on port 4175.
+
+The phase lock still applies. The saved step moves one step at a time: discovery, brief, design, build, Elevate, then so-long only after the quality check passes. A towel project restored from the sample already has a brief file, so the first move is back to discovery, which is one legal step.
+
+On the desk, Drive says what happens after the queue: the build runs one prompt at a time, then the quality check, then you keep or undo each pick. The Launch card says a preview can open when that check is clear, and that publishing still waits until you name the host. The yes button still only records a yes. At 375 the folded phase label and the phase notes wrap instead of running off the screen. Opening that list stays open when the desk refreshes the map. On Approvals, the brand kit wraps long lines so the page does not grow a sideways scroll.
+
 ---
 
 ## Built on GSD
@@ -727,6 +763,7 @@ Good places to start:
 - **Read the alpha notes before you publish anything.** [`CHANGELOG.md`](CHANGELOG.md) records `0.1.0`. [`docs/RELEASE-v0.1.md`](docs/RELEASE-v0.1.md) lists the Specs 01, 02, and 03 tests by file, plus the towel sample and the ship-gate fixture. The `v0.1.0` tag and the registry upload need Matt's explicit yes. The checks for that wording are [`packages/qa/test/readme-quickstart.test.ts`](packages/qa/test/readme-quickstart.test.ts), [`packages/qa/test/release-doc.test.ts`](packages/qa/test/release-doc.test.ts), [`packages/qa/test/docs-truth.test.ts`](packages/qa/test/docs-truth.test.ts), and [`packages/cli/test/hh-bin.test.ts`](packages/cli/test/hh-bin.test.ts). Run each with `node --experimental-strip-types --test <file>`, then `pnpm exec tsc -b`. Do not npm publish, and do not create a tag, as part of that check. A pull request that fixes a stale version sentence, or that keeps the checklist from telling someone to upload, is a good first PR.
 - **Try the live check and the Launch card.** [`packages/deploy/test/post-check.test.ts`](packages/deploy/test/post-check.test.ts) covers the post-check section, including a page that comes back 404. [`packages/deploy/test/launch-kit.test.ts`](packages/deploy/test/launch-kit.test.ts) keeps the launch kit on disk and checks that the desk card names the cost, Hostinger, and the yes button without publishing. [`packages/deploy/test/launch-wired-241k.test.ts`](packages/deploy/test/launch-wired-241k.test.ts) checks that appending the section does not turn the checklist into a deploy. The phone screen is [`packages/app/e2e/launch-card-245d.spec.ts`](packages/app/e2e/launch-card-245d.spec.ts). Run the node files with `node --experimental-strip-types --test <file>`, and that one Playwright spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/launch-card-245d.spec.ts`. Leave the rest of the Playwright suite alone unless you mean to run it.
 - **Lock the phase changes.** The one table is [`packages/orchestrator/src/phase-lock.ts`](packages/orchestrator/src/phase-lock.ts). [`packages/orchestrator/test/phase-lock-247.test.ts`](packages/orchestrator/test/phase-lock-247.test.ts) walks every legal edge, a sample of illegal ones, and the commands that call the table. Run it with `node --experimental-strip-types --test packages/orchestrator/test/phase-lock-247.test.ts`, then `pnpm exec tsc -b`. A pull request that adds a skip around the table is the bug. When you touch the queue, the Elevate runner, or the launch check, also run [`packages/orchestrator/test/progress.test.ts`](packages/orchestrator/test/progress.test.ts), [`packages/orchestrator/test/runner.test.ts`](packages/orchestrator/test/runner.test.ts), and [`packages/orchestrator/test/ship-gate-243.test.ts`](packages/orchestrator/test/ship-gate-243.test.ts) with the same node command.
+- **Walk the towel sample once.** [`packages/orchestrator/src/golden-path.ts`](packages/orchestrator/src/golden-path.ts) restores [`samples/towel-day.hhproject`](samples/towel-day.hhproject), answers discovery, approves the brief in the harness (not with `hh brief --approve`), builds with a cassette, keeps one Elevate pick, undoes one, and writes a passing quality check. [`packages/orchestrator/test/golden-path-247b.test.ts`](packages/orchestrator/test/golden-path-247b.test.ts) then opens the real preview and expects HTTP 200. [`packages/app/e2e/golden-path-247b.spec.ts`](packages/app/e2e/golden-path-247b.spec.ts) checks 375 and 1440. Run the node file with `node --experimental-strip-types --test packages/orchestrator/test/golden-path-247b.test.ts`, the spec with `pnpm --filter @hitchhiker/app exec playwright test e2e/golden-path-247b.spec.ts`, then `pnpm exec tsc -b`. Leave the rest of the suite alone unless you mean to run it. Do not set `HH_LIVE`, do not bind port 4175, and do not call a host.
 
 House style, in brief: one PR, one job. Follow the spec-first habit (write down what "done" means before you start). Keep the docs free of the banned words. And be kind, because everyone here is figuring out a very new thing together.
 
@@ -850,6 +887,15 @@ Some sites answer each visit from a server. There is no folder of finished pages
 
 **Will the preview take the desk's port or call a host?**
 No. It asks the operating system for a free port and refuses port 4175, which is the desk. It binds to `127.0.0.1` only. It does not read the keychain, does not call a host, and does not run when you decline.
+
+**Can the towel sample reach a preview without calling Grok?**
+Yes, in the fixture walk. It restores `samples/towel-day.hhproject`, answers the remaining discovery questions, and approves the brief inside the test harness. That approval is `approveSiteBrief`. It is not `hh brief --approve`. A cassette writes `dist/index.html` and does not spawn Grok. The quality check passes for that git commit. One Elevate pick is kept and one is undone, because the second pick makes the link check need a fix. Then `hh so-long --project <dir> --host preview --yes` opens the page on `127.0.0.1` and `/` returns HTTP 200 with Mostly Towels in the body. The preview is not Hostinger. It does not use port 4175, and it does not write `.hitchhiker/hostinger-yes.json`. Leave `--yes` off, or leave `--host` off, and nothing is opened. The node file is `packages/orchestrator/test/golden-path-247b.test.ts`. Do not set `HH_LIVE` for that run.
+
+**The phase name is cut off on my phone.**
+The folded label wraps. At 375 the map summary and each phase note stay inside the screen, including So Long and Thanks for All the Fish once you open the list. A refresh of the map leaves that list open. At 1440 the list is already open in the rail. The brand kit on Approvals wraps long lines. A control that still runs past the edge is a bug, not a reason to pinch-zoom.
+
+**Drive does not say what happens after the queue.**
+It does. Under the queue line, the page says the build runs one prompt at a time, then the quality check, then you keep or undo each pick. The Launch card says a preview can open on this computer when the quality check is clear, and that publishing still waits until you name the host. The yes button still only records a yes. It does not publish, and it does not move the saved step.
 
 **I unzipped the preview and double-clicked index.html. The page looks broken.**
 The zip is a copy of the built folder, with `index.html` at the top and the other files beside it under the same paths. Many pages ask for files from the site root, a path that starts with `/`. A double-clicked file does not have that root, so those files are missing even though they are in the zip. Use the `http://127.0.0.1:` address while the preview is open. Closing the preview stops the address. The zip stays until the next preview overwrites it.

@@ -568,7 +568,9 @@ textarea {
 
 .hh-map__note {
   display: block;
+  max-width: 100%;
   margin-top: var(--space-1);
+  overflow-wrap: anywhere;
   font-family: var(--font-text);
   font-size: var(--type-small);
   font-weight: 400;
@@ -625,7 +627,9 @@ textarea {
 }
 
 .hh-status .hh-btn {
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
 }
 
 .hh-approval__note {
@@ -1178,6 +1182,23 @@ p.hh-error__next {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: var(--type-small);
+}
+
+/* Brand kit and design stages are preformatted. On a phone the long lines
+   have to wrap, or the page grows past the screen. */
+[data-brand-kit],
+[data-design-stage] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-brand-kit] pre,
+[data-design-stage] pre {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .hh-qcard[aria-busy="true"] .hh-qcard__input {
