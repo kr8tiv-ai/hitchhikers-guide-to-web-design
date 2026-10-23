@@ -11,6 +11,7 @@ import { closeActiveApp, runApp, type RunAppOptions } from "./commands/app.ts";
 import {
   isImplementedCommand,
   renderCommandTable,
+  renderCommandUsage,
   type ImplementedCommand,
 } from "./commands-table.ts";
 import {
@@ -500,8 +501,11 @@ export async function runCli(
   deps: CliDeps = {},
 ): Promise<{ exitCode: number; stdout: string; stderr?: string }> {
   const command = argv[0];
-  // Bare `hh` is rewritten to `app` before this runs. `--help` stays the old usage line.
-  if (command === undefined || command === "--help" || command === "-h") {
+  if (command === "--help" || command === "-h" || command === "help") {
+    return { exitCode: 0, stdout: renderCommandUsage() };
+  }
+  // Bare `hh` is rewritten to `app` before this runs. An empty argv keeps the doctor usage line.
+  if (command === undefined) {
     return { exitCode: 2, stdout: `${HELP}\n` };
   }
   if (command === "--version") {

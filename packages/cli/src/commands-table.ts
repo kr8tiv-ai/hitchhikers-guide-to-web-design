@@ -1,5 +1,6 @@
 /**
  * Unknown `hh` subcommands print this table on stderr and exit 2.
+ * The table includes the same usage block `hh --help` prints.
  * Implemented names are the dispatch switch in main.ts.
  * Skill-only names are read from packages/grok-plugin: a user-invocable
  * skill whose body says it is not implemented in the CLI.
@@ -144,17 +145,28 @@ function oneLine(value: string): string {
   return clean.length > 0 ? clean : "unknown";
 }
 
+/**
+ * One line per name in `IMPLEMENTED_COMMANDS`, which the unknown-command test
+ * locks to the `dispatchImplemented` switch. Do not keep a second copy of the names.
+ */
+function usageLines(): string[] {
+  return ["Usage: hh <command>", ...IMPLEMENTED_COMMANDS.map((name) => `  hh ${name}`)];
+}
+
+/** Top-level usage. `hh --help`, `hh -h`, and `hh help` print this and exit 0. */
+export function renderCommandUsage(): string {
+  return `${usageLines().join("\n")}\n`;
+}
+
 /** Text table for an unknown subcommand. Ends with a newline. No doctor report. */
 export function renderCommandTable(unknownCommand: string, skillsDir?: string): string {
   const skills = skillsDir === undefined ? skillOnlySlashCommands() : skillOnlySlashCommands(skillsDir);
-  const commandLines = IMPLEMENTED_COMMANDS.flatMap((name) =>
-    name === "improve" ? [`  hh ${name}`, "  hh improve supervise"] : [`  hh ${name}`],
-  );
   const lines = [
     `Unknown command: ${oneLine(unknownCommand)}`,
     "",
-    "Implemented commands",
-    ...commandLines,
+    ...usageLines(),
+    // `supervise` is a form of `improve`, not its own switch case.
+    "  hh improve supervise",
     "",
     "Skill-only slash commands",
   ];

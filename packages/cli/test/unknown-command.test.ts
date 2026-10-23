@@ -130,7 +130,7 @@ test("implemented names are the dispatch cases in main.ts", () => {
   assert.equal(IMPLEMENTED_COMMANDS.includes("so-long"), true);
 });
 
-test("hh doctor still runs and hh --help stays the usage line", async () => {
+test("hh doctor still runs and top-level help lists commands", async () => {
   const { runner, calls } = quietRunner();
   const known = await runCli(["doctor"], runner);
   assert.equal(known.exitCode, nodeIsSupported(process.version) ? 0 : 1);
@@ -140,8 +140,9 @@ test("hh doctor still runs and hh --help stays the usage line", async () => {
 
   const before = calls.length;
   const help = await runCli(["--help"], runner);
-  assert.equal(help.exitCode, 2);
-  assert.equal(help.stdout, "hh doctor [--project <dir>]\n");
+  assert.equal(help.exitCode, 0);
+  assert.match(help.stdout, /^Usage: hh <command>\n/);
+  assert.match(help.stdout, /^  hh doctor$/m);
   assert.equal(help.stderr, undefined);
   assert.equal(calls.length, before);
 

@@ -67,6 +67,8 @@ The Guide is two programs that share one project folder.
 
 The desk is a local site on `127.0.0.1`. It interviews you, then shows the brief, the brand, the design stages, the queue, and the launch card. `hh` is the same work from a terminal. A bare `hh`, with no subcommand, opens that desk. `hh --help` does not. It prints `hh doctor [--project <dir>]` and exits 2.
 
+`hh --help`, `hh -h`, and `hh help` print one line for each command the program dispatches, then exit 0. They do not open the desk, and they do not install anything.
+
 This tree is alpha. The publishable CLI is `0.1.0`. The private workspace root stays `0.0.0`. The six phases, the gates, and a packable CLI are here. npm does not have the package yet. The exact commands, and the reason a registry fetch fails today, are in [Try it](#try-it) and [Install](#install).
 
 Once a project exists, its memory is a `.hitchhiker/` folder of plain files: the interview, the brand, the plan, the queue, the quality check, and the deploy record. Close the laptop. Open the same folder tomorrow. Nothing important lived only in the chat.
@@ -518,6 +520,7 @@ A local tarball can be built and inspected. The steps, the 25 MB cap, and the di
 | `hh brief` | Draft or show the Site Brief. `--approve` approves it and starts the next phase, only after a yes. The command asks the phase lock first. A draft or a show stays on the brief. `--approve` moves to the design only from the brief, and it still does not start the billed build. |
 | `hh build` | `hh build --resume` continues the site build from the first prompt that has not passed. A second call while a run is live does not start another. The resume asks the same phase lock, so a build cannot start before the design. |
 | `hh so-long` | Publish after the quality check, or preview on this computer. Hostinger is the suggestion. Nothing is sent until you name the host and pass `--yes`. A connected checker then writes a post-check section, and `--rollback --yes` can send the last working publish again. The phase lock runs before the quality check. Publishing from an earlier step stops with a plain sentence, and the check is not treated as passed. |
+| `hh --help` | `hh --help`, `hh -h`, and `hh help` print one line for each dispatched command and exit 0. They do not open the desk. An unknown word prints that block on stderr and exits 2. |
 
 Every flag on those commands is written out in [Commands and flags](#commands-and-flags).
 
@@ -854,6 +857,8 @@ Unknown subcommands print the implemented names and the skill-only slash names o
 | `hh --help`, `hh -h` | The doctor usage line. Exit 2. |
 | `hh <unknown>` | The command table on stderr. Exit 2. No doctor report. |
 
+`hh --help`, `hh -h`, and `hh help` print one usage block and exit 0. The first line is `Usage: hh <command>`. Each following line names one command the program dispatches, in that order. The names are the quick start rows, except `hh --version` and `hh improve supervise`. `hh improve supervise` is still printed by an unknown command, on its own line, because it is the supervise form of `hh improve`. An unknown command prints the usage block on stderr, then the skill-only slash names, and exits 2. `hh doctor --help` still prints `hh doctor [--project <dir>]` and installs nothing.
+
 ### hh install
 
 ```text
@@ -1019,6 +1024,8 @@ hh so-long --project <dir> [--host preview|hostinger|vercel|netlify|cloudflare] 
 | 0 | The command did the thing it was asked to do. `hh elevate --help` uses 0 and returns. A successful `hh app`, including `--help`, is kept alive by the bin until Ctrl+C. |
 | 1 | A check failed, state was missing, the phase lock or the ship gate refused the step, or Node is older than 22 on `hh doctor`. |
 | 2 | Usage. Unknown command, missing flag, or a yes that was required and absent. `hh --help` uses 2. |
+
+`hh --help`, `hh -h`, and `hh help` exit 0 after printing the usage block.
 
 ## Configuration
 
@@ -1487,6 +1494,9 @@ The desk will not use its own source tree, a folder inside it, or a worktree of 
 
 **`hh --help` did not list the commands.**
 `hh --help` and `hh -h` print `hh doctor [--project <dir>]` and exit 2. They install nothing. An unknown word, such as `hh help`, prints the implemented commands and the skill-only slash names on stderr and exits 2. The full flag list is [Commands and flags](#commands-and-flags).
+
+**`hh --help` lists every dispatched command.**
+`hh --help`, `hh -h`, and `hh help` print one line for each command the program dispatches and exit 0. They install nothing, and they do not open the desk. `hh doctor --help` still prints `hh doctor [--project <dir>]` and installs nothing. An unknown word prints that usage block on stderr, then the skill-only slash names, and exits 2.
 
 **There is no `hh deep-thought` command.**
 Correct. `/hh-deep-thought` is a skill, and the skill says it is not implemented in the CLI yet. The plan files are still written from the desk and from the spec modules. Typing the name as an `hh` subcommand prints the command table.
