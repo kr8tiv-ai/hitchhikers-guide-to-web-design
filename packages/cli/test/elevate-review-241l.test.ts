@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os, { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import { hiddenChildOptions, OPACITY_KEEP_MS, phonePerformanceBudget } from "@hitchhiker/engine";
 import { runElevateCommand } from "../src/commands/elevate.ts";
 
@@ -267,6 +267,22 @@ const PLAN = {
   cassette: "live" as const,
 };
 
+// Git for Windows rejects "NUL" as a config path. One empty file isolates both configs.
+const emptyGitConfigDir = mkdtempSync(path.join(os.tmpdir(), "hh-git-config-"));
+const emptyGitConfig = path.join(emptyGitConfigDir, "empty.gitconfig");
+writeFileSync(emptyGitConfig, "");
+
+function removeEmptyGitConfig(): void {
+  try {
+    rmSync(emptyGitConfigDir, { recursive: true, force: true });
+  } catch {
+    // Removal must never fail a test.
+  }
+}
+
+process.on("exit", removeEmptyGitConfig);
+after(removeEmptyGitConfig);
+
 function gitEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -278,8 +294,9 @@ function gitEnv(): NodeJS.ProcessEnv {
   env.GIT_COMMITTER_NAME = "Hitchhiker";
   env.GIT_COMMITTER_EMAIL = "hh@localhost";
   env.GIT_TERMINAL_PROMPT = "0";
-  env.GIT_CONFIG_GLOBAL = "NUL";
-  env.GIT_CONFIG_SYSTEM = "NUL";
+  env.GIT_CONFIG_GLOBAL = emptyGitConfig;
+  env.GIT_CONFIG_SYSTEM = emptyGitConfig;
+  env.GIT_CONFIG_NOSYSTEM = "1";
   return env;
 }
 
