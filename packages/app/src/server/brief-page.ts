@@ -125,7 +125,8 @@ export function approveMain(
       : "";
   const sections = desk.sources
     .map((source) => {
-      const changeId = source.questionId.split(",")[0]?.trim() ?? "";
+      const questionId = typeof source.questionId === "string" ? source.questionId : "";
+      const changeId = questionId.split(",")[0]?.trim() ?? "";
       const change =
         /^DP-\d+\.\d+$/.test(changeId)
           ? `<form method="post" action="/approve">
@@ -136,9 +137,9 @@ export function approveMain(
         </form>`
           : "";
       const sourceLine =
-        source.questionId.trim() === ""
+        questionId.trim() === ""
           ? ""
-          : `<p>Source ${escapeHtml(source.questionId)}: ${escapeHtml(source.answer)}</p>`;
+          : `<p>Source ${escapeHtml(questionId)}: ${escapeHtml(source.answer)}</p>`;
       return `<section>
         <h2>${escapeHtml(source.heading)}</h2>
         <p>${escapeHtml(source.text)}</p>

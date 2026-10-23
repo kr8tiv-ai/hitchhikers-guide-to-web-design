@@ -346,7 +346,7 @@ function heading(title: string, why: string, done: boolean): string {
 /** Finished interview. The action is absent until the desk names a brief status. Progress stays on the interview head. */
 function doneCard(brief: CardState["brief"]): string {
   if (brief === undefined || brief === null) {
-    return `<article class="hh-qcard" data-done="true" aria-labelledby="hh-card-ask">
+    return `<article class="hh-qcard" data-done="true" data-question-id="" aria-labelledby="hh-card-ask">
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
   <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
 </article>`;
@@ -366,7 +366,7 @@ function doneCard(brief: CardState["brief"]): string {
   } else {
     action = `  <p class="hh-qcard__next"><a class="hh-btn hh-btn--primary" href="/approve">Approve the plan</a></p>\n`;
   }
-  return `<article class="hh-qcard" data-done="true" data-brief-status="${status}" aria-labelledby="hh-card-ask">
+  return `<article class="hh-qcard" data-done="true" data-question-id="" data-brief-status="${status}" aria-labelledby="hh-card-ask">
   <h2 class="hh-qcard__title" id="hh-card-ask">${escapeHtml(DONE_TITLE)}</h2>
   <p class="hh-qcard__why">${escapeHtml(DONE_WHY)}</p>
 ${action}</article>`;

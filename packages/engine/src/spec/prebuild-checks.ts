@@ -38,6 +38,7 @@ const ALL_BUDGET = 122880;
 
 /** The gates a person can pass before Grok or a media call starts. */
 export function runPrebuildChecks(brief: string, projectDir?: string): PrebuildReport {
+  const text = typeof brief === "string" ? brief : "";
   const sitemap = readOptional(projectDir, ".hitchhiker/sitemap.md");
   const wireframe = readOptional(projectDir, ".hitchhiker/wireframe.md");
   const styleGuide = readOptional(projectDir, "DESIGN.md");
@@ -45,12 +46,12 @@ export function runPrebuildChecks(brief: string, projectDir?: string): PrebuildR
   const checks: PrebuildCheck[] = [
     critiqueCheck(brief),
     deviceCheck(styleGuide, sitemap, wireframe),
-    phoneCheck(brief, styleGuide, pair),
-    webglCheck(brief, styleGuide),
+    phoneCheck(text, styleGuide, pair),
+    webglCheck(text, styleGuide),
     elevateCheck(sitemap, wireframe, styleGuide),
     aiLookCheck(styleGuide, pair),
     typeCheck(pair),
-    awwwardsCheck(brief, styleGuide, sitemap, wireframe),
+    awwwardsCheck(text, styleGuide, sitemap, wireframe),
   ];
   return { pass: checks.every((check) => check.status !== "fail"), checks };
 }

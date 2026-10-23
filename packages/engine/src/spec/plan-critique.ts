@@ -23,6 +23,8 @@ export interface PlanDraft {
   wireframe: string;
   anchors: readonly string[];
   generic: boolean;
+  /** True when the caller did not pass a brief string. */
+  missing?: boolean;
 }
 
 export interface PlanCritique {
@@ -56,8 +58,19 @@ const CATEGORY_WORD =
   /\b(cafés|café|cafes|cafe|coffee|pastries|pastry|studios|studio|projects|project|design|clinics|clinic|patients|patient|care)\b/gi;
 
 const FAIL = "Any similar brief would produce this plan.";
+const MISSING_BRIEF = "The brief is missing.";
 
 export function draftPlan(brief: string): PlanDraft {
+  if (typeof brief !== "string") {
+    return {
+      brief: "",
+      tokens: { ...GENERIC_TOKENS },
+      wireframe: genericWireframe(),
+      anchors: [],
+      generic: true,
+      missing: true,
+    };
+  }
   const anchors = contentAnchors(brief);
   const generic = isGeneric(brief, anchors);
   const tokens = generic ? { ...GENERIC_TOKENS } : tokensFrom(brief);
@@ -74,6 +87,9 @@ export function plansSwapWithoutEdit(left: PlanDraft, right: PlanDraft): boolean
 }
 
 export function critiquePlan(draft: PlanDraft): PlanCritique {
+  if (draft.missing === true) {
+    return { pass: false, differences: [], failure: MISSING_BRIEF };
+  }
   const differences = draft.generic ? [] : concreteDifferences(draft);
   if (draft.generic || differences.length < 3) {
     return { pass: false, differences: [], failure: FAIL };
@@ -119,6 +135,7 @@ function concreteDifferences(draft: PlanDraft): string[] {
 }
 
 function significantWords(brief: string): string[] {
+  if (typeof brief !== "string") return [];
   const words = brief.match(/[A-Za-z][A-Za-z0-9&'-]{3,}/g) ?? [];
   const out: string[] = [];
   const seen = new Set<string>();
@@ -138,6 +155,7 @@ function isGeneric(brief: string, anchors: readonly string[]): boolean {
 }
 
 function singleCategory(brief: string): "cafe" | "studio" | "clinic" | null {
+  if (typeof brief !== "string") return null;
   const lower = brief.toLowerCase();
   const cafe = /\bcaf[eé]s?\b|\bcoffee\b|\bpastr(?:y|ies)\b/.test(lower);
   const studio = /\bstudios?\b|\bprojects?\b/.test(lower);
@@ -150,6 +168,7 @@ function singleCategory(brief: string): "cafe" | "studio" | "clinic" | null {
 }
 
 function contentAnchors(brief: string): string[] {
+  if (typeof brief !== "string") return [];
   const anchors: string[] = [];
   for (const raw of brief.split(/\n+/)) {
     const line = raw.trim();
@@ -181,6 +200,7 @@ function isCategoryFiller(sentence: string): boolean {
 }
 
 function pageNames(brief: string): string[] {
+  if (typeof brief !== "string") return [];
   const names: string[] = [];
   for (const match of brief.matchAll(/Pages:\s*([^\n]+)/gi)) {
     const line = match[1] ?? "";

@@ -5067,13 +5067,14 @@ function tourControl(start: DeskElement | null): boolean {
 /** Keep the article node when the question id did not change. */
 function refillSameCard(region: DeskElement, html: string): boolean {
   const existing = region.querySelector("[data-question-id]");
-  if (existing === null) return false;
+  if (existing === null || existing.getAttribute("data-done") === "true") return false;
   const openAt = html.indexOf("<article");
   if (openAt < 0) return false;
   const openEnd = html.indexOf(">", openAt);
   const closeAt = html.lastIndexOf("</article>");
   if (openEnd < 0 || closeAt < openEnd) return false;
   const open = html.slice(openAt, openEnd);
+  if (/data-done="true"/.test(open)) return false;
   const idMatch = /data-question-id="([^"]*)"/.exec(open);
   if (idMatch === null || decodeAttr(idMatch[1] ?? "") !== existing.getAttribute("data-question-id")) return false;
   // Same question: keep the textarea node. Replacing it drops a fill that already

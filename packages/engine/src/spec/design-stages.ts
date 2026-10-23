@@ -123,6 +123,12 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
 export function designReadyForBuild(projectDir: string, brief: string): DesignBuildGate {
   const state = readApprovals(projectDir);
   const checks = runPrebuildChecks(brief, projectDir);
+  if (typeof brief !== "string") {
+    const critique = checks.checks.find((check) => check.id === "critique");
+    const reason =
+      critique !== undefined && /missing/i.test(critique.detail) ? critique.detail : "The brief is missing.";
+    return { ok: false, reason, checks };
+  }
   if (state.sitemap === undefined) return { ok: false, reason: "Approve the sitemap before the build.", checks };
   if (state.wireframe === undefined) return { ok: false, reason: "Approve the wireframe before the build.", checks };
   if (state.styleGuide === undefined) return { ok: false, reason: "Approve the style guide before the build.", checks };

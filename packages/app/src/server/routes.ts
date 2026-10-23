@@ -1467,7 +1467,11 @@ async function runDeskTurn(
       const session = view();
       hub.publish("session", session);
       for (const event of output.events) hub.publish("update", event);
-      return { httpStatus: 200, body: { next: output.next, events: output.events, session } };
+      const nextId = session.done ? null : nextQuestionId(output.next);
+      return {
+        httpStatus: 200,
+        body: { next: output.next ?? null, nextId, done: session.done, events: output.events, session },
+      };
     } catch (error: unknown) {
       if (error instanceof LockHeld && attempt < 7) {
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -5086,6 +5090,13 @@ function parseTurnBody(
   if (Array.isArray(attachments)) body.attachments = attachments;
   if (kind === "answer" && value.assumed === true) body.assumed = true;
   return body;
+}
+
+/** A finished interview sends null, never an omitted id a client would split. */
+function nextQuestionId(next: unknown): string | null {
+  if (typeof next !== "object" || next === null || !("id" in next)) return null;
+  const id = (next as { id?: unknown }).id;
+  return typeof id === "string" && id.trim() !== "" ? id : null;
 }
 
 function asTurnResult(value: unknown): { next: unknown; events: unknown[] } {
