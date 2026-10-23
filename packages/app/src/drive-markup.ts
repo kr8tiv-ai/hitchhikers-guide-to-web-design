@@ -402,8 +402,8 @@ export function renderDriveDocument(
         <span>On this machine</span>
         <span class="hh-status__spacer"></span>
         <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
+        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </footer>
-      <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
     </div>`;
   return documentShell("Drive", body, options);
 }
@@ -435,8 +435,8 @@ export function renderDriveReadError(message: string, options?: DrivePageOptions
         <span>On this machine</span>
         <span class="hh-status__spacer"></span>
         <button class="hh-btn hh-btn--ghost" type="button" data-theme-toggle data-tip="Switches this page between the day desk and the night desk.">Night desk</button>
+        <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
       </footer>
-      <p class="hh-dek" data-journey>${DRIVE_NEXT}</p>
     </div>`;
   return documentShell("Drive", body, options, false);
 }
