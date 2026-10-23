@@ -222,20 +222,109 @@ export function questionFocusTarget(width: number, height: number): "draft" | "h
 /** Same three lines as ANSWER_PROGRESS in the engine. The browser bundle does not import it. */
 const ANSWER_PROGRESS_STAGES = ["Checking your answer", "Writing the next question", "Saving"] as const;
 
-/** Honest stage plus elapsed seconds. Unknown stages and fake percentages stay off the card. */
+/**
+ * Floor of the server Guide call cap, in seconds.
+ * Same duration as GUIDE_CALL_TIMEOUT_MS. This desk does not abort the call.
+ */
+export const SERVER_GUIDE_TIMEOUT_S = 600;
+
+/** Under a minute: `45s`. From 60s: `2 min 05 s`. No percentages. */
+export function formatElapsed(elapsedSeconds: number): string | null {
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0) return null;
+  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const rest = elapsedSeconds % 60;
+  return `${minutes} min ${String(rest).padStart(2, "0")} s`;
+}
+
+/** Honest stage plus elapsed time. Unknown stages and fake percentages stay off the card. */
 export function answerProgressLine(stage: string, elapsedSeconds: number): string | null {
   if (!(ANSWER_PROGRESS_STAGES as readonly string[]).includes(stage)) return null;
-  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0) return null;
-  return `${stage} · ${elapsedSeconds}s`;
+  const elapsed = formatElapsed(elapsedSeconds);
+  if (elapsed === null) return null;
+  return `${stage} · ${elapsed}`;
 }
 
 const BRIEF_PROGRESS_STAGE = "Drafting the Site Brief";
 
-/** Stage plus elapsed seconds for the Site Brief. Other stages stay off this line. */
+/** Stage plus elapsed time for the Site Brief. Other stages stay off this line. */
 export function briefProgressLine(stage: string, elapsedSeconds: number): string | null {
   if (stage !== BRIEF_PROGRESS_STAGE) return null;
-  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0) return null;
-  return `${stage} · ${elapsedSeconds}s`;
+  const elapsed = formatElapsed(elapsedSeconds);
+  if (elapsed === null) return null;
+  return `${stage} · ${elapsed}`;
+}
+
+export const LONG_WAIT_NOTE =
+  "This one is taking longer than usual. Your answer is saved; you can wait or leave the desk open and come back.";
+
+/** One plain line under the progress line once a check has run for 120s. */
+export function answerLongWaitNote(elapsedSeconds: number): string | null {
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 120) return null;
+  return LONG_WAIT_NOTE;
+}
+
+export interface AnswerCheckReport {
+  /** The server said this check failed. */
+  callFailed: boolean;
+  /** The server's own timeout has passed. */
+  serverTimeoutPassed: boolean;
+}
+
+/**
+ * Try again is offered from 300s only after the server reports failure
+ * or its own timeout has passed. A check still inside that cap stays a wait.
+ */
+export function answerLongWaitRetry(elapsedSeconds: number, report: AnswerCheckReport): boolean {
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 300) return false;
+  return report.callFailed === true || report.serverTimeoutPassed === true;
+}
+
+/**
+ * A running call is not a failure. The clock uses the server's own cap.
+ * Passing that cap does not cancel the call.
+ */
+export function answerCheckReport(input: {
+  elapsedSeconds: number;
+  jobStatus: "running" | "failed" | "done" | "unknown";
+  serverError: string | null;
+  serverTimeoutSeconds: number;
+}): AnswerCheckReport {
+  const error = input.serverError?.trim() ?? "";
+  const timedOut = /took too long/i.test(error);
+  const cap = input.serverTimeoutSeconds;
+  const clockPassed =
+    input.jobStatus !== "done" &&
+    Number.isInteger(input.elapsedSeconds) &&
+    input.elapsedSeconds >= 0 &&
+    Number.isInteger(cap) &&
+    cap >= 0 &&
+    input.elapsedSeconds >= cap;
+  return {
+    callFailed: input.jobStatus === "failed" || timedOut,
+    serverTimeoutPassed: timedOut || clockPassed,
+  };
+}
+
+/** Note, then Try again, directly under the stage line. Empty when neither is due. */
+export function answerWaitHtml(
+  elapsedSeconds: number,
+  report: AnswerCheckReport,
+  options?: { inProgress?: boolean },
+): string {
+  const inProgress = options?.inProgress !== false;
+  const note = inProgress ? answerLongWaitNote(elapsedSeconds) : null;
+  const retry = answerLongWaitRetry(elapsedSeconds, report);
+  const parts: string[] = [];
+  if (note !== null) {
+    parts.push(`    <p class="hh-qcard__long-wait" data-long-wait="1">${escapeHtml(note)}</p>\n`);
+  }
+  if (retry) {
+    parts.push(
+      `    <p class="hh-qcard__retry"><button type="button" class="hh-btn hh-btn--secondary" data-retry="answer" data-long-wait-retry="true">Try again</button></p>\n`,
+    );
+  }
+  return parts.join("");
 }
 
 /** Matches the server cap in uploads.ts. The server still refuses a larger body. */
@@ -923,6 +1012,18 @@ export function mountDesk(env: DeskEnv): () => void {
   let progressLine: string | null = null;
   let progressStarted = 0;
   let progressTimer: ReturnType<typeof setInterval> | null = null;
+  /** Elapsed seconds kept after a failed check so Try again can still appear. */
+  let answerElapsedHeld = 0;
+  /** The server said this check failed, or the turn came back as an error. */
+  let answerCallFailed = false;
+  /** Error text from the server, when it sent one. */
+  let answerServerError: string | null = null;
+  /** Keep Try again on the card after the check returns. */
+  let answerWaitHeld = false;
+  /** Question the open check belongs to. A later card does not inherit the button. */
+  let answerWaitQuestionId: string | null = null;
+  /** Re-send this answer once when the in-flight check ends in failure. */
+  let retryQueued = false;
   let briefTimer: ReturnType<typeof setInterval> | null = null;
   let briefStarted = 0;
   let briefPosted = false;
@@ -1088,6 +1189,10 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     if (readMarked(event.target, "data-retry") === "answer") {
       event.preventDefault();
+      if (hasMark(event.target, "data-long-wait-retry")) {
+        void retryLongWait();
+        return;
+      }
       void submit("answer");
       return;
     }
@@ -2911,10 +3016,13 @@ export function mountDesk(env: DeskEnv): () => void {
     } catch {
       error = DRAFT_KEPT;
     } finally {
-      pending = false;
-      if (writer !== null) continueDraftSave();
-      stopAnswerProgress();
-      paint();
+      const again = action === "answer" ? releaseAnswerCheck(advance) : false;
+      if (action !== "answer") {
+        pending = false;
+        if (writer !== null) continueDraftSave();
+        stopAnswerProgress();
+        paint();
+      }
       if (advance) {
         // A fill may already be in the box the stream painted. Leave that focus.
         // A pushback parks the words until the person focuses the box. Do not take it.
@@ -2922,6 +3030,8 @@ export function mountDesk(env: DeskEnv): () => void {
         else if (focusChoices) focusChoiceGroup();
         else if (!draftFocused()) focusNewQuestion();
       }
+      // Same words, same server model and effort. Never a second call beside a live one.
+      if (again) void submit("answer");
     }
   }
 
@@ -3013,15 +3123,10 @@ export function mountDesk(env: DeskEnv): () => void {
     } catch {
       showFieldError(DRAFT_KEPT);
     } finally {
-      pending = false;
-      if (writer !== null) continueDraftSave();
-      stopAnswerProgress();
-      if (advance) {
-        paint();
-        focusNewQuestion();
-      } else {
-        setBusy(false);
-      }
+      const again = releaseAnswerCheck(advance);
+      if (again) void submit("answer");
+      else if (advance) focusNewQuestion();
+      else setBusy(false);
     }
   }
 
@@ -4192,6 +4297,7 @@ export function mountDesk(env: DeskEnv): () => void {
         ...attachSpread(),
         keepDraft: true,
         ...(pending && progressLine !== null ? { reading: progressLine } : {}),
+        ...longWaitSpread(),
         ...(draftNote !== null && draftNote !== "" ? { draftNote, draftFade } : {}),
         ...(view.lead !== "" ? { lead: view.lead } : {}),
         ...(view.help !== "" ? { help: view.help } : {}),
@@ -4249,6 +4355,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (returnToDraft) focusField();
     ensureWriter();
     maybeDraftBrief();
+    syncAnswerWait();
   }
 
   function formatSavedAt(iso: string): string {
@@ -4382,16 +4489,121 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function stopAnswerProgress(): void {
-    if (progressTimer !== null) {
-      clearInterval(progressTimer);
-      progressTimer = null;
-    }
+    clearAnswerTimer();
     progressStage = null;
     progressLine = null;
+    clearAnswerWait();
+    retryQueued = false;
   }
 
   function elapsedAnswerSeconds(): number {
     return Math.max(0, Math.floor((Date.now() - progressStarted) / 1000));
+  }
+
+  function answerElapsedNow(): number {
+    if (pending || progressTimer !== null) return elapsedAnswerSeconds();
+    return answerElapsedHeld;
+  }
+
+  function answerReportNow(): AnswerCheckReport {
+    const jobStatus =
+      answerCallFailed || answerWaitHeld ? "failed" : pending || progressTimer !== null ? "running" : "unknown";
+    return answerCheckReport({
+      elapsedSeconds: answerElapsedNow(),
+      jobStatus,
+      serverError: answerServerError,
+      serverTimeoutSeconds: SERVER_GUIDE_TIMEOUT_S,
+    });
+  }
+
+  function longWaitSpread(): { longWaitHtml: string } | Record<string, never> {
+    const html = answerWaitMarkup();
+    return html === "" ? {} : { longWaitHtml: html };
+  }
+
+  function answerWaitMarkup(): string {
+    const current = view?.question?.id ?? null;
+    if (answerWaitQuestionId !== null && current !== answerWaitQuestionId) {
+      if (!pending) clearAnswerWait();
+      return "";
+    }
+    if (!pending && !answerWaitHeld) return "";
+    return answerWaitHtml(answerElapsedNow(), answerReportNow(), { inProgress: pending });
+  }
+
+  function markAnswerFailure(message: string): void {
+    answerCallFailed = true;
+    answerServerError = message;
+    answerElapsedHeld = elapsedAnswerSeconds();
+    answerWaitHeld = true;
+  }
+
+  function clearAnswerWait(): void {
+    answerElapsedHeld = 0;
+    answerCallFailed = false;
+    answerServerError = null;
+    answerWaitHeld = false;
+    answerWaitQuestionId = null;
+  }
+
+  function clearAnswerTimer(): void {
+    if (progressTimer !== null) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+    }
+  }
+
+  /**
+   * The check on screen has ended.
+   * True means Try again asked for one more send of the same answer.
+   * That send goes through the answer route, so model and effort stay the server's.
+   */
+  function releaseAnswerCheck(advance: boolean): boolean {
+    if (advance) clearAnswerWait();
+    else if (error !== null) markAnswerFailure(error);
+    pending = false;
+    if (writer !== null) continueDraftSave();
+    clearAnswerTimer();
+    progressStage = null;
+    progressLine = null;
+    const again = retryQueued && !advance;
+    retryQueued = false;
+    if (!again) paint();
+    return again;
+  }
+
+  async function retryLongWait(): Promise<void> {
+    if (!answerLongWaitRetry(answerElapsedNow(), answerReportNow())) return;
+    if (pending) {
+      // The server is still in this check. Re-send when it reports failure.
+      // A second Guide call does not start beside a live one.
+      retryQueued = true;
+      return;
+    }
+    await submit("answer");
+  }
+
+  function syncAnswerWait(): void {
+    const root = region();
+    if (root === null) return;
+    const reading = root.querySelector("[data-guide-reading]");
+    if (reading === null || typeof reading.insertAdjacentHTML !== "function") return;
+    const desired = answerWaitMarkup();
+    const note = root.querySelector('[data-long-wait="1"]');
+    const retry = root.querySelector("[data-long-wait-retry]");
+    const have = `${note !== null ? "n" : ""}${retry !== null ? "r" : ""}`;
+    const wantNote = desired.includes('data-long-wait="1"');
+    const wantRetry = desired.includes("data-long-wait-retry");
+    const want = `${wantNote ? "n" : ""}${wantRetry ? "r" : ""}`;
+    const noteText = pending ? answerLongWaitNote(answerElapsedNow()) : null;
+    const sameNote = note === null || noteText === null || note.textContent === noteText;
+    if (have === want && sameNote) return;
+    note?.remove?.();
+    const wrap = retry?.parentElement ?? null;
+    if (wrap !== null && wrap.getAttribute("class")?.includes("hh-qcard__retry") === true) wrap.remove?.();
+    else retry?.remove?.();
+    if (desired === "") return;
+    reading.insertAdjacentHTML("afterend", desired);
   }
 
   function writeReading(line: string): void {
@@ -4404,6 +4616,7 @@ export function mountDesk(env: DeskEnv): () => void {
     stopAnswerProgress();
     progressStarted = Date.now();
     progressStage = "Checking your answer";
+    answerWaitQuestionId = view?.question?.id ?? null;
     progressLine = answerProgressLine(progressStage, 0);
     paint();
     progressTimer = setInterval(() => {
@@ -4412,6 +4625,7 @@ export function mountDesk(env: DeskEnv): () => void {
       if (line === null) return;
       progressLine = line;
       writeReading(line);
+      syncAnswerWait();
     }, 1000);
     const timer = progressTimer as { unref?: () => void };
     if (typeof timer.unref === "function") timer.unref();
@@ -4431,6 +4645,7 @@ export function mountDesk(env: DeskEnv): () => void {
     progressStage = payload.stage;
     progressLine = line;
     writeReading(line);
+    syncAnswerWait();
   }
 
   function focusNewQuestion(): void {

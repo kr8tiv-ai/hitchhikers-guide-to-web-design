@@ -1627,7 +1627,10 @@ p.hh-error__next {
     margin-top: 0;
   }
 
-  .hh-interview .hh-qcard .hh-qcard__actions .hh-btn--primary {
+  .hh-interview .hh-qcard .hh-qcard__actions .hh-btn--primary,
+  .hh-interview .hh-qcard .hh-qcard__actions .hh-qcard__reading,
+  .hh-interview .hh-qcard .hh-qcard__actions .hh-qcard__long-wait,
+  .hh-interview .hh-qcard .hh-qcard__actions > .hh-qcard__retry {
     grid-column: 1 / -1;
   }
 

@@ -107,6 +107,11 @@ export interface CardState {
   /** Stage line while an answer is in flight. Absent until the server names a stage. */
   reading?: string;
   /**
+   * Long-wait note and Try again, already escaped, under the stage line.
+   * Absent until a check has run long enough.
+   */
+  longWaitHtml?: string;
+  /**
    * Set only after the interview is finished.
    * Omitted, the done card stays a heading with no action.
    */
@@ -647,7 +652,7 @@ ${noticeLine(state.notice ?? null)}${confirmBlock(state)}  <div class="hh-qcard_
     ${button("suggest", SUGGEST_LABEL, "secondary", state.pending)}
     ${button("skip", SKIP_LABEL, "ghost", state.pending)}
     <p class="hh-qcard__reading" data-guide-reading aria-live="polite">${state.pending ? escapeHtml(state.reading && state.reading !== "" ? state.reading : "Guide is reading your answer…") : ""}</p>
-  </div>
+${state.longWaitHtml ?? ""}  </div>
 ${voiceNoteLine(state.voiceNote === true)}  </div>
 </article>`);
 }
