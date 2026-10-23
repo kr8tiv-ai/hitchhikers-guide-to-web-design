@@ -48,6 +48,9 @@ export interface GrokEntryDraft {
   family?: string;
   kind?: DesignEntry["kind"];
   source?: DesignEntry["source"];
+  industry?: string;
+  palette?: { note?: string; hex?: string[] };
+  typography?: string;
 }
 
 export interface GrokVocabulary {
@@ -131,6 +134,7 @@ export async function runIngest(
     return discovered.findIndex((other) => canonicalUrl(other.url) === key) === index;
   });
   let cursor = 0;
+  let accepted = 0;
   const worker = async (): Promise<void> => {
     while (cursor < queue.length) {
       const candidate = queue[cursor] as IngestCandidate;
@@ -139,24 +143,16 @@ export async function runIngest(
       const item = await ingestOne(candidate, next.items[key], deps, hosts, vocabulary);
       next.items[key] = item;
       deps.onProgress?.(next, item);
+      if (item.entryId !== undefined) {
+        accepted += 1;
+        // Every tenth placement, held drafts get another try so the quota does not starve a long run.
+        if (accepted % 10 === 0) placeHeldItems(next, deps);
+      }
     }
   };
   const lanes = Math.max(1, Math.floor(deps.concurrency ?? 1));
   await Promise.all(Array.from({ length: Math.min(lanes, Math.max(queue.length, 1)) }, () => worker()));
-  // Entries held by the quota get another try now that the mix has moved. No fetch, no Grok.
-  let placed = true;
-  while (placed) {
-    placed = false;
-    for (const [key, item] of Object.entries(next.items)) {
-      if (item.status !== "pending" || item.held === undefined) continue;
-      const after = placeHeld(item.held, item, deps);
-      if (after.status !== "pending") {
-        next.items[key] = after;
-        deps.onProgress?.(next, after);
-        placed = true;
-      }
-    }
-  }
+  placeHeldItems(next, deps);
   rebuildIndex(deps.root, day(deps));
   return next;
 }
@@ -306,6 +302,23 @@ export async function recheckLibrary(deps: IngestDeps, state: IngestState): Prom
 
 export async function addLibraryUrl(url: string, deps: IngestDeps, state: IngestState): Promise<IngestState> {
   return runIngest([{ url, source: hostSource(url), via: "add" }], state, deps);
+}
+
+/** Entries held by the quota get another try now that the mix has moved. No fetch, no Grok. */
+function placeHeldItems(next: IngestState, deps: IngestDeps): void {
+  let placed = true;
+  while (placed) {
+    placed = false;
+    for (const [key, item] of Object.entries(next.items)) {
+      if (item.status !== "pending" || item.held === undefined) continue;
+      const after = placeHeld(item.held, item, deps);
+      if (after.status !== "pending") {
+        next.items[key] = after;
+        deps.onProgress?.(next, after);
+        placed = true;
+      }
+    }
+  }
 }
 
 /** Place a held link-only entry if the quota allows it now; otherwise it stays pending with its draft. */
@@ -459,6 +472,9 @@ function draftToEntry(
     retired: false,
   };
   if (award && candidate.provenance !== undefined) entry.provenance = candidate.provenance;
+  if (draft.industry !== undefined) entry.industry = draft.industry;
+  if (draft.palette?.note !== undefined && draft.palette.hex !== undefined && draft.palette.hex.length > 0) entry.palette = { note: draft.palette.note, hex: draft.palette.hex };
+  if (draft.typography !== undefined) entry.typography = draft.typography;
   if (mode === "code") entry.licenseTextPath = `snippets/${id}/LICENSE`;
   return entry;
 }
@@ -599,11 +615,37 @@ export function tidyDraft(draft: GrokEntryDraft, vocabulary: GrokVocabulary): Gr
     libraries: keep(draft.libraries, vocabulary.libraries),
     kind: "site",
   };
+  delete tidy.industry;
+  delete tidy.palette;
+  delete tidy.typography;
+  Object.assign(tidy, briefFields(draft));
   if (family !== undefined) {
     tidy.family = family;
     tidy.styleWorld = vocabulary.families[family] as string;
   }
   return tidy;
+}
+
+/** Industry, palette, and typography from a Grok answer, cleaned for brief matching. Invalid parts are dropped. Pure. */
+export function briefFields(raw: { industry?: unknown; palette?: { note?: unknown; hex?: unknown } | unknown; typography?: unknown }): Pick<GrokEntryDraft, "industry" | "palette" | "typography"> {
+  const out: Pick<GrokEntryDraft, "industry" | "palette" | "typography"> = {};
+  const industry = typeof raw.industry === "string" ? raw.industry.toLowerCase().replace(/[^a-z0-9 &/-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40).trim() : "";
+  if (/^[a-z0-9][a-z0-9 &/-]{1,39}$/.test(industry)) out.industry = industry;
+  const palette = (typeof raw.palette === "object" && raw.palette !== null ? raw.palette : {}) as { note?: unknown; hex?: unknown };
+  const hex = [...new Set((Array.isArray(palette.hex) ? palette.hex : [])
+    .map((value) => String(value).trim().toUpperCase())
+    .map((value) => (/^#[0-9A-F]{3}$/.test(value) ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}` : value))
+    .filter((value) => /^#[0-9A-F]{6}$/.test(value)))].slice(0, 5);
+  const note = plainLine(palette.note);
+  if (hex.length > 0 && note !== "") out.palette = { note, hex };
+  const typography = plainLine(raw.typography);
+  if (typography !== "") out.typography = typography;
+  return out;
+}
+
+function plainLine(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/https?:\/\/\S+/gi, "").replace(/[\u2014\u2013]/g, ",").replace(/!/g, ".").replace(/\s+/g, " ").trim().slice(0, 220).trim();
 }
 
 function provenanceSource(list: readonly Provenance[]): DesignEntry["source"] {

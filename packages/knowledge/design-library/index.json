@@ -10,6 +10,7 @@
     "chrome-autoplay",
     "codrops-interlude",
     "dark-luxury-grade",
+    "dropbox-brand-guidelines",
     "elimar",
     "food-for-fish",
     "framer-agents",
@@ -52,6 +53,7 @@
         "awwwards-sites",
         "awwwards-sotd",
         "codrops-interlude",
+        "dropbox-brand-guidelines",
         "elimar",
         "lenis-smooth",
         "stitch"
@@ -77,6 +79,7 @@
         "awwwards-sotd",
         "bruno-s-portfolio",
         "chrome-autoplay",
+        "dropbox-brand-guidelines",
         "framer-agents",
         "gsap-standard-license",
         "ivress-spin-a-tale",
@@ -130,6 +133,7 @@
         "awwwards-sotd",
         "codrops-interlude",
         "dark-luxury-grade",
+        "dropbox-brand-guidelines",
         "elimar",
         "lenis-smooth",
         "stitch",
@@ -154,6 +158,7 @@
       "playful": [
         "awards-racing",
         "bruno-s-portfolio",
+        "dropbox-brand-guidelines",
         "food-for-fish",
         "framer-agents",
         "lando-norris",
@@ -162,6 +167,7 @@
       "technical": [
         "awards-racing",
         "bruno-s-portfolio",
+        "dropbox-brand-guidelines",
         "elimar",
         "food-for-fish",
         "gsap-a11y",
@@ -179,6 +185,7 @@
         "why-zero"
       ],
       "warm": [
+        "dropbox-brand-guidelines",
         "food-for-fish",
         "the-renaissance-edition"
       ]
@@ -186,6 +193,7 @@
     "sectionTypes": {
       "cards": [
         "awards-racing",
+        "dropbox-brand-guidelines",
         "framer-agents",
         "lando-norris",
         "the-renaissance-edition",
@@ -200,6 +208,7 @@
       ],
       "footer": [
         "awards-racing",
+        "dropbox-brand-guidelines",
         "elimar",
         "food-for-fish",
         "howler-sound",
@@ -213,6 +222,7 @@
         "astro-images",
         "awwwards-sites",
         "awwwards-sotd",
+        "dropbox-brand-guidelines",
         "elimar",
         "lando-norris",
         "lusion-v3",
@@ -228,6 +238,7 @@
         "chrome-autoplay",
         "codrops-interlude",
         "dark-luxury-grade",
+        "dropbox-brand-guidelines",
         "elimar",
         "food-for-fish",
         "framer-agents",
@@ -251,6 +262,7 @@
         "astro-images",
         "bruno-s-portfolio",
         "dark-luxury-grade",
+        "dropbox-brand-guidelines",
         "elimar",
         "food-for-fish",
         "gsap-a11y",
@@ -288,6 +300,7 @@
       ],
       "asymmetric-editorial-grid": [
         "awwwards-sotd",
+        "dropbox-brand-guidelines",
         "stitch"
       ],
       "glsl-gradient-noise": [
@@ -331,6 +344,7 @@
         "lando-norris"
       ],
       "split-text-reveal": [
+        "dropbox-brand-guidelines",
         "elimar",
         "gsap-a11y",
         "motion-split"
@@ -352,6 +366,7 @@
         "awards-racing",
         "awwwards-sites",
         "dark-luxury-grade",
+        "dropbox-brand-guidelines",
         "elimar",
         "ivress-spin-a-tale",
         "lando-norris",
@@ -435,6 +450,7 @@
         "chrome-autoplay",
         "codrops-interlude",
         "dark-luxury-grade",
+        "dropbox-brand-guidelines",
         "elimar",
         "food-for-fish",
         "framer-agents",

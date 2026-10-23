@@ -12,7 +12,7 @@ export function grokLibraryRunner(input: { url: string; mode: string; material: 
   const vocab = input.vocabulary;
   const prompt = [
     "Write a design-library entry as JSON.",
-    "Fields: title, techniques, promptLanguage, notes, perfCost, reducedMotion, moods, sectionTypes, libraries, styleWorld, family, kind, source.",
+    "Fields: title, techniques, promptLanguage, notes, perfCost, reducedMotion, moods, sectionTypes, libraries, styleWorld, family, kind, source, industry, palette, typography.",
     "Prompt language is one or two sentences in our own words. Remix the idea. Do not copy the page.",
     "notes is one or two sentences of our own observation. reducedMotion is exactly one sentence. No URL, no exclamation mark, no em dash in prose fields.",
     ...(vocab === undefined
@@ -24,6 +24,10 @@ export function grokLibraryRunner(input: { url: string; mode: string; material: 
           `libraries: only from: ${vocab.libraries.join(", ")}`,
           `family: one of: ${Object.keys(vocab.families).join(", ")}. styleWorld follows the family: ${Object.entries(vocab.families).map(([family, world]) => `${family}=${world}`).join(", ")}`,
           "perfCost: low, medium, or high. kind: site.",
+          "Choose family by the client and the layout. Use 3d-webgl only when a real-time 3D scene is the main content of nearly every section; a WebGL hero or accent on an otherwise editorial, luxury, or portfolio site takes that other family.",
+          "industry: the client's industry or sector in one to four lowercase words, for example automotive, fashion, architecture, music, spirits, fintech, studio portfolio, museum.",
+          "palette: an object { note, hex }. hex is one to five uppercase #RRGGBB colours read from the page or its CSS. note is one sentence on how the colours are used.",
+          "typography: one sentence on the type system, such as serif display over grotesk body. Name a font only when the page or its CSS states it.",
         ]),
     `Mode: ${input.mode}`,
     `URL: ${input.url}`,

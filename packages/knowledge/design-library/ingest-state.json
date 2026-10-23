@@ -14,7 +14,7 @@
       "url": "http://www.getty.edu/persepolis",
       "status": "failed",
       "reason": "fetch failed",
-      "failures": 2,
+      "failures": 5,
       "checked": "2026-10-23",
       "mode": "link-only"
     },
@@ -87,7 +87,70 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "lacoste-ace-breaker",
+        "kind": "site",
+        "title": "Lacoste Ace Breaker",
+        "url": "https://members-play.lacoste.com/ace-breaker-rg",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/lacoste-ace-breaker",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "playful",
+          "dark",
+          "bold",
+          "luxurious",
+          "cinematic",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "cards"
+        ],
+        "techniques": [
+          "three-hero",
+          "glsl-gradient-noise",
+          "ambient-sound-toggle",
+          "typographic-scale"
+        ],
+        "libraries": [
+          "three",
+          "glsl",
+          "web-audio",
+          "vanilla"
+        ],
+        "promptLanguage": "Set the playfield as a full-canvas court seen from behind the baseline, with a paddle clearing stacked blocks, and keep the headline and the start control as real text over that canvas. Before the rally, show a short row of round bonus marks, and leave sound off until a control in the side panel is pressed.",
+        "notes": "The opening title is DOM type over one WebGL canvas, and that same canvas becomes the playfield once the match starts. A physics worker moves the ball, and the side panel keeps a waveform control beside the locale.",
+        "perfCost": "high",
+        "reducedMotion": "When motion is reduced, hold the court as a still frame, leave the ball at rest, and keep the title and the start control.",
+        "sourceUrl": "https://members-play.lacoste.com/ace-breaker-rg",
+        "license": "link-only",
+        "creditLine": "Merci-Michel, Lacoste Ace Breaker (https://thefwa.com/cases/lacoste-ace-breaker)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2026-06-11",
+            "url": "https://thefwa.com/cases/lacoste-ace-breaker",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2026-07-01",
+            "url": "https://thefwa.com/cases/lacoste-ace-breaker",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://santionispirits.com/": {
       "url": "https://santionispirits.com/",
@@ -95,7 +158,84 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "santioni-spirits-the-notturno-experience",
+        "kind": "site",
+        "title": "Santioni Spirits",
+        "url": "https://santionispirits.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/santioni-spirits-the-notturno-experience-p2",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "dark",
+          "cinematic",
+          "luxurious",
+          "bold",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "gallery",
+          "footer",
+          "transition"
+        ],
+        "techniques": [
+          "split-text-reveal",
+          "grain-and-grade",
+          "layered-parallax",
+          "ambient-sound-toggle"
+        ],
+        "libraries": [
+          "gsap",
+          "splittext",
+          "glsl",
+          "web-audio"
+        ],
+        "promptLanguage": "Hold a full-viewport ink scene and drift two planes at different rates as a split headline rises in lines. Sound stays off until a labelled control is pressed, and a fine grain sits on the grade.",
+        "notes": "The scroll is one continuous WebGL story that later uncovers a type layout, a product block, and a footer. An audio control stays fixed, and the ink grade plus split display lines do the mood work.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion holds a still opening frame, shows the display lines at full size, and keeps sound off until the audio control is pressed.",
+        "sourceUrl": "https://santionispirits.com/",
+        "license": "link-only",
+        "creditLine": "Active Theory, Plan8, Santioni Spirits: The Notturno Experience (https://thefwa.com/cases/santioni-spirits-the-notturno-experience-p2)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2026-08-18",
+            "url": "https://thefwa.com/cases/santioni-spirits-the-notturno-experience-p2",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2026-09-01",
+            "url": "https://thefwa.com/cases/santioni-spirits-the-notturno-experience-p2",
+            "via": "listing"
+          }
+        ],
+        "industry": "spirits",
+        "palette": {
+          "note": "Near-black grounds the interface, white carries loader and footer type, a bright red marks hover and labels, and a deeper red belongs to the illustrated night.",
+          "hex": [
+            "#1D1D1D",
+            "#121212",
+            "#FFFFFF",
+            "#C82924",
+            "#592223"
+          ]
+        },
+        "typography": "Charles Rosie Regular sets the uppercase display, PP Nikkei Maru Ultrabold sets the small labels, and GT Era Text Light sets the reading text."
+      }
     },
     "https://shopify.com/editions/winter2026": {
       "url": "https://www.shopify.com/editions/winter2026",
@@ -112,7 +252,71 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "explore-primland",
+        "kind": "site",
+        "title": "Explore Primland",
+        "url": "https://explore.ownprimland.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/explore-primland",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "cinematic",
+          "luxurious",
+          "organic",
+          "calm",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "gallery",
+          "transition"
+        ],
+        "techniques": [
+          "three-hero",
+          "glsl-gradient-noise",
+          "ambient-sound-toggle",
+          "typographic-scale"
+        ],
+        "libraries": [
+          "three",
+          "glsl",
+          "gsap",
+          "web-audio"
+        ],
+        "promptLanguage": "Open on a full-viewport Three.js mountain and let a small noise field tint fog, canopy, and sky when the season changes. Keep the place name and the map control as HTML, ease the camera between a few stops with GSAP, and leave birdsong silent until a labelled control starts it.",
+        "notes": "The first view is already the terrain, with a small line over a large place name, a map control, and a choice that begins with sound off. A season change recolors the whole scene at once, and a second control jumps among a few places instead of scrolling a long page.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion shows one still frame of the mountain, swaps the season without a blend, and leaves sound off until the labelled control is used.",
+        "sourceUrl": "https://explore.ownprimland.com/",
+        "license": "link-only",
+        "creditLine": "Outpost, Ingamana, Robert Borghesi, Robbin Cenijn, Matyáš Sochor, Explore Primland (https://thefwa.com/cases/explore-primland)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2026-01-07",
+            "url": "https://thefwa.com/cases/explore-primland",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2026-02-01",
+            "url": "https://thefwa.com/cases/explore-primland",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://oryzo.ai/": {
       "url": "https://oryzo.ai/",
@@ -120,7 +324,72 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "oryzo-ai",
+        "kind": "site",
+        "title": "Oryzo AI",
+        "url": "https://oryzo.ai/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/oryzo-ai",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "playful",
+          "cinematic",
+          "warm",
+          "technical",
+          "organic"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "cards",
+          "gallery",
+          "pricing",
+          "contact",
+          "footer"
+        ],
+        "techniques": [
+          "three-hero",
+          "layered-parallax",
+          "typographic-scale"
+        ],
+        "libraries": [
+          "three",
+          "glsl",
+          "vanilla"
+        ],
+        "promptLanguage": "Set one ordinary object on a lit desk in a full-viewport WebGL scene, and let scroll move the camera through a few feature chapters, a comparison, and a studio close. Keep the headlines as real text with one size jump, and hold a still of the desk when motion is off.",
+        "notes": "The live page is one long scroll around a single desk scene, with feature chapters, a three-column comparison, portrait cards, and a studio close in front of the picture. The type stays quiet except for one large line per chapter, so the object keeps the focus.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion holds the chapters, comparison, and close in place and shows the desk as a still frame.",
+        "sourceUrl": "https://oryzo.ai/",
+        "license": "link-only",
+        "creditLine": "Lusion, Oryzo AI (https://thefwa.com/cases/oryzo-ai)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2026-03-25",
+            "url": "https://thefwa.com/cases/oryzo-ai",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2026-04-01",
+            "url": "https://thefwa.com/cases/oryzo-ai",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://themonolithproject.net/": {
       "url": "https://themonolithproject.net/",
@@ -128,7 +397,68 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "the-monolith-project",
+        "kind": "site",
+        "title": "The Monolith Project",
+        "url": "https://themonolithproject.net/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/the-monolith-project-p4",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "cinematic",
+          "technical",
+          "playful",
+          "bold",
+          "organic"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "transition"
+        ],
+        "techniques": [
+          "three-hero",
+          "glsl-gradient-noise",
+          "grain-and-grade"
+        ],
+        "libraries": [
+          "three",
+          "r3f",
+          "glsl"
+        ],
+        "promptLanguage": "Hold one illustrated object in a full-viewport WebGL scene, tint it with a quiet gradient and a little noise, and finish the frame with a soft color grade and a thin chromatic fringe. When the scene changes, mix the current frame into the next with a mask or a blur, and keep a still of each world when motion is off.",
+        "notes": "The public page is one React Three Fiber canvas that moves through a run of outlined worlds, from a solar view into a winter forest and a closing scene. Color correction, a slight chromatic fringe, and colored edge lines sit on the composite, and each handoff blends two frames that are already drawn.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion shows each world as a still frame in order and skips the gradient drift, the particle motion, and the scene mixes.",
+        "sourceUrl": "https://themonolithproject.net/",
+        "license": "link-only",
+        "creditLine": "Kehan Fan, Ethan Chiu, Fabian Tjoe-A-On, Nando Correa, The Monolith Project (https://thefwa.com/cases/the-monolith-project-p4)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-10-28",
+            "url": "https://thefwa.com/cases/the-monolith-project-p4",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-12-01",
+            "url": "https://thefwa.com/cases/the-monolith-project-p4",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://powster.com/case-study/welcome-to-berk": {
       "url": "https://powster.com/case-study/welcome-to-berk/",
@@ -136,7 +466,70 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "welcome-to-berk",
+        "kind": "site",
+        "title": "Welcome to Berk",
+        "url": "https://powster.com/case-study/welcome-to-berk/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/welcome-to-berk",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "cinematic",
+          "organic",
+          "warm",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "gallery",
+          "testimonial-free proof",
+          "contact",
+          "footer"
+        ],
+        "techniques": [
+          "three-hero",
+          "ambient-sound-toggle",
+          "typographic-scale"
+        ],
+        "libraries": [
+          "three",
+          "web-audio",
+          "vanilla"
+        ],
+        "promptLanguage": "Set one WebGL settlement across the first screen, with daylight that follows the clock and a few places that open a still. The name stays real text on a poster, and a labelled control is the only way sound starts.",
+        "notes": "The public page is a studio case study with a large title, a short kicker, award marks, two prose chapters, one wide picture, and a four-image row. Those chapters describe a walkable coastal settlement, clock-based weather, tappable places, and a sound bed, and a contact band closes the page.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion keeps the title, chapters, picture row, and contact in place and shows the settlement as a still poster.",
+        "sourceUrl": "https://powster.com/case-study/welcome-to-berk/",
+        "license": "link-only",
+        "creditLine": "POWSTER, Rogier de Boevé, Welcome to Berk (https://thefwa.com/cases/welcome-to-berk)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-08-15",
+            "url": "https://thefwa.com/cases/welcome-to-berk",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-09-01",
+            "url": "https://thefwa.com/cases/welcome-to-berk",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "http://samsy.ninja/": {
       "url": "http://samsy.ninja/",
@@ -144,7 +537,65 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "gen-02-smsy-portfolio",
+        "kind": "site",
+        "title": "Gen-02 SMSY Portfolio",
+        "url": "http://samsy.ninja/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/gen-02-smsy-portfolio",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "dark",
+          "cinematic",
+          "technical",
+          "playful",
+          "bold"
+        ],
+        "sectionTypes": [
+          "hero",
+          "gallery",
+          "story"
+        ],
+        "techniques": [
+          "three-hero",
+          "ambient-sound-toggle"
+        ],
+        "libraries": [
+          "three"
+        ],
+        "promptLanguage": "A dark city rendered in Three.js is the portfolio: walk a character between districts, read the work on a central board, and meet the about area on foot. Music stays silent until the visitor asks a figure in the scene for a track.",
+        "notes": "The public page is one continuous Three.js city, with a menu for explore, about, and works that you reach by walking, and a board in the middle that pages through projects. Other visitors can appear in the same scene, and a figure in the world starts a track only after a request.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion shows stills of the city, the project board, and the about area in order, skips the walk and the live visitors, and leaves music off.",
+        "sourceUrl": "http://samsy.ninja/",
+        "license": "link-only",
+        "creditLine": "Samsy, Gen-02 SMSY Portfolio (https://thefwa.com/cases/gen-02-smsy-portfolio)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-09-09",
+            "url": "https://thefwa.com/cases/gen-02-smsy-portfolio",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-10-01",
+            "url": "https://thefwa.com/cases/gen-02-smsy-portfolio",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://messenger.abeto.co/": {
       "url": "https://messenger.abeto.co/",
@@ -152,7 +603,68 @@
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
       "checked": "2026-10-23",
-      "mode": "link-only"
+      "mode": "link-only",
+      "held": {
+        "id": "messenger",
+        "kind": "site",
+        "title": "Messenger",
+        "url": "https://messenger.abeto.co/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/messenger",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "playful",
+          "calm",
+          "warm",
+          "cinematic",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story"
+        ],
+        "techniques": [
+          "three-hero",
+          "typographic-scale",
+          "glsl-gradient-noise"
+        ],
+        "libraries": [
+          "three",
+          "glsl",
+          "web-audio",
+          "vanilla"
+        ],
+        "promptLanguage": "Fill the screen with one WebGL place built in Three, and set the name in one large scale above a small control. Layered noise keeps the sky and the water soft and flat, with a still frame ready when motion is off.",
+        "notes": "The opening is one canvas, a turning illustrated place with a huge outlined name and a single button, and the page does not scroll. Noise textures for clouds, water, and ground load with music and separate place ambiences, while a checklist and an emoji tray wait in the layout.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion holds a still of the place, keeps the name and the button readable, and leaves sound off.",
+        "sourceUrl": "https://messenger.abeto.co/",
+        "license": "link-only",
+        "creditLine": "abeto, Messenger (https://thefwa.com/cases/messenger)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-10-03",
+            "url": "https://thefwa.com/cases/messenger",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-11-01",
+            "url": "https://thefwa.com/cases/messenger",
+            "via": "listing"
+          }
+        ]
+      }
     },
     "https://nvg8.io/": {
       "url": "https://nvg8.io/",
@@ -175,6 +687,693 @@
       "status": "pending",
       "reason": "Style-world quota (3d-world).",
       "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "held": {
+        "id": "arina-s-story",
+        "kind": "site",
+        "title": "Arina's Story",
+        "url": "https://arinastory.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/arinas-story",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "cinematic",
+          "dark",
+          "warm",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "transition",
+          "contact"
+        ],
+        "techniques": [
+          "three-hero",
+          "scroll-video",
+          "ambient-sound-toggle"
+        ],
+        "libraries": [
+          "three",
+          "web-audio",
+          "vanilla"
+        ],
+        "promptLanguage": "Build one hall as a full-viewport scene and move the camera from a ruined room into a bright dance, with a muted film of those same rooms ready if the scene cannot start. The spoken lines stay real text, a labelled control is the only way the voice starts, and a still of the hall remains when motion is off.",
+        "notes": "The public piece is a voiced walk through one hall, from a ruined room into a painted dance, and a filmed cut of those rooms plays when the live picture cannot start. Giving is the last step of that walk.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion shows the hall as a still, leaves the voice off until the control is used, and keeps the spoken lines and the fundraising close as text.",
+        "sourceUrl": "https://arinastory.com/",
+        "license": "link-only",
+        "creditLine": "ISD Group, United24, Microsoft, SENSORAMA LAB, KA.KA.HA, Arina's Story (https://thefwa.com/cases/arinas-story)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-06-16",
+            "url": "https://thefwa.com/cases/arinas-story",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-07-01",
+            "url": "https://thefwa.com/cases/arinas-story",
+            "via": "listing"
+          }
+        ]
+      }
+    },
+    "https://mola-zone.com/": {
+      "url": "https://mola-zone.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "held": {
+        "id": "yam-the-molazone",
+        "kind": "site",
+        "title": "The Molazone",
+        "url": "https://mola-zone.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/yame-the-molazone",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "cinematic",
+          "playful",
+          "bold",
+          "organic",
+          "technical"
+        ],
+        "sectionTypes": [
+          "hero",
+          "story",
+          "gallery",
+          "transition"
+        ],
+        "techniques": [
+          "three-hero"
+        ],
+        "libraries": [
+          "three",
+          "glsl",
+          "vanilla"
+        ],
+        "promptLanguage": "Hold one figure still in a full-viewport Three.js scene and rotate the set underneath so each stop is a new flat-shaded place. Keep the doors to films, audio, and the shop as HTML over the canvas.",
+        "notes": "The page opens on a loader, then a full-canvas world whose places are reached by turning the set, with HTML doors for films, audio, tour dates, and a shop. A portrait prompt sits in front of the canvas, and the drawn shading carries more of the mood than the type.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion holds the chapter doors in place and shows the opening world as a still frame.",
+        "sourceUrl": "https://mola-zone.com/",
+        "license": "link-only",
+        "creditLine": "Studio9p, Hugo Maury, Yamê — The Molazone (https://thefwa.com/cases/yame-the-molazone)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-07-26",
+            "url": "https://thefwa.com/cases/yame-the-molazone",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-08-01",
+            "url": "https://thefwa.com/cases/yame-the-molazone",
+            "via": "listing"
+          }
+        ]
+      }
+    },
+    "https://brand.dropbox.com/": {
+      "url": "https://brand.dropbox.com/",
+      "status": "done",
+      "reason": "The automated path stores a link and our notes when the host is allowed.",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "entryId": "dropbox-brand-guidelines"
+    },
+    "https://the-maison-of-all-victories.lvmh.com/en": {
+      "url": "https://the-maison-of-all-victories.lvmh.com/en",
+      "status": "refused",
+      "reason": "robots.txt could not be read, so the site is skipped.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://jordan-delcros.com/": {
+      "url": "https://jordan-delcros.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 2,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://hatom.com/": {
+      "url": "https://www.hatom.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 2,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://immersive-g.com/": {
+      "url": "https://immersive-g.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "held": {
+        "id": "immersive-garden-website",
+        "kind": "site",
+        "title": "Immersive Garden",
+        "url": "https://immersive-g.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/immersive-garden-website",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "editorial",
+          "cinematic",
+          "minimal",
+          "technical",
+          "luxurious"
+        ],
+        "sectionTypes": [
+          "hero",
+          "gallery",
+          "story",
+          "contact",
+          "footer",
+          "transition"
+        ],
+        "techniques": [
+          "three-hero",
+          "lenis-smooth-scroll",
+          "ambient-sound-toggle",
+          "asymmetric-editorial-grid"
+        ],
+        "libraries": [
+          "lenis",
+          "three",
+          "gsap"
+        ],
+        "promptLanguage": "Lay a light grey page over a full-viewport Three.js field and let Lenis carry an uneven reel of case films, with serif lines rising as each statement enters. Sound stays silent until a visible control starts it, and the close is a dark still of the same field with the address in small sans type.",
+        "notes": "A warm grey ground and near-black serif hold a long project reel, with a WebGL canvas behind the first screen and a black panel for the address and mail. Case films share rows at uneven widths, and the sound control stays quiet until it is pressed.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion keeps the reel, statements, and contact in place, shows the WebGL field as a still frame, and leaves sound off.",
+        "sourceUrl": "https://immersive-g.com/",
+        "license": "link-only",
+        "creditLine": "Immersive Garden, Immersive Garden website (https://thefwa.com/cases/immersive-garden-website)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2024-12-18",
+            "url": "https://thefwa.com/cases/immersive-garden-website",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-01-01",
+            "url": "https://thefwa.com/cases/immersive-garden-website",
+            "via": "listing"
+          }
+        ],
+        "industry": "studio portfolio",
+        "palette": {
+          "note": "Warm grey covers the page and returns as type on the black close, near-black sets the serif, and a mid grey marks the fast-scroll dots.",
+          "hex": [
+            "#E8E8E8",
+            "#030303",
+            "#A6A6A6"
+          ]
+        },
+        "typography": "PSTimes, a self-hosted serif, sets the display lines and statements, and Helvetica Neue sets the small labels, address, and controls."
+      }
+    },
+    "https://membersexperience-create.lacoste.com/": {
+      "url": "https://membersexperience-create.lacoste.com/",
+      "status": "pending",
+      "reason": "Style-world quota (3d-world).",
+      "failures": 0,
+      "checked": "2026-10-23",
+      "mode": "link-only",
+      "held": {
+        "id": "lacoste-members-experience",
+        "kind": "site",
+        "title": "Lacoste Members Experience",
+        "url": "https://membersexperience-create.lacoste.com/",
+        "source": "fwa",
+        "sourcePage": "https://thefwa.com/cases/lacoste-members-experience",
+        "styleWorld": "3d-world",
+        "family": "3d-webgl",
+        "moods": [
+          "playful",
+          "bold",
+          "technical",
+          "luxurious"
+        ],
+        "sectionTypes": [
+          "hero",
+          "gallery"
+        ],
+        "techniques": [
+          "three-hero"
+        ],
+        "libraries": [
+          "three",
+          "glsl"
+        ],
+        "promptLanguage": "Put one shirt in a WebGL stage and leave the marker, fill, eraser, and pattern choices as ordinary controls beside the canvas. A flat view edits the same surface up close, and a gallery collects the finished pieces.",
+        "notes": "The live tool puts a polo in a WebGL stage with marker, fill, and eraser controls, plus a flat view for closer drawing. A separate gallery holds member designs, and the page chrome stays on a bright green and white pair while the garment takes the colors the visitor applies.",
+        "perfCost": "high",
+        "reducedMotion": "Reduced motion keeps the shirt, the drawing tools, and the member gallery in place and shows the garment as a still frame.",
+        "sourceUrl": "https://membersexperience-create.lacoste.com/",
+        "license": "link-only",
+        "creditLine": "Merci-Michel, Lacoste Members Experience (https://thefwa.com/cases/lacoste-members-experience)",
+        "ingestMode": "link-only",
+        "snippets": [],
+        "shots": [],
+        "checked": "2026-10-23",
+        "verified": "auto",
+        "retired": false,
+        "provenance": [
+          {
+            "source": "fwa",
+            "award": "FOTD",
+            "date": "2025-01-28",
+            "url": "https://thefwa.com/cases/lacoste-members-experience",
+            "via": "listing"
+          },
+          {
+            "source": "fwa",
+            "award": "FOTM",
+            "date": "2025-03-01",
+            "url": "https://thefwa.com/cases/lacoste-members-experience",
+            "via": "listing"
+          }
+        ],
+        "industry": "fashion sportswear",
+        "palette": {
+          "note": "Bright green and white hold the interface, and the garment takes the colors the visitor paints on.",
+          "hex": [
+            "#0DA100",
+            "#FFFFFF"
+          ]
+        },
+        "typography": "Small labels sit beside the garment and leave the shirt as the main visual."
+      }
+    },
+    "https://quatre.merci-michel.com/": {
+      "url": "https://quatre.merci-michel.com/",
+      "status": "refused",
+      "reason": "robots.txt disallows the path.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://equinox.space/": {
+      "url": "https://equinox.space/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://kaizen.makemepulse.com/": {
+      "url": "https://kaizen.makemepulse.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://casadisolare.com/": {
+      "url": "https://casadisolare.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://igloo.inc/": {
+      "url": "https://www.igloo.inc/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://followingwildfire.com/": {
+      "url": "https://followingwildfire.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://thelinestudio.com/": {
+      "url": "https://thelinestudio.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://onnujonuson.com/clip/almost-over-you": {
+      "url": "https://onnujonuson.com/clip/almost-over-you",
+      "status": "refused",
+      "reason": "robots.txt could not be read, so the site is skipped.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://activetheory.net/": {
+      "url": "https://activetheory.net/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://howls.loewe.com/": {
+      "url": "https://howls.loewe.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://gehry.getty.edu/": {
+      "url": "https://gehry.getty.edu/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://haunted.thedigitalpanda.com/": {
+      "url": "https://haunted.thedigitalpanda.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://kprverse.com/": {
+      "url": "https://kprverse.com/",
+      "status": "refused",
+      "reason": "robots.txt disallows the path.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://takingshape.adobe.com/": {
+      "url": "https://takingshape.adobe.com/",
+      "status": "refused",
+      "reason": "robots.txt could not be read, so the site is skipped.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://cartier.com/thefabulouscartierjourney": {
+      "url": "https://www.cartier.com/thefabulouscartierjourney",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://lr.doesbook.kr/en": {
+      "url": "https://lr.doesbook.kr/en/",
+      "status": "refused",
+      "reason": "robots.txt disallows the path.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://aten7.com/": {
+      "url": "https://www.aten7.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://locomotive.ca/": {
+      "url": "https://locomotive.ca/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://witchernetflix.com/": {
+      "url": "https://www.witchernetflix.com/",
+      "status": "refused",
+      "reason": "robots.txt could not be read, so the site is skipped.",
+      "failures": 0,
+      "checked": "2026-10-23"
+    },
+    "https://findworkhappiness.com/": {
+      "url": "https://www.findworkhappiness.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://kubota.com/futurecube?redirected": {
+      "url": "https://www.kubota.com/futurecube/?redirected",
+      "status": "failed",
+      "reason": "Site not live (status 404).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://museum.xbox.com/": {
+      "url": "https://museum.xbox.com/",
+      "status": "failed",
+      "reason": "Site not live (status 404).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://curious.co/": {
+      "url": "https://curious.co/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://resn.co.nz/": {
+      "url": "https://resn.co.nz/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://coastalworld.com/": {
+      "url": "https://coastalworld.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "http://hape.io/": {
+      "url": "http://www.hape.io/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "http://atrailtale.com/": {
+      "url": "http://atrailtale.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://therace.montblanclegend.com/": {
+      "url": "https://therace.montblanclegend.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://magische-spiegelungen.de/": {
+      "url": "https://www.magische-spiegelungen.de/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://dream-with-ai.com/": {
+      "url": "https://dream-with-ai.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://library.jjangik.kr/": {
+      "url": "https://library.jjangik.kr/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://fabiantjoeaon.com/": {
+      "url": "https://fabiantjoeaon.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://yoloexe.com/": {
+      "url": "https://yoloexe.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://emotion-agency.com/": {
+      "url": "https://emotion-agency.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://contentarchitecture.dev/": {
+      "url": "https://www.contentarchitecture.dev/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "http://dwaynekoh.com/": {
+      "url": "http://www.dwaynekoh.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://labs.griflan.com/": {
+      "url": "https://labs.griflan.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://chungiyoo.com/": {
+      "url": "https://www.chungiyoo.com/",
+      "status": "failed",
+      "reason": "Site not live (status 500).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://2019.makemepulse.com/": {
+      "url": "https://2019.makemepulse.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://bleibtgleich.dev/": {
+      "url": "https://bleibtgleich.dev/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://aspensearch.com/": {
+      "url": "https://www.aspensearch.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://butter.video/": {
+      "url": "https://www.butter.video/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://ch.maswitzerland.com/": {
+      "url": "https://ch.maswitzerland.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://boc.studio/work": {
+      "url": "https://boc.studio/work",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://coloniazacamil.com/": {
+      "url": "https://coloniazacamil.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://cominvi.com.mx/": {
+      "url": "https://www.cominvi.com.mx/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
+      "checked": "2026-10-23",
+      "mode": "link-only"
+    },
+    "https://davidlubofsky.com/": {
+      "url": "https://www.davidlubofsky.com/",
+      "status": "failed",
+      "reason": "Grok did not write an entry (exit 1).",
+      "failures": 1,
       "checked": "2026-10-23",
       "mode": "link-only"
     }

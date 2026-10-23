@@ -1,0 +1,61 @@
+{
+  "id": "dropbox-brand-guidelines",
+  "kind": "site",
+  "title": "Dropbox Brand Guidelines",
+  "url": "https://brand.dropbox.com/",
+  "source": "fwa",
+  "sourcePage": "https://thefwa.com/cases/dropbox-brand-guidelines-p2",
+  "styleWorld": "editorial",
+  "family": "editorial",
+  "moods": [
+    "editorial",
+    "playful",
+    "warm",
+    "bold",
+    "technical"
+  ],
+  "sectionTypes": [
+    "hero",
+    "story",
+    "gallery",
+    "cards",
+    "footer"
+  ],
+  "techniques": [
+    "typographic-scale",
+    "split-text-reveal",
+    "asymmetric-editorial-grid"
+  ],
+  "libraries": [
+    "vanilla"
+  ],
+  "promptLanguage": "Break a chapter sentence into display lines, then let one control restyle a type specimen while a wide photograph sits beside a short color name. Keep the swatches, icons, and rules as real text in an uneven editorial grid.",
+  "notes": "The chapters read as a brand book you can play: stacked display lines, a type treatment control, color names locked to photographs, and icons that change on hover. A strategy chapter mixes a short clip with document stills and four numbered cards, and the logo chapter uses the mark as the plane that starts the layout.",
+  "perfCost": "medium",
+  "reducedMotion": "Reduced motion leaves the display lines, specimen, swatches, icons, and photographs fully readable and skips the restyle and shuffle.",
+  "sourceUrl": "https://brand.dropbox.com/",
+  "license": "link-only",
+  "creditLine": "Daybreak Studio, Dropbox Brand Guidelines (https://thefwa.com/cases/dropbox-brand-guidelines-p2)",
+  "ingestMode": "link-only",
+  "snippets": [],
+  "shots": [],
+  "checked": "2026-10-23",
+  "verified": "auto",
+  "retired": false,
+  "provenance": [
+    {
+      "source": "fwa",
+      "award": "FOTD",
+      "date": "2025-01-22",
+      "url": "https://thefwa.com/cases/dropbox-brand-guidelines-p2",
+      "via": "listing"
+    },
+    {
+      "source": "fwa",
+      "award": "FOTM",
+      "date": "2025-02-01",
+      "url": "https://thefwa.com/cases/dropbox-brand-guidelines-p2",
+      "via": "listing"
+    }
+  ]
+}

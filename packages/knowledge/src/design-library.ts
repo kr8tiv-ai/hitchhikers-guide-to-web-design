@@ -140,6 +140,12 @@ export interface DesignEntry {
   provenance?: Provenance[];
   /** False keeps the entry's technique language but drops it from the award site-reference set. */
   siteReference?: boolean;
+  /** Client industry or sector in a few lowercase words, for brief matching. */
+  industry?: string;
+  /** Dominant colours read from the page or its CSS, with one sentence on their use. */
+  palette?: { note: string; hex: string[] };
+  /** One sentence on the type system. */
+  typography?: string;
 }
 
 export interface DesignIndex {
@@ -387,6 +393,15 @@ export function validateDesignEntry(entry: DesignEntry, context: ValidateContext
     if (context.snippetText !== undefined && text.trim() === "") problems.push(`${entry.id}: missing snippet ${snippet}`);
     if (text.split(/\r?\n/).length > SNIPPET_LINE_CAP) problems.push(`${entry.id}: snippet over the cap`);
     if (isCopyleft(text)) problems.push(`${entry.id}: copyleft snippet`);
+  }
+  if (entry.industry !== undefined && !/^[a-z0-9][a-z0-9 &/-]{1,39}$/.test(entry.industry)) problems.push(`${entry.id}: industry`);
+  if (entry.palette !== undefined) {
+    const hex = entry.palette.hex ?? [];
+    if (hex.length < 1 || hex.length > 5 || hex.some((value) => !/^#[0-9A-F]{6}$/.test(value))) problems.push(`${entry.id}: palette hex`);
+    if ((entry.palette.note ?? "").trim() === "" || entry.palette.note.length > 220 || /https?:/i.test(entry.palette.note)) problems.push(`${entry.id}: palette note`);
+  }
+  if (entry.typography !== undefined && (entry.typography.trim() === "" || entry.typography.length > 220 || /https?:/i.test(entry.typography))) {
+    problems.push(`${entry.id}: typography`);
   }
   problems.push(...provenanceProblems(entry, context.requireSiteProvenance === true));
   if (context.seenUrls !== undefined) {

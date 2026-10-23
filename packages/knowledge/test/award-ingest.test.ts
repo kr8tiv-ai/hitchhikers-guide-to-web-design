@@ -319,3 +319,26 @@ test("award ingest: a quota-held entry keeps its draft and is placed later witho
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("award ingest: industry, palette, and typography are tidied and stored for brief matching", async () => {
+  const dir = libraryDir();
+  try {
+    const fetchImpl = (async (input: string | URL | Request) => (String(input).endsWith("/robots.txt") ? okRobots() : new Response("<html></html>", { status: 200 }))) as typeof fetch;
+    const grok: IngestDeps["grok"] = async () =>
+      draft({
+        industry: "Automotive / Racing!",
+        palette: { note: "Black ground with one acid accent \u2014 used on links.", hex: ["#0a0a0a", "#fff", "red", "#D7FF3A"] },
+        typography: "Condensed grotesk display over a quiet mono for captions.",
+      });
+    await runIngest([award("https://brief.example/", "Brief Site")], { version: 1, items: {} }, deps(dir, fetchImpl, { grok }));
+    const entry = loadDesignEntries(dir).find((item) => item.sourceUrl === "https://brief.example/");
+    assert.ok(entry);
+    assert.equal(entry.industry, "automotive / racing");
+    assert.deepEqual(entry.palette?.hex, ["#0A0A0A", "#FFFFFF", "#D7FF3A"]);
+    assert.equal(entry.palette?.note.includes("\u2014"), false);
+    assert.equal(entry.typography, "Condensed grotesk display over a quiet mono for captions.");
+    assert.deepEqual(validateDesignEntry(entry).filter((problem) => /industry|palette|typography/.test(problem)), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
