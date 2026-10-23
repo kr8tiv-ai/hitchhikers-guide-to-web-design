@@ -115,6 +115,11 @@ export function handleTourKey(doc: TourDocument, event: TourKeyEvent): boolean {
     // Splash still covers the page. 242e/242g own that key. Do not close the tour behind it.
     if (doc.querySelector("[data-splash-cover]") !== null) return false;
     if (isField(target) && insideTour(target, tour)) return false;
+    // A listening mic owns Escape, including from the answer box. Skipping here
+    // reloads the desk and drops the "Heard you" line.
+    if (doc.querySelector("[data-voice='hold'][aria-pressed='true']") !== null) return false;
+    // Idle Escape in the answer box leaves the draft. It must not submit Skip tour.
+    if (isAnswerDraft(target)) return false;
     event.preventDefault?.();
     submitNamed(tour, "hh-tour-skip");
     return true;
@@ -203,6 +208,13 @@ function isField(target: unknown): boolean {
   if (typeof target !== "object" || target === null) return false;
   const tag = "tagName" in target ? String((target as { tagName?: string }).tagName ?? "") : "";
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+function isAnswerDraft(target: unknown): boolean {
+  if (typeof target !== "object" || target === null || !("getAttribute" in target)) return false;
+  const read = (target as TourNode).getAttribute;
+  if (typeof read !== "function") return false;
+  return read.call(target, "id") === "hh-card-draft";
 }
 
 function submitNamed(tour: TourNode, id: string): void {

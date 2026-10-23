@@ -582,16 +582,53 @@ interface DeskEvent {
  * A live refresh replaces the map markup. On a phone the list sits in a
  * disclosure, and that refresh used to close it. Keep it open when the
  * person had opened it.
+ *
+ * The first client paint repeats the server list. Writing innerHTML anyway
+ * detaches the summary and the phase name between a visibility check and
+ * the box read. Leave the nodes in place when the list is the same.
  */
 function replaceMap(map: DeskElement, html: string): void {
+  if (sameMapMarkup(map.innerHTML, html)) return;
   const fold = map.querySelector(".hh-map-fold");
   const wasOpen = fold !== null && (fold.open === true || fold.getAttribute("open") !== null);
-  map.innerHTML = html;
+  map.innerHTML = wasOpen ? bornOpenFold(html) : html;
   if (!wasOpen) return;
   const next = map.querySelector(".hh-map-fold");
   if (next === null) return;
   next.open = true;
   next.setAttribute("open", "");
+}
+
+function sameMapMarkup(current: string, next: string): boolean {
+  if (current === next) return true;
+  const left = mapMarkupKey(current);
+  const right = mapMarkupKey(next);
+  return left !== null && left === right;
+}
+
+/**
+ * The nav's innerHTML is the browser's serialization of the server string.
+ * Parse both, drop only the disclosure's open flag, and ignore spacing.
+ * A harness with no document falls back to the raw string compare above.
+ */
+function mapMarkupKey(html: string): string | null {
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return null;
+  try {
+    const holder = document.createElement.call(document, "div");
+    holder.innerHTML = html;
+    for (const fold of holder.querySelectorAll(".hh-map-fold")) fold.removeAttribute("open");
+    return holder.innerHTML.replace(/\s+/g, " ").trim();
+  } catch {
+    return null;
+  }
+}
+
+/** A real phase change must not paint a closed frame before open is restored. */
+function bornOpenFold(html: string): string {
+  return html.replace(
+    /<details class="hh-map-fold"(?![^>]*\bopen\b)/,
+    '<details class="hh-map-fold" open',
+  );
 }
 
 /** The draft and the choice list. Typing there closes a tip without a second document listener. */
