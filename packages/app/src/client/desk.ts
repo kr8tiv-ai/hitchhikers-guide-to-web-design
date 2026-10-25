@@ -1010,6 +1010,21 @@ function wait(ms: number): Promise<void> {
   });
 }
 
+function wantsTour(doc: DeskDocument): boolean {
+  const view = doc.defaultView as { location?: { search?: string } } | null | undefined;
+  const search = view?.location?.search;
+  if (typeof search !== "string" || search.length === 0) return false;
+  return new URLSearchParams(search).get("tour") === "1";
+}
+
+function clearSplashCover(doc: DeskDocument): void {
+  for (let guard = 0; guard < 8; guard += 1) {
+    const cover = doc.querySelector("[data-splash-cover]");
+    if (cover === null) return;
+    cover.removeAttribute("data-splash-cover");
+  }
+}
+
 /** Wire the current document. Returns a cleanup, or does nothing outside a browser. */
 export function mountDesk(env: DeskEnv): () => void {
   const token = readToken(env.document);
@@ -1519,6 +1534,14 @@ export function mountDesk(env: DeskEnv): () => void {
     revealTourSoon();
   };
   env.document.addEventListener("hh-splash-dismissed", onSplashDismissed);
+  // Create project and Replay tour land on /?tour=1. Drop the splash cover so
+  // Escape can close the tour, then bring the plate into view and focus it.
+  const tourRequested = wantsTour(env.document);
+  if (tourRequested) {
+    clearSplashCover(env.document);
+    splashDismissed = true;
+    revealTour(env.document, undefined, true);
+  }
   // Enter can dismiss the cue before this module mounts. The event is already gone.
   if (
     env.document.querySelector("[data-splash]") !== null &&

@@ -20,5 +20,5 @@ export function renderResumePrompt(draft: ProjectDraft, filePath: string): strin
     "Then do the next step named above. This file is enough for any coding agent.",
     "",
   ].join("\n");
-  return scrubText(text);
+  return scrubText(text, [draft.sourceDir, filePath]);
 }

@@ -25,7 +25,7 @@ import {
   type ProjectDraft,
   type ProjectFile,
 } from "./schema.ts";
-import { scrubText, scrubValue } from "./scrub.ts";
+import { scrubValue } from "./scrub.ts";
 
 const LOCK_TRIES = 3;
 const LOCK_WAIT_MS = 120;
@@ -65,19 +65,17 @@ function scrubDraft(draft: ProjectDraft): ProjectDraft {
   return cleaned as ProjectDraft;
 }
 
-/** Final pass so a planted key cannot survive inside any string. */
+/**
+ * Final pass so a planted key cannot survive inside free text.
+ * Path fields are copied byte-exact. The serialized file is not scanned again,
+ * because a Windows path inside JSON would look like a token.
+ */
 export function sealProjectFile(file: ProjectFile): string {
-  const scrubbed = scrubText(`${JSON.stringify(file, null, 2)}\n`);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(scrubbed);
-  } catch {
+  const scrubbed = scrubValue(file);
+  if (!isRecord(scrubbed) || scrubbed.schemaVersion !== PROJECT_FILE_SCHEMA_VERSION) {
     throw new ProjectFileError("The project file could not be written after the secret pass.");
   }
-  if (!isRecord(parsed) || parsed.schemaVersion !== PROJECT_FILE_SCHEMA_VERSION) {
-    throw new ProjectFileError("The project file could not be written after the secret pass.");
-  }
-  return `${JSON.stringify(parsed, null, 2)}\n`;
+  return `${JSON.stringify(scrubbed, null, 2)}\n`;
 }
 
 async function peek(filePath: string): Promise<

@@ -3,18 +3,24 @@
  * The id pattern matches SECRET_PATTERN in packages/orchestrator/src/progress.ts.
  * Free text is scanned for token shapes, bearer tokens, credential assignments,
  * and userinfo in URLs. Allow-listed settings keys are copied before this pass.
+ * Path fields (sourceDir, snapshot path) and exact keep strings are copied
+ * byte-exact. A token needs a boundary before its prefix, so desk-, task-,
+ * and kiosk- stay words. A real token in other text still redacts, including
+ * one that sits in an unquoted path. A quoted Windows path is left whole.
  */
 
 import { isRecord } from "./schema.ts";
 
 /** Same shape as the orchestrator queue id check, applied to lowercased text. */
 export const SECRET_PATTERN =
-  /(?:^|-)(?:sk|pk|rk|xai)-[a-z0-9-]{8,}|(?:secret|apikey|api-key|password|bearer|access-token)/;
+  /(?<![a-z0-9])(?:sk|pk|rk|xai)-[a-z0-9-]{8,}|(?:secret|apikey|api-key|password|bearer|access-token)/;
 
 const SECRET_KEY =
   /(?:^|[._-])(?:secrets?|apikey|api[-_]?key|passwords?|passwd|tokens?|cookies?|authorization|bearer|credentials?|access[-_]?token)(?:$|[._-])|\.env$/i;
 
-const TOKEN = /(?:sk|pk|rk|xai)-[A-Za-z0-9_-]{8,}/gi;
+const TOKEN = /(?<![A-Za-z0-9])(?:sk|pk|rk|xai)-[A-Za-z0-9_-]{8,}/gi;
+const QUOTED_WIN_PATH = /"(?:[A-Za-z]:[\\/]|\\\\)[^"]*"/g;
+const PATH_FIELDS = new Set(["sourceDir", "path"]);
 const BEARER = /bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi;
 const ENV_ASSIGN =
   /[A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|COOKIE)[A-Za-z0-9_]*=[^\s"'\\]+/g;
@@ -55,29 +61,53 @@ export function secretKey(name: string): boolean {
   return SECRET_KEY.test(name) || SECRET_PATTERN.test(name.toLowerCase());
 }
 
-export function scrubText(value: string): string {
-  const replaced = value
+export function scrubText(value: string, keep: readonly string[] = []): string {
+  const masks: string[] = [];
+  const hold = (text: string): string => {
+    const token = `\u0000P${masks.length}\u0000`;
+    masks.push(text);
+    return token;
+  };
+  let shielded = value;
+  const exact = [...keep].filter((item) => item.length > 0).sort((left, right) => right.length - left.length);
+  for (const item of exact) {
+    if (!shielded.includes(item)) continue;
+    shielded = shielded.split(item).join(hold(item));
+  }
+  shielded = shielded.replace(QUOTED_WIN_PATH, (span) => hold(span));
+  const replaced = shielded
     .replace(TOKEN, "[redacted]")
     .replace(BEARER, "Bearer [redacted]")
     .replace(ENV_ASSIGN, "[redacted]")
-    .replace(URL_USERINFO, "//[redacted]@");
-  return replaced.replace(JSON_PAIR, (full, key: string) => {
-    if (!secretKey(key)) return full;
-    return `"${key}": "[redacted]"`;
-  });
+    .replace(URL_USERINFO, "//[redacted]@")
+    .replace(JSON_PAIR, (full, key: string) => {
+      if (!secretKey(key)) return full;
+      return `"${key}": "[redacted]"`;
+    });
+  return replaced.replace(/\u0000P(\d+)\u0000/g, (full, index: string) => masks[Number(index)] ?? full);
 }
 
-export function scrubValue(value: unknown): unknown {
-  if (typeof value === "string") return scrubText(value);
+export function scrubValue(value: unknown, keep: readonly string[] = []): unknown {
+  if (typeof value === "string") return scrubText(value, keep);
   if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
-  if (Array.isArray(value)) return value.map((item) => scrubValue(item));
+  if (Array.isArray(value)) return value.map((item) => scrubValue(item, keep));
   if (!isRecord(value)) return null;
+  const nextKeep = keepPaths(value, keep);
   const next: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
     if (secretKey(key)) continue;
-    next[key] = scrubValue(item);
+    if (PATH_FIELDS.has(key) && typeof item === "string") {
+      next[key] = item;
+      continue;
+    }
+    next[key] = scrubValue(item, nextKeep);
   }
   return next;
+}
+
+function keepPaths(record: Record<string, unknown>, keep: readonly string[]): readonly string[] {
+  if (typeof record.sourceDir !== "string" || record.sourceDir.length === 0) return keep;
+  return [...keep, record.sourceDir];
 }
 
 function copyAllow(record: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {

@@ -60,7 +60,7 @@ export function renderTour(token: string): string {
     </li>`;
   }).join("");
   return `<aside class="hh-tour" data-tour data-step="0" tabindex="0" aria-labelledby="hh-tour-heading">
-    <p class="hh-kicker" id="hh-tour-heading">First five minutes</p>
+    <p class="hh-kicker" id="hh-tour-heading" tabindex="-1">First five minutes</p>
     <ol class="hh-tour__steps">${steps}</ol>
     <p class="hh-small" data-tour-count>1 of ${TOUR_STEPS.length}</p>
     <div class="hh-qcard__actions">

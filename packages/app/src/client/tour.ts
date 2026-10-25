@@ -18,7 +18,7 @@ export interface TourNode {
   querySelectorAll?(selector: string): TourNode[];
   textContent?: string | null;
   hidden?: boolean;
-  focus?: () => void;
+  focus?: (options?: { preventScroll?: boolean }) => void;
   closest?(selector: string): TourNode | null;
   scrollIntoView?(options?: {
     block?: "start" | "center" | "end" | "nearest";
@@ -77,15 +77,20 @@ export function mountTour(doc: TourDocument): () => void {
 }
 
 /**
- * Bring the open tour into view. `nearest` does not move the page when the
- * plate already fits. Callers that must land even if a smooth scroll stalls
- * pass `auto`. Omitted behavior follows prefers-reduced-motion.
+ * Bring the open tour to the top of the viewport. `nearest` left the plate
+ * below the fold when the splash had already pinned the page. Callers that
+ * must land even if a smooth scroll stalls pass `auto`. Omitted behavior
+ * follows prefers-reduced-motion. `focusInside` moves focus to the heading.
  */
-export function revealTour(doc: TourDocument, behavior?: "auto" | "smooth"): void {
+export function revealTour(doc: TourDocument, behavior?: "auto" | "smooth", focusInside = false): void {
   const tour = doc.querySelector("[data-tour]");
   if (tour === null || tour.scrollIntoView === undefined) return;
   const motion = behavior ?? (prefersReducedMotion() ? "auto" : "smooth");
-  tour.scrollIntoView({ block: "nearest", inline: "nearest", behavior: motion });
+  tour.scrollIntoView({ block: "start", inline: "nearest", behavior: motion });
+  if (!focusInside) return;
+  const heading = tour.querySelector?.("#hh-tour-heading");
+  const target = heading !== null && heading !== undefined && heading.focus !== undefined ? heading : tour;
+  target.focus?.({ preventScroll: true });
 }
 
 function prefersReducedMotion(): boolean {

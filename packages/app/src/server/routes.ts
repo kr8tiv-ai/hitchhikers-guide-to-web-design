@@ -1140,7 +1140,8 @@ async function handleProjectRoute(
       res.end();
       return;
     }
-    res.writeHead(303, { location: "/" });
+    const location = pathname === "/api/project/new" ? "/?tour=1" : "/";
+    res.writeHead(303, { location });
     res.end();
     return;
   }
@@ -4077,7 +4078,8 @@ async function handleTourPost(
     sendHtml(req, res, 500, tourErrorPage("The tour setting did not save.", detail));
     return;
   }
-  res.writeHead(303, { location: "/" });
+  const location = tour === "replay" ? "/?tour=1" : "/";
+  res.writeHead(303, { location });
   res.end();
 }
 

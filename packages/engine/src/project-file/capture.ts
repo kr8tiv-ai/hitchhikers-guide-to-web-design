@@ -252,11 +252,12 @@ async function hashDir(dir: string): Promise<NamedHash[]> {
 }
 
 async function snapshotOf(hitch: string): Promise<SnapshotFile[]> {
+  const sourceDir = path.dirname(hitch);
   const files: SnapshotFile[] = [];
   for (const relative of SNAPSHOTS) {
     const text = await readText(path.join(hitch, relative));
     if (text === null) continue;
-    files.push({ path: relative, text: scrubText(text) });
+    files.push({ path: relative, text: scrubText(text, [sourceDir]) });
   }
   return files;
 }

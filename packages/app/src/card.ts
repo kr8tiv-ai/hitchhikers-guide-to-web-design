@@ -574,9 +574,12 @@ ${radios.join("\n")}
   <p class="hh-choices__live" data-choices-live aria-live="polite">Options ready: ${items.length} ${noun}</p>`;
 }
 
-/** Shown only when the Guide call itself timed out. The draft stays in the field. */
+const BILLING_RETRY = "Your Grok Build usage balance is used up.";
+
+/** Shown when the Guide call timed out or the usage balance is used up. The draft stays in the field. */
 function timeoutRetry(error: string | null): string {
-  if (error === null || !/took too long/i.test(error)) return "";
+  if (error === null) return "";
+  if (!/took too long/i.test(error) && !error.includes(BILLING_RETRY)) return "";
   return `  <p class="hh-qcard__retry"><button type="button" class="hh-btn hh-btn--secondary" data-retry="answer">Retry</button></p>\n`;
 }
 

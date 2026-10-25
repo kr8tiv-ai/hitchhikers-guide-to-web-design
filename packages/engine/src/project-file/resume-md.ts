@@ -127,5 +127,5 @@ export function renderResumeMd(draft: ProjectDraft, filePath: string): string {
     "The portable file is enough to resume. After resume, the same state is in the project folder.",
     "",
   ].join("\n");
-  return scrubText(body);
+  return scrubText(body, [draft.sourceDir, filePath]);
 }

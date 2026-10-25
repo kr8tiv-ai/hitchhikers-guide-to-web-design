@@ -712,6 +712,7 @@ export {
   removeRecentProject,
   renderResumeMd,
   renderResumePrompt,
+  SECRET_PATTERN,
   restoreProject,
   sanitizeProjectName,
   saveProjectFile,

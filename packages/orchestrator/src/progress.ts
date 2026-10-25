@@ -38,8 +38,9 @@ const SHA = /^[0-9a-f]{7,40}$/;
 const IDLE = "Drive idle";
 const ID_PATTERN = /^[a-z0-9-]+$/;
 
-const SECRET_PATTERN =
-  /(?:^|-)(?:sk|pk|rk|xai)-[a-z0-9-]{8,}|(?:secret|apikey|api-key|password|bearer|access-token)/;
+/** Same boundary as the project-file scrubber: a token prefix is not inside a word. */
+export const SECRET_PATTERN =
+  /(?<![a-z0-9])(?:sk|pk|rk|xai)-[a-z0-9-]{8,}|(?:secret|apikey|api-key|password|bearer|access-token)/;
 
 type Outcome = "passed" | "escalated";
 
