@@ -23,7 +23,7 @@ export function launchSpec(
   const resolved = resolveOnPath(command, env);
   if (/\.(cmd|bat)$/i.test(resolved)) {
     const commandLine = [resolved, ...args].map((arg) => quoteCmdArg(arg)).join(" ");
-    const comspec = env.ComSpec ?? env.COMSPEC ?? "cmd.exe";
+    const comspec = comSpecFrom(env);
     return {
       file: comspec,
       args: ["/d", "/s", "/c", `"${commandLine}"`],
@@ -102,6 +102,18 @@ export function quoteCmdArg(arg: string): string {
   }
   if (slashes > 0) out += "\\".repeat(slashes * 2);
   return `${out}"`;
+}
+
+/** ComSpec, COMSPEC, or any other case. An empty value is kept. */
+function comSpecFrom(env: NodeJS.ProcessEnv): string {
+  if (typeof env.ComSpec === "string") return env.ComSpec;
+  if (typeof env.COMSPEC === "string") return env.COMSPEC;
+  const key = Object.keys(env).find((name) => name.toLowerCase() === "comspec");
+  if (key !== undefined) {
+    const value = env[key];
+    if (typeof value === "string") return value;
+  }
+  return "cmd.exe";
 }
 
 function isFile(filePath: string): boolean {

@@ -5,6 +5,7 @@ import path from "node:path";
 import type { GuideConfig } from "../config.ts";
 import { planInterview } from "../guide/interview-call.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
+import { launchProcess } from "../process-launch.ts";
 import type { ThinkRequest } from "./think.ts";
 
 /**
@@ -490,62 +491,20 @@ export function unavailableMessage(stdout: string, stderr: string): string | und
   return line.length > 0 ? line.slice(0, 500) : "grok is unavailable.";
 }
 
-function quoteCmdArg(arg: string): string {
-  // cmd expands %VAR% even inside quotes. %%VAR%% still contains %VAR%
-  // when VAR is set, so doubling is not an escape. End the quote, emit a
-  // caret-escaped percent, and reopen the quote: "100"^%"PATH"^%"".
-  if (arg.length === 0) return '""';
-  if (!/[\s"&|<>^()%!`]/.test(arg)) return arg;
-  let out = '"';
-  let slashes = 0;
-  for (const char of arg) {
-    if (char === "\\") {
-      slashes += 1;
-      continue;
-    }
-    if (char === "%") {
-      if (slashes > 0) out += "\\".repeat(slashes * 2);
-      slashes = 0;
-      out += '"^%"';
-      continue;
-    }
-    if (char === '"') {
-      out += `${"\\".repeat(slashes * 2)}\\"`;
-      slashes = 0;
-      continue;
-    }
-    if (slashes > 0) {
-      out += "\\".repeat(slashes);
-      slashes = 0;
-    }
-    out += char;
-  }
-  if (slashes > 0) out += "\\".repeat(slashes * 2);
-  return `${out}"`;
-}
-
 /**
  * Spawn a resolved grok.exe or grok.cmd. Arguments stay an array.
  * A batch shim cannot be CreateProcess'd, so Windows runs it through
  * cmd.exe /d /s /c with each argument quoted. The prompt is not concatenated
- * into a shell script by the caller.
+ * into a shell script by the caller. Detached stays on outside Windows so
+ * killTree can signal the process group.
  */
 function launch(file: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
-  const shared = {
+  return launchProcess(file, args, {
     cwd,
     env,
-    stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     detached: process.platform !== "win32",
-  };
-  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(file)) {
-    const commandLine = [file, ...args].map((arg) => quoteCmdArg(arg)).join(" ");
-    const comspec = envValue(env, "ComSpec") ?? "cmd.exe";
-    return spawn(comspec, ["/d", "/s", "/c", `"${commandLine}"`], hiddenChildOptions({
-      ...shared,
-      windowsVerbatimArguments: true,
-    }));
-  }
-  return spawn(file, [...args], hiddenChildOptions(shared));
+  });
 }
 
 function killTree(child: ChildProcess): void {

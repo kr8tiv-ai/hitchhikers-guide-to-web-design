@@ -24,7 +24,7 @@ import {
   relativizePromptText,
   type OutsideAccess,
 } from "./site-confine.ts";
-import { hiddenChildOptions } from "../hidden-child.ts";
+import { launchProcess } from "../process-launch.ts";
 import { LockHeld } from "../lock.ts";
 import {
   lastFinishedPrompt,
@@ -445,7 +445,7 @@ export function installLiveBuildRunner(env: NodeJS.ProcessEnv = process.env): vo
         done: Promise.resolve({ code: 127, stdout: "", stderr: message, errorCode: "ENOENT" }),
       };
     }
-    return spawnLive(command, request, env);
+    return spawnLiveBuild(command, request, env);
   };
   liveBuildEnvs.set(spawn, env);
   setBuildRunner(spawn);
@@ -476,15 +476,32 @@ export function launchSiteBuild(projectDir: string): void {
   });
 }
 
-function spawnLive(command: string, request: BuildSpawnRequest, env: NodeJS.ProcessEnv): BuildSpawnHandle {
-  const child = spawn(
+export interface LiveBuildLaunch {
+  /** Injected so a test can simulate win32 without patching process.platform. */
+  platform?: NodeJS.Platform;
+  spawnImpl?: typeof spawn;
+}
+
+/**
+ * The live build spawn. Tests pass platform and spawnImpl.
+ * The desk calls this with neither, so it uses this process and node spawn.
+ */
+export function spawnLiveBuild(
+  command: string,
+  request: BuildSpawnRequest,
+  env: NodeJS.ProcessEnv,
+  launch: LiveBuildLaunch = {},
+): BuildSpawnHandle {
+  const child = launchProcess(
     command,
-    [...request.args],
-    hiddenChildOptions({
+    request.args,
+    {
       cwd: request.cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
-    }),
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+    launch.platform ?? process.platform,
+    launch.spawnImpl ?? spawn,
   );
   let stdout = "";
   let stderr = "";
