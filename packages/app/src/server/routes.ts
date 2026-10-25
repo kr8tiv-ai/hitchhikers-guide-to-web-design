@@ -317,6 +317,7 @@ const VOICE_TEXT_SOURCE = path.resolve(SRC_ROOT, "client", "voice-text.ts");
 const THEME_SOURCE = path.resolve(SRC_ROOT, "client", "theme.ts");
 const DRIVE_SOURCE = path.resolve(SRC_ROOT, "client", "drive.ts");
 const DRIVE_MARKUP_SOURCE = path.resolve(SRC_ROOT, "drive-markup.ts");
+const ART_DIRECTION_NOTE_SOURCE = path.resolve(SRC_ROOT, "art-direction-note.ts");
 const WALK_SOURCE = path.resolve(SRC_ROOT, "gallery", "walk.ts");
 const TILE_SOURCE = path.resolve(SRC_ROOT, "gallery", "tile.ts");
 const MOTION_SOURCE = path.resolve(SRC_ROOT, "motion-previews", "index.ts");
@@ -2590,6 +2591,16 @@ async function handleGet(
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(DRIVE_MARKUP_SOURCE)));
     return;
   }
+  if (pathname === "/client/art-direction-note.js") {
+    sendBytes(
+      req,
+      res,
+      200,
+      "text/javascript; charset=utf-8",
+      Buffer.from(browserModule(ART_DIRECTION_NOTE_SOURCE)),
+    );
+    return;
+  }
   if (pathname === "/client/document-head.js") {
     sendBytes(
       req,
@@ -4266,6 +4277,8 @@ function browserModule(filePath: string): string {
     .replace(/from\s+["']\.\/client\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\/attach\.ts["']/g, 'from "/client/attach.js"')
     .replace(/from\s+["']\.\.\/drive-markup\.ts["']/g, 'from "/client/drive-markup.js"')
+    .replace(/from\s+["']\.\/art-direction-note\.ts["']/g, 'from "/client/art-direction-note.js"')
+    .replace(/from\s+["']\.\.\/art-direction-note\.ts["']/g, 'from "/client/art-direction-note.js"')
     .replace(/from\s+["']\.\/design\/document-head\.ts["']/g, 'from "/client/document-head.js"')
     .replace(/from\s+["']\.\.\/server\/head\.ts["']/g, 'from "/client/head.js"')
     .replace(/from\s+["']\.\.\/design\/tokens\.ts["']/g, 'from "/client/tokens.js"')
