@@ -211,6 +211,23 @@ interface TurnStamp {
 
 let runner: BuildSpawn | null = null;
 const projectRunners = new Map<string, BuildSpawn | null>();
+/** Env captured by installLiveBuildRunner. Stub runners are absent, so tests skip the grok lookup. */
+const liveBuildEnvs = new WeakMap<BuildSpawn, NodeJS.ProcessEnv>();
+type SiteBuildFailureSink = (projectDir: string, error: unknown) => void;
+let siteBuildFailureSink: SiteBuildFailureSink | null = null;
+
+export class BuildRunnerMissingError extends Error {
+  constructor() {
+    super("The build could not start: no build runner is installed. Run hh doctor.");
+    this.name = "BuildRunnerMissingError";
+  }
+}
+
+/** Desk hook for a build that rejected before or while it was running. */
+export function setSiteBuildFailureSink(sink: SiteBuildFailureSink | null): void {
+  siteBuildFailureSink = sink;
+}
+
 const jobs = new Map<string, Promise<void>>();
 const watchOverrides = new Map<string, SiteBuildWatch>();
 const buildGates = new Map<string, SiteBuildGate>();
@@ -417,7 +434,7 @@ export function buildSpawnArgs(cwd: string, promptPath: string, resumeSessionId?
 }
 
 export function installLiveBuildRunner(env: NodeJS.ProcessEnv = process.env): void {
-  setBuildRunner((request) => {
+  const spawn: BuildSpawn = (request) => {
     let command = request.command;
     try {
       command = resolveGrokCommand(env);
@@ -429,6 +446,33 @@ export function installLiveBuildRunner(env: NodeJS.ProcessEnv = process.env): vo
       };
     }
     return spawnLive(command, request, env);
+  };
+  liveBuildEnvs.set(spawn, env);
+  setBuildRunner(spawn);
+}
+
+/**
+ * Refuse to mark a build started when nothing can run it.
+ * A stub runner is not the live grok spawn, so it does not need grok on PATH.
+ */
+export function assertSiteBuildReady(projectDir: string): void {
+  const spawnFn = runnerFor(projectDir);
+  if (spawnFn === null) throw new BuildRunnerMissingError();
+  const env = liveBuildEnvs.get(spawnFn);
+  if (env === undefined) return;
+  resolveGrokCommand(env);
+}
+
+/** Fire the queue. A rejection is recorded on the desk instead of disappearing. */
+export function launchSiteBuild(projectDir: string): void {
+  void ensureSiteBuild(projectDir).catch((error: unknown) => {
+    queueMicrotask(() => {
+      try {
+        siteBuildFailureSink?.(projectDir, error);
+      } catch {
+        // Recording the desk error must not hide the rejection.
+      }
+    });
   });
 }
 
@@ -761,7 +805,7 @@ export function ensureSiteBuild(projectDir: string): Promise<void> {
   const existing = jobs.get(key);
   if (existing) return existing;
   const spawnFn = runnerFor(projectDir);
-  if (spawnFn === null) return Promise.resolve();
+  if (spawnFn === null) return Promise.reject(new BuildRunnerMissingError());
   const job = runJob(projectDir, spawnFn);
   jobs.set(key, job);
   void job.finally(() => {
@@ -815,7 +859,7 @@ export async function retrySiteBuild(projectDir: string, promptId: string): Prom
   if (billing) clearBillingPause(projectDir);
   await releaseQueuePause(projectDir);
   if (resume && current !== null) writeRun(projectDir, { ...current, resumeNext: true });
-  void ensureSiteBuild(projectDir);
+  launchSiteBuild(projectDir);
 }
 
 export async function resumeSiteBuild(projectDir: string, promptId: string): Promise<void> {
@@ -1157,7 +1201,7 @@ async function recoverBody(projectDir: string): Promise<void> {
     await enqueueControl(projectDir, async () => {
       if (jobs.has(path.resolve(projectDir))) return;
       const adopted = await adoptDeadRun(projectDir);
-      if (adopted === "continue") void ensureSiteBuild(projectDir);
+      if (adopted === "continue") launchSiteBuild(projectDir);
     });
   } catch {
     // The row stays on disk. Resume can try again.
@@ -1176,13 +1220,13 @@ async function continueBody(projectDir: string, promptId?: string): Promise<Buil
     if (live?.status === "running") {
       const adopted = await adoptDeadRun(projectDir);
       if (adopted === "continue") {
-        void ensureSiteBuild(projectDir);
+        launchSiteBuild(projectDir);
         return "started";
       }
     }
     const explicit = await planExplicit(projectDir, promptId);
     if (explicit === "start") {
-      void ensureSiteBuild(projectDir);
+      launchSiteBuild(projectDir);
       return "started";
     }
     return explicit;

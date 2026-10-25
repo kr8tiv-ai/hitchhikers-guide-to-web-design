@@ -4,6 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { GrokMissingError } from "../ai/grok-cli.ts";
 import { BILLING_TOP_UP, isBillingFailure } from "../ai/grok-failure.ts";
 import type { think } from "../ai/think.ts";
 import { loadDecisions, syncAnswer } from "../context/index.ts";
@@ -23,7 +24,14 @@ import { loadFacts } from "./suggest.ts";
 import { dropInternalCopy, repoGuidanceLines } from "./guidance.ts";
 import { advanceDesignStages, designReadyForBuild } from "../spec/design-stages.ts";
 import { PlanCoverageError } from "../spec/plan-coverage.ts";
-import { draftBriefPlan, ensureSiteBuild, prepareSiteBuild } from "./site-build.ts";
+import {
+  assertSiteBuildReady,
+  BuildRunnerMissingError,
+  draftBriefPlan,
+  launchSiteBuild,
+  prepareSiteBuild,
+  setSiteBuildFailureSink,
+} from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
 
 export const BRIEF_BUILD_ID = "guide-entry";
@@ -257,7 +265,34 @@ function buildHasStarted(projectDir: string, nextAction: string): boolean {
   return nextAction.trim() === "The build is started.";
 }
 
+function deskFailureMessage(error: unknown): string {
+  const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "The build could not start.";
+  return message.includes("Run hh doctor.") ? message : `${message} Run hh doctor.`;
+}
+
+function isStartRefusal(error: unknown): boolean {
+  return error instanceof BuildRunnerMissingError || error instanceof GrokMissingError;
+}
+
+function recordDeskBuildError(projectDir: string, error: unknown): void {
+  const file = readPending(projectDir);
+  writePending(projectDir, {
+    status: file.status,
+    draft: file.draft,
+    buildStarted: file.buildStarted === true,
+    planApproved: file.planApproved === true,
+    error: deskFailureMessage(error),
+    note: file.note ?? "",
+    fallback: file.fallback === true,
+  });
+}
+
+setSiteBuildFailureSink((projectDir, error) => {
+  recordDeskBuildError(projectDir, error);
+});
+
 async function startBuild(projectDir: string): Promise<void> {
+  assertSiteBuildReady(projectDir);
   const saved = loadState(projectDir);
   const next: GuideState = {
     phase: BRIEF_NEXT_PHASE,
@@ -272,7 +307,7 @@ async function startBuild(projectDir: string): Promise<void> {
   const pending = readPending(projectDir);
   const markdown = pending.draft === null ? "" : renderSiteBrief(pending.draft);
   await prepareSiteBuild(projectDir, markdown);
-  void ensureSiteBuild(projectDir);
+  launchSiteBuild(projectDir);
 }
 
 async function runApprove(projectDir: string, thinkFn: typeof think, confirmFallback: boolean): Promise<BriefDeskView> {
@@ -352,15 +387,16 @@ async function runStartBuild(projectDir: string): Promise<BriefDeskView> {
   try {
     await startBuild(projectDir);
   } catch (error) {
-    if (error instanceof PlanCoverageError) {
+    if (error instanceof PlanCoverageError || isStartRefusal(error)) {
       writePending(projectDir, {
         status: "approved",
         draft: file.draft,
         buildStarted: false,
         planApproved: true,
-        error: error.message,
+        error: error instanceof PlanCoverageError ? error.message : deskFailureMessage(error),
         fallback: file.fallback === true,
       });
+      if (isStartRefusal(error)) return readBriefDesk(projectDir);
     }
     throw error;
   }

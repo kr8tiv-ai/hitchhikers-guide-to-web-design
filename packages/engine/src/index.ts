@@ -304,6 +304,8 @@ export {
   BUILD_IDLE_MS,
   BUILD_MODEL,
   BUILD_WATCHDOG_INTERVAL_MS,
+  assertSiteBuildReady,
+  BuildRunnerMissingError,
   buildSpawnArgs,
   clearProjectBuildRunner,
   configureSiteBuildWatch,

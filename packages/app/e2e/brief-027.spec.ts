@@ -190,7 +190,8 @@ function childSource(): string {
       }
       throw new Error(req.task);
     };
-    const handle = await loaded.startServer({ projectDir, open: false, guideThink: think });
+    const buildSpawn = () => ({ pid: 4242, done: new Promise(() => {}) });
+    const handle = await loaded.startServer({ projectDir, open: false, guideThink: think, buildSpawn });
     process.stdout.write(handle.url + "\\n");
     await new Promise(() => {});
   `;
