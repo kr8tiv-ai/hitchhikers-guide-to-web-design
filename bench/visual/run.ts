@@ -30,7 +30,10 @@ function runLive(): void {
 function main(): void {
   if (!benchMayStart(process.argv)) {
     console.error("bench/visual refuses to start without --run.");
-    process.exit(2);
+    // Node 24 on Windows aborts inside process.exit() (libuv async.c:76,
+    // UV_HANDLE_CLOSING) and the status becomes 3221226505, not 2.
+    process.exitCode = 2;
+    return;
   }
   runLive();
 }
