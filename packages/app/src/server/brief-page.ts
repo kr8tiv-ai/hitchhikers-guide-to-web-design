@@ -3,6 +3,7 @@
  * The shell stays in the desk routes. This file is the panel body only.
  */
 import { escapeHtml } from "../card.ts";
+import { artDirectionNoteHtml } from "../art-direction-note.ts";
 import type { BriefDeskView, CoverageRow } from "@hitchhiker/engine";
 
 export interface ApproveCoverage {
@@ -83,6 +84,7 @@ export function approveMain(
   brandMarkdown = "",
   stage: ApproveStage = "brief",
   stageHtml = "",
+  artDirection: "none" | "" = "",
 ): string {
   if (desk.status === "drafting") {
     return `<div class="hh-empty hh-rise hh-rise--2">
@@ -150,6 +152,7 @@ export function approveMain(
     .join("\n");
   return `<div class="hh-rise hh-rise--2" data-brief-status="${escapeHtml(desk.status)}">
         <h1 class="hh-title">Site Brief</h1>
+        ${artDirectionNoteHtml(artDirection)}
         ${started}
         ${fallback}
         ${failure}

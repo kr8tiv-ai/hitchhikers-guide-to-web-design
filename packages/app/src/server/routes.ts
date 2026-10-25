@@ -74,6 +74,7 @@ import {
   PlanCoverageError,
   checkPlanCoverage,
   planCoverageMessage,
+  designLibraryArtDirection,
   projectPlanCoverage,
   readPromptTasks,
   readSiteBrief,
@@ -3821,7 +3822,7 @@ function renderApproveBrief(
     current: "/approve",
     kicker: "Approvals",
     status,
-    main: `${approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir), stage, stageHtml)}
+    main: `${approveMain(token, desk, changeError, coverage, confirmError, brandMarkdown(projectDir), stage, stageHtml, designLibraryArtDirection(projectDir))}
         ${launchCard(token, projectDir)}`,
     script: "/client/brief-change.js",
   });

@@ -5,6 +5,7 @@
  */
 
 import { escapeHtml } from "./card.ts";
+import { artDirectionNoteHtml } from "./art-direction-note.ts";
 import { documentHeadExtras } from "./design/document-head.ts";
 
 export const DRIVE_MAX_ROWS = 200;
@@ -67,6 +68,8 @@ export interface DrivePageOptions {
   scriptUrl?: string;
   run?: DriveRun | null;
   pause?: DrivePause | null;
+  /** "none" when planning recorded a design-library failure. */
+  artDirection?: "none" | "";
 }
 
 const STATUS_LABEL: Record<DriveStatus, string> = {
@@ -324,6 +327,7 @@ export function renderDriveDocument(
       <main id="drive-main" data-hh-ready>
       <div class="hh-dash">
         <section class="hh-drive__main hh-rise hh-rise--2" id="queue" data-region="queue"${driveQueueHeld(items, options?.run, options?.pause) ? ' data-queue-state="paused"' : ""} aria-labelledby="queue-title">
+          ${artDirectionNoteHtml(options?.artDirection)}
           <div class="hh-drive__toolbar">
             <h2 class="hh-title" id="queue-title">Prompt queue</h2>
           </div>

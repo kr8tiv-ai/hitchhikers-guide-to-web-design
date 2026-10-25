@@ -247,6 +247,7 @@ export {
 } from "./spec/plan-critique.ts";
 export type { PlanCritique, PlanDraft, PlanTokens } from "./spec/plan-critique.ts";
 export { translateBrief } from "./spec/art-direction.ts";
+export { NO_ART_DIRECTION_NOTE } from "./spec/design-language.ts";
 export {
   formatLanguagePack,
   languageBlockFor,
@@ -317,8 +318,10 @@ export {
   continueSiteBuild,
   decideBuildRecovery,
   logHasCleanEnd,
+  designLibraryArtDirection,
   draftBriefPlan,
   prepareSiteBuild,
+  readDesignLibraryError,
   projectPlanCoverage,
   readBuildRun,
   readPromptTasks,

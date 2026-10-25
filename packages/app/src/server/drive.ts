@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   LockHeld,
   QueueFileError,
+  designLibraryArtDirection,
   loadQueue,
   pauseQueue,
   readBuildRun,
@@ -42,6 +43,7 @@ export async function readDashboard(projectDir: string, token: string): Promise<
         scriptUrl: DRIVE_SCRIPT,
         run,
         pause: queue?.pause ?? null,
+        artDirection: designLibraryArtDirection(projectDir),
       }),
     };
   } catch (error: unknown) {

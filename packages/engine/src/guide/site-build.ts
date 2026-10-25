@@ -4,11 +4,12 @@
  * The live spawn is installed only when a desk or CLI command asks for it.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packagedModule } from "../packaged-dir.ts";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
+import { appendAiOutcome } from "../ai/think.ts";
 import {
   BILLING_TOP_UP,
   classifyGrokFailure,
@@ -324,6 +325,21 @@ export function setBeautyRunner(
   const key = path.resolve(projectDir);
   if (runner === null) beautyRunners.delete(key);
   else beautyRunners.set(key, runner);
+}
+
+/**
+ * Tests point selection at a design-library directory (the folder that
+ * contains `entries/`). Null uses the packaged library. A process-wide
+ * seam, cleared by the test when the call returns.
+ */
+let designLibraryDirOverride: string | null = null;
+
+export function setDesignLibraryDir(dir: string | null): void {
+  designLibraryDirOverride = dir === null || dir.trim() === "" ? null : dir;
+}
+
+function resolveDesignLibraryDir(): string {
+  return designLibraryDirOverride ?? path.join(knowledgeRoot(), "design-library");
 }
 
 export function resetSiteBuildWatch(projectDir: string): void {
@@ -662,7 +678,7 @@ export async function draftBriefPlan(projectDir: string, briefMarkdown: string):
     planned.pages.flatMap((page) => page.sections),
   );
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
-  const library = await attachDesignSelection(readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
+  const library = await attachDesignSelection(projectDir, readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];
@@ -717,7 +733,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   const coverage = checkPlanCoverage(planned.requirements, prompts);
   if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
-  const library = await attachDesignSelection(readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
+  const library = await attachDesignSelection(projectDir, readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
   mkdirSync(dir, { recursive: true });
   const ids: string[] = [];
@@ -1951,70 +1967,141 @@ async function releaseQueuePause(projectDir: string): Promise<void> {
   await saveBuildQueue(projectDir, resumeQueue(queue));
 }
 
-async function attachDesignSelection(library: DesignLibrary, brief: string): Promise<DesignLibrary> {
+function designLibraryErrorFile(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "library-error.txt");
+}
+
+/** The design-library failure text, or empty when selection did not fail. */
+export function readDesignLibraryError(projectDir: string): string {
+  if (projectDir.trim() === "") return "";
+  return readOptional(designLibraryErrorFile(projectDir)).trim();
+}
+
+/** Desk flag. "none" when library-error.txt holds a selection failure. */
+export function designLibraryArtDirection(projectDir: string): "none" | "" {
+  return readDesignLibraryError(projectDir) === "" ? "" : "none";
+}
+
+function designLibraryErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") return error.message.trim();
+  return "The design library did not load.";
+}
+
+/**
+ * Same record writeLibrarySections uses for a section-library failure:
+ * one message line in library-error.txt. This file sits beside sections/,
+ * so a later section render cannot erase the selection failure.
+ */
+function writeDesignLibraryError(projectDir: string, message: string): void {
+  const file = designLibraryErrorFile(projectDir);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, `${message}\n`, "utf8");
+}
+
+function clearDesignLibraryError(projectDir: string): void {
   try {
-    const href = pathToFileURL(packagedModule("knowledge", "src/design-library.ts")).href;
-    const mod = (await import(href)) as {
-      loadDesignEntries: (dir: string) => Array<{
-        id: string;
-        title: string;
-        styleWorld: string;
-        promptLanguage: string;
-        notes: string;
-        libraries: string[];
-        retired?: boolean;
-        sectionTypes: string[];
-      }>;
-      loadDesignIndex: (dir: string) => unknown;
-      selectDesignEntries: (
-        input: {
-          artDirection: string;
-          sectionType: string;
-          styleWorld: string;
-          moods: string[];
-          motionScore: number;
-          budget3d: number;
-          stack: string[];
-        },
-        entries: unknown[],
-        options: { index?: unknown },
-      ) => Array<{ title: string; promptLanguage: string; notes: string; sectionTypes: string[] }>;
-    };
-    const dir = path.join(knowledgeRoot(), "design-library");
-    const entries = mod.loadDesignEntries(dir).filter((entry) => entry.retired !== true);
-    const index = mod.loadDesignIndex(dir);
-    const moods = ["calm", "editorial", "bold", "technical", "playful", "minimal", "dark", "luxurious"].filter((mood) =>
-      brief.toLowerCase().includes(mood),
-    );
-    const picked: PickedDesignNote[] = [];
-    for (const sectionType of ["hero", "story", "gallery", "footer"]) {
-      const selected = mod.selectDesignEntries(
-        {
-          artDirection: brief,
-          sectionType,
-          styleWorld: styleWorldFrom(brief),
-          moods: moods.length >= 2 ? moods.slice(0, 6) : ["calm", "editorial"],
-          motionScore: /bold|tech|film/i.test(brief) ? 8 : 4,
-          budget3d: /webgl|shader|3d/i.test(brief) ? 1 : 0,
-          stack: ["astro", "lenis", "gsap", "vanilla"],
-        },
-        entries,
-        index === null ? {} : { index },
-      );
-      for (const entry of selected.slice(0, 4)) {
-        const section = entry.sectionTypes.includes(sectionType) ? sectionType : (entry.sectionTypes[0] ?? sectionType);
-        picked.push({
-          sectionType: section,
-          title: entry.title,
-          promptLanguage: entry.promptLanguage,
-          techniqueNote: entry.notes,
-        });
-      }
-    }
-    return { ...library, picked, packs: freshPackNotes() };
-  } catch {
-    return library;
+    unlinkSync(designLibraryErrorFile(projectDir));
+  } catch (error: unknown) {
+    const code = typeof error === "object" && error !== null && "code" in error ? (error as { code?: unknown }).code : "";
+    if (code !== "ENOENT") throw error;
   }
+}
+
+async function recordDesignLibraryError(projectDir: string, error: unknown): Promise<void> {
+  const message = designLibraryErrorMessage(error);
+  writeDesignLibraryError(projectDir, message);
+  try {
+    await appendAiOutcome(projectDir, {
+      task: "design-library",
+      outcome: "error",
+      error: message,
+      model: BUILD_MODEL,
+      effort: BUILD_EFFORT,
+    });
+  } catch {
+    // The error file is already the record. A log failure must not stop the plan.
+  }
+}
+
+interface DesignLibraryModule {
+  loadDesignEntries: (dir: string) => Array<{
+    id: string;
+    title: string;
+    styleWorld: string;
+    promptLanguage: string;
+    notes: string;
+    libraries: string[];
+    retired?: boolean;
+    sectionTypes: string[];
+  }>;
+  loadDesignIndex: (dir: string) => unknown;
+  selectDesignEntries: (
+    input: {
+      artDirection: string;
+      sectionType: string;
+      styleWorld: string;
+      moods: string[];
+      motionScore: number;
+      budget3d: number;
+      stack: string[];
+    },
+    entries: unknown[],
+    options: { index?: unknown },
+  ) => Array<{ title: string; promptLanguage: string; notes: string; sectionTypes: string[] }>;
+}
+
+async function loadDesignLibraryModule(): Promise<DesignLibraryModule> {
+  const href = pathToFileURL(packagedModule("knowledge", "src/design-library.ts")).href;
+  return (await import(href)) as DesignLibraryModule;
+}
+
+/** Load and pick. Throws when the library or the selector throws. Pack notes stay outside. */
+async function pickDesignNotes(brief: string): Promise<PickedDesignNote[]> {
+  const mod = await loadDesignLibraryModule();
+  const dir = resolveDesignLibraryDir();
+  const entries = mod.loadDesignEntries(dir).filter((entry) => entry.retired !== true);
+  const index = mod.loadDesignIndex(dir);
+  const moods = ["calm", "editorial", "bold", "technical", "playful", "minimal", "dark", "luxurious"].filter((mood) =>
+    brief.toLowerCase().includes(mood),
+  );
+  const picked: PickedDesignNote[] = [];
+  for (const sectionType of ["hero", "story", "gallery", "footer"]) {
+    const selected = mod.selectDesignEntries(
+      {
+        artDirection: brief,
+        sectionType,
+        styleWorld: styleWorldFrom(brief),
+        moods: moods.length >= 2 ? moods.slice(0, 6) : ["calm", "editorial"],
+        motionScore: /bold|tech|film/i.test(brief) ? 8 : 4,
+        budget3d: /webgl|shader|3d/i.test(brief) ? 1 : 0,
+        stack: ["astro", "lenis", "gsap", "vanilla"],
+      },
+      entries,
+      index === null ? {} : { index },
+    );
+    for (const entry of selected.slice(0, 4)) {
+      const section = entry.sectionTypes.includes(sectionType) ? sectionType : (entry.sectionTypes[0] ?? sectionType);
+      picked.push({
+        sectionType: section,
+        title: entry.title,
+        promptLanguage: entry.promptLanguage,
+        techniqueNote: entry.notes,
+      });
+    }
+  }
+  return picked;
+}
+
+async function attachDesignSelection(projectDir: string, library: DesignLibrary, brief: string): Promise<DesignLibrary> {
+  let picked: PickedDesignNote[];
+  try {
+    picked = await pickDesignNotes(brief);
+  } catch (error: unknown) {
+    await recordDesignLibraryError(projectDir, error);
+    return { ...library, artDirection: "none" };
+  }
+  clearDesignLibraryError(projectDir);
+  return { ...library, picked, packs: freshPackNotes() };
 }
 
 function freshPackNotes(): DesignPackNote[] {

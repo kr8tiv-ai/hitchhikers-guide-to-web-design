@@ -52,6 +52,10 @@ export interface DesignPackNote {
   excerpt: string;
 }
 
+/** Shown when selection throws. The plan still runs. The library did not. */
+export const NO_ART_DIRECTION_NOTE =
+  "No art direction: the design library failed to load (see library-error.txt).";
+
 export interface DesignLibrary {
   goldenDir: string;
   recipes: string;
@@ -61,6 +65,8 @@ export interface DesignLibrary {
   styleText: string;
   picked?: readonly PickedDesignNote[];
   packs?: readonly DesignPackNote[];
+  /** Set when selection failed. Absent when the library loaded. */
+  artDirection?: "none";
 }
 
 export function designLanguageFor(
@@ -80,7 +86,9 @@ export function designLanguageFor(
   const language = languageBlockFor(languageQuery);
   const skills = section === "" ? "" : skillBlock(section, direction, languageQuery.appetite, library.styleText);
   const ingredients = ingredientBlock(prompt);
+  const missing = library.artDirection === "none" ? [NO_ART_DIRECTION_NOTE, ""] : [];
   return [
+    ...missing,
     FRAMING,
     "",
     REMIX_LINE,
