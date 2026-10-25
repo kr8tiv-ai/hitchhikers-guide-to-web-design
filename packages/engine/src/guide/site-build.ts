@@ -40,6 +40,7 @@ import { extractReferenceDesign, resolveReferenceTransport } from "../brand/refe
 import { writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
 import { REFERENCE_PHASES, recordPhasePrompt } from "../spec/skills.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
+import { decideStack, writeStackDecision } from "../spec/stack-from-brief.ts";
 import { styleWorldFrom } from "../spec/art-direction.ts";
 import { writeSectionStillPlan } from "../spec/section-stills.ts";
 import {
@@ -60,7 +61,7 @@ import {
   type CoverageRow,
   type CoverageTask,
 } from "../spec/plan-coverage.ts";
-import { SITE_RULES, type SitePromptSkeleton } from "../spec/site-prompts.ts";
+import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/site-prompts.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
 
@@ -598,6 +599,15 @@ export interface ProjectPlanCoverage {
   message: string;
 }
 
+function chosenStack(projectDir: string, briefMarkdown: string, answers: readonly BriefAnswer[]): SiteStack {
+  return writeStackDecision(projectDir, decideStack(briefMarkdown, answers)).pick;
+}
+
+/** Persist the stack record unless one is already on disk, and return the pick. */
+export function recordStackDecision(projectDir: string, briefMarkdown: string): SiteStack {
+  return chosenStack(projectDir, briefMarkdown, briefAnswers(projectDir));
+}
+
 function briefAnswers(projectDir: string): BriefAnswer[] {
   try {
     return loadFacts(projectDir).answers.map((answer) =>
@@ -660,15 +670,16 @@ export function projectPlanCoverage(projectDir: string, briefMarkdown: string): 
 
 /** Write the prompt queue from the brief. Does not start the build and does not write DESIGN.md. */
 export async function draftBriefPlan(projectDir: string, briefMarkdown: string): Promise<string[]> {
+  const answers = briefAnswers(projectDir);
+  const stack = chosenStack(projectDir, briefMarkdown, answers);
   const existing = readPromptTasks(projectDir);
   if (existing.length > 0) {
     return existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
   }
-  const answers = briefAnswers(projectDir);
   const planned = planFromBrief(briefMarkdown, answers);
-  const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
+  const { prompts } = generateBriefPlan(briefMarkdown, stack, answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);
   writeMotionModule(
@@ -708,6 +719,7 @@ async function mergeBuildQueue(projectDir: string, ids: readonly string[]): Prom
 
 export async function prepareSiteBuild(projectDir: string, briefMarkdown: string): Promise<string[]> {
   const answers = briefAnswers(projectDir);
+  const stack = chosenStack(projectDir, briefMarkdown, answers);
   const planned = planFromBrief(briefMarkdown, answers);
   const existing = readPromptTasks(projectDir);
   if (existing.length > 0) {
@@ -720,7 +732,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     await mergeBuildQueue(projectDir, ids);
     return ids;
   }
-  const { prompts } = generateBriefPlan(briefMarkdown, "astro", answers);
+  const { prompts } = generateBriefPlan(briefMarkdown, stack, answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);
   writeDesignMd(projectDir, briefMarkdown, answers);

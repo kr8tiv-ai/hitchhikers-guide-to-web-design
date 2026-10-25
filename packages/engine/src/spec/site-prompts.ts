@@ -573,11 +573,30 @@ function scaffoldFiles(stack: SiteStack): string[] {
   }
 }
 
-function scaffoldAcceptance(): string[] {
-  return [
+function starterPath(stack: SiteStack): string | null {
+  switch (stack) {
+    case "next":
+      return "packages/templates/next-app";
+    case "vite-react":
+      return "packages/templates/vite-react-world";
+    case "astro":
+    case "sveltekit":
+      // Astro is the default, so naming its starter would change today's prompt
+      // bytes when nothing chooses a stack. SvelteKit has no starter in templates/.
+      return null;
+    default:
+      return assertNever(stack);
+  }
+}
+
+function scaffoldAcceptance(stack: SiteStack): string[] {
+  const lines = [
     "package.json sets name, private true, and type module, pins dependencies, and defines scripts dev, build, preview, check, and test as appropriate for the stack.",
     "Run pnpm install. The install succeeds, and package.json and pnpm-lock.yaml are committed.",
   ];
+  const starter = starterPath(stack);
+  if (starter !== null) lines.push(`Create the site from the starter at ${starter}.`);
+  return lines;
 }
 
 function configFile(stack: SiteStack): string {
@@ -821,7 +840,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: scaffoldFiles(stack),
       requirement: "REQ-SCAFFOLD",
-      acceptance: scaffoldAcceptance(),
+      acceptance: scaffoldAcceptance(stack),
     }),
     job(claim, {
       phase: "improbability-drive",

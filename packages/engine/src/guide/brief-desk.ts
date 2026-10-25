@@ -30,6 +30,7 @@ import {
   draftBriefPlan,
   launchSiteBuild,
   prepareSiteBuild,
+  recordStackDecision,
   setSiteBuildFailureSink,
 } from "./site-build.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -362,6 +363,7 @@ async function runPlanApprove(projectDir: string): Promise<BriefDeskView> {
   const file = readPending(projectDir);
   if (file.draft === null) throw new Error("The brief is not ready to approve.");
   const markdown = renderSiteBrief(file.draft);
+  recordStackDecision(projectDir, markdown);
   advanceDesignStages(projectDir, { brief: markdown });
   writePending(projectDir, {
     status: "approved",
