@@ -949,33 +949,6 @@ function isHttpUrl(value: string): boolean {
   return true;
 }
 
-function createEngineTurn(session: InterviewSession): TurnHandler {
-  return async (input) => {
-    const current = session.next();
-    if (current === null) {
-      throw new InterviewError("finished", "The interview is finished.");
-    }
-    if (current.id !== input.questionId) {
-      throw new InterviewError("command", "That question is no longer on the desk.");
-    }
-    if (input.kind === "answer") {
-      await session.command({ type: "answer", text: input.text ?? "" });
-    } else if (input.kind === "suggest") {
-      await session.command({ type: "suggest" });
-    } else {
-      await session.command({ type: "skip" });
-    }
-    const next = session.next();
-    return {
-      next,
-      events: [
-        { type: "turn", kind: input.kind, questionId: input.questionId },
-        { type: "session", questionId: next === null ? null : next.id },
-      ],
-    };
-  };
-}
-
 async function handlePost(
   req: IncomingMessage,
   res: ServerResponse,

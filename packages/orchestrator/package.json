@@ -20,6 +20,7 @@
     "@hitchhiker/qa": "workspace:*"
   },
   "scripts": {
+    "lint": "eslint src test",
     "test": "node --experimental-strip-types --test test/**/*.test.ts",
     "e2e:real": "node --experimental-strip-types test/real-grok-e2e-250i-run.ts"
   }

@@ -125,7 +125,9 @@ function outputForApp(appType: HostingerAppType): string {
 }
 
 function asNodeVersion(value: unknown): HostingerNodeVersion {
-  if (value === 18 || value === 20 || value === 22 || value === 24) return value;
+  if (typeof value === "number" && (NODE_VERSIONS as readonly number[]).includes(value)) {
+    return value as HostingerNodeVersion;
+  }
   throw new Error("host.json nodeVersion must be 18, 20, 22, or 24.");
 }
 
@@ -135,7 +137,7 @@ function asAppType(value: string): HostingerAppType {
 }
 
 function asPackageManager(value: string): HostingerPackageManager {
-  if (value === "npm" || value === "yarn" || value === "pnpm") return value;
+  if ((PACKAGE_MANAGERS as readonly string[]).includes(value)) return value as HostingerPackageManager;
   throw new Error("host.json packageManager must be npm, yarn, or pnpm.");
 }
 

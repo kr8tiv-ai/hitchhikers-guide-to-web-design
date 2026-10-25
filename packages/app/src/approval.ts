@@ -240,6 +240,7 @@ function isGate(value: string): value is ApprovalGate {
 }
 
 // Served from components.css. Not injected. The launch-kit source check reads this text.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- launch-kit.test.ts reads this binding from the source
 const LAUNCH_STYLE =
   ".hh-launch{min-width:0;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere}.hh-launch p,.hh-launch h2{min-width:0;max-width:100%;overflow-wrap:anywhere}.hh-launch form{display:flex;flex-wrap:wrap;gap:var(--space-2);min-width:0;max-width:100%}.hh-launch button{min-height:44px;max-width:100%;white-space:normal}";
 

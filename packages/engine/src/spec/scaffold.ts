@@ -140,6 +140,8 @@ const SPINE_FILES = [
   "STATE.md",
 ] as const;
 
+const [projectSpine, requirementsSpine, roadmapSpine, stateSpine] = SPINE_FILES;
+
 function requiredText(value: string, emptyMessage: string, newlineMessage: string): string {
   if (value.includes("\n") || value.includes("\r")) {
     throw new ScaffoldError(newlineMessage);
@@ -437,19 +439,19 @@ export async function scaffoldProject(dir: string, info: ProjectInfo): Promise<s
 
   const files: { name: (typeof SPINE_FILES)[number]; body: string }[] = [
     {
-      name: "PROJECT.md",
+      name: projectSpine,
       body: fillProject(renderedProject, { name, siteWhy, hosting, date }),
     },
     {
-      name: "REQUIREMENTS.md",
+      name: requirementsSpine,
       body: fillRequirements(renderedRequirements, { name, siteWhy, date }),
     },
     {
-      name: "ROADMAP.md",
+      name: roadmapSpine,
       body: fillRoadmap(renderedRoadmap, { name, siteWhy }),
     },
     {
-      name: "STATE.md",
+      name: stateSpine,
       body: fillState(renderedState, { siteWhy, date }),
     },
   ];

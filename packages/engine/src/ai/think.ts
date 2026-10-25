@@ -40,7 +40,7 @@ export type { Effort } from "../config.ts";
 export type { JsonSchema } from "./schema-validate.ts";
 export { GrokMissingError, GrokUnavailableError, ThinkInputError };
 
-export interface ThinkRequest<T> {
+export interface ThinkRequest<_T> {
   task: string;
   schema?: JsonSchema;
   input: string;

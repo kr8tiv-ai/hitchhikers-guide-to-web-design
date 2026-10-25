@@ -115,10 +115,6 @@ async function tempDir(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "hh-3d-"));
 }
 
-function glbMagic(): Uint8Array {
-  return new Uint8Array([0x67, 0x6c, 0x54, 0x46, 2, 0, 0, 0, 12, 0, 0, 0]);
-}
-
 test("fixture GLB is a tiny original CC0 triangle", async () => {
   const bytes = await readFile(fixture);
   assert.ok(bytes.length < 4096);

@@ -26,6 +26,7 @@
     "three": "0.186.0"
   },
   "scripts": {
+    "lint": "eslint src test",
     "test": "node --experimental-strip-types --test test/**/*.test.ts",
     "e2e": "playwright test",
     "write-html": "node --experimental-strip-types scripts/write-html.ts",

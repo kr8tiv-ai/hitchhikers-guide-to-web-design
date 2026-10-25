@@ -1496,7 +1496,6 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("contextmenu", onContextMenu);
   env.document.addEventListener("visibilitychange", onVisibility);
   env.document.addEventListener("focusin", onFocusIn);
-  let splashParked = false;
   let splashDismissed = false;
   let tourRevealTimer: ReturnType<typeof setTimeout> | null = null;
   const revealTourSoon = (): void => {
@@ -1517,7 +1516,6 @@ export function mountDesk(env: DeskEnv): () => void {
     // The cue scrolls #desk-heading into view and focuses it. Replaying the
     // card placement pulls that heading back down the page.
     splashDismissed = true;
-    splashParked = false;
     revealTourSoon();
   };
   env.document.addEventListener("hh-splash-dismissed", onSplashDismissed);
@@ -4718,16 +4716,12 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function placeQuestion(): void {
-    if (splashCovers()) {
-      splashParked = true;
-      return;
-    }
+    if (splashCovers()) return;
     // A session that arrives after the cue, including one that missed
     // hh-splash-dismissed because the desk mounted late, must not scroll
     // the card over the heading the cue just focused.
     if (splashDismissed || appHeadingFocused()) {
       splashDismissed = true;
-      splashParked = false;
       return;
     }
     const question = region();

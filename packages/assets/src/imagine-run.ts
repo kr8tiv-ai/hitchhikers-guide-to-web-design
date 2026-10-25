@@ -383,15 +383,6 @@ function isFinished(slot: AssetSlot): boolean {
   return slot.status === "done" && slot.file !== undefined && slot.file.length > 0;
 }
 
-function isResume(slot: AssetSlot, ledger: SpendLedger): boolean {
-  return (
-    slot.kind === "video" &&
-    slot.jobId !== undefined &&
-    slot.status === "failed" &&
-    alreadyCounted(ledger, slot.id, slot.jobId)
-  );
-}
-
 function alreadyCounted(ledger: SpendLedger, slotId: string, jobId: string): boolean {
   return ledger.entries.some((entry) => entry.slot === slotId && entry.jobId === jobId);
 }

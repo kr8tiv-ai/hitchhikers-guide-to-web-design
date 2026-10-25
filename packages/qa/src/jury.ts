@@ -119,13 +119,9 @@ function assertSameWeights(): void {
 
 function weightedTotal(scores: Pick<JuryInput, (typeof SCORE_FIELDS)[number]>): number {
   assertSameWeights();
-  return (
-    (scores.brand * WEIGHTS.brand +
-      scores.craft * WEIGHTS.craft +
-      scores.clarity * WEIGHTS.clarity +
-      scores.performance * WEIGHTS.performance) /
-    SCORE_SPAN
-  );
+  let total = 0;
+  for (const field of SCORE_FIELDS) total += scores[field] * WEIGHTS[field];
+  return total / SCORE_SPAN;
 }
 
 /** The same 40/30/20/10 total the beauty gate and the jury both use. */

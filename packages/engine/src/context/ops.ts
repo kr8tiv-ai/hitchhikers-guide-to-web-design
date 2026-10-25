@@ -31,7 +31,7 @@ import {
   type FactInput,
 } from "./disk.ts";
 import { readAudit } from "./packet.ts";
-import { ANSWER_SOURCES, type AssetRecord, type DecisionRecord, type DoctorFinding, type RouterStatus } from "./types.ts";
+import { ANSWER_SOURCES, type DecisionRecord, type DoctorFinding, type RouterStatus } from "./types.ts";
 
 const PHASES = [
   "Don't Panic",

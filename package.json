@@ -22,7 +22,9 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "eslint": "10.13.0",
     "hitchhikers-guide": "workspace:*",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0"
   }
 }

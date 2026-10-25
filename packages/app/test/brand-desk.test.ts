@@ -450,12 +450,6 @@ function header(init: RequestInit | undefined, name: string): string | undefined
   return typeof value === "string" ? value : undefined;
 }
 
-async function flush(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 async function waitFor(ready: () => boolean, turns = 50): Promise<void> {
   for (let i = 0; i < turns; i++) {
     if (ready()) return;

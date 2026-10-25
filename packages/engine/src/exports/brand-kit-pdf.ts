@@ -66,7 +66,7 @@ export function readBrandName(projectDir: string): string | null {
   return name === "" ? null : name;
 }
 
-export function renderBrandKitPrint(projectDir: string, brandName: string): string {
+export function renderBrandKitPrint(projectDir: string, _brandName: string): string {
   const sections = approvedSections(projectDir);
   if (sections.length === 0) {
     return `<section class="pdf-section">

@@ -371,12 +371,6 @@ function pauseFailure(status: number, payload: unknown): string {
   return "Pause did not save.";
 }
 
-async function readItems(response: Response): Promise<DriveItem[] | null> {
-  const payload = await readPayload(response);
-  if (payload === null) return null;
-  return parseDriveQueue(payload);
-}
-
 async function readPayload(response: Response): Promise<unknown> {
   try {
     return await response.json();

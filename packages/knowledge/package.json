@@ -16,6 +16,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "lint": "eslint src test",
     "test": "node --experimental-strip-types --test test/**/*.test.ts",
     "validate:gallery": "node --experimental-strip-types scripts/validate-gallery.ts",
     "validate:design-library": "node --experimental-strip-types scripts/validate-design-library.ts",

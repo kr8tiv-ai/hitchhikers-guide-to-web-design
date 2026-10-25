@@ -48,6 +48,26 @@ const HEADINGS = [
   "17. Approval",
 ] as const;
 
+const [
+  summaryTitle,
+  usersTitle,
+  kpiTitle,
+  positioningTitle,
+  iaTitle,
+  sectionPlanTitle,
+  functionalTitle,
+  contentTitle,
+  visualTitle,
+  mediaTitle,
+  nfrTitle,
+  stackTitle,
+  deployTitle,
+  assumptionsTitle,
+  laterTitle,
+  risksTitle,
+  approvalTitle,
+] = HEADINGS;
+
 interface ReqSpec {
   id: string;
   label: string;
@@ -166,7 +186,7 @@ function section(title: string, body: readonly string[]): string {
 function summary(latest: ReadonlyMap<string, AnswerRecord>, name: string): string {
   const flat = flatten(name);
   const intro = flat === "" ? "This PRD describes the site." : `${flat} is the site this PRD describes.`;
-  return section("1. Summary", [
+  return section(summaryTitle, [
     intro,
     show(latest.get("DP-2.1"), "Goal"),
     show(latest.get("DP-2.2"), "One action"),
@@ -175,7 +195,7 @@ function summary(latest: ReadonlyMap<string, AnswerRecord>, name: string): strin
 }
 
 function users(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("2. Users and personas", [
+  return section(usersTitle, [
     show(latest.get("DP-2.6"), "Visitor"),
     "The interview names one visitor. A second persona is not added here.",
   ]);
@@ -202,7 +222,7 @@ function kpis(latest: ReadonlyMap<string, AnswerRecord>): string {
     }
   }
   lines.push(show(latest.get("DP-2.4"), "Key outcome"));
-  return section("3. KPIs and tracking plan", lines);
+  return section(kpiTitle, lines);
 }
 
 function positioning(brandMarkdown: string): string {
@@ -222,11 +242,11 @@ function positioning(brandMarkdown: string): string {
     lines.push("The excerpt is the full brand file.");
   }
   lines.push("Full brand: `.hitchhiker/BRAND.md`.");
-  return section("4. Positioning and messaging hierarchy", lines);
+  return section(positioningTitle, lines);
 }
 
 function architecture(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("5. Information architecture", [
+  return section(iaTitle, [
     show(latest.get("DP-2.8"), "Pages"),
     show(latest.get("DP-2.5"), "Shape"),
     "Nav follows the recorded page list. This PRD adds no extra pages.",
@@ -234,7 +254,7 @@ function architecture(latest: ReadonlyMap<string, AnswerRecord>): string {
 }
 
 function sectionPlan(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("6. Section plan summary", [
+  return section(sectionPlanTitle, [
     "Each section gets one job and one wow. Both are written in `.hitchhiker/SECTION-PLAN.md`.",
     "This summary leaves the job and the wow for that file.",
     show(latest.get("DP-2.8"), "Pages on the plan"),
@@ -257,11 +277,11 @@ function functional(latest: ReadonlyMap<string, AnswerRecord>): string {
     const notes = req.sources.map((id) => sourceNote(latest.get(id), id));
     lines.push(`- **${req.id}**: ${req.label}. ${spaceAfterTerminal(notes.join(". "))}.`);
   }
-  return section("7. Functional requirements", lines);
+  return section(functionalTitle, lines);
 }
 
 function content(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("8. Content requirements", [
+  return section(contentTitle, [
     "Real proof only. Testimonials, awards, client names, and figures need a recorded source.",
     show(latest.get("DP-8.1"), "Copy source"),
     show(latest.get("DP-8.2"), "Proof on record"),
@@ -272,7 +292,7 @@ function content(latest: ReadonlyMap<string, AnswerRecord>): string {
 }
 
 function visual(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("9. Visual and motion requirements", [
+  return section(visualTitle, [
     "Visual direction lives in `.hitchhiker/VISUAL-DIRECTION.md`. Motion lives in `.hitchhiker/MOTION.md`.",
     "The toolkit is chosen per effect in MOTION.md and is not a library dump on every page.",
     show(latest.get("DP-5.3"), "Vibe"),
@@ -285,7 +305,7 @@ function visual(latest: ReadonlyMap<string, AnswerRecord>): string {
 }
 
 function media(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("10. 3D and media requirements", [
+  return section(mediaTitle, [
     show(latest.get("DP-6.4"), "3D source"),
     show(latest.get("DP-3.6"), "Media"),
     show(latest.get("DP-6.5"), "Phone motion"),
@@ -297,7 +317,7 @@ function media(latest: ReadonlyMap<string, AnswerRecord>): string {
 }
 
 function nonFunctional(): string {
-  return section("11. Non-functional requirements", [
+  return section(nfrTitle, [
     "Lighthouse mobile is at least 90 in all four categories: performance, accessibility, best practices, and SEO.",
     "The floor is measured on real mobile runs of what a phone actually gets (D-006): the LHCI mobile preset, throttled, the median of 3 runs, every route as a phone receives it.",
     "A desktop scene does not waive the phone.",
@@ -310,7 +330,7 @@ function nonFunctional(): string {
 }
 
 function stack(): string {
-  return section("12. Tech stack decision", [
+  return section(stackTitle, [
     "The stack record is `.hitchhiker/research/STACK-DECISION.md`. This PRD does not lock a framework. The user may override it.",
     "Default rules for that file:",
     "- Astro for brand, marketing, portfolio, and content sites, and for motion levels 1 to 9.",
@@ -323,7 +343,7 @@ function stack(): string {
 }
 
 function deploy(latest: ReadonlyMap<string, AnswerRecord>): string {
-  return section("13. Deploy plan", [
+  return section(deployTitle, [
     show(latest.get("DP-9.2"), "Hosting"),
     show(latest.get("DP-9.1"), "Deadline"),
     show(latest.get("DP-9.3"), "Maintenance"),
@@ -344,18 +364,18 @@ function assumptions(list: readonly Assumption[]): string {
       lines.push(`- ${item.id}: ${item.value} (${item.status})`);
     }
   }
-  return section("14. Assumptions", lines);
+  return section(assumptionsTitle, lines);
 }
 
 function outOfScope(): string {
-  return section("15. Out of scope / Version 2 list", [
+  return section(laterTitle, [
     "- A full Shopify store is out unless a later escalation says otherwise.",
     "- Version 2 is every field still not settled under Assumptions. Those lines stay out of the build until a later pass records them.",
   ]);
 }
 
 function risks(): string {
-  return section("16. Risks", [
+  return section(risksTitle, [
     "Soft and skipped fields live under Assumptions. Treating one of them as a decision is the risk this list exists to catch.",
     "Phone performance is specified under Non-functional requirements, including the real mobile floor of 90. A later pass does not lower that floor.",
     "Proof, rates, and volumes the interview did not record must stay off the site.",
@@ -364,7 +384,7 @@ function risks(): string {
 }
 
 function approval(): string {
-  return section("17. Approval", [
+  return section(approvalTitle, [
     "PRD approval: pending",
     "This renderer leaves the PRD unsigned. CONTEXT.md and the prompt list wait for the same sign-off.",
   ]);

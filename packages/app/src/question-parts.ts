@@ -184,7 +184,7 @@ function splitSentences(text: string): string[] {
     if (!/[A-Z\u201C\u2018"'(]/.test(next)) return -1;
     return cursor;
   };
-  const cutAt = (end: number, at: number, index: number): number => {
+  const cutAt = (end: number, at: number, _index: number): number => {
     parts.push(flat.slice(start, end).trim());
     start = at;
     return at - 1;

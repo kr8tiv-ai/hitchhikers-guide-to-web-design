@@ -81,10 +81,6 @@ function emptyProject(): string {
   return `# Project\n\n${sections}`;
 }
 
-function emptyDecisions(): string {
-  return "# Decisions\n";
-}
-
 function emptyAssets(): string {
   return "# Assets\n\n## Index\n\n| Saved | Original | Role | Question | Status |\n| --- | --- | --- | --- | --- |\n";
 }

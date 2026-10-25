@@ -18,12 +18,6 @@ import { loadFacts } from "../src/guide/suggest.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKIPPED = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
 
-interface Answer {
-  id: string;
-  value: string;
-  status?: string;
-}
-
 function projectDir(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-brief-040-"));
   const hitch = path.join(dir, ".hitchhiker");

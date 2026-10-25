@@ -29,6 +29,7 @@
     "svgo": "4.1.0"
   },
   "scripts": {
+    "lint": "eslint src test",
     "test": "node --experimental-strip-types --test test/**/*.test.ts"
   }
 }

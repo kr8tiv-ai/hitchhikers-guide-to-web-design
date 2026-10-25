@@ -650,7 +650,7 @@ function signature(state: SessionState): unknown {
   };
 }
 
-function conditionHolds(question: Question, state: SessionState, all: readonly Question[]): boolean {
+function conditionHolds(question: Question, state: SessionState, _all: readonly Question[]): boolean {
   const text = (id: string): string =>
     state.answers.find((answer) => answer.id === id)?.text.toLowerCase() ?? "";
   if (question.id === "DP-0.2a") {

@@ -39,8 +39,7 @@ import {
 import { agentPrompt, ensureFindingsFile, runTestAgent, type AgentRunRequest, type AgentRunResult } from "./agents.ts";
 import { runSupervisorEvaluation } from "./evaluate.ts";
 import { readEvaluationFiles } from "./files.ts";
-import { HOOK_LOG_REL, PUSH_FAILED_REL, agentCommandFailed, agentHookFailed, observeCommand, rowsFromAgentLog } from "./hooks.ts";
-import { RESULTS_REL, STOP_REL } from "./loop.ts";
+import { agentCommandFailed, agentHookFailed, observeCommand, rowsFromAgentLog } from "./hooks.ts";
 import { runSupervisorGit, verifyKeptCommit, type GitText, type PushCheck } from "./pushcheck.ts";
 import { baselineProblem } from "./baseline.ts";
 import { STRAY_DIRS, createSupervisorWorktree, type SupervisorWorktree } from "./worktree.ts";

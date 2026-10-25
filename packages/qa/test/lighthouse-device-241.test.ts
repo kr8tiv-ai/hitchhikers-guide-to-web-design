@@ -14,7 +14,6 @@ import {
   evaluateDevicePerformance,
   evaluatePerformance,
   type DeviceRunInput,
-  type PerformanceInput,
 } from "../src/performance-gate.ts";
 import {
   REAL_DEVICE_EMULATION,
