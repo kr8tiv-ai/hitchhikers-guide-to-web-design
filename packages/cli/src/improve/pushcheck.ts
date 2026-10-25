@@ -12,12 +12,28 @@ export type GitRunner = (cwd: string, args: readonly string[]) => GitText;
 
 const HEX_COMMIT = /^[0-9a-f]{40}$/;
 const GIT_LOCK_ATTEMPTS = 10;
+const AUTH_PUSH_REASON = "Push was refused: SSH key or credentials. Check your git login.";
 
-/** A Windows lock on a loose object. A rejected ref is not this. */
-export function gitTextIsFileLock(text: string): boolean {
-  return /permission denied|unable to write file|unable to write new index file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i.test(
+/**
+ * SSH or HTTPS rejected the remote. A loose-object "Permission denied" is not this.
+ * Checked before the file-lock test so a publickey refusal is not retried.
+ */
+export function gitTextIsAuthFailure(text: string): boolean {
+  return /permission denied \(publickey\)|could not read from remote repository|authentication failed|\b403\b/i.test(
     text,
   );
+}
+
+const FILE_LOCK =
+  /unable to write file|unable to write new index file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i;
+const DENIED = /permission denied/i;
+const DENIED_CONTEXT = /(?:\bfile\b|\bobjects?\b|\bindex\b|\.git[\\/])/i;
+
+/** A Windows lock on a loose object or the index. An auth refusal is not this. */
+export function gitTextIsFileLock(text: string): boolean {
+  if (gitTextIsAuthFailure(text)) return false;
+  if (FILE_LOCK.test(text)) return true;
+  return DENIED.test(text) && DENIED_CONTEXT.test(text);
 }
 
 export function gitLockDelayMs(attempt: number): number {
@@ -29,14 +45,16 @@ function waitMs(ms: number): void {
 }
 
 /**
- * Retry only a file lock. A rejected push, a hook, and a bad ref return on the first result.
+ * Retry only a file lock. An auth refusal, a rejected push, a hook, and a bad ref return on the first result.
  */
 export function retryGitText(run: () => GitText, wait: (ms: number) => void = waitMs): GitText {
   let last: GitText = { status: 1, stdout: "", stderr: "git produced no result" };
   for (let attempt = 0; attempt < GIT_LOCK_ATTEMPTS; attempt += 1) {
     last = run();
     if ((last.status ?? 1) === 0) return last;
-    const locked = gitTextIsFileLock(`${last.stderr}\n${last.stdout}`);
+    const text = `${last.stderr}\n${last.stdout}`;
+    if (gitTextIsAuthFailure(text)) return last;
+    const locked = gitTextIsFileLock(text);
     if (!locked || attempt === GIT_LOCK_ATTEMPTS - 1) return last;
     wait(gitLockDelayMs(attempt));
   }
@@ -124,9 +142,11 @@ export function verifyKeptCommit(
   }
   const decision = decidePushVerify({ pushExit, ancestorExit, forceRefused });
   const output = clip(chunks);
+  const authRefused = gitTextIsAuthFailure(chunks.join("\n"));
   let reason = "";
   if (decision !== "pushed") {
     if (forceRefused) reason = "force push refused";
+    else if (authRefused) reason = AUTH_PUSH_REASON;
     else if (pushExit !== 0) reason = "push was rejected";
     else reason = "origin/main does not contain the commit";
   }
