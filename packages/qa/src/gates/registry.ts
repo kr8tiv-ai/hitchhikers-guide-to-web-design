@@ -20,6 +20,7 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BANNED_PHRASES, BANNED_WORDS, hiddenChildOptions } from "@hitchhiker/engine";
+import { isolatedGitEnv } from "../git-child.ts";
 import { evaluateA11y, type A11yGateInput, type A11yGateResult } from "../a11y-gate.ts";
 import { lintSlop, type SlopHit } from "../antislop.ts";
 import type { ConsoleGateResult } from "../console-gate.ts";
@@ -88,6 +89,11 @@ export interface GateReport {
 export interface GateProject {
   /** Site directory. The report is written to `.hitchhiker/qa/GATES.json` here. */
   root: string;
+  /**
+   * Commit id for the report. When omitted, the report reads `git rev-parse HEAD`.
+   * A round that injected git passes the same reader so the head matches that store.
+   */
+  readHead?: (root: string) => Promise<string> | string;
 }
 
 export interface MotionRunInput {
@@ -212,7 +218,7 @@ export function gatesJsonPath(root: string): string {
  * `head` is the git commit of `project.root`.
  */
 export async function runAllGates(project: GateProject, runners: GateRunners): Promise<GateReport> {
-  const head = await readHead(project.root);
+  const head = await resolveHead(project);
   const facts = await collect(project, runners);
   const results = GATE_IDS.map((id) => RUN[id](facts));
   const report: GateReport = {
@@ -321,17 +327,39 @@ async function runMatrix(
   }
 }
 
+function validHead(head: string): boolean {
+  return /^[0-9a-f]{40}$/.test(head) || /^[0-9a-f]{64}$/.test(head);
+}
+
+async function resolveHead(project: GateProject): Promise<string> {
+  if (project.readHead === undefined) return readHead(project.root);
+  const head = String(await project.readHead(project.root)).trim().toLowerCase();
+  if (!validHead(head)) throw new Error("This folder has no git commit to attach the gate report to.");
+  return head;
+}
+
 function readHead(root: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", ["rev-parse", "HEAD"], hiddenChildOptions({ cwd: root, encoding: "utf8" }), (error, stdout) => {
-      const head = stdout.trim().toLowerCase();
-      const valid = /^[0-9a-f]{40}$/.test(head) || /^[0-9a-f]{64}$/.test(head);
-      if (error !== null || !valid) {
-        reject(new Error("This folder has no git commit to attach the gate report to."));
-        return;
-      }
-      resolve(head);
-    });
+    execFile(
+      "git",
+      ["rev-parse", "HEAD"],
+      hiddenChildOptions({
+        cwd: root,
+        encoding: "utf8",
+        env: isolatedGitEnv(),
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+        stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
+      }),
+      (error, stdout) => {
+        const head = stdout.trim().toLowerCase();
+        if (error !== null || !validHead(head)) {
+          reject(new Error("This folder has no git commit to attach the gate report to."));
+          return;
+        }
+        resolve(head);
+      },
+    );
   });
 }
 

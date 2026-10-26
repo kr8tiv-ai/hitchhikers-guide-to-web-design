@@ -24,6 +24,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
@@ -55,7 +56,15 @@ test("spawn args name grok-4.7-build-fast and effort xhigh", () => {
 test("a stub run passes, records files, and a second ensure does not spawn again", async () => {
   const dir = tempDir();
   let calls = 0;
-  let releaseFirst: (result: BuildSpawnResult) => void = () => undefined;
+  // The promise exists before spawn. Cleanup can release it even when the
+  // build has not reached the runner yet, so a live pid cannot sit until the
+  // idle watchdog.
+  const held = hold();
+  let markRunning: () => void = () => undefined;
+  const sawRunning = new Promise<void>((resolve) => {
+    markRunning = resolve;
+  });
+  const live = startLivePid();
   const spawn: BuildSpawn = (request) => {
     calls += 1;
     assert.equal(request.model, "grok-4.7-build-fast");
@@ -69,9 +78,8 @@ test("a stub run passes, records files, and a second ensure does not spawn again
     }
     request.onOutput?.("Writing the home page");
     if (request.promptId === "001") {
-      const held = hold();
-      releaseFirst = held.release;
-      return { pid: 424242, done: held.promise };
+      markRunning();
+      return { pid: live.pid, done: held.promise };
     }
     return { pid: 424242, done: Promise.resolve(result(0)) };
   };
@@ -88,19 +96,19 @@ test("a stub run passes, records files, and a second ensure does not spawn again
     const first = ensureSiteBuild(dir);
     const second = ensureSiteBuild(dir);
     assert.equal(first, second);
-    let running = false;
-    for (let attempt = 0; attempt < 40 && !running; attempt += 1) {
-      running = readBuildRun(dir)?.status === "running";
-      if (!running) await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    assert.equal(running, true);
+    const outcome = await Promise.race([
+      sawRunning.then(() => "running" as const),
+      first.then(() => "settled" as const),
+    ]);
+    assert.equal(outcome, "running");
+    assert.equal(readBuildRun(dir)?.status, "running");
     assert.equal(calls, 1);
     const during = readBuildRun(dir);
     assert.equal(during?.model, "grok-4.7-build-fast");
     assert.equal(during?.effort, "xhigh");
     assert.match(during?.lastLines.join("\n") ?? "", /Writing the home page/);
     assert.ok((during?.filesWritten ?? []).includes("index.html"));
-    releaseFirst(result(0));
+    held.release(result(0));
     await first;
     const queue = await loadQueue(dir);
     assert.equal(queue?.items[0]?.status, "passed");
@@ -110,7 +118,8 @@ test("a stub run passes, records files, and a second ensure does not spawn again
     await ensureSiteBuild(dir);
     assert.equal(calls, after);
   } finally {
-    releaseFirst(result(0));
+    held.release(result(0));
+    live.stop();
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
     removeTempDir(dir);

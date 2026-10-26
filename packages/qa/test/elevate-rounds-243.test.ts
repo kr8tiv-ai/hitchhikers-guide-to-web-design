@@ -4,13 +4,12 @@
  */
 
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { after, describe, test } from "node:test";
+import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { defaultConfig, hiddenChildOptions, phonePerformanceBudget, think, type SpawnLike } from "@hitchhiker/engine";
+import { defaultConfig, phonePerformanceBudget, think, type SpawnLike } from "@hitchhiker/engine";
 import { elevateRound, type ElevateRoundDeps, type GateResult as RoundGates } from "../src/elevate-loop.ts";
 import { readElevateLedger } from "../src/elevate-ledger.ts";
 import { loadElevateMenu } from "../src/elevate-menu.ts";
@@ -30,7 +29,10 @@ import type { DeviceProject, MatrixHooks } from "../src/device-matrix.ts";
 import { gatesJsonPath, type GateReport, type GateRunners } from "../src/gates/registry.ts";
 import { OPACITY_KEEP_MS, type PhoneSceneSample, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
 import { REVIEW_WIDTHS } from "../src/screenshots.ts";
+import { createMemoryGit } from "./memory-git.ts";
 import { removeTempDir } from "./remove-temp.ts";
+
+const memoryGit = createMemoryGit();
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(here, "..", "src", "elevate-rounds.ts");
@@ -84,91 +86,8 @@ function clearGates(): RoundGates {
   return { lh: "PASS", a11y: "PASS", console: "PASS", links: "PASS", weight: "PASS" };
 }
 
-// Git for Windows rejects "NUL" as a config path. One empty file isolates both configs.
-const emptyGitConfigDir = mkdtempSync(path.join(os.tmpdir(), "hh-git-config-"));
-const emptyGitConfig = path.join(emptyGitConfigDir, "empty.gitconfig");
-writeFileSync(emptyGitConfig, "");
-
-function removeEmptyGitConfig(): void {
-  try {
-    removeTempDir(emptyGitConfigDir);
-  } catch {
-    // Removal must never fail a test.
-  }
-}
-
-process.on("exit", removeEmptyGitConfig);
-after(removeEmptyGitConfig);
-
-function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith("GIT_")) continue;
-    env[key] = value;
-  }
-  env.GIT_AUTHOR_NAME = "Hitchhiker";
-  env.GIT_AUTHOR_EMAIL = "hh@localhost";
-  env.GIT_COMMITTER_NAME = "Hitchhiker";
-  env.GIT_COMMITTER_EMAIL = "hh@localhost";
-  env.GIT_TERMINAL_PROMPT = "0";
-  env.GIT_CONFIG_GLOBAL = emptyGitConfig;
-  env.GIT_CONFIG_SYSTEM = emptyGitConfig;
-  env.GIT_CONFIG_NOSYSTEM = "1";
-  return env;
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function git(dir: string, args: readonly string[], attempt = 0): Promise<string> {
-  const hooks = path.join(os.tmpdir(), "hh-elevate-no-hooks").replaceAll("\\", "/");
-  mkdirSync(hooks, { recursive: true });
-  const full = [
-    "-c",
-    "user.name=Hitchhiker",
-    "-c",
-    "user.email=hh@localhost",
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "core.autocrlf=false",
-    "-c",
-    "core.fscache=false",
-    "-c",
-    "core.editor=true",
-    "-c",
-    `core.hooksPath=${hooks}`,
-    "-C",
-    dir,
-    ...args,
-  ];
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      full,
-      hiddenChildOptions({
-        encoding: "utf8",
-        timeout: 60_000,
-        maxBuffer: 8 * 1024 * 1024,
-        env: gitEnv(),
-      }),
-      (error, stdout, stderr) => {
-        if (error) {
-          const detail = String(stderr ?? "").trim();
-          const message = detail.length > 0 ? detail : error.message;
-          if (attempt < 8 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(message)) {
-            removeTempDir(path.join(dir, ".git", "index.lock"));
-            wait(400 * (attempt + 1)).then(() => git(dir, args, attempt + 1).then(resolve, reject), reject);
-            return;
-          }
-          reject(new Error(`${args.join(" ")}: ${message}`));
-          return;
-        }
-        resolve(String(stdout).trim());
-      },
-    );
-  });
+function git(dir: string, args: readonly string[]): Promise<string> {
+  return memoryGit(dir, args);
 }
 
 function plant(projectDir: string): void {
@@ -369,6 +288,7 @@ async function assertGatesMatchHead(projectDir: string, report: GateReport): Pro
 
 function depsFor(model: typeof think, scenario: Scenario): ElevateRoundDeps {
   return {
+    git: memoryGit,
     think: model,
     pick: async (items) => (scenario.accept ? items.slice(0, 1) : []),
     runPrompt: async () => {
@@ -733,6 +653,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
       await initRepo(projectDir);
       const before = (await git(projectDir, ["rev-parse", "HEAD"])).toLowerCase();
       const result = await elevateRound(projectDir, {
+        git: memoryGit,
         think: scriptedPlan(PLAN_PAYLOAD),
         pick: async (items) => items.slice(0, 1),
         runPrompt: async () => {
@@ -803,6 +724,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
       const heads: string[] = [];
       let prompts = 0;
       const beauty = await elevateRound(projectDir, {
+        git: memoryGit,
         think: scriptedPlan(two),
         pick: async (items) => items,
         runPrompt: async () => {
@@ -831,6 +753,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
         await initRepo(juryDir);
         const juryBefore = (await git(juryDir, ["rev-parse", "HEAD"])).toLowerCase();
         const jury = await elevateRound(juryDir, {
+          git: memoryGit,
           think: scriptedPlan(PLAN_PAYLOAD),
           pick: async (items) => items.slice(0, 1),
           runPrompt: async () => {
@@ -861,6 +784,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
         projectDir,
         maxRounds: 2,
         deps: {
+          git: memoryGit,
           think: scriptedPlan(PLAN_PAYLOAD),
           pick: async (items) => items.slice(0, 1),
           runPrompt: async () => {

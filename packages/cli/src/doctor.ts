@@ -201,7 +201,7 @@ export async function doctor(
   return { report, exitCode: nodeOk ? 0 : 1 };
 }
 
-/** Spawn with shell off, stdin ignored, and a 10 second timeout. PATH is the process PATH. */
+/** Spawn with shell off and stdin ignored. The timeout is 10 seconds unless HH_PROBE_TIMEOUT_MS is a positive integer. PATH is the process PATH. */
 export function spawnCommand(
   command: string,
   args: readonly string[],

@@ -58,13 +58,14 @@ test("hh app refuses HH_CASSETTE outside a test and does not open a browser", as
 
 test("hh app starts when cassette mode is opted in and the desk says so", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-cassette-"));
+  const runner = quietRunner();
   let opened = 0;
   const open = async (): Promise<boolean> => {
     opened += 1;
     return true;
   };
   try {
-    const flagged = await runCli(["app", "--cassette", "--project", dir, "--port", "0"], undefined, {
+    const flagged = await runCli(["app", "--cassette", "--project", dir, "--port", "0"], runner, {
       env: { HH_CASSETTE: "replay" },
       open,
     });
@@ -80,7 +81,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
     await closeActiveApp();
 
     opened = 0;
-    const allowed = await runCli(["app", "--no-open", "--project", dir, "--port", "0"], undefined, {
+    const allowed = await runCli(["app", "--no-open", "--project", dir, "--port", "0"], runner, {
       env: { HH_CASSETTE: "replay", HH_ALLOW_CASSETTE: "1" },
       open,
     });
@@ -93,7 +94,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
 
     const recorded = await runCli(
       ["app", "--cassette", "--no-open", "--project", dir, "--port", "0"],
-      undefined,
+      runner,
       { env: { HH_CASSETTE: "record" }, open },
     );
     assert.equal(recorded.exitCode, 0, recorded.stderr);
@@ -102,7 +103,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
     assert.match(recordedHtml, /Record mode: answers are written to cassettes\./);
     await closeActiveApp();
 
-    const quiet = await runCli(["app", "--no-open", "--project", dir, "--port", "0"], undefined, {
+    const quiet = await runCli(["app", "--no-open", "--project", dir, "--port", "0"], runner, {
       env: { HH_CASSETTE: "replay", NODE_TEST_CONTEXT: "child" },
       open,
     });

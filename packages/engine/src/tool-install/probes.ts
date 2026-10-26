@@ -24,6 +24,15 @@ export interface CommandRunner {
 
 const SPAWN_TIMEOUT_MS = 10_000;
 
+/** A positive HH_PROBE_TIMEOUT_MS shortens the probe. Anything else keeps 10 seconds. */
+function probeTimeoutMs(env: NodeJS.ProcessEnv): number {
+  const raw = env.HH_PROBE_TIMEOUT_MS;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) return SPAWN_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return SPAWN_TIMEOUT_MS;
+  return parsed;
+}
+
 const OPTIONAL_TOOLS = ["playwright", "whisper", "pdftotext"] as const;
 
 export const PATH_PROBE_NAMES = ["grok", ...OPTIONAL_TOOLS] as const;
@@ -98,7 +107,7 @@ export function deskPreflight(runner: CommandRunner): DeskPreflightReport {
   };
 }
 
-/** Spawn with shell off, stdin ignored, and a 10 second timeout. PATH comes from `env`. */
+/** Spawn with shell off and stdin ignored. The timeout is 10 seconds unless HH_PROBE_TIMEOUT_MS is a positive integer. PATH comes from `env`. */
 export function spawnProbe(
   command: string,
   args: readonly string[],
@@ -107,7 +116,7 @@ export function spawnProbe(
   const spec = launchSpec(command, args, env, process.platform);
   const result = spawnSync(spec.file, spec.args, hiddenChildOptions({
     shell: false,
-    timeout: SPAWN_TIMEOUT_MS,
+    timeout: probeTimeoutMs(env),
     encoding: "utf8",
     env,
     windowsVerbatimArguments: spec.verbatim,

@@ -24,7 +24,18 @@ import {
 } from "@hitchhiker/engine";
 import { runBriefCommand } from "../src/commands/brief.ts";
 import { runCli } from "../src/main.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
+
+async function until(ready: () => boolean): Promise<boolean> {
+  for (let attempt = 0; attempt < 10_000; attempt += 1) {
+    if (ready()) return true;
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+  return ready();
+}
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -54,13 +65,19 @@ test("Start build and hh next --run spawn through the injected runner once", asy
   const gate = new Promise<number>((resolve) => {
     release = resolve;
   });
+  let noteStart: () => void = () => undefined;
+  const sawStart = new Promise<void>((resolve) => {
+    noteStart = resolve;
+  });
+  const live = startLivePid();
   const spawn: BuildSpawn = (request) => {
     calls += 1;
+    noteStart();
     assert.ok(request.args.includes("grok-4.7-build-fast"));
     assert.ok(request.args.includes("xhigh"));
     if (request.promptId === "001") {
       return {
-        pid: 424242,
+        pid: live.pid,
         done: gate.then((code) => ({ code, stdout: "", stderr: "", errorCode: null })),
       };
     }
@@ -91,24 +108,19 @@ test("Start build and hh next --run spawn through the injected runner once", asy
     assert.equal(calls, 0);
     const started = await startSiteBuild(dir);
     assert.equal(started.buildStarted, true);
-    let running = false;
-    for (let attempt = 0; attempt < 40 && !running; attempt += 1) {
-      running = readBuildRun(dir)?.status === "running";
-      if (!running) await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    assert.equal(running, true);
+    await sawStart;
+    assert.equal(await until(() => readBuildRun(dir)?.status === "running"), true);
     assert.equal(calls, 1);
-    const again = runCli(["next", "--run", "--project", dir]);
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    const finished = await runCli(["next", "--run", "--project", dir]);
     assert.equal(calls, 1);
     release(0);
-    const finished = await again;
     assert.equal(finished.exitCode, 0);
     assert.match(finished.stdout, /The build is started/);
     await siteBuildSettled(dir);
     assert.equal((await loadQueue(dir))?.items[0]?.status, "passed");
   } finally {
     release(0);
+    live.stop();
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
     removeTempDir(dir);

@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { loadQueue, saveQueue, siteBuildSettled, withStateLock, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
@@ -135,6 +136,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const live = startLivePid();
   const buildSpawn: BuildSpawn = (request) => {
     calls += 1;
     assert.ok(request.args.includes("grok-4.7-build-fast"));
@@ -142,7 +144,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
     request.onOutput?.("Writing the home page");
     if (request.promptId === "001") {
       return {
-        pid: 424242,
+        pid: live.pid,
         done: gate.then(() => {
           writeFileSync(path.join(dir, "index.html"), "<p>Home</p>\n", "utf8");
           return { code: 0, stdout: "", stderr: "", errorCode: null };
@@ -158,11 +160,13 @@ test("approve starts one build and the drive shows model, effort, and files", as
     const token = tokenFrom(home.body);
     await approveBriefThenPlan(handle.port, token);
     let progress = "";
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
       const next = await raw(handle.port, "GET", "/api/drive/progress");
       progress = next.body;
-      if (progress.includes('"status":"running"')) break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      if (progress.includes('"status":"running"') || progress.includes('"status":"failed"')) break;
+      await new Promise((resolve) => {
+        setImmediate(resolve);
+      });
     }
     assert.match(progress, /grok-4\.7-build-fast/);
     assert.match(progress, /xhigh/);
@@ -191,6 +195,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
     assert.equal((await loadQueue(dir))?.items[0]?.status, "passed");
   } finally {
     release();
+    live.stop();
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
     removeTempDir(dir);
@@ -284,7 +289,9 @@ test("a failing stub shows the failure and Retry starts the same prompt again", 
       const next = await raw(handle.port, "GET", "/hh-dashboard");
       page = next.body;
       if (page.includes('data-status="failed"')) break;
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await new Promise((resolve) => {
+        setImmediate(resolve);
+      });
     }
     assert.match(page, /data-status="failed"/);
     assert.match(page, /data-action="retry"/);

@@ -18,27 +18,30 @@ import {
   type BuildSpawn,
 } from "@hitchhiker/engine";
 import { runCli } from "../src/main.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 test("hh build --resume and hh next --resume start one run", { timeout: 20_000 }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-cli-034b-"));
   const seen: string[] = [];
   let release: () => void = () => undefined;
+  let noteStart: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const saw003 = new Promise<void>((resolve) => {
+    noteStart = resolve;
+  });
+  const live = startLivePid();
   const spawn: BuildSpawn = (request) => {
     seen.push(request.promptId);
+    if (request.promptId === "003") noteStart();
     assert.equal(request.model, BUILD_MODEL);
     assert.equal(request.effort, BUILD_EFFORT);
     assert.ok(request.args.includes(BUILD_MODEL));
     assert.ok(request.args.includes(BUILD_EFFORT));
     if (request.promptId === "003") {
-      return { pid: 999999, done: gate.then(() => ({ code: 0, stdout: "", stderr: "", errorCode: null })) };
+      return { pid: live.pid, done: gate.then(() => ({ code: 0, stdout: "", stderr: "", errorCode: null })) };
     }
     return { pid: 999999, done: Promise.resolve({ code: 0, stdout: "", stderr: "", errorCode: null }) };
   };
@@ -63,12 +66,11 @@ test("hh build --resume and hh next --resume start one run", { timeout: 20_000 }
     const started = await runCli(["build", "--resume", "--project", dir]);
     assert.equal(started.exitCode, 0);
     assert.match(started.stdout, /The build is started/);
-    for (let attempt = 0; attempt < 40 && !seen.includes("003"); attempt += 1) await delay(25);
+    await saw003;
     assert.deepEqual(seen, ["003"]);
     const again = await runCli(["next", "--resume", "--project", dir]);
     assert.equal(again.exitCode, 0);
     assert.match(again.stdout, /The build is started/);
-    await delay(40);
     assert.deepEqual(seen, ["003"]);
     release();
     await siteBuildSettled(dir);
@@ -78,6 +80,7 @@ test("hh build --resume and hh next --resume start one run", { timeout: 20_000 }
     assert.equal(seen.filter((id) => id === "003").length, 1);
   } finally {
     release();
+    live.stop();
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
     removeTempDir(dir);

@@ -21,12 +21,12 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hiddenChildOptions, type think } from "@hitchhiker/engine";
+import { emptyHooksPath, isolatedGitEnv } from "./git-child.ts";
 import {
   planElevateModel,
   type ElevateColdRead,
@@ -146,6 +146,16 @@ export interface ElevateRoundDeps {
   scores?: () => Promise<ElevateRoundScores> | ElevateRoundScores;
   /** Scores from the previous round. A drop reverts the picks kept in this round. */
   priorScores?: ElevateRoundScores;
+  /**
+   * Git for status, rev-parse, and reset. When omitted, the round shells
+   * out. Tests pass an in-memory runner so a round does not wait on a process.
+   */
+  git?: (dir: string, args: readonly string[]) => Promise<string>;
+  /**
+   * Wait before retrying a git write Windows locked. Attempt is 0-based.
+   * The default waits 300ms times the attempt number.
+   */
+  retryDelay?: (attempt: number) => Promise<void>;
 }
 
 export interface ElevateRoundResult {
@@ -426,26 +436,29 @@ async function writePickPrompt(projectDir: string, id: string, item: ElevateItem
   return file;
 }
 
-function gitEnv(): NodeJS.ProcessEnv {
+interface GitCall {
+  runner?: (dir: string, args: readonly string[]) => Promise<string>;
+  retryDelay?: (attempt: number) => Promise<void>;
+}
+
+function gitCallOf(deps: ElevateRoundDeps): GitCall {
   return {
-    ...process.env,
-    GIT_AUTHOR_NAME: "Hitchhiker",
-    GIT_AUTHOR_EMAIL: "hh@localhost",
-    GIT_COMMITTER_NAME: "Hitchhiker",
-    GIT_COMMITTER_EMAIL: "hh@localhost",
-    GIT_TERMINAL_PROMPT: "0",
+    ...(deps.git === undefined ? {} : { runner: deps.git }),
+    ...(deps.retryDelay === undefined ? {} : { retryDelay: deps.retryDelay }),
   };
 }
 
-function emptyHooks(): string {
-  const dir = path.join(os.tmpdir(), "hh-elevate-no-hooks");
-  mkdirSync(dir, { recursive: true });
-  return dir.replaceAll("\\", "/");
+function defaultRetryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 300 * (attempt + 1));
+  });
 }
 
-function git(dir: string, args: readonly string[], attempt = 0): Promise<string> {
+function git(dir: string, args: readonly string[], attempt = 0, call: GitCall = {}): Promise<string> {
+  if (call.runner !== undefined) return call.runner(dir, args);
   // An empty hooks path keeps a machine-level hook from blocking the revert.
   // fscache off: that Windows cache denies new object writes.
+  // fsync and fsmonitor off: a scanner or the user's monitor must not stall the child.
   const full = [
     "-c",
     "user.name=Hitchhiker",
@@ -458,9 +471,15 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
     "-c",
     "core.fscache=false",
     "-c",
+    "core.fsync=none",
+    "-c",
+    "gc.auto=0",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
     "core.editor=true",
     "-c",
-    `core.hooksPath=${emptyHooks()}`,
+    `core.hooksPath=${emptyHooksPath()}`,
     "-C",
     dir,
     ...args,
@@ -471,10 +490,11 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
       full,
       hiddenChildOptions({
         encoding: "utf8",
-        env: gitEnv(),
+        env: isolatedGitEnv(),
         maxBuffer: 8 * 1024 * 1024,
         timeout: 60_000,
         killSignal: "SIGKILL",
+        stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
       }),
       (error, stdout, stderr) => {
         if (error) {
@@ -482,9 +502,8 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
           // Windows can deny the object write for a moment while a scanner holds the new file.
           if (attempt < 5 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(detail)) {
             rmSync(path.join(dir, ".git", "index.lock"), { force: true });
-            setTimeout(() => {
-              git(dir, args, attempt + 1).then(resolve, reject);
-            }, 300 * (attempt + 1));
+            const wait = call.retryDelay ?? defaultRetryDelay;
+            wait(attempt).then(() => git(dir, args, attempt + 1, call).then(resolve, reject), reject);
             return;
           }
           reject(new Error(calm(detail)));
@@ -496,9 +515,9 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
   });
 }
 
-async function headOf(dir: string): Promise<string> {
+async function headOf(dir: string, call: GitCall): Promise<string> {
   try {
-    const head = await git(dir, ["rev-parse", "HEAD"]);
+    const head = await git(dir, ["rev-parse", "HEAD"], 0, call);
     if (/^[0-9a-f]+$/i.test(head)) return head;
   } catch {
     // A missing HEAD is reported by the caller.
@@ -533,9 +552,9 @@ function insideProject(projectDir: string, relative: string): string | null {
   return full;
 }
 
-async function assertClean(projectDir: string): Promise<void> {
-  await headOf(projectDir);
-  const foreign = linesOf(await git(projectDir, ["status", "--porcelain"])).filter(
+async function assertClean(projectDir: string, call: GitCall): Promise<void> {
+  await headOf(projectDir, call);
+  const foreign = linesOf(await git(projectDir, ["status", "--porcelain"], 0, call)).filter(
     (line) => !line.replaceAll("\\", "/").includes(".hitchhiker/"),
   );
   if (foreign.length > 0) {
@@ -543,9 +562,9 @@ async function assertClean(projectDir: string): Promise<void> {
   }
 }
 
-async function removeNewUntracked(projectDir: string, before: readonly string[]): Promise<void> {
+async function removeNewUntracked(projectDir: string, before: readonly string[], call: GitCall): Promise<void> {
   const known = new Set(before);
-  const current = untrackedFiles(await git(projectDir, ["status", "--porcelain"]));
+  const current = untrackedFiles(await git(projectDir, ["status", "--porcelain"], 0, call));
   for (const relative of current) {
     if (known.has(relative)) continue;
     if (relative.startsWith(".hitchhiker/")) continue;
@@ -584,12 +603,12 @@ async function restoreLedger(projectDir: string, saved: ReadonlyMap<string, stri
  * Put the project back on the pre-pick commit. HEAD equals that hash
  * afterwards. A new revert commit would leave a different HEAD.
  */
-async function revertTo(projectDir: string, before: string, untracked: readonly string[]): Promise<void> {
+async function revertTo(projectDir: string, before: string, untracked: readonly string[], call: GitCall): Promise<void> {
   const saved = snapshotLedger(projectDir);
-  await git(projectDir, ["reset", "--hard", before]);
-  await removeNewUntracked(projectDir, untracked);
+  await git(projectDir, ["reset", "--hard", before], 0, call);
+  await removeNewUntracked(projectDir, untracked, call);
   await restoreLedger(projectDir, saved);
-  const head = (await headOf(projectDir)).toLowerCase();
+  const head = (await headOf(projectDir, call)).toLowerCase();
   if (head !== before.toLowerCase()) {
     throw new Error("This change could not be undone.");
   }
@@ -828,6 +847,7 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     throw new Error("elevateRound needs think, pick, runPrompt, and gates.");
   }
   const root = path.resolve(projectDir);
+  const call = gitCallOf(deps);
   const artifactReasons = await artifactRefusals(root, deps);
   if (artifactReasons.length > 0) {
     const blockedRound = nextRound(root);
@@ -895,9 +915,9 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     return { applied: [], refused };
   }
 
-  await assertClean(root);
-  const headAtRoundStart = await headOf(root);
-  const untrackedAtStart = untrackedFiles(await git(root, ["status", "--porcelain"]));
+  await assertClean(root, call);
+  const headAtRoundStart = await headOf(root, call);
+  const untrackedAtStart = untrackedFiles(await git(root, ["status", "--porcelain"], 0, call));
   let prior = await deps.gates();
   const applied: string[] = [];
   const refused: Array<{ id: string; reason: string }> = [];
@@ -908,13 +928,13 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
     if (item === undefined) continue;
     const id = `r${round}-${String(index + 1).padStart(2, "0")}`;
     picks.push({ id, file: item.file, change: item.change });
-    const headBefore = await headOf(root);
-    const untracked = untrackedFiles(await git(root, ["status", "--porcelain"]));
+    const headBefore = await headOf(root, call);
+    const untracked = untrackedFiles(await git(root, ["status", "--porcelain"], 0, call));
     const file = await writePickPrompt(root, id, item);
     const promptText = readFileSync(file, "utf8");
     let next = prior;
     let gateError = "";
-    const rollback = (): Promise<void> => revertTo(root, headBefore, untracked);
+    const rollback = (): Promise<void> => revertTo(root, headBefore, untracked, call);
     if (!preserveSentencePresent(promptText)) {
       refused.push({ id, reason: "The prompt omitted the preserve sentence, so the model was not called." });
       continue;
@@ -974,7 +994,7 @@ export async function elevateRound(projectDir: string, deps: ElevateRoundDeps): 
   const measured = await readRoundScores(deps);
   const roundDrop = priorDropReasons(deps.priorScores, measured);
   if (roundDrop.length > 0 && applied.length > 0) {
-    await revertTo(root, headAtRoundStart, untrackedAtStart);
+    await revertTo(root, headAtRoundStart, untrackedAtStart, call);
     const reason = calm(roundDrop.join(" "));
     for (const id of applied) refused.push({ id, reason });
     applied.length = 0;

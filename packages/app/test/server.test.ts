@@ -23,6 +23,16 @@ import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cliEntry = path.resolve(here, "../../cli/src/main.ts");
+const compileCache = path.join(tmpdir(), "hh-node-compile-cache");
+mkdirSync(compileCache, { recursive: true });
+
+function cliEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HH_PROBE_TIMEOUT_MS: "200",
+    NODE_COMPILE_CACHE: compileCache,
+  };
+}
 
 function tempProject(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-desk-"));
@@ -891,6 +901,7 @@ function readSse(handle: ServerHandle): Promise<void> {
 test("hh app prints a loopback URL and hh sessions prints the command table", async () => {
   const help = spawnSync(process.execPath, ["--experimental-strip-types", cliEntry, "app", "--help"], {
     encoding: "utf8",
+    env: cliEnv(),
   });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /Usage: hh app \[--project <dir>\] \[--port <n>\] \[--no-open\] \[--cassette\]/);
@@ -898,6 +909,7 @@ test("hh app prints a loopback URL and hh sessions prints the command table", as
 
   const unknown = spawnSync(process.execPath, ["--experimental-strip-types", cliEntry, "sessions"], {
     encoding: "utf8",
+    env: cliEnv(),
   });
   assert.equal(unknown.status, 2);
   assert.equal(unknown.stdout, "");
@@ -909,7 +921,7 @@ test("hh app prints a loopback URL and hh sessions prints the command table", as
   const child = spawn(
     process.execPath,
     ["--experimental-strip-types", cliEntry, "app", "--cassette", "--no-open", "--project", dir],
-    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, env: cliEnv() },
   );
   try {
     const url = await readUrl(child);
@@ -982,30 +994,31 @@ function readUrl(child: ChildProcess): Promise<string> {
     let stdout = "";
     let stderr = "";
     let settled = false;
-    const timer = setTimeout(() => {
+    const fail = (why: string): void => {
       if (settled) return;
       settled = true;
-      reject(new Error(`hh app did not print a URL\n${stderr}`));
-    }, 20_000);
+      const code = child.exitCode === null ? "null" : String(child.exitCode);
+      const signal = child.signalCode ?? "null";
+      reject(new Error(`${why}\nexit ${code} signal ${signal}\n${stderr}\n${stdout}`));
+    };
     child.stdout?.setEncoding("utf8");
     child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
-      const line = stdout.split("\n").find((item) => item.startsWith("http://127.0.0.1:"));
+      const line = stdout.split(/\r?\n/).find((item) => item.startsWith("http://127.0.0.1:"));
       if (line !== undefined && !settled) {
         settled = true;
-        clearTimeout(timer);
         resolve(line.trim());
       }
     });
     child.stderr?.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.once("exit", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new Error(`hh app exited ${code ?? "null"}\n${stderr}\n${stdout}`));
+    child.once("error", (error: Error) => {
+      fail(`hh app did not start. ${error.message}`);
+    });
+    child.once("exit", (code, signal) => {
+      fail(`hh app exited ${code ?? "null"} signal ${signal ?? "null"}`);
     });
   });
 }

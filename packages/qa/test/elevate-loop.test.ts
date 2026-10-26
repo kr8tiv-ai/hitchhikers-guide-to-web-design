@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { defaultConfig, hiddenChildOptions, think, type SpawnLike, type ThinkRequest } from "@hitchhiker/engine";
+import { defaultConfig, think, type SpawnLike, type ThinkRequest } from "@hitchhiker/engine";
 import {
   COPY_REFINE_SCHEMA,
   COPY_REFINE_TASK,
@@ -24,7 +24,10 @@ import { elevateRound, type GateResult } from "../src/elevate-loop.ts";
 import type { ElevateItem } from "../src/elevate.ts";
 import { startFixtureSite } from "../src/playwright-opener.ts";
 import { REVIEW_WIDTHS } from "../src/screenshots.ts";
+import { createMemoryGit } from "./memory-git.ts";
 import { removeTempDir } from "./remove-temp.ts";
+
+const memoryGit = createMemoryGit();
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..", "..", "..");
@@ -94,56 +97,8 @@ function codeOf(error: Error | null): number {
   return 1;
 }
 
-function git(dir: string, args: readonly string[], attempt = 0): Promise<void> {
-  const hooks = path.join(os.tmpdir(), "hh-elevate-no-hooks").replaceAll("\\", "/");
-  mkdirSync(hooks, { recursive: true });
-  const full = [
-    "-c",
-    "user.name=Hitchhiker",
-    "-c",
-    "user.email=hh@localhost",
-    "-c",
-    "commit.gpgsign=false",
-    "-c",
-    "core.fscache=false",
-    "-c",
-    "core.editor=true",
-    "-c",
-    `core.hooksPath=${hooks}`,
-    "-C",
-    dir,
-    ...args,
-  ];
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      full,
-      hiddenChildOptions({
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          GIT_AUTHOR_NAME: "Hitchhiker",
-          GIT_AUTHOR_EMAIL: "hh@localhost",
-          GIT_COMMITTER_NAME: "Hitchhiker",
-          GIT_COMMITTER_EMAIL: "hh@localhost",
-        },
-      }),
-      (error, _stdout, stderr) => {
-        if (error) {
-          const detail = stderr.trim().length > 0 ? stderr.trim() : error.message;
-          if (attempt < 5 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(detail)) {
-            setTimeout(() => {
-              git(dir, args, attempt + 1).then(resolve, reject);
-            }, 300 * (attempt + 1));
-            return;
-          }
-          reject(new Error(detail));
-          return;
-        }
-        resolve();
-      },
-    );
-  });
+function git(dir: string, args: readonly string[]): Promise<void> {
+  return memoryGit(dir, args).then(() => undefined);
 }
 
 function plant(projectDir: string): void {
@@ -251,6 +206,7 @@ test("a cassette round keeps one pick and refuses a Lighthouse regression", { ti
     let gateCalls = 0;
     const prompts: string[] = [];
     const result = await elevateRound(projectDir, {
+      git: memoryGit,
       think: model,
       pick: async (items) => {
         const stranger: ElevateItem = { file: "src/stranger.tsx", change: "A line that was not planned" };
@@ -379,6 +335,7 @@ test("every regressing pick is refused and nothing is kept", { timeout: 60_000 }
   try {
     await initRepo(projectDir);
     const result = await elevateRound(projectDir, {
+      git: memoryGit,
       think: scriptedThink(PLAN_PAYLOAD),
       pick: async (items) => items,
       runPrompt: async (file) => {

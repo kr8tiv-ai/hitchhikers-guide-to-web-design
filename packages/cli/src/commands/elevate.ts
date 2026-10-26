@@ -122,6 +122,11 @@ export interface ElevateCommandDeps {
   runPrompt?: (file: string) => Promise<void>;
   /** Replaces the live gate read. Tests use this so a round does not open a browser. */
   gates?: () => Promise<GateResult>;
+  /**
+   * Git for the round's status, rev-parse, and reset. When omitted, the
+   * round uses git on disk. Tests pass an in-memory runner.
+   */
+  git?: (dir: string, args: readonly string[]) => Promise<string>;
 }
 
 /** `hh elevate`. */
@@ -270,6 +275,7 @@ async function runRound(
     gates: () => (deps.gates !== undefined ? deps.gates() : loadGates(parsed.projectDir, parsed.url)),
     review: review.project,
     ...(qualityGates === undefined ? {} : { qualityGates }),
+    ...(deps.git === undefined ? {} : { git: deps.git }),
   };
   const result = await api.elevateRound(parsed.projectDir, roundDeps);
   for (const id of result.applied) lines.push(`Applied: ${id}`);
@@ -309,6 +315,7 @@ async function runRounds(
     gates: () => (deps.gates !== undefined ? deps.gates() : loadGates(parsed.projectDir, parsed.url)),
     review,
     ...(deps.qualityGates === undefined ? {} : { qualityGates: deps.qualityGates }),
+    ...(deps.git === undefined ? {} : { git: deps.git }),
   };
   const result = await api.runElevateLoop({
     projectDir: parsed.projectDir,
@@ -456,6 +463,7 @@ async function loadLoop(): Promise<{
         gates: () => Promise<GateResult>;
         review: object;
         qualityGates?: object;
+        git?: (dir: string, args: readonly string[]) => Promise<string>;
       },
     ) => Promise<RoundResult>,
   };
@@ -482,6 +490,7 @@ async function loadRounds(): Promise<{
       gates: () => Promise<GateResult>;
       review: object;
       qualityGates?: object;
+      git?: (dir: string, args: readonly string[]) => Promise<string>;
     };
     runners: object;
     scores: (round: number) => ScorePoint | Promise<ScorePoint>;

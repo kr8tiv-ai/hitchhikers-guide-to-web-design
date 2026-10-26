@@ -302,7 +302,11 @@ export async function runElevateLoop({
     const previous = history[history.length - 1];
     if (previous !== undefined) roundDeps.priorScores = previous;
     const result = await elevateRound(root, roundDeps);
-    gates = await runAllGates({ root }, runners);
+    const readGit = deps.git;
+    gates = await runAllGates(
+      readGit === undefined ? { root } : { root, readHead: () => readGit(root, ["rev-parse", "HEAD"]) },
+      runners,
+    );
     const point = readScores(await scores(round));
     const review = readVerdict(await verdict(round));
     history.push(point);

@@ -27,6 +27,7 @@ import {
   siteBuildSettled,
   type BuildSpawn,
 } from "../src/index.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 999_999;
@@ -291,15 +292,21 @@ test("two Resume calls share one spawn and then the next prompt runs", { timeout
   const dir = tempDir();
   const seen: string[] = [];
   let release: () => void = () => undefined;
+  let noteStart: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const saw003 = new Promise<void>((resolve) => {
+    noteStart = resolve;
+  });
+  const live = startLivePid();
   const spawn: BuildSpawn = (request) => {
     seen.push(request.promptId);
+    if (request.promptId === "003") noteStart();
     assert.equal(request.model, BUILD_MODEL);
     assert.equal(request.effort, BUILD_EFFORT);
     if (request.promptId === "003") {
-      return { pid: DEAD_PID, done: gate.then(() => result(0)) };
+      return { pid: live.pid, done: gate.then(() => result(0)) };
     }
     return { pid: DEAD_PID, done: Promise.resolve(result(0)) };
   };
@@ -318,10 +325,12 @@ test("two Resume calls share one spawn and then the next prompt runs", { timeout
     const second = resumeSiteBuild(dir, "003");
     await first;
     await second;
-    for (let attempt = 0; attempt < 40 && !seen.includes("003"); attempt += 1) await delay(25);
+    await saw003;
     assert.deepEqual(seen, ["003"]);
     await continueSiteBuild(dir);
-    await delay(40);
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
     assert.deepEqual(seen, ["003"]);
     release();
     await siteBuildSettled(dir);
@@ -332,6 +341,7 @@ test("two Resume calls share one spawn and then the next prompt runs", { timeout
     assert.equal(seen.filter((id) => id === "003").length, 1);
   } finally {
     release();
+    live.stop();
     await cleanup(dir);
   }
 });

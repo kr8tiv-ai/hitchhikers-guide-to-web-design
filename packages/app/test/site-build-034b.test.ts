@@ -24,12 +24,15 @@ import {
 } from "@hitchhiker/engine";
 import { queueBodyHtml, type DriveRun } from "../src/drive-markup.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(_ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 function seed(dir: string): void {
@@ -285,15 +288,21 @@ test("two Resume posts start one run and the button is held while it is live", {
   seed(dir);
   const seen: string[] = [];
   let release: () => void = () => undefined;
+  let noteStart: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const saw003 = new Promise<void>((resolve) => {
+    noteStart = resolve;
+  });
+  const live = startLivePid();
   const buildSpawn: BuildSpawn = (request) => {
     seen.push(request.promptId);
+    if (request.promptId === "003") noteStart();
     assert.equal(request.model, BUILD_MODEL);
     assert.equal(request.effort, BUILD_EFFORT);
     if (request.promptId === "003") {
-      return { pid: 999999, done: gate.then(() => ({ code: 0, stdout: "", stderr: "", errorCode: null })) };
+      return { pid: live.pid, done: gate.then(() => ({ code: 0, stdout: "", stderr: "", errorCode: null })) };
     }
     return { pid: 999999, done: Promise.resolve({ code: 0, stdout: "", stderr: "", errorCode: null }) };
   };
@@ -313,21 +322,21 @@ test("two Resume posts start one run and the button is held while it is live", {
     ]);
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    for (let attempt = 0; attempt < 40 && !seen.includes("003"); attempt += 1) await delay(25);
+    await saw003;
     assert.deepEqual(seen, ["003"]);
     let held = "";
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 10_000; attempt += 1) {
       const page = await raw(handle.port, "GET", "/hh-dashboard");
       held = page.body;
-      if (held.includes('data-status="running"') || held.includes("003 rerun after restart")) break;
-      await delay(25);
+      if (held.includes("003 rerun after restart") || held.includes('data-status="failed"')) break;
+      await delay(0);
     }
     assert.match(held, /003 rerun after restart/);
     const resume = /<button\b[^>]*data-action="resume"[^>]*>/.exec(held);
     if (resume !== null) assert.match(resume[0], /disabled/);
     const third = await raw(handle.port, "POST", "/api/drive/resume", headers, body);
     assert.equal(third.status, 200);
-    await delay(40);
+    await delay(0);
     assert.deepEqual(seen, ["003"]);
     release();
     await siteBuildSettled(dir);
@@ -338,6 +347,7 @@ test("two Resume posts start one run and the button is held while it is live", {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "queue.json")), true);
   } finally {
     release();
+    live.stop();
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
     removeTempDir(dir);
