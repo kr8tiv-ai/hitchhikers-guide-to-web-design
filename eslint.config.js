@@ -3,9 +3,11 @@
  * packages/engine/test/boundaries.test.ts, so tests do not need to duplicate it.
  * One boundary rule, plus a minimal TypeScript set.
  *
- * no-floating-promises is type-aware and applies only to package src.
+ * no-floating-promises is type-aware. It applies to package src, and to
+ * Playwright specs under packages/app/e2e (those sit outside the composite
+ * src program, so they use packages/app/tsconfig.e2e.json).
  * Patterns are listed twice so they match both a repo-root eslint run and
- * `eslint src test` from a package directory.
+ * `eslint src test e2e` from a package directory.
  * Starter trees under packages/templates/ are ignored.
  */
 import tseslint from "typescript-eslint";
@@ -77,6 +79,22 @@ export default [
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+    },
+  },
+  {
+    files: ["packages/app/e2e/**/*.ts", "e2e/**/*.ts"],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        project: "./packages/app/tsconfig.e2e.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
     },
     rules: {
       "@typescript-eslint/no-floating-promises": "error",

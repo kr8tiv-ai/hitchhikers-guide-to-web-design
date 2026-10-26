@@ -144,7 +144,7 @@ test("the sitemap, wireframe, and style guide follow the Run 11 brief", async ({
     const button = /Button text (#[0-9a-fA-F]{6}) on (#[0-9a-fA-F]{6}) at ([0-9.]+) to 1/.exec(guideText);
     expect(button).not.toBeNull();
     expect(Number(button?.[3])).toBeGreaterThanOrEqual(4.5);
-    expect(page.getByRole("button", { name: "Start build" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start build" })).toHaveCount(0);
   } finally {
     child.kill();
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
