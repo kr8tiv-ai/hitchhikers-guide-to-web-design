@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +22,7 @@ import {
   type BrandGuideAdapter,
   type SpawnLike,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const fixturePdf = fileURLToPath(new URL("./fixtures/slogan.pdf", import.meta.url));
 const sourcePath = fileURLToPath(new URL("../src/ingest.ts", import.meta.url));
@@ -144,8 +145,8 @@ test("a file outside the root is rejected and a file inside is read", async () =
       assertIngest(error, "OUTSIDE_ROOT"),
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(outsideRoot, { recursive: true, force: true });
+    removeTempDir(root);
+    removeTempDir(outsideRoot);
   }
 });
 
@@ -157,7 +158,7 @@ test("a missing file throws IngestError NOT_FOUND", async () => {
       (error: unknown) => assertIngest(error, "NOT_FOUND"),
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -187,7 +188,7 @@ test("a file over 25 MB is refused before it is parsed", async () => {
     assert.ok(extracted instanceof IngestError);
     assert.equal(extracted.code, "NOT_FOUND");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -203,7 +204,7 @@ test("text past the cap keeps the prefix and sets truncated", async () => {
     assert.equal(extracted.text.length, TEXT_CAP);
     assert.equal(extracted.text, "E".repeat(TEXT_CAP));
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -216,7 +217,7 @@ test("bytes that are not a PDF are unsupported", async () => {
       assertIngest(error, "UNSUPPORTED"),
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -233,7 +234,7 @@ test("a 1x1 PNG warns and the file bytes stay put", async () => {
     assert.equal(facts.warning, "Longest side is 1px, under 512.");
     assert.ok(readFileSync(file).equals(before));
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -254,7 +255,7 @@ test("a 512px side does not warn, and JPEG SOF is measured", async () => {
     assert.equal(photoFacts.height, 480);
     assert.equal(photoFacts.warning, null);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -277,7 +278,7 @@ test("an unknown image type and an oversized image are refused", async () => {
       (error: unknown) => assertIngest(error, "TOO_LARGE"),
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -361,7 +362,7 @@ test("importBrandGuide replays a cassette and does not spawn", async () => {
       },
     ]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

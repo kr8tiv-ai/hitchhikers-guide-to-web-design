@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import {
 } from "../src/review-runners.ts";
 import { falseVisualBans } from "../src/zaphod-vision.ts";
 import { TYPE_MIN_BODY_PX } from "../src/type-gate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const RUNNERS = [runElevateReview, runVerdictReview, runJuryReview] as const;
 
@@ -269,7 +270,7 @@ test("mixed imagery or a missing image credit blocks elevate, verdict, and jury"
       assert.match(missing.failures.map((failure) => failure.reason).join("\n"), /towel\.jpg/);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -283,7 +284,7 @@ test("a craft score under 7 blocks the review even when the shot is clean", asyn
     assert.equal(reviewed.blocked, true);
     assert.match(reviewed.failures.map((failure) => failure.reason).join("\n"), /Usability is 4/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -332,7 +333,7 @@ test("a juror no, a skipped redesign step, or one variant refuses before think",
     assert.equal(thoughts, 0);
     assert.match(variants.refused.map((row) => row.reason).join("\n"), /four variants/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -379,7 +380,7 @@ test("the screenshot loop captures, and a closed blocker without a retest blocks
     assert.equal(saved[0]?.retest?.elevatePass, "elevate-1");
     assert.equal(saved[0]?.retest?.result, "fail");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -412,6 +413,6 @@ test("a section lock that moves refuses the pick", { timeout: 60_000 }, async ()
     assert.equal(round.applied.length, 0);
     assert.match(round.refused.map((row) => row.reason).join("\n"), /Locked section footer/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -4,7 +4,7 @@
  * A brutalist display under 4× the body fails.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   typeScaleFor,
   typeWorldFrom,
 } from "../src/brand/type-scale.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRUTALIST = ["## Vibe", "", "A brutalist poster.", ""].join("\n");
 const PRODUCT = ["## Vibe", "", "product, one family", ""].join("\n");
@@ -176,7 +177,7 @@ test("writeDesignMd persists the brief-derived scale", () => {
     assert.match(design, /Families: Tanker and Cabinet Grotesk\./);
     assert.match(design, /Ratio: 1\.5/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { followUpChoices, judgePushback } from "../src/guide/pushback-judge.ts";
 import { CHOICES_SCHEMA, type Facts } from "../src/guide/schemas.ts";
 import { choiceSetFrom } from "../src/guide/suggest.ts";
 import type { Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const facts: Facts = {
   answers: [{ id: "DP-2.1", value: "The neighbor orders tea." }],
@@ -280,6 +281,6 @@ test("an assumed pick is stored as SUGGESTED and the next card is asked", async 
     assert.equal(saved.answers[0]?.status, "SUGGESTED");
     assert.equal(saved.answers[0]?.value, picked);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

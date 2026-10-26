@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { runAssetsCommand } from "../src/commands/assets.ts";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PROMPT = "orchid-prompt-should-stay-hidden-062";
 
@@ -13,7 +14,7 @@ function tempDir(): string {
 }
 
 function cleanup(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 function writeJson(file: string, value: unknown): void {

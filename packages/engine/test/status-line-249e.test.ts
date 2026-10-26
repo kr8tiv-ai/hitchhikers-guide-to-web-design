@@ -4,7 +4,7 @@
  * interview names the Site Brief instead of an earlier "Answer …" list.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { assertCanAdvance, formatStatusLine, readStatus, recordFact } from "../src/context/index.ts";
 import { saveState, type GuideState } from "../src/state.ts";
 import { loadTree, questionsToAsk } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -52,7 +53,7 @@ test("an empty project still has no phase and lists every required id", () => {
     assert.equal(readStatus(dir).phase, "");
     for (const id of REQUIRED) assert.match(line, new RegExp(id));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -75,7 +76,7 @@ test("answered required ids leave the Next list and an empty phase becomes Don't
     assert.equal(line.includes("DP-2.2"), false);
     assert.equal(line.includes("No phase yet"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -95,7 +96,7 @@ test("a finished interview says to review the Site Brief and keeps a saved phase
     );
     for (const id of REQUIRED) assert.equal(line.includes(id), false, id);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -107,7 +108,7 @@ test("a finished interview with an empty phase still names Don't Panic", async (
     assert.equal(readStatus(dir).phase, "");
     assert.match(formatStatusLine(dir), /^Don't Panic\. Next: review the Site Brief\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -132,7 +133,7 @@ test("saved answers for every asked question finish the interview even when the 
     assert.match(line, /Next: review the Site Brief\./);
     assert.equal(line.includes("Answer DP-"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -161,7 +162,7 @@ test("an open decision still blocks advance after the interview is done", async 
     assert.match(line, /Next: review the Site Brief\./);
     assert.equal(line.includes("Settle "), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -180,6 +181,6 @@ test("a live decision phase fills an empty state phase before the interview star
     assert.match(formatStatusLine(dir), /^Babel Fish\. Next: Answer /);
     assert.equal(formatStatusLine(dir).includes("No phase yet"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

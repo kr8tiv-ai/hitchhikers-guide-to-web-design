@@ -3,7 +3,7 @@
  * A skip publishes none of those stages.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { ANSWER_PROGRESS } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleRaw } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -156,6 +157,6 @@ test("one answer publishes Checking, Writing, then Saving, and a skip publishes 
     }
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

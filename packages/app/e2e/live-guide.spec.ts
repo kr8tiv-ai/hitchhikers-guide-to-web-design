@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cassetteDir = path.resolve(here, "..", "..", "engine", "test", "cassettes", "guide");
@@ -113,7 +114,7 @@ test("replays ten Towel and Tea turns at 375, including pushback, four cards, an
     expect(brief.includes("!")).toBe(false);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

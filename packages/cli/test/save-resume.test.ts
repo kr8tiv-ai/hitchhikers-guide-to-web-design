@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { isPortableResume } from "../src/commands/project-file.ts";
 import { parseCli, runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const saveModule = path.resolve(here, "../../engine/src/project-file/save.ts");
@@ -50,7 +51,7 @@ test("hh resume --project prints the prompt id and does not rewrite state", asyn
     assert.equal(result.stdout, "resume: interview:DP-0.2\n");
     assert.equal(readFileSync(path.join(project, ".hitchhiker", "STATE.md"), "utf8"), before);
   } finally {
-    await rm(project, { recursive: true, force: true });
+    await removeTempDir(project);
   }
 });
 
@@ -89,7 +90,7 @@ describe("portable save and resume", { concurrency: 1 }, () => {
     } finally {
       if (prior === undefined) delete process.env.HH_PROJECT_HOME;
       else process.env.HH_PROJECT_HOME = prior;
-      await rm(root, { recursive: true, force: true });
+      await removeTempDir(root);
     }
   });
 
@@ -150,7 +151,7 @@ describe("portable save and resume", { concurrency: 1 }, () => {
     } finally {
       if (prior === undefined) delete process.env.HH_PROJECT_HOME;
       else process.env.HH_PROJECT_HOME = prior;
-      await rm(root, { recursive: true, force: true });
+      await removeTempDir(root);
     }
   });
 });

@@ -3,7 +3,7 @@
  * with the context packet, then start one build.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -21,6 +21,7 @@ import type { SiteBrief } from "../src/guide/schemas.ts";
 import { readRevisitId } from "../src/interview.ts";
 import { loadQueue } from "../src/queue-file.ts";
 import { loadState } from "../src/state.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -92,7 +93,7 @@ test("draftSiteBrief calls briefLoop with the context packet and does not draft 
     assert.equal(second.status, "pending");
     assert.equal(calls.length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -128,7 +129,7 @@ test("approve opens the design stages and a second approve does not call the mod
     assert.equal(tasks.filter((task) => task === "brief-draft").length, 1);
     assert.equal((await loadQueue(dir))?.items.length ?? 0, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -158,6 +159,6 @@ test("a question id returns to that question and prose revises without approving
     assert.equal(decisions.some((item) => item.text === "The goal should name a tour."), true);
     assert.equal((await loadQueue(dir))?.items.length ?? 0, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

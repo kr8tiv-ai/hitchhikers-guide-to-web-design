@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import {
   commitPrompt,
   prepareRepo,
 } from "../src/git-flow.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function gitAvailable(): boolean {
   try {
@@ -103,7 +104,7 @@ async function withRepo(run: (dir: string) => Promise<void>): Promise<void> {
   try {
     await run(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

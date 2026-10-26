@@ -2,13 +2,14 @@
  * BUG-028: a failed brief draft stays on the page with the recorded fields and Retry.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { syncAnswer, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const GOAL = "Help a visitor book a private tour.";
 const PAGES = "Home, work, and visit.";
@@ -112,6 +113,6 @@ test("a max-turns draft keeps the fields and Retry stays on the brief", async ()
     assert.match(shown.body, /Home, work, and visit/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

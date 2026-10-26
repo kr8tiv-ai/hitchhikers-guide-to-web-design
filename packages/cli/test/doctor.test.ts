@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -23,6 +23,7 @@ import {
   type GateBrowserSnapshot,
 } from "../src/doctor.ts";
 import { parseArgs, runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const UUID_HELP = "-s, --session-id <UUID>\nUse a UUID for a new session.\n";
 const ALIAS_HELP = "-s, --session-id <ID>\nCreate or resume a session name.\n--effort <LEVEL>\n";
@@ -126,7 +127,7 @@ test("saveConfig round-trips and uses the lock", async () => {
     assert.equal(readFileSync(filePath, "utf8"), before);
     assert.equal(loadConfig(dir).effort, "high");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -144,7 +145,7 @@ test("saveConfig refuses a key parseConfig would reject and writes nothing", asy
     );
     assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -272,12 +273,12 @@ test("doctor --project writes uuid or alias and leaves unknown untouched", async
       );
       assert.equal(existsSync(path.join(bothDir, ".hitchhiker")), false);
     } finally {
-      rmSync(bothDir, { recursive: true, force: true });
+      removeTempDir(bothDir);
     }
   } finally {
-    rmSync(aliasDir, { recursive: true, force: true });
-    rmSync(unknownDir, { recursive: true, force: true });
-    rmSync(existingDir, { recursive: true, force: true });
+    removeTempDir(aliasDir);
+    removeTempDir(unknownDir);
+    removeTempDir(existingDir);
   }
 });
 
@@ -306,7 +307,7 @@ test("doctor --project keeps other config fields and updates sessionIdMode", asy
     assert.equal(config.sessionIdMode, "uuid");
     assert.equal(config.voiceEngine, "local");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -420,7 +421,7 @@ test("doctor says grok --help has no auth status flag and does not run login", a
     assert.equal(run.calls.some((call) => call.includes(path.basename(projectDir))), false);
     assert.equal(loadConfig(projectDir).sessionIdMode, "uuid");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -536,7 +537,7 @@ test("readGateBrowsers sees Chromium and WebKit and ignores the headless shell",
       assert.equal(none.chromium, false);
       assert.equal(none.webkit, false);
     } finally {
-      rmSync(empty, { recursive: true, force: true });
+      removeTempDir(empty);
     }
     const shellOnly = browserCache({});
     try {
@@ -544,10 +545,10 @@ test("readGateBrowsers sees Chromium and WebKit and ignores the headless shell",
       assert.equal(onlyShell.chromium, false);
       assert.equal(onlyShell.webkit, false);
     } finally {
-      rmSync(shellOnly.dir, { recursive: true, force: true });
+      removeTempDir(shellOnly.dir);
     }
   } finally {
-    rmSync(cache.dir, { recursive: true, force: true });
+    removeTempDir(cache.dir);
   }
 });
 
@@ -585,8 +586,8 @@ test("doctor describes missing gate browsers and does not install without yes", 
     assert.equal(run.calls.some((call) => call.includes("install")), false);
     assert.equal(run.calls.includes("grok login"), false);
   } finally {
-    rmSync(cache.dir, { recursive: true, force: true });
-    rmSync(pnpm, { recursive: true, force: true });
+    removeTempDir(cache.dir);
+    removeTempDir(pnpm);
   }
 });
 
@@ -632,7 +633,7 @@ test("doctor installs only the missing gate browsers when yes is passed", async 
       assert.match(formatDoctor(skipped.report), /Nothing was downloaded/);
       assert.equal(idle.calls.some((call) => call.includes("install")), false);
     } finally {
-      rmSync(present.dir, { recursive: true, force: true });
+      removeTempDir(present.dir);
     }
 
     const failed = scripted({
@@ -653,11 +654,11 @@ test("doctor installs only the missing gate browsers when yes is passed", async 
       assert.match(formatDoctor(broken.report), /pnpm exec playwright install webkit/);
       assert.equal(formatDoctor(broken.report).includes("!"), false);
     } finally {
-      rmSync(webkitOnly.dir, { recursive: true, force: true });
+      removeTempDir(webkitOnly.dir);
     }
   } finally {
-    rmSync(cache.dir, { recursive: true, force: true });
-    rmSync(pnpm, { recursive: true, force: true });
+    removeTempDir(cache.dir);
+    removeTempDir(pnpm);
   }
 });
 
@@ -709,6 +710,6 @@ test("hh doctor --yes installs from the CLI only when the flag is present", asyn
     assert.equal(run.calls.includes("pnpm exec playwright install chromium"), true);
     assert.equal(run.calls.includes("grok login"), false);
   } finally {
-    rmSync(pnpm, { recursive: true, force: true });
+    removeTempDir(pnpm);
   }
 });

@@ -3,11 +3,12 @@
  * before the next question arrives. No percentage.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +31,7 @@ test("a slow answer shows the stage and elapsed seconds before the next question
     await expect(page.locator('[data-question-id="DP-0.2"]')).toBeVisible();
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

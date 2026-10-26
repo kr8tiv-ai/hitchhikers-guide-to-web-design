@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import {
   pathsForPrint,
   slugifyLogoName,
 } from "../src/logo/export-set.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const SQUARE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#111111" d="M4 4 H28 V28 H4 Z"/></svg>`;
 const OTHER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#111111" d="M8 8 H16 V24 H8 Z"/></svg>`;
@@ -136,7 +137,7 @@ test("exportLogoSet writes every file, exact PNG sizes, and valid SVGs", { timeo
     const otherPdf = readFileSync(other.find((file) => file.endsWith(".pdf")) ?? "");
     assert.equal(pdfBytes.equals(otherPdf), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

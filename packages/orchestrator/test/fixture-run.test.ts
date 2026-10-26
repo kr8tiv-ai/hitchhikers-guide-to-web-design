@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { FIXTURE_COMMIT, FixtureRunError, runFixture } from "../src/fixture-run.
 import { evaluateCommand } from "../src/policy.ts";
 import { loadQueue } from "../src/queue-file.ts";
 import type { SpawnImpl } from "../src/runner.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const AT = "2026-10-07T00:00:00.000Z";
 
@@ -70,7 +71,7 @@ async function withDrive(approved: boolean, run: (dir: string) => Promise<void>)
     });
     await run(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
     assert.equal(existsSync(dir), false);
   }
 }

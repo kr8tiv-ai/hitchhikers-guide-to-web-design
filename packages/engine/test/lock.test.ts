@@ -4,7 +4,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -19,6 +18,7 @@ import {
   withStateLock,
 } from "../src/lock.ts";
 import { LockHeld as LockHeldFromIndex } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 2147483646;
 
@@ -51,7 +51,7 @@ test("a live lock blocks a second acquire", async () => {
     assert.equal(again.pid, process.pid);
     await release(lockPath, again.pid);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -74,7 +74,7 @@ test("two acquires at once: the second sees LockHeld", async () => {
     assert.ok(success !== undefined && success.status === "fulfilled");
     await release(lockPath, success.value.pid);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -101,7 +101,7 @@ test("a dead lock older than 30s is taken over once", async () => {
     assert.equal(stored.pid, process.pid);
     await release(lockPath, taken.pid);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -124,7 +124,7 @@ test("a young dead lock is not stolen", async () => {
     };
     assert.equal(stored.pid, DEAD_PID);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -151,7 +151,7 @@ test("withStateLock releases the lock when the writer throws", async () => {
     );
     assert.equal(existsSync(lockPath), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -170,7 +170,7 @@ test("release deletes the lock only when the pid still matches", async () => {
     await release(lockPath, DEAD_PID);
     assert.equal(existsSync(lockPath), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -192,7 +192,7 @@ test("a live legacy state.lock refuses the write", async () => {
     assert.equal(existsSync(legacyPath), true);
     assert.equal(existsSync(path.join(hitch, STATE_LOCK_NAME)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -216,7 +216,7 @@ test("withStateLock leaves a live lock file in place", async () => {
     const stored = JSON.parse(readFileSync(lockPath, "utf8")) as { pid: number };
     assert.equal(stored.pid, process.pid);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -231,6 +231,6 @@ test("a dead legacy state.lock is removed", async () => {
     assert.equal(existsSync(legacyPath), false);
     assert.equal(existsSync(path.join(hitch, STATE_LOCK_NAME)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

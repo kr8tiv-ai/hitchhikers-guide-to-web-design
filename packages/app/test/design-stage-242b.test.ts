@@ -3,11 +3,12 @@
  * buildStarted is not required.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { renderDesignStagePanel } from "../src/server/design-stage-desk.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("renderDesignStagePanel renders the sitemap when no build has started", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-stage-panel-"));
@@ -20,6 +21,6 @@ test("renderDesignStagePanel renders the sitemap when no build has started", () 
     assert.doesNotMatch(html, /The build is started/);
     assert.equal(html.includes("buildStarted"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

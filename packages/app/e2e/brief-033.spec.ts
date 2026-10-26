@@ -2,11 +2,12 @@
  * BUG-033: an over-length draft still renders the brief, without the stopped-early alert.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -51,7 +52,7 @@ test("an over-length brief renders complete without the stopped-early alert", as
     await expect(page.locator("body")).not.toContainText("Source :");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

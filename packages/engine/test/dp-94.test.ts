@@ -4,7 +4,7 @@
  * is still recorded with its skip text, which is the reason it was not asked.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { gateQuestion, type SessionState } from "../src/guide/session-state.ts";
 import { openInterview, type AnswerRecord } from "../src/interview.ts";
 import { loadTree, questionsForDepth, questionsToAsk } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const treeFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "interview", "tree.yaml");
 
@@ -61,7 +62,7 @@ test("DP-9.3 is followed by DP-9.4 and then DP-9.5", async () => {
     assert.equal(stored?.status, "ANSWERED");
     assert.equal(session.next()?.id, "DP-9.5");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

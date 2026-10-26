@@ -14,7 +14,7 @@
  * One yes covers the whole quote. Nothing is posted until that yes.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, open } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -363,7 +363,13 @@ async function writeGlb(outDir: string | undefined, name: string, bytes: Uint8Ar
   const dir = outDir ?? path.join(os.tmpdir(), "hitchhiker-3d");
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, `${name}.glb`);
-  await writeFile(file, bytes);
+  const handle = await open(file, "w");
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   return file;
 }
 

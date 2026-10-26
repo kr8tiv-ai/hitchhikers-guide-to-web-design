@@ -3,7 +3,7 @@
  * Saving a deal does not. The next deal skips the rejected names.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,7 @@ import { decisionLogPath, readDecisionLog, rejectedDirectionNames } from "../src
 import { dealDirections, designLibraryRoot, readDirectionDeal } from "../src/brand/directions.ts";
 import { writeBrandKit } from "../src/brand/kit-from-interview.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const AT = "2026-10-20T16:00:00.000Z";
 const REASON = "The quieter page fits the brief.";
@@ -75,7 +76,7 @@ test("a choice writes the log and the next deal skips the rejected names", () =>
     const kept = readDirectionDeal(dir);
     assert.equal(kept?.pickedId, picked.id);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(empty, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(empty);
   }
 });

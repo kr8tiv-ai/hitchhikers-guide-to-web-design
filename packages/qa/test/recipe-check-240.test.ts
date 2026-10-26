@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { checkRecipeDir, checkRecipes, type RecipeRule } from "../src/recipe-check.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PAGES: Record<RecipeRule, { pass: string; fail: string }> = {
   "two-scroll-owners": {
@@ -127,6 +128,6 @@ test("a site directory reports the broken page and leaves the clean page alone",
       false,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

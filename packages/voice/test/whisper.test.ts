@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   transcribe,
   type WhisperRunner,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const voiceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(voiceRoot, "..", "..");
@@ -36,7 +37,7 @@ function makeFixture(prefix = "hh-voice-"): Fixture {
 }
 
 function removeFixture(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 function countingRunner(result: {
@@ -465,7 +466,7 @@ test("resolveWhisperPaths reads the env vars and then PATH", () => {
     });
     assert.equal(fromEnv.bin, explicit);
 
-    rmSync(cli);
+    removeTempDir(cli);
     const fallback = resolveWhisperPaths({
       env: { WHISPER_CPP_MODEL: model },
       pathDirs: [dir],

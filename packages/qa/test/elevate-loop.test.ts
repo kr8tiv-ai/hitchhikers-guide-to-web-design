@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import { elevateRound, type GateResult } from "../src/elevate-loop.ts";
 import type { ElevateItem } from "../src/elevate.ts";
 import { startFixtureSite } from "../src/playwright-opener.ts";
 import { REVIEW_WIDTHS } from "../src/screenshots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..", "..", "..");
@@ -311,7 +312,7 @@ test("a cassette round keeps one pick and refuses a Lighthouse regression", { ti
     assert.equal(saved.length, 1);
     assert.equal(existsSync(path.join(repo, "packages", "qa", "test", "cassettes", "elevate-plan")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -339,7 +340,7 @@ test("no picks ends the round without gates or prompts", { timeout: 60_000 }, as
     assert.match(round, /This round changes nothing\./);
     assert.equal(existsSync(path.join(projectDir, "site.txt")), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -368,7 +369,7 @@ test("a second round is numbered and still changes nothing when nothing is picke
     assert.match(round2, /This round changes nothing\./);
     assert.equal(existsSync(path.join(projectDir, "site.txt")), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -401,7 +402,7 @@ test("every regressing pick is refused and nothing is kept", { timeout: 60_000 }
     assert.match(round, /Nothing was kept\./);
     assert.equal(existsSync(path.join(projectDir, "site.txt")), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -457,7 +458,7 @@ test("detail prompts cover each area and cite the site rules", async () => {
       assert.equal(/\belevate\b/i.test(text), false);
     }
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -533,10 +534,10 @@ test("copy proposals drop banned lines and a write needs approval", async () => 
     const smuggled = await approveCopy(smuggledDir, [rejected], [{ id: "bang", approve: true }]);
     assert.equal(smuggled.file, null);
     assert.equal(existsSync(path.join(smuggledDir, ".hitchhiker", "prompts", "elevate", "copy.md")), false);
-    rmSync(noneDir, { recursive: true, force: true });
-    rmSync(smuggledDir, { recursive: true, force: true });
+    removeTempDir(noneDir);
+    removeTempDir(smuggledDir);
   } finally {
-    rmSync(approvedDir, { recursive: true, force: true });
+    removeTempDir(approvedDir);
   }
 });
 
@@ -627,7 +628,7 @@ test("copy refinement replays a recorded cassette through the adapter", async ()
     assert.deepEqual(second, first);
     assert.equal(existsSync(path.join(repo, "packages", "qa", "test", "cassettes", "copy-refine")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

@@ -5,13 +5,14 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { runCli } from "../src/main.ts";
 import { SO_LONG_USAGE, type SoLongClients, type SoLongDeps } from "../src/commands/so-long.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -139,7 +140,7 @@ test("a red gate exits non-zero and calls no adapter", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -161,7 +162,7 @@ test("a stale head exits non-zero and calls no adapter", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -184,7 +185,7 @@ test("a declined yes writes nothing", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -224,7 +225,7 @@ test("preview builds, hands off to the injected client, and records it", async (
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "deploy", "preview.zip")), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "hostinger-yes.json")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -253,7 +254,7 @@ test("an omitted host recommends Hostinger and asks", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -284,7 +285,7 @@ test("a brief that names Cloudflare Pages suggests that host", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -312,7 +313,7 @@ test("a brief that names GitHub Pages suggests it and offers only the preview fl
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -336,7 +337,7 @@ test("a folder with no saved version stays closed and calls no adapter", async (
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -410,7 +411,7 @@ test("a failed live check lists the 404 and does not roll back without a yes", a
     assert.match(record, /404/);
     assert.match(record, /The live check failed\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -476,7 +477,7 @@ test("a yes after a failed check sends the last working publish again", async ()
     assert.match(record, /The live check passed\./);
     assert.match(record, /The live check failed\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -510,7 +511,7 @@ test("a passing live check does not offer a roll back", async () => {
     assert.equal(outcome.stdout.includes("can go back up"), false);
     assertQuiet(outcome.stdout);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -546,7 +547,7 @@ test("rollback without a yes writes nothing", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -589,7 +590,7 @@ test("rollback with a yes sends the last working publish and does not build", as
     assert.match(record, /rollback of hostinger/);
     assert.match(record, /## Post-check/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -612,7 +613,7 @@ test("rollback with nothing earlier stays quiet and sends nothing", async () => 
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -633,7 +634,7 @@ test("a red gate blocks rollback and calls no adapter", async () => {
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -645,7 +646,7 @@ test("a host and a rollback together are refused", async () => {
     assert.match(outcome.stdout, /Unexpected argument/);
     assertQuiet(outcome.stdout);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

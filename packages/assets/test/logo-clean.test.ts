@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   assertCleanedLogoSvg,
   cleanLogo,
 } from "../src/logo/clean.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const SQUARE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#111111" d="M4 4 H28 V28 H4 Z"/></svg>`;
 const TRIANGLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#111111" d="M4 28 L16 4 L28 28 Z"/></svg>`;
@@ -238,7 +239,7 @@ test("cleanLogo replays a cassette through think()", async () => {
     assert.deepEqual(second.changes, ["Snapped to the 0.5 grid."]);
     assertCleanedLogoSvg(second.svg);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

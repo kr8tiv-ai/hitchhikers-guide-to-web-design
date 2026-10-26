@@ -2,7 +2,7 @@
  * BUG-046. New project creates the /hh-new layout outside the desk repo.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { DESK_REPO_REFUSAL } from "../src/desk-repo.ts";
 import { homeIndexPath } from "../src/home-index.ts";
 import { createSiteProject, defaultProjectDir, slugProjectName } from "../src/new-project.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -35,9 +36,9 @@ test("a new site project is a folder, .hitchhiker, and a home row, never the des
     assert.equal(index.some((row) => row.name === "Visit Book" && row.path === created.dir), true);
     assert.equal(isInside(created.dir, repo), false);
   } finally {
-    rmSync(home, { recursive: true, force: true });
-    rmSync(root, { recursive: true, force: true });
-    rmSync(nested, { recursive: true, force: true });
+    removeTempDir(home);
+    removeTempDir(root);
+    removeTempDir(nested);
   }
 });
 

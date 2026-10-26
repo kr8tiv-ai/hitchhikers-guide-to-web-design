@@ -5,7 +5,7 @@
  * The model is not called.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import { chooseDirection, readDirectionDeal } from "../src/brand/directions.ts";
 import { brandKitFromAnswers } from "../src/brand/kit-from-interview.ts";
 import { draftBriefPlan, prepareSiteBuild } from "../src/guide/site-build.ts";
 import { directionAcceptance, translateBrief } from "../src/spec/art-direction.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const TYPE_ANSWER =
   "No fonts yet. Light, wide, airy sans for headings like the logo; easy-reading body. Show me pairings.";
@@ -314,6 +315,6 @@ test("picking and changing a direction rewrites the kit and unbuilt prompts only
     assert.deepEqual(after, snapshot);
     assert.match(readFileSync(brandFile, "utf8"), /Picked families: Gambetta and Synonym\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

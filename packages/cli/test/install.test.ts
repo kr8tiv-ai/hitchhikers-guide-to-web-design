@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import {
   runInstall,
 } from "../src/install.ts";
 import { cliEntryArgs, runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(prefix: string): string {
   return mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -59,8 +60,8 @@ test("installSkills copies markdown into hh- skill folders and keeps the relativ
     assert.equal(readFileSync(path.join(project, ".grok", "hooks", "hh-deny.json"), "utf8"), "{}\n");
     assert.equal(readFileSync(path.join(project, ".grok", "rules", "hh-voice.md"), "utf8"), "rules\n");
   } finally {
-    rmSync(source, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(source);
+    removeTempDir(project);
   }
 });
 
@@ -81,9 +82,9 @@ test("a skill that resolves outside the source directory is not copied", async (
     const tree = readFileSync(path.join(project, ".grok", "skills", "hh-guide-persona", "SKILL.md"), "utf8");
     assert.equal(tree.includes("SECRET"), false);
   } finally {
-    rmSync(source, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    removeTempDir(source);
+    removeTempDir(project);
+    removeTempDir(outside);
   }
 });
 
@@ -105,9 +106,9 @@ test("a destination that realpaths outside the project throws and writes nothing
     assert.equal(existsSync(path.join(outside, "skills")), false);
     assert.equal(existsSync(path.join(outside, "hh-guide-persona")), false);
   } finally {
-    rmSync(source, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
-    rmSync(outside, { recursive: true, force: true });
+    removeTempDir(source);
+    removeTempDir(project);
+    removeTempDir(outside);
   }
 });
 
@@ -130,8 +131,8 @@ test("a second install overwrites the hh- folder and leaves a sibling skill alon
     assert.equal(existsSync(stale), false);
     assert.equal(readFileSync(sibling, "utf8"), "leave me\n");
   } finally {
-    rmSync(source, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(source);
+    removeTempDir(project);
   }
 });
 
@@ -152,8 +153,8 @@ test("a missing source throws and an empty source copies nothing", async () => {
     assert.equal(readFileSync(kept, "utf8"), "keep\n");
     assert.equal(readFileSync(sibling, "utf8"), "sibling\n");
   } finally {
-    rmSync(project, { recursive: true, force: true });
-    rmSync(empty, { recursive: true, force: true });
+    removeTempDir(project);
+    removeTempDir(empty);
   }
 });
 
@@ -185,7 +186,7 @@ test("the install parser requires --project and hh install copies the Guide skil
     assert.equal(viaCli.exitCode, 0);
     assert.equal(readFileSync(sibling, "utf8"), "unrelated\n");
   } finally {
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(project);
   }
 });
 

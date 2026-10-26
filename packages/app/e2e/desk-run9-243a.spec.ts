@@ -3,11 +3,12 @@
  * scrolls the tour into view. Phone widths do not clip links or icons.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PHONES = [
@@ -38,7 +39,7 @@ test.describe("desk run 9", () => {
 
   test.afterAll(async () => {
     if (child !== undefined) await stopChild(child);
-    if (projectDir.length > 0) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir.length > 0) await removeTempDir(projectDir);
   });
 
   test("Enter the Guide scrolls the tour into view at 375 and 1440", async ({ page }) => {

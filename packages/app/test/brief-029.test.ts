@@ -2,13 +2,14 @@
  * BUG-029: an empty Change something stays on the approve page as HTML.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -120,6 +121,6 @@ test("a no-JS empty change post returns the approve page, not JSON", async () =>
     assert.match(api.body, /Write the change\./);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

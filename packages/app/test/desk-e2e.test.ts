@@ -6,7 +6,7 @@
  * - card regions: title, why, and the Answer, Suggest, and Skip actions, plus the phase map
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import {
 } from "@hitchhiker/engine";
 import { reduceCard, renderCard, type CardState } from "../src/card.ts";
 import { renderMap } from "../src/map.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -206,7 +207,7 @@ test("the desk renders the question card and Don't Panic from a saved session", 
     assert.equal(hasPlanningDir(projectDir), false);
     assert.equal(homeStamp(), homeBefore);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 

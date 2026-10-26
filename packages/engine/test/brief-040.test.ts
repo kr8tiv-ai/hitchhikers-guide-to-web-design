@@ -4,7 +4,7 @@
  * the fallback stays labelled until a model draft replaces it.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ import { approveSiteBrief, approveSitePlan, draftSiteBrief, readBriefDesk, revis
 import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { BRIEF_KEYS, briefFieldTarget, type Facts, type SiteBrief } from "../src/guide/schemas.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKIPPED = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
@@ -121,7 +122,7 @@ test("a project4-shaped ok draft is used and coverage accounts for every id", as
     assert.equal(pending.fallback, false);
     assert.equal(pending.error, "");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -166,7 +167,7 @@ test("a rejected ok draft logs the field and rule and the alert is readable", as
     const copies = desk.error.split("reply language").length - 1;
     assert.equal(copies, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -202,7 +203,7 @@ test("retry replaces a fallback when the next draft is valid, and a second failu
     assert.match(inputs[2] ?? "", /DP-2\.1/);
     assert.equal(inputs[2]?.includes("language; language"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 
   const again = projectDir();
@@ -219,7 +220,7 @@ test("retry replaces a fallback when the next draft is valid, and a second failu
     assert.equal(second.error.includes("language; language"), false);
     assert.equal(second.error.includes("!"), false);
   } finally {
-    rmSync(again, { recursive: true, force: true });
+    removeTempDir(again);
   }
 });
 
@@ -252,7 +253,7 @@ test("a named change on a fallback keeps the marker, and approve needs confirmat
     assert.equal(held.fallback, true);
     assert.match(held.draft?.budget ?? "", /50 dollars/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -319,6 +320,6 @@ test("confirming a small fallback approves it and keeps the marker", async () =>
     assert.equal(file.fallback, true);
     assert.equal(file.error, "");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

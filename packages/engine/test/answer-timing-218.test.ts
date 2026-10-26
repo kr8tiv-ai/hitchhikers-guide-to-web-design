@@ -2,7 +2,7 @@
  * PERF-001. Stage timings land in the AI log, and the first stage is not waiting on the model.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { think } from "../src/ai/think.ts";
 import { ANSWER_PROGRESS } from "../src/guide/guide-progress.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function hit<T>(value: T): ThinkResult<T> {
   return { value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" };
@@ -67,6 +68,6 @@ test("a slow judge still reports Checking within 2s and the log records each sta
       assert.equal(row.effort, "xhigh");
     }
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

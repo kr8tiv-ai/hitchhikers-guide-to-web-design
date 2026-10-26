@@ -3,12 +3,13 @@
  * It must not ask to relocate because the path was scrubbed.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { createSiteProject, saveProjectFile, saveState, type GuideState } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("opening a project in desk-e2e-run11 does not say the folder is missing", async () => {
   const sandbox = mkdtempSync(path.join(tmpdir(), "hh-open-243a-"));
@@ -45,7 +46,7 @@ test("opening a project in desk-e2e-run11 does not say the folder is missing", a
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTempDir(sandbox);
   }
 });
 

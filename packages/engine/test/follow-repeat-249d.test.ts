@@ -4,7 +4,7 @@
  * A follow-up reply is stored on its own line, after "Follow-up:".
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import {
   type SessionState,
 } from "../src/guide/session-state.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const treeFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "interview", "tree.yaml");
 const FALLBACK = "No favorites yet? Let's look at a few sites together. Say love, meh, or hate.";
@@ -254,7 +255,7 @@ test("a follow-up reply is stored after a Follow-up mark, including a glued repl
     assert.equal(gluedRow[0]?.value, `${NOTES}\nFollow-up: In about 4 weeks, before the holiday season.`);
     assert.equal(gluedRow[0]?.value.includes("That's all.In about"), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
-    rmSync(gluedDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
+    removeTempDir(gluedDir);
   }
 });

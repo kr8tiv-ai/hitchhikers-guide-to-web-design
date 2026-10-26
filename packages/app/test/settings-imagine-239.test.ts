@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { loadConfig } from "@hitchhiker/engine";
 import { driverFor } from "../src/server/imagine-browser.ts";
 import { applySettingsPost, renderSettingsMain } from "../src/server/settings.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("Imagine in the browser is off until the checkbox is saved", async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "hh-settings-239-"));
@@ -34,6 +35,6 @@ test("Imagine in the browser is off until the checkbox is saved", async () => {
     assert.equal(skipped, undefined);
     assert.equal(built, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

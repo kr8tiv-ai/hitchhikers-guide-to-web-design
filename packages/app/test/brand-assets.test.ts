@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import { inflateSync } from "node:zlib";
 import { contrastRatio, color } from "../src/design/tokens.ts";
 import { PRODUCT_NAME, THEME_DARK, THEME_LIGHT } from "../src/server/head.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -616,7 +617,7 @@ describe("desk identity", { concurrency: false }, () => {
       assert.equal(headJs.body.toString("utf8").includes("node:http"), false);
     } finally {
       if (handle !== undefined) await handle.close();
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 

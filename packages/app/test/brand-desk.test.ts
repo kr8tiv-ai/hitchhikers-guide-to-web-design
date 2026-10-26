@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -9,6 +9,7 @@ import { BRAND_SECTIONS } from "@hitchhiker/engine";
 import { bindApproveDeck } from "../src/brand/approve-cards.ts";
 import { mountBrand, type BrandEnv } from "../src/client/brand.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,7 +32,7 @@ async function withDesk(run: (handle: ServerHandle, dir: string) => Promise<void
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 
@@ -362,7 +363,7 @@ function assertSyntax(source: string, name: string): void {
   writeFileSync(file, source);
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
-  rmSync(file, { force: true });
+  removeTempDir(file);
 }
 
 interface FakeEl {

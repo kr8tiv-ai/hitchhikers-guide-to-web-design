@@ -4,11 +4,12 @@
  * Start build is not pressed. The model is stubbed.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const LINE = "Noted for this desk run.";
@@ -150,7 +151,7 @@ test("the sitemap, wireframe, and style guide follow the Run 11 brief", async ({
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTempDir(sandbox);
   }
 });
 

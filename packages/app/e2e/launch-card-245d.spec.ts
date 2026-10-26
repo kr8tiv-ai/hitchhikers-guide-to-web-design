@@ -5,12 +5,13 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { hiddenChildOptions } from "@hitchhiker/engine";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,7 +65,7 @@ test("the launch card records a yes and stays inside a phone screen", async ({ p
     expect(after.includes("!")).toBe(false);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -123,7 +124,7 @@ test("the launch card suggests the host named in the brief", async ({ page }) =>
     expect(existsSync(path.join(projectDir, ".hitchhiker", "deploy", "DEPLOYS.md"))).toBe(false);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

@@ -4,12 +4,13 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 import { approveDesignAndStart } from "./design-then-build.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +39,7 @@ test("restart after prompt 003 ends passes it and starts 004", async ({ page }) 
     expect(ids).toContain("004");
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -65,7 +66,7 @@ test("restart before prompt 003 ends reruns it and 004 passes", async ({ page })
     expect(ids).toContain("004");
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -102,7 +103,7 @@ test("Resume continues an interrupted prompt once and then runs 004", async ({ p
   } finally {
     await writeFile(path.join(projectDir, "release-003"), "go\n", "utf8").catch(() => undefined);
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseConfig } from "../src/config.ts";
 import { loadProjectFile, restoreProject } from "../src/project-file/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const samplePath = path.join(root, "samples", "towel-day.hhproject");
@@ -43,7 +44,7 @@ test("the towel sample loads through the project file loader", async () => {
     assert.match(brief, /Mostly Towels/);
     assert.equal(interview.includes("brief-yes"), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

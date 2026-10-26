@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +24,7 @@ import {
 } from "../src/imagine-http.ts";
 import { RealSubjectError, planBatch, readSpend, runBatch, type RunBatchDeps } from "../src/imagine-run.ts";
 import { proposeReplacement, readAssetTable, type AssetSlot } from "../src/slots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const KEY = "xai-test-key-062-do-not-leak";
 const PROMPT = "unique-prompt-orchid-9931-do-not-log";
@@ -41,7 +42,7 @@ function tempDir(): string {
 }
 
 function cleanup(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 function still(id: string): AssetSlot {

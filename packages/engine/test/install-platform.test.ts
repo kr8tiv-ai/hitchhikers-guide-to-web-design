@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,7 @@ import {
   restoreInstallEnv,
   type ToolInstallRecord,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("windows batch shims launch through cmd.exe and other platforms stay direct", () => {
   const linux = launchSpec("tar", ["-xf", "archive.tar.gz"], { PATH: "/usr/bin" }, "linux");
@@ -41,7 +42,7 @@ test("windows batch shims launch through cmd.exe and other platforms stay direct
       assert.match(result.stdout, /scoop-ok/);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -71,7 +72,7 @@ test("win32 resolve returns the host shim path and PATHEXT lists earlier extensi
     assert.match(spec.args[3] ?? "", /only\.cmd/);
     assert.match(spec.args[3] ?? "", /install poppler/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -120,6 +121,6 @@ test("registry PATH merges after the current directories and whisper env is rest
     restoreInstallEnv([record], kept);
     assert.equal(kept.WHISPER_CPP_BIN, "C:\\fresh\\whisper.exe");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -3,11 +3,12 @@
  * The first-five-minutes tour does not receive focus.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +26,7 @@ test("load and resume keep the question in view", async ({ page }) => {
     await openAndCheck(page, url, { width: 390, height: 640 });
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

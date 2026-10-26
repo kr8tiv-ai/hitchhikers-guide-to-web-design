@@ -12,7 +12,6 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -33,6 +32,7 @@ import {
   type InterviewSession,
   type Question,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -166,7 +166,7 @@ async function answerOpening(projectDir: string, fourthId: string): Promise<void
   );
   assert.equal(readAnswers(projectDir).length, OPENING.length);
   assert.equal(session.next()?.id, fourthId);
-  rmSync(lockPath(projectDir), { force: true });
+  removeTempDir(lockPath(projectDir));
 }
 
 async function walkRest(session: InterviewSession): Promise<void> {
@@ -281,6 +281,6 @@ test("express saves, resumes at the next id, and finishes with no missing requir
     assert.equal(homeStamp(), homeBefore);
     assert.equal(existsSync(path.join(projectDir, ".hitchhiker")), true);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

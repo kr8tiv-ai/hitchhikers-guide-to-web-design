@@ -4,11 +4,12 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { emitDesignStages, openInterview } from "../src/interview.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRIEF = "The site helps a visitor book a visit.";
 const CLOCK = () => new Date("2026-10-20T12:00:00.000Z");
@@ -79,7 +80,7 @@ test("a run that skips the wireframe approval does not write DESIGN.md", async (
     assert.equal(after.sitemap, "The pages are right.");
     assert.equal(after.wireframe, "The sections are right.");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(early, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(early);
   }
 });

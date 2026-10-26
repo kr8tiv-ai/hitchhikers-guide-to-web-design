@@ -2,13 +2,14 @@
  * PERF-001. The desk publishes answer progress within 2s while the guide is still working.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function hit<T>(value: T): ThinkResult<T> {
   return { value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" };
@@ -117,6 +118,6 @@ test("answer progress is on the stream within 2s of a slow guide", async () => {
     }
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

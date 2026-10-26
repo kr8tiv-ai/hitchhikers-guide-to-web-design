@@ -1,11 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 import { TALK_NEEDS_CHROMIUM } from "../src/client/desk.ts";
 import { VOICE_FALLBACK, isPaidSttUrl } from "../src/client/voice-engine.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 /**
  * Default voice must not call a paid speech host. Web Speech is stubbed.
@@ -42,7 +43,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (child !== null) await stopChild(child);
-  if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
+  if (projectDir !== "") await removeTempDir(projectDir);
 });
 
 test("default click-to-toggle voice and a conversational turn never call paid speech", async ({ page }) => {

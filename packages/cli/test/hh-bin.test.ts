@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { hiddenChildOptions } from "@hitchhiker/engine";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const binDir = path.join(repoRoot, "node_modules", ".bin");
@@ -52,7 +53,7 @@ test("pnpm exec hh doctor runs the workspace bin and not Windows HTML Help", () 
     assert.equal(calls.includes("login"), false);
     assert.equal(calls.includes("--session-id"), false);
   } finally {
-    rmSync(work, { recursive: true, force: true });
+    removeTempDir(work);
   }
 });
 
@@ -197,7 +198,7 @@ test("hh so-long prints usage instead of opening Windows HTML Help", () => {
     assert.equal(stderr.toLowerCase().includes("html help"), false);
     assert.equal(HTML_HELP.test(stdout), false);
   } finally {
-    rmSync(work, { recursive: true, force: true });
+    removeTempDir(work);
   }
 });
 
@@ -222,7 +223,7 @@ test("hh --version prints 0.1.0 from the workspace package", () => {
     assert.equal(result.stdout.includes("!"), false);
     assert.equal((result.stderr ?? "").includes("!"), false);
   } finally {
-    rmSync(work, { recursive: true, force: true });
+    removeTempDir(work);
   }
 });
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import {
   DESIGN_PATTERN_TOKEN_CAP,
 } from "../src/spec/design-language.ts";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRIEF = `# Site Brief
 
@@ -66,6 +67,6 @@ test("a rendered hero prompt carries design language under the cap", async () =>
     assert.match(gates, /Reduced motion stays visible and complete/);
     assert.match(gates, /phone Lighthouse at least 90/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

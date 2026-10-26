@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
   type QueueFile,
   type QueueStatus,
 } from "../src/queue-file.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempProject(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-queue-"));
@@ -48,7 +49,7 @@ test("a two-item queue round-trips under the state lock", async () => {
     assert.deepEqual(onDisk, TWO);
     assert.equal(readFileSync(queueFile(dir), "utf8").includes("!"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -59,7 +60,7 @@ test("an empty items array round-trips and means the drive is not planned", asyn
     await saveQueue(dir, empty);
     assert.deepEqual(await loadQueue(dir), empty);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -115,7 +116,7 @@ test("pause then save keeps finished rows on disk", async () => {
       pause: { at: "2026-10-15T12:00:00.000Z", after: "001" },
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -129,7 +130,7 @@ test("corrupt JSON throws and does not delete the file", async () => {
     await assert.rejects(() => loadQueue(dir), QueueFileError);
     assert.equal(readFileSync(filePath, "utf8"), raw);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -143,7 +144,7 @@ test("a queue with a bad shape throws and leaves the file", async () => {
     await assert.rejects(() => loadQueue(dir), /Queue item has an unknown field|Queue kind|Queue status/);
     assert.equal(readFileSync(filePath, "utf8"), raw);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -158,7 +159,7 @@ test("a second save is refused while the state lock is held", async () => {
     });
     assert.equal(existsSync(queueFile(dir)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -181,7 +182,7 @@ test("bad ids and secret-looking ids are rejected and not written", async () => 
       /\/\^\[a-z0-9-\]\+\$\//,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -196,7 +197,7 @@ test("duplicate ids are rejected", async () => {
       /Duplicate queue id/,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -223,7 +224,7 @@ test("scheduled reviews round-trip as queue rows with statuses", async () => {
     assert.equal(loaded?.items[3]?.kind, "review");
     assert.equal(loaded?.items.length, 4);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -272,7 +273,7 @@ test("an empty elevate list does not create or change the queue", async () => {
     );
     assert.equal(readFileSync(queueFile(dir), "utf8"), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -303,6 +304,6 @@ test("scheduled elevate picks append as queued builds and keep a pause", async (
     await assert.rejects(() => enqueueElevatePicks(dir, [{ id: "Bad_Id" }]), QueueFileError);
     assert.equal(readFileSync(queueFile(dir), "utf8"), raw);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -4,7 +4,7 @@
  * read those artefacts. Sentence joins keep a space after terminal punctuation.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import { BRIEF_KEYS, type SiteBrief } from "../src/guide/schemas.ts";
 import { advanceDesignStages, designReadyForBuild } from "../src/spec/design-stages.ts";
 import { renderDesignMd } from "../src/spec/design-outputs.ts";
 import { runPrebuildChecks } from "../src/spec/prebuild-checks.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TITLES = [
@@ -110,7 +111,7 @@ test("the Run 8 brief sitemap lists all 11 pages, with privacy and terms in the 
     assert.equal(primary.includes("- Privacy at "), false);
     assert.equal(primary.includes("- Terms at "), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -138,7 +139,7 @@ test("a sitemap change revises the pages and does not approve the stage", () => 
     assert.equal(saved.includes("remove Blog"), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "wireframe.md")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -170,7 +171,7 @@ test("the wireframe lists the approved sitemap and goes stale after a later site
     assert.equal(waiting.wrote, "none");
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "wireframe.md")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -229,7 +230,7 @@ test("the style guide uses the Run 8 kit, then the picked pair, and skips 3D on 
     assert.equal(state.styleGuide, undefined);
     assert.equal(state.sitemap, "Approved.");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -294,8 +295,8 @@ test("pre-build checks read the Run 8 artefacts and a failure keeps the build ga
     assert.equal(gate.ok, false);
     assert.equal(gate.checks.checks.some((check) => check.status === "fail"), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(blocked, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(blocked);
   }
 });
 

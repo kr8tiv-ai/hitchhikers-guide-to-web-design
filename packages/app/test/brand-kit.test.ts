@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { renderBrandKit, writeBrandKit, type BrandKitModel } from "../src/brand-kit.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cssPath = path.resolve(here, "../src/brand-kit.css");
@@ -169,6 +170,6 @@ test("writeBrandKit writes html and a print pdf under .hitchhiker/brand", async 
     const font = await stat(path.join(path.dirname(written.htmlPath), "fonts", "Literata-opsz16-wght400.woff2"));
     assert.ok(font.size > 0);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });

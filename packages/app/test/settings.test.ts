@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { defaultConfig, loadConfig, saveConfig } from "@hitchhiker/engine";
 import { STT_QUOTE_FILENAME } from "../src/server/settings.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const voiceUrl = new URL("../../voice/src/xai-stt.ts", import.meta.url);
@@ -51,7 +52,7 @@ async function withDesk(run: (handle: ServerHandle, dir: string) => Promise<void
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -19,6 +19,7 @@ import {
   saveProjectFile,
   type ProjectDraft,
 } from "../src/project-file/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, "fixtures");
@@ -119,7 +120,7 @@ test("a missing Desktop writes in the home folder and does not create Desktop", 
     assert.equal(existsSync(path.join(home, "Desktop")), false);
     assert.equal(existsSync(path.join(home, "OneDrive")), false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -133,7 +134,7 @@ test("an OneDrive Desktop is used when it is the only Desktop under home", async
     assert.equal(located.note, null);
     assert.equal(located.filePath, path.join(desktop, "Café Towel.hhproject"));
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -169,7 +170,7 @@ test("Windows paths with spaces, non-ASCII, and a reserved name round-trip", asy
       assert.match(saved.filePath, /カフェ Café/);
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -264,7 +265,7 @@ test("a planted key never appears in the project file, RESUME.md, or the resume 
     assert.equal(skipped?.assumption, true);
     assert.equal(file.projectName.includes(SK), false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -291,7 +292,7 @@ test("schema 0 migrates in memory and the fixture bytes stay", async () => {
     assert.equal(direct.readOnly, false);
     assert.equal(direct.file?.schemaVersion, 1);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -322,7 +323,7 @@ test("a newer schema opens read-only and is not rewritten", async () => {
     assert.equal(stepped.readOnly, true);
     assert.equal(stepped.file, null);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -353,7 +354,7 @@ test("a truncated file falls back to the backup and keeps the bad bytes", async 
     assert.equal(await readFile(path.join(home, kept), "utf8"), truncated);
     assert.equal(existsSync(`${filePath}.bak`), true);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -378,7 +379,7 @@ test("a truncated file with no backup uses the live project folder", async () =>
     assert.equal(await readFile(path.join(home, kept), "utf8"), truncated);
     assert.equal(existsSync(`${filePath}.bak`), false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -402,7 +403,7 @@ test("backup rotation keeps the previous file and one older copy", async () => {
     assert.match(bak, /DP-0\.2/);
     assert.match(older, /DP-0\.1/);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -440,7 +441,7 @@ test("a second window stays read-only and a dead lock is taken over", async () =
     const loaded = await loadProjectFile(filePath);
     assert.equal(loaded.file?.interview.currentQuestionId, "DP-0.3");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -502,7 +503,7 @@ test("resume keeps a newer live folder and never approves a closed gate", async 
     assert.equal(existsSync(path.join(project, ".git")), false);
     assert.match(applied.gitNote ?? "", /Nothing in the git tree was changed/);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -539,7 +540,7 @@ describe("autosave hooks", { concurrency: 1 }, () => {
     } finally {
       if (prior === undefined) delete process.env.HH_PROJECT_HOME;
       else process.env.HH_PROJECT_HOME = prior;
-      await rm(root, { recursive: true, force: true });
+      await removeTempDir(root);
     }
   });
 
@@ -557,7 +558,7 @@ describe("autosave hooks", { concurrency: 1 }, () => {
     } finally {
       if (prior === undefined) delete process.env.HH_PROJECT_HOME;
       else process.env.HH_PROJECT_HOME = prior;
-      await rm(root, { recursive: true, force: true });
+      await removeTempDir(root);
     }
   });
 
@@ -583,7 +584,7 @@ describe("autosave hooks", { concurrency: 1 }, () => {
     } finally {
       if (prior === undefined) delete process.env.HH_PROJECT_HOME;
       else process.env.HH_PROJECT_HOME = prior;
-      await rm(root, { recursive: true, force: true });
+      await removeTempDir(root);
     }
   });
 });

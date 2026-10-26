@@ -3,13 +3,14 @@
  * and Approve asks for an explicit confirmation.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 const STOPPED =
@@ -228,6 +229,6 @@ test("Change something keeps the fallback marker, and Approve requires confirmat
     assert.match(approved.body, /"error":""/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

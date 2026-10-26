@@ -4,11 +4,12 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,7 +41,7 @@ test.describe("gate card 243f", () => {
 
   test.afterAll(async () => {
     if (child !== undefined) await stopChild(child);
-    if (projectDir.length > 0) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir.length > 0) await removeTempDir(projectDir);
   });
 
   test("a font card asks before a fix and does not clip at 375", async ({ page }) => {

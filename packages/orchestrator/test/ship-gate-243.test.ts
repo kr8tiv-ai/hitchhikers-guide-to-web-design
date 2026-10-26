@@ -5,13 +5,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { GATE_IDS, gatesJsonPath, type GateId, type GateStatus } from "@hitchhiker/qa";
 import { beginPhaseSix, shipGate } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -54,7 +55,7 @@ test("a missing quality report keeps launch closed", async () => {
     assert.equal(result.ok, false);
     assert.match(result.reasons.join(" "), /quality check for this site is missing/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -77,7 +78,7 @@ test("a stale commit keeps launch closed", async () => {
     assert.equal(entered.ok, false);
     assert.equal(deploys, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -105,7 +106,7 @@ test("a blocker stops phase 6 with zero deploy calls", async () => {
     assert.match(state.nextAction, /Launch stays closed/);
     assert.ok(state.blockers.some((line) => line.includes(reason)));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -133,7 +134,7 @@ test("a fix before round 2 keeps launch closed", async () => {
     assert.equal(entered.ok, false);
     assert.equal(deploys, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -176,7 +177,7 @@ test("a pass with known issues and no blocker launches", async () => {
     assert.equal(state?.nextAction, "011");
     assert.deepEqual(state?.blockers, ["hold the towel"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -211,7 +212,7 @@ test("a pass with known issues still fails when a check is blocked", async () =>
     assert.equal(deploys, 0);
     assert.equal(kits, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -232,6 +233,6 @@ test("a clean report for this commit launches", async () => {
     assert.equal(entered.ok, true);
     assert.equal(deploys, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

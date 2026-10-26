@@ -3,11 +3,12 @@
  * and Approve starts the build only after the confirmation.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const LINE = "The site helps a visitor book a visit.";
@@ -130,7 +131,7 @@ test("a fallback stays labelled, a named change lands, and Approve asks first", 
     await expect(page.locator("[data-brief-error]")).toHaveCount(0);
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

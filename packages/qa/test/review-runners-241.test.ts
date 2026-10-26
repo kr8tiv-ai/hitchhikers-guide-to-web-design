@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -21,6 +21,7 @@ import {
   type ReviewProject,
 } from "../src/review-runners.ts";
 import { falseVisualBans, zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const GATE_NAMES = [
   "judgeBeauty",
@@ -239,7 +240,7 @@ test("elevate, verdict, and jury runners call beauty, recipes, and the 241 gates
       assert.equal(result.remediation.prompts.length, 0, name);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -272,7 +273,7 @@ test("a beauty or recipe failure blocks and feeds a remediation prompt", async (
       assert.ok(result.fixes.length >= 1 && result.fixes.length <= 3, name);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -418,7 +419,7 @@ test("a Three.js import is not a failure", async () => {
     assert.equal(result.blocked, false);
     assert.equal(result.failures.length, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -476,6 +477,6 @@ test("elevateRound and zaphodReview call the same gates", async () => {
     assert.ok(verdict.fixes.length >= 1);
     assert.deepEqual(verdictLog, [...GATE_NAMES]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import {
   passesLargeContrast,
   writeBrandKit,
 } from "../src/brand/kit-from-interview.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("a fixture interview with no logo and four references yields a complete kit", () => {
   const kit = brandKitFromAnswers([
@@ -84,6 +85,6 @@ test("a skipped colour answer uses a default palette that passes contrast", () =
     assert.match(written, /## Palette/);
     assert.match(readFileSync(path.join(dir, "src", "data", "brand.ts"), "utf8"), /export const brand/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

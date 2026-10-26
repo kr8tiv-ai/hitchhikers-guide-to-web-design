@@ -3,7 +3,7 @@
  * or when the live runner cannot resolve grok.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -30,6 +30,7 @@ import {
   setBuildRunner,
   siteBuildSettled,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const NO_RUNNER = "The build could not start: no build runner is installed. Run hh doctor.";
 const GROK_MISSING = "grok is not on PATH. Run hh doctor.";
@@ -108,7 +109,7 @@ test("no build runner records a desk error and does not mark the build started",
     setBuildRunner(previous);
     clearProjectBuildRunner(dir);
     await siteBuildSettled(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -133,7 +134,7 @@ test("missing grok fails the desk before the build is marked started", async () 
     setBuildRunner(previous);
     clearProjectBuildRunner(dir);
     await siteBuildSettled(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -166,6 +167,6 @@ test("the live runner still returns code 127 when grok is missing and the queue 
     setBuildRunner(previous);
     clearProjectBuildRunner(dir);
     await siteBuildSettled(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

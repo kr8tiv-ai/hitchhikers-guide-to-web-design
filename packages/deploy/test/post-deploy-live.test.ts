@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { judgePhoneLighthouse, postDeployChecks, sitemapInstructions } from "../src/post-deploy-live.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PAGE = `<!doctype html><html><head>
 <title>Milliways</title>
@@ -223,7 +224,7 @@ test("a route failure does not rewrite the deploy record", async () => {
     assert.match(instructions, /sitemap\.xml/);
     assert.match(instructions, /does not submit a sitemap/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

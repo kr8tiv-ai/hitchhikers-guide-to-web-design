@@ -3,7 +3,7 @@
  * The exact "no prior site" phrase still skips. Any other no-site answer is reworded.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -19,6 +19,7 @@ import {
   noPriorSite,
 } from "../src/guide/session-state.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -87,9 +88,9 @@ test("no prior site rewords DP-0.2a, and a real site keeps the love and wince as
     for (const phrase of BANNED) assert.equal(phrase.test(drifted), false);
     assert.equal(guardPriorSiteText(question.ask, someState, "DP-0.2a"), question.ask);
   } finally {
-    rmSync(none, { recursive: true, force: true });
-    rmSync(some, { recursive: true, force: true });
-    rmSync(skipped, { recursive: true, force: true });
+    removeTempDir(none);
+    removeTempDir(some);
+    removeTempDir(skipped);
   }
 });
 
@@ -125,7 +126,7 @@ test("a stubbed model cannot keep a banned site phrase when there is no site", a
     assert.equal(kept.questionId, "DP-0.2a");
     assert.match(kept.message, /\bthat site\b/i);
   } finally {
-    rmSync(none, { recursive: true, force: true });
-    rmSync(some, { recursive: true, force: true });
+    removeTempDir(none);
+    removeTempDir(some);
   }
 });

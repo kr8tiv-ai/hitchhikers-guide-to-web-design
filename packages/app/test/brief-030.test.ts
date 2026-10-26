@@ -2,7 +2,7 @@
  * BUG-030: two change posts share one revise, and the desk answers while it runs.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,6 +15,7 @@ import {
   type ThinkResult,
 } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 const NEXT = "The site helps a visitor book a tour.";
@@ -120,6 +121,6 @@ test("two change requests start one revise and return while it is still running"
   } finally {
     release();
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

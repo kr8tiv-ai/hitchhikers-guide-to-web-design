@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { writeSectionStillPlan, type PlannedPage } from "@hitchhiker/engine";
 import { RealSubjectError } from "../src/imagine-run.ts";
 import { generateSectionStills, resolveDeskProvider, type MediaProvider } from "../src/section-generate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const SECRET = "xai-test-key-should-not-appear";
@@ -84,7 +85,7 @@ test("generation writes each still as it arrives, with pictures and credits, and
     assert.equal(blob.includes("keychain"), false);
     assert.equal(/TODO/i.test(blob), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -120,7 +121,7 @@ test("a real subject is refused before the provider runs", async () => {
     await assert.rejects(() => generateSectionStills(dir, provider), (error: unknown) => error instanceof RealSubjectError);
     assert.equal(called, false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -145,7 +146,7 @@ test("a failed provider writes a composition and no TODO", async () => {
     assert.equal(/TODO/i.test(blob), false);
     assert.equal(blob.includes("placeholder"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -193,7 +194,7 @@ test("open-license stock is used before a composition", async () => {
     assert.equal(/TODO/i.test(note), false);
     assert.equal(existsSync(path.join(dir, "src", "assets", "generated", "farms.svg")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -218,6 +219,6 @@ test("the desk chain does not call a billed provider unless that provider is ena
     assert.match(result.fallbacks[0] ?? "", /art-directed composition/);
     assert.equal(treeText(dir).includes(SECRET), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

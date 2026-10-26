@@ -2,13 +2,14 @@
  * BUG-031: approving the brief starts one runner. A failed stub surfaces Retry.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { loadQueue, saveQueue, siteBuildSettled, withStateLock, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -192,7 +193,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
     release();
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -254,7 +255,7 @@ test("drive read and retry wait while this process holds the state lock", async 
     await held;
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -304,6 +305,6 @@ test("a failing stub shows the failure and Retry starts the same prompt again", 
   } finally {
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

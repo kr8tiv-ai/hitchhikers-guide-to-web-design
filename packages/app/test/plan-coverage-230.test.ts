@@ -2,12 +2,13 @@
  * BUG-039: plan approval refuses an uncovered requirement and accepts a complete plan.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function raw(
   port: number,
@@ -91,6 +92,6 @@ test("plan approval names uncovered requirements and accepts a complete plan", a
     assert.equal(accepted.ok, true);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

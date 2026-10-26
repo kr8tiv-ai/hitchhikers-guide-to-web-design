@@ -3,7 +3,7 @@
  * The question is not asked. Budget copy drops custom-generation lines.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
 } from "../src/guide/session-state.ts";
 import { openInterview } from "../src/interview.ts";
 import { loadTree } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const treeFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "interview", "tree.yaml");
 
@@ -92,7 +93,7 @@ test("a None answer records DP-7.2 and the walk does not ask it", async () => {
     assert.equal(budget.status, "SKIPPED");
     assert.match(budget.value, /Not applicable/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -126,7 +127,7 @@ test("a saved None answer does not offer DP-7.2 on resume", async () => {
     ]);
     assert.equal(kept.length, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -139,7 +140,7 @@ test("Tripo stays on the walk and budget copy drops only custom 3D lines", async
     await session.command({ type: "answer", text: "Use Tripo for the hero." });
     assert.equal(session.next()?.id, "DP-7.2");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 
   const dropped = budgetCardCopy("Tripo at forty dollars. Meshy at twenty dollars. Hosting stays put.", "None.");

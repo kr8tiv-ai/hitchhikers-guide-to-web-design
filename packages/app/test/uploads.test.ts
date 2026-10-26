@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import {
   acceptUpload,
   contentLengthExceeds,
 } from "../src/server/uploads.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempProject(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-upload-"));
@@ -26,7 +27,7 @@ async function withDesk(
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

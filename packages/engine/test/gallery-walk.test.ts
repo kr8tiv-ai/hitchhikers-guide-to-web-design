@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   type GalleryEntry,
   type WalkState,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const sourcePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -308,7 +309,7 @@ test("writeReferences writes three site files and an index with the thread", asy
     }
     assert.match(draftThread(state, pack), /Why /);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

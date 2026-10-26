@@ -3,7 +3,7 @@
  * and the fallback cites every answer that fed a field.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,6 +20,7 @@ import {
   type Facts,
   type SiteBrief,
 } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const FLAGS = new Set([
   "-p",
@@ -129,7 +130,7 @@ test("a length miss shortens only the failing fields and keeps the rest", async 
       assert.ok(value[key].length < payload[key].length, key);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -159,7 +160,7 @@ test("a non-JSON reply is repaired once", async () => {
     assert.match(prompts[1] ?? "", /response was not JSON/);
     assert.equal(result.value.ok, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -182,7 +183,7 @@ test("the draft prompt states the same limits as the schema", async () => {
     assert.equal(calls[0]?.model, "grok-4.7-build-fast");
     assert.equal(calls[0]?.effort, "xhigh");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -247,7 +248,7 @@ test("Paradise Found fallback maps each field to its own answers", async () => {
     assert.equal(source("coverage")?.questionId, "");
     assert.equal(desk.sources.some((item) => item.questionId.trim() === ":" ), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -274,7 +275,7 @@ test("retry feeds the failure back, then a good draft clears the alert", async (
     assert.equal(again.error, "");
     assert.match(again.draft?.goal ?? "", /farm stay/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -294,6 +295,6 @@ test("a second retry failure names the reason and the time", async () => {
     assert.ok(second.draft);
     assert.equal(second.draft.goal.trim() === "", false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

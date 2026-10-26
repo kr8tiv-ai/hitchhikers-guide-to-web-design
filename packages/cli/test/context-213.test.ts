@@ -3,12 +3,13 @@
  * `hh next` without --status does not write.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { saveState } from "@hitchhiker/engine";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-cli-context-"));
@@ -55,6 +56,6 @@ test("hh context, hh next --status, and hh doctor --context", async () => {
     assert.equal(existsSync(stateFile), true);
     assert.equal(readFileSync(stateFile, "utf8"), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

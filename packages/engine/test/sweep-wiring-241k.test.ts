@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import {
   type BuildSpawnResult,
   type ReferenceTransport,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const designIndex = path.join(repoRoot, "packages", "knowledge", "design-library", "index.json");
@@ -105,7 +106,7 @@ test("prepareSiteBuild writes phase logs, the section landmark, and reference to
     assert.equal(before.includes("ref-example-com-work"), false);
   } finally {
     setReferenceTransport(null);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -131,7 +132,7 @@ test("a plain brief does not fetch a reference", async () => {
     );
   } finally {
     setReferenceTransport(null);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -159,7 +160,7 @@ test("the watchdog stops a quiet child before it settles the row", { timeout: 20
     resetSiteBuildWatch(dir);
     clearProjectBuildRunner(dir);
     setReferenceTransport(null);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

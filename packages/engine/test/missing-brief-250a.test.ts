@@ -3,12 +3,13 @@
  * say the brief is missing. They do not throw and they do not pass.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { designReadyForBuild } from "../src/spec/design-stages.ts";
 import { critiquePlan, draftPlan } from "../src/spec/plan-critique.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("designReadyForBuild and plan critique name a missing brief instead of splitting it", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-missing-brief-250a-"));
@@ -22,6 +23,6 @@ test("designReadyForBuild and plan critique name a missing brief instead of spli
     assert.equal(gate.ok, false);
     assert.match(gate.reason, /brief is missing/i);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

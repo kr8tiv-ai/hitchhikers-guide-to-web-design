@@ -3,7 +3,7 @@
  * and languages, imagery, and budget are not dumped into neighbouring fields.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -22,6 +22,7 @@ import {
   type Facts,
   type SiteBrief,
 } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -116,7 +117,7 @@ test("schema descriptions and the draft prompt state the same length targets", a
     assert.equal(calls[0]?.model, "grok-4.7-build-fast");
     assert.equal(calls[0]?.effort, "xhigh");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -175,6 +176,6 @@ test("an older pending brief without the new fields still loads", () => {
     assert.match(desk.markdown, /## Budget/);
     assert.match(desk.markdown, /## Colours/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

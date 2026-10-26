@@ -4,12 +4,13 @@
  * stores the motion fact and then shows Guide Entry is next.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const ASK =
   "Here is what I heard. You said the home page is a short calm film, and you also said no video at launch. Should I treat the film as gentle motion only, with no video file?";
@@ -104,6 +105,6 @@ test("the recap question has Answer, Suggest for me, and Skip, then Guide Entry 
     assert.equal(saved.answers.find((answer) => answer.id === "DP-6.3")?.value, RESOLUTION);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

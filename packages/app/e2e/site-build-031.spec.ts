@@ -2,12 +2,13 @@
  * BUG-031: approve, watch the drive, then see the stub's files or the failure.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { approveDesignAndStart } from "./design-then-build.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +31,7 @@ test("approve shows a running build, then the stub file, then passed", async ({ 
     await expect(page.locator("[data-files-written]")).toContainText("index.html", { timeout: 15_000 });
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -49,7 +50,7 @@ test("a failing stub shows the failure and a Retry control", async ({ page }) =>
     await expect(page.locator("[data-build-reason]")).toContainText("usage limit");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

@@ -4,12 +4,13 @@
  * The model is not called.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { chooseDirection, pickDirection, readDirectionDeal } from "../src/brand/directions.ts";
 import { brandKitFromAnswers, writeBrandKit } from "../src/brand/kit-from-interview.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const TYPE_ANSWER =
   "No fonts yet. Light, wide, airy sans for headings like the logo; easy-reading body. Show me pairings.";
@@ -123,7 +124,7 @@ test("an approved brief like Run 11 fills motion, action, and the kit files", ()
     assert.match(markdown, new RegExp(`Action: ${action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.equal(brandTs.includes("Yes. A general contact form"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -139,7 +140,7 @@ test("a brief edit to Motion shows up in the kit", () => {
     assert.equal(markdown.includes("400 ms"), false);
     assert.equal(markdown.includes("4. Sound stays off"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -159,7 +160,7 @@ test("without an approved brief the answer kit stays, and a bare score is an app
     assert.match(scoreOnly.markdown, /Motion appetite 4 of 10\./);
     assert.equal(scoreOnly.markdown.includes("4. Sound stays off"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -203,6 +204,6 @@ test("a picked direction is named in the brand kit", () => {
     const written = readFileSync(path.join(dir, ".hitchhiker", "brand", "BRAND.md"), "utf8");
     assert.match(written, new RegExp(`Picked ${first.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.`));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

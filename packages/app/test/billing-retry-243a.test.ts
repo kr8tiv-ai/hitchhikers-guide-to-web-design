@@ -3,7 +3,7 @@
  * The stub is the only model. No Grok process is spawned.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,6 +19,7 @@ import { renderCard, type CardState } from "../src/card.ts";
 import { mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleRaw } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "For myself.";
 
@@ -211,7 +212,7 @@ test("a billing failure then Retry runs the same turn once more and stores one a
     assert.equal(answerCount(dir, LINE), 1);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

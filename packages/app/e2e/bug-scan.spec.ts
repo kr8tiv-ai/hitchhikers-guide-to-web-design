@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { renderApproval } from "../src/approval.ts";
 import { type BrandKitModel } from "../src/brand-kit.ts";
 import { listAppRoutes } from "../src/polish.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WIDTHS = [
@@ -133,7 +134,7 @@ test("every desk screen at 375 and 1440 has no console errors, broken links, or 
       await walkJump(page, jumpUrl, "before-jump-open", findings, checkedLinks);
     } finally {
       await stopChild(openChild);
-      await rm(jumpOpen, { recursive: true, force: true });
+      await removeTempDir(jumpOpen);
     }
 
     const jumpClear = await mkdtemp(path.join(tmpdir(), "hh-bug-scan-jump-"));
@@ -148,7 +149,7 @@ test("every desk screen at 375 and 1440 has no console errors, broken links, or 
       await walkJump(page, jumpUrl, "before-jump-clear", findings, checkedLinks);
     } finally {
       await stopChild(clearChild);
-      await rm(jumpClear, { recursive: true, force: true });
+      await removeTempDir(jumpClear);
     }
 
     const unexpected = consoleErrors.filter((line) => !isExpectedConsole(line));
@@ -159,8 +160,8 @@ test("every desk screen at 375 and 1440 has no console errors, broken links, or 
     expect(requestFailures, requestFailures.join("\n")).toEqual([]);
   } finally {
     await stopChild(desk);
-    await rm(projectDir, { recursive: true, force: true });
-    await rm(cacheDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
+    await removeTempDir(cacheDir);
   }
 });
 
@@ -202,7 +203,7 @@ function deskScreens(deskUrl: string, projectDir: string, packFile: string): Scr
     {
       id: "brand-empty",
       async open(target) {
-        await rm(path.join(projectDir, ".hitchhiker", "brand", "brand-kit.json"), { force: true });
+        await removeTempDir(path.join(projectDir, ".hitchhiker", "brand", "brand-kit.json"));
         await target.goto(`${deskUrl}brand`);
       },
     },
@@ -246,7 +247,7 @@ function deskScreens(deskUrl: string, projectDir: string, packFile: string): Scr
     {
       id: "dashboard-empty",
       async open(target) {
-        await rm(path.join(projectDir, ".hitchhiker", "queue.json"), { force: true });
+        await removeTempDir(path.join(projectDir, ".hitchhiker", "queue.json"));
         await target.goto(`${deskUrl}hh-dashboard`);
       },
     },
@@ -475,7 +476,7 @@ function row(source: string, name: string, url: string): unknown {
 }
 
 async function resetGallery(projectDir: string): Promise<void> {
-  await rm(path.join(projectDir, ".hitchhiker", "gallery-walk.json"), { force: true });
+  await removeTempDir(path.join(projectDir, ".hitchhiker", "gallery-walk.json"));
 }
 
 async function writeQueue(projectDir: string, broken: boolean): Promise<void> {

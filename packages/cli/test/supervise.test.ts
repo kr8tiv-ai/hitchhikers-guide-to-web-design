@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -21,6 +21,7 @@ import { gitLockDelayMs, gitTextIsFileLock, runSupervisorGit, verifyKeptCommit, 
 import { runSupervise } from "../src/improve/supervisor.ts";
 import { baselineProblem } from "../src/improve/baseline.ts";
 import { exitNote, failureHint } from "../src/improve/session.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..", "..");
@@ -139,7 +140,7 @@ function initPair(): { work: string; origin: string } {
 function remove(dir: string): void {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     try {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
       return;
     } catch {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);

@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 /**
  * An unsent answer stays on this machine. Leaving the desk, reloading, and
@@ -43,7 +44,7 @@ test("typed text and the same question survive Brand and come back", async ({ pa
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -79,7 +80,7 @@ test("a reload and a new server on the same project keep the draft", async ({ pa
     expect(errors).toEqual([]);
   } finally {
     if (child !== null) await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -106,7 +107,7 @@ test("dictation is saved the same way after a stop", async ({ page }) => {
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -132,7 +133,7 @@ test("a pushback card returns with its line and the typed text", async ({ page }
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -171,7 +172,7 @@ test("Other after a pushback stays empty instead of offering the saved draft", a
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -215,7 +216,7 @@ test("a typed draft survives Suggest and does not come back as the helper", asyn
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -253,7 +254,7 @@ test("Suggest does not store the helper, and posting it is rejected", async ({ p
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -297,7 +298,7 @@ test("a picked choice is saved without writing the helper into the draft", async
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -344,7 +345,7 @@ test("a picked choice is saved with the choice set", async ({ page }) => {
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -377,7 +378,7 @@ test("an attached file stays, and clearing the draft leaves the file", async ({ 
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -419,7 +420,7 @@ test("a successful Answer clears the draft and a failed Answer keeps it", async 
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -446,7 +447,7 @@ test("skip removes the draft and an empty box stores nothing", async ({ page }) 
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -465,7 +466,7 @@ test("blocked storage still accepts typing and shows the note", async ({ page })
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -507,7 +508,7 @@ test("a stored draft for a question the interview is not asking is ignored and r
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -542,7 +543,7 @@ test("Draft saved is one polite line per batch and does not shift the box", asyn
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

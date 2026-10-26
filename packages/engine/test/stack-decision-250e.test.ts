@@ -3,7 +3,7 @@
  * in the shape deploy parses, and the prompt plan uses that pick.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { approveSitePlan } from "../src/guide/brief-desk.ts";
 import { BRIEF_KEYS, type SiteBrief } from "../src/guide/schemas.ts";
 import { draftBriefPlan, prepareSiteBuild } from "../src/guide/site-build.ts";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -117,7 +118,7 @@ async function approvedPick(brief: SiteBrief, answers?: readonly { id: string; v
     assert.match(readFileSync(file, "utf8"), /^# STACK-DECISION$/m);
     return decision.pick;
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 
@@ -172,8 +173,8 @@ test("draftBriefPlan and prepareSiteBuild pass the chosen stack and name the sta
     const viteDecision = await parseSiteShape(readFileSync(stackPath(viteDir), "utf8"));
     assert.equal(viteDecision.pick, "vite-react");
   } finally {
-    rmSync(nextDir, { recursive: true, force: true });
-    rmSync(viteDir, { recursive: true, force: true });
+    removeTempDir(nextDir);
+    removeTempDir(viteDir);
   }
 });
 
@@ -198,8 +199,8 @@ test("an existing STACK-DECISION.md is kept and its pick is used", async () => {
     assert.match(nextText, /next\.config\.ts/);
     assert.equal(nextText.includes("packages/templates/vite-react-world"), false);
   } finally {
-    rmSync(viteDir, { recursive: true, force: true });
-    rmSync(nextDir, { recursive: true, force: true });
+    removeTempDir(viteDir);
+    removeTempDir(nextDir);
   }
 });
 
@@ -236,6 +237,6 @@ test("no stack decision keeps today's astro prompt bytes", async () => {
       assert.equal(text.includes("packages/templates/"), false, prompt.id);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -4,7 +4,7 @@
  * Retry is the only resume. Model and effort stay xhigh.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -26,6 +26,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 999_999;
 const RUN3 = "API error (status 402 Payment Required): Grok Build usage balance exhausted";
@@ -50,7 +51,7 @@ async function cleanup(dir: string): Promise<void> {
   await siteBuildSettled(dir).catch(() => undefined);
   resetSiteBuildWatch(dir);
   clearProjectBuildRunner(dir);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 test("a 402 exit fails with the top-up sentence, pauses, and does not start the next prompt", async () => {

@@ -3,7 +3,7 @@
  * The next turn waits for it. A failure leaves the last good summary on disk.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { think } from "../src/ai/think.ts";
 import { isLive, writeSummaryFile } from "../src/context/disk.ts";
 import { awaitPendingSummary, loadDecisions, loadSummary, refreshSummary, syncAnswer } from "../src/context/index.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PHRASE = "LAST-GOOD-SUMMARY-PHRASE";
 const REQUIRED = "Write a summary of at most 400 words. Keep every decision id and every asset file name.";
@@ -92,7 +93,7 @@ test("the next card is returned before context-summary resolves", async () => {
     release();
     await pending.catch(() => undefined);
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -143,7 +144,7 @@ test("the next turn waits for a pending summary before it builds a prompt", asyn
     await first.catch(() => undefined);
     await second?.catch(() => undefined);
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -190,7 +191,7 @@ test("a failed summary keeps the answer and the next turn uses the last good sum
     assert.match(failures[0]?.error ?? "", /summary down/);
   } finally {
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -240,7 +241,7 @@ test("two summaries for one project never overlap", async () => {
     await first.catch(() => undefined);
     await extra?.catch(() => undefined);
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -280,6 +281,6 @@ test("the summary prompt gets the previous summary and the new turn, not the who
     assert.equal(input.includes(REQUIRED), true);
   } finally {
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

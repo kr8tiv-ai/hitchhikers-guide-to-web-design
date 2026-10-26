@@ -3,7 +3,7 @@
  * A later phase can still name them. Nothing in the log is deleted.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
   rejectedDirectionNames,
 } from "../src/brand/decision-canvas.ts";
 import type { DirectionDeal } from "../src/brand/directions.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const deal: DirectionDeal = {
   pickedId: null,
@@ -88,6 +89,6 @@ test("a later phase can still name the rejected directions", () => {
     assert.equal(phase[0]?.name, "brand");
     assert.match(phase[0]?.reason ?? "", /north pick/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

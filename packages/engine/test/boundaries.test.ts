@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import {
   findEscapes,
   listWorkspacePackages,
 } from "@hitchhiker/engine";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -48,7 +49,7 @@ test("a fixture deep import fails, including a .ts comment, and markdown is igno
     assert.equal(hits.length, 2);
     assert.ok(hits.every((hit) => hit.file.endsWith(".ts")));
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -83,7 +84,7 @@ test("relative imports inside a package are allowed; escapes and vendor imports 
     const specifiers = escapes.map((hit) => hit.specifier).sort();
     assert.deepEqual(specifiers, [outside, vendor].sort());
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -109,7 +110,7 @@ test("Windows-style separators still count as deep imports and package escapes",
       [outside],
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

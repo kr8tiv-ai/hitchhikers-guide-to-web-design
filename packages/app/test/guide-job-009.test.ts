@@ -4,7 +4,7 @@
  * The same submit joins the running job instead of calling the model twice.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleRaw } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -147,7 +148,7 @@ test("a 30s Guide call leaves GET / and the session route under a second", async
     clearTimeout(backstop);
     release();
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

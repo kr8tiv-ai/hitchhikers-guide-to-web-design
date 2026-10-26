@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -19,6 +19,7 @@ import {
   type EngineSelectionInput,
   type RateAcceptGate,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const voiceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OFF: RateAcceptGate = { settingEnabled: false, rateAccepted: false };
@@ -184,7 +185,7 @@ test("default, setting-off, and rate-off transcribe calls do not fetch", async (
       assert.equal(calls, 0);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -210,7 +211,7 @@ test("both flags on is the only state that reaches fetch", async () => {
     assert.equal(result.engine, "xai");
     assert.equal(result.text, "from the api");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -284,7 +285,7 @@ test("local whisper is detected only when both files exist outside packages", ()
       false,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { crc32, deflateSync } from "node:zlib";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -48,6 +48,7 @@ import {
   licenceFromLabel,
   search as searchSketch,
 } from "../src/three-d/sources/sketchfab.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const fixture = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -165,7 +166,7 @@ test("optimizeGlb writes Draco and Meshopt GLBs and resizes textures", async () 
       path.join(dir, ".hitchhiker", "assets", "3d", "Chair_Model.glb"),
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -249,7 +250,7 @@ test("Poly Haven search and download keep CC0 and the include map", async () => 
     assert.equal(await readFile(path.join(dir, "scene.bin"), "utf8"), "bin-bytes");
     assert.ok(calls.every((call) => call.authorization === undefined));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -301,7 +302,7 @@ test("ambientCG prefers the 1K zip and refuses a non-commercial record", async (
       return true;
     });
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -343,7 +344,7 @@ test("Kenney parses the catalog and refuses a pack that is not CC0", async () =>
     });
     assert.equal(calls.some((call) => call.url.includes("locked") && call.url.endsWith(".zip")), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -395,7 +396,7 @@ test("Quaternius saves a direct file and stops on an itch-only or non-commercial
       return true;
     });
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -457,7 +458,7 @@ test("Sketchfab keeps CC0 and CC-BY, and refuses the rest without a download", a
     assert.throws(() => licenceFromLabel("Standard"), LicenceError);
     assert.equal(licenceFromLabel("CC0 Public Domain"), "CC0-1.0");
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -541,7 +542,7 @@ test("credits append and the options stay in plain words", async () => {
     }
     for (const phrase of BANNED_PHRASES) assert.equal(spoken.toLowerCase().includes(phrase), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -625,7 +626,7 @@ test("generation quotes, refuses the cap, and waits for a yes", async () => {
     assert.equal(declined.calls.length, 0);
     assert.equal((await readdir(dir)).length, 0);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -817,7 +818,7 @@ test("Tripo and Meshy poll to a GLB only after a yes, and errors record no charg
       },
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

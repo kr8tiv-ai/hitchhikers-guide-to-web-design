@@ -3,8 +3,7 @@
  * and every later Guide call reads the same packet.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -53,6 +52,7 @@ import { saveProjectFile, restoreProject } from "../src/project-file/index.ts";
 import { beforeWeJump } from "../src/spec/before-jump.ts";
 import { saveState, type GuideState } from "../src/state.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -111,7 +111,7 @@ test("parallel uploads both land in the asset index", async () => {
     const saved = loadAssets(dir).map((asset) => asset.original).sort();
     assert.deepEqual(saved, ["logo.svg", "side.png"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -229,7 +229,7 @@ test("each write kind lands in the context files", async () => {
     assert.match(readFileSync(path.join(dir, ".hitchhiker", "PROJECT.md"), "utf8"), /no prior site/);
     assert.equal(loadDecisions(dir).some((row) => row.source === "skip"), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -249,7 +249,7 @@ test("a changed answer supersedes the old decision and a hand edit is read next"
     assert.match(renderContextPacket(packet), /a hand edit of the prior site/);
     assert.equal(packet.decisions.some((row) => row.text === "no prior site"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -293,7 +293,7 @@ test("the packet trims old answers, redacts secrets, and rejects a summary that 
     assert.match(summary, /paradise-found-logo\.png/);
     assert.equal(loadSummary(dir), summary);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -311,7 +311,7 @@ test("context survives a project-file restore and the next calls still name the 
     const names = ["PROJECT.md", "STATE.md", "DECISIONS.md", "ASSETS.md", "CONTEXT-SUMMARY.md"];
     const before = names.map((name) => normalize(readFileSync(path.join(dir, ".hitchhiker", name), "utf8")));
     const saved = await saveProjectFile(dir, { homeDir: home, to: path.join(dir, "out"), projectName: "Context Desk" });
-    await rm(path.join(dir, ".hitchhiker"), { recursive: true, force: true });
+    await removeTempDir(path.join(dir, ".hitchhiker"));
     const restored = await restoreProject(saved.filePath, { projectDir: dir, prefer: "file" });
     assert.equal(restored.kept, "file");
     assert.equal(names.every((name) => restored.file?.snapshot.some((item) => item.path === name)), true);
@@ -327,7 +327,7 @@ test("context survives a project-file restore and the next calls still name the 
     }
     assert.equal(readStatus(dir).phase, "Babel Fish");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -379,7 +379,7 @@ test("mirror, brief, and site-prompt calls carry the seeded decision and logo", 
     assert.ok(tasks.includes("author-site-prompt"));
     for (const input of seen) assertFacts(input);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -404,7 +404,7 @@ test("the router names the phase and refuses an open gate", async () => {
     });
     assert.match(jump.questions[0] ?? "", /^Decision D-\d+ is still open\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -421,7 +421,7 @@ test("approval writes ADR entries linked to the driving questions", async () => 
     const second = await writePhaseAdvisories(dir, "2026-10-12");
     assert.equal(second.length, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -438,7 +438,7 @@ test("discuss leaves the cursor alone until the note is promoted", async () => {
     assert.equal(loadDecisions(dir).length, 1);
     assert.equal(readStatus(dir).questionId, "DP-0.2");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -468,7 +468,7 @@ test("doctor names each inconsistency and undo keeps the history", async () => {
     assert.equal(loadAssets(dir).every((asset) => asset.status === "withdrawn"), true);
     assert.match(readFileSync(path.join(dir, ".hitchhiker", "DECISIONS.md"), "utf8"), /no prior site/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -487,7 +487,7 @@ test("a passing gate is reused and the summary is in the next packet", async () 
     assert.match(packet.buildSummary, /Shipped the towel page/);
     assert.match(renderContextPacket(packet), /Build summaries/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -508,6 +508,6 @@ test("phase stats sum without inventing a price, and lookahead promotes once", a
     assert.equal(await promoteLookahead(dir, "2026-10-12"), 0);
     assert.match(loadDecisions(dir)[0]?.text ?? "", /Sell towels/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

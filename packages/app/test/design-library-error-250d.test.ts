@@ -2,7 +2,7 @@
  * 250d. The plan page and the drive name a design library that failed to load.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import { artDirectionNoteHtml } from "../src/art-direction-note.ts";
 import { approveMain } from "../src/server/brief-page.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import type { BriefDeskView } from "@hitchhiker/engine";
+import { removeTempDir } from "./remove-temp.ts";
 
 const NOTE = "No art direction: the design library failed to load (see library-error.txt).";
 const LINE = "The site helps a visitor book a visit.";
@@ -133,6 +134,6 @@ test("the approve page and the drive show the design-library failure", async () 
     assert.match(drive.body, /No art direction: the design library failed to load \(see library-error\.txt\)\./);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

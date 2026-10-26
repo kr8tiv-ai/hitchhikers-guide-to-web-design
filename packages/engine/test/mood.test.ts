@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -19,6 +19,7 @@ import {
   buildMoodRequest,
   moodImageName,
 } from "../src/mood/analyze.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const FACTS: Facts = {
   answers: [{ id: "DP-1.4", value: "warm paper and brass" }],
@@ -264,7 +265,7 @@ test("non-hex colors and repeated palettes are rejected", async () => {
       },
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -291,7 +292,7 @@ test("a font name becomes a class and the guess is noted", async () => {
     assert.match((direction.notes ?? []).join(" "), /Playfair Display/);
     assert.equal(JSON.stringify(result).includes('"Helvetica"'), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -317,7 +318,7 @@ test("express records no why and marks the field ASSUMED", async () => {
     }
     assert.equal(JSON.stringify(result).includes("quiet paper"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -351,7 +352,7 @@ test("deep asks why for at most 5 images", async () => {
     const last = asImage(result.perImage[5]);
     assert.equal(last.why, undefined);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -373,7 +374,7 @@ test("only 12 images are sent", async () => {
     });
     assert.equal(sent, 12);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -414,7 +415,7 @@ test("images over 10 MB are downscaled before think", async () => {
     assert.equal(pngOut.file === png, false);
     assert.equal(jpegOut.file === jpeg, false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -484,7 +485,7 @@ test("a six-image cassette returns 3 distinct hex directions", async () => {
     assert.match(first.note ?? "", /not a fact/);
     await mkdir(project, { recursive: true });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(project);
   }
 });

@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,6 +14,7 @@ import {
   renderJourneyReveal,
   type GateSummary,
 } from "../src/reveals/journey-reveal.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const screens = path.join(here, "screens");
@@ -83,7 +84,7 @@ test("brand and journey reveals settle at 375 and 1440", async ({ page }) => {
     ).toBe("rv-enter");
     expect(errors).toEqual([]);
   } finally {
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -212,7 +213,7 @@ test("a failed gate withholds the badge and a deploy record picks the live URL",
     expect(missing.includes("This is the local preview. The site is not deployed yet.")).toBe(true);
     expect(missing.includes("http://localhost:4173/preview")).toBe(true);
   } finally {
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 
   await page.setContent(failed);

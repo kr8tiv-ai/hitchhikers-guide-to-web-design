@@ -4,7 +4,7 @@
  * owner, the reveals, or the transitions.
  */
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { writeBack } from "../src/phases/write-back.ts";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
 import { phonePerformanceBudget } from "../src/spec/phone-budget.ts";
 import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PARADISE = `# Site Brief
 
@@ -170,6 +171,6 @@ test("writeMotion uses the art-direction requests", async () => {
     assert.match(motion, /: lenis\./);
     assert.equal(motion.includes("hero-fade"), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });

@@ -2,12 +2,13 @@
  * BUG-036, BUG-025, BUG-035. Stubbed cards: a real question, no internal guidance, no colon join.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { loadTree, saveState } from "@hitchhiker/engine";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "../../../interview/tree.yaml");
@@ -46,7 +47,7 @@ test("DP-7.1 shows the budget question and hides model guidance", async ({ page 
     expect(text.includes(" : ")).toBe(false);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -70,7 +71,7 @@ test("DP-2.7 heading is only the question", async ({ page }) => {
     expect(labelled).toBe("hh-card-ask");
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -106,7 +107,7 @@ test("DP-1.5 shows the six font examples", async ({ page }) => {
     await expect(page.locator("#hh-card-draft")).toHaveValue("brutalist poster");
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

@@ -2,11 +2,12 @@
  * BUG-002. The heading is the question. Phase copy and button talk stay out of it.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const COMBINED =
@@ -32,7 +33,7 @@ test("the question heading is only the question", async ({ page }) => {
     await expect(page.locator("[data-card-lead]")).toContainText("Don't Panic.");
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

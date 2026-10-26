@@ -3,12 +3,13 @@
  * and no field is longer than its target.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { BRIEF_HEADINGS, briefFieldTarget, type BriefKey } from "@hitchhiker/engine";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -82,7 +83,7 @@ test("the approval page shows languages, imagery, and budget within each target"
     expect(goal.length).toBeLessThan(LONG_GOAL.length);
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

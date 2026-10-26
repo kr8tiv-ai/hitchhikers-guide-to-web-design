@@ -6,12 +6,13 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { createSiteProject, dealDirections, deterministicBrief, draftBriefPlan, projectPlanCoverage, renderSiteBrief, saveDirectionDeal, saveProjectFile } from "@hitchhiker/engine";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../../..");
@@ -73,7 +74,7 @@ test("opening a saved project from Resume switches the desk and leaves the other
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    await rm(sandbox, { recursive: true, force: true });
+    await removeTempDir(sandbox);
   }
 });
 
@@ -204,7 +205,7 @@ test("the design stages keep the Run 8 pages, the kit, the pick, and the checks"
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    await rm(sandbox, { recursive: true, force: true });
+    await removeTempDir(sandbox);
   }
 });
 

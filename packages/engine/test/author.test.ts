@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +41,7 @@ import {
 import { SITE_RULES } from "../src/spec/site-rules.ts";
 import { validatePackage } from "../src/spec/site-validate.ts";
 import { StackError, decideStack, type StackDecision } from "../src/spec/stack.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const CREDIT =
   "Method and prompt wording from Matt Haynes's AntiHero guides (antihero.community), used with permission.";
@@ -425,7 +426,7 @@ test("a huge pack excerpt is trimmed before the anchor and the skeleton", () => 
     assert.ok(request.input.includes("#sections"));
     assert.equal(request.goldenName, "section");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -537,7 +538,7 @@ test("framework discussion and authored packages", async () => {
       const repairedReport = validatePackage(promptsFrom(skeletonRows, repair.bodies()));
       assert.equal(repairedReport.ok, true, JSON.stringify(repairedReport.errors, null, 2));
     } finally {
-      rmSync(repairDir, { recursive: true, force: true });
+      removeTempDir(repairDir);
     }
 
     const failDir = await mkdtemp(path.join(os.tmpdir(), "hh-author-fail-"));
@@ -552,7 +553,7 @@ test("framework discussion and authored packages", async () => {
       assert.ok(second);
       assert.ok(promptFile(path.join(failDir, ".hitchhiker", "prompts"), second.id));
     } finally {
-      rmSync(failDir, { recursive: true, force: true });
+      removeTempDir(failDir);
     }
 
     const missingDir = await mkdtemp(path.join(os.tmpdir(), "hh-author-missing-"));
@@ -580,7 +581,7 @@ test("framework discussion and authored packages", async () => {
       assert.ok(scrollId);
       assert.ok(result.needsHuman.includes(scrollId));
     } finally {
-      rmSync(missingDir, { recursive: true, force: true });
+      removeTempDir(missingDir);
     }
 
     const swapDir = await mkdtemp(path.join(os.tmpdir(), "hh-author-swap-"));
@@ -608,7 +609,7 @@ test("framework discussion and authored packages", async () => {
       const nextReport = validatePackage(promptsFrom(nextRows, swap.bodies()));
       assert.equal(nextReport.ok, true, JSON.stringify(nextReport.errors, null, 2));
     } finally {
-      rmSync(swapDir, { recursive: true, force: true });
+      removeTempDir(swapDir);
     }
 
     await assert.rejects(
@@ -616,7 +617,7 @@ test("framework discussion and authored packages", async () => {
       AuthorError,
     );
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
     registerInflight(null);
   }
 });
@@ -670,6 +671,6 @@ test("replay returns an authored body and does not spawn", async () => {
     assert.equal(result.value.body, body);
     assert.equal(result.durationMs, 12);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

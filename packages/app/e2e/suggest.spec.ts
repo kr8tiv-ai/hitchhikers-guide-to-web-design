@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 /**
  * Suggest must leave the card on screen. The suggestion is written into that
@@ -67,7 +68,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -120,7 +121,7 @@ for (const viewport of VIEWPORTS) {
       ]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 }

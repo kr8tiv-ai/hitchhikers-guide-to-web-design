@@ -3,7 +3,7 @@
  * Later interview, suggestion, and judge context name it by the original filename.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -23,6 +23,7 @@ import {
   sessionBlock,
 } from "../src/guide/session-state.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -97,7 +98,7 @@ test("a logo-slot file is role logo under its original filename", () => {
       "paradise-found-logo.png",
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -126,7 +127,7 @@ test("an asset row that calls the hero a logo does not replace the logo slot", (
     const gate = gateQuestion(byId(all, "DP-1.1"), state, all);
     assert.equal(gate.ask, "Using the logo you gave earlier (paradise-found-logo.png). Change?");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -145,7 +146,7 @@ test("a hashed logo slot without originalName still shows the leaf filename", ()
     assert.equal(logo.originalName, "paradise-found-logo.png");
     assert.match(sessionBlock(state), /paradise-found-logo\.png \(paradise-found-logo\.png\) role logo/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -201,7 +202,7 @@ test("interview, suggest, and judge prompts name the logo-slot file", async () =
       assert.match(prompt, /role logo/);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -236,7 +237,7 @@ test("a suggestion that names the hero as the logo keeps the logo file as choice
     assert.match(offer.choices[0]?.label ?? "", /paradise-found-logo\.png/);
     assert.equal(offer.choices.some((item) => item.label.includes("paradise-found-hero.jpg")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -298,6 +299,6 @@ test("naming the logo file does not ask mark versus hero again", async () => {
     assert.match(judge, /role logo/);
     assert.match(judge, /paradise-found-logo\.png/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

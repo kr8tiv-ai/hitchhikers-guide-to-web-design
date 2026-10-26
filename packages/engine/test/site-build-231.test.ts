@@ -4,7 +4,7 @@
  * A real cap auto-retries once (238). The second cap still fails and stays put.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -29,6 +29,7 @@ import {
 import { SITE_RULES } from "../src/spec/site-rules.ts";
 import { generateSkeleton, type SitePrompt, type SitePromptSkeleton } from "../src/spec/site-prompts.ts";
 import { validatePackage } from "../src/spec/site-validate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-site-231-"));
@@ -137,7 +138,7 @@ test("a zero timeout does not kill a live child", async () => {
     assert.equal(output.timedOut, false);
     assert.equal(output.status, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -175,7 +176,7 @@ test("exit 0 with max_turns_reached fails the row and does not advance", async (
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
     resetSiteBuildWatch(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -243,6 +244,6 @@ test("a recovered log with max_turns_reached and end_turn fails instead of passi
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
     resetSiteBuildWatch(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

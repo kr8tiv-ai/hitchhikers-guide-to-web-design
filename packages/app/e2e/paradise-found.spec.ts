@@ -2,11 +2,12 @@
  * BUG-004. The Logo file slot is listed after reload, and DP-1.1 does not offer the hero as the logo.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x11, 0x22]);
@@ -50,7 +51,7 @@ test("a logo in the slot survives reload and DP-1.1 does not offer the hero", as
     await expect(page.locator("[data-choices]")).toContainText("paradise-found-logo.png");
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

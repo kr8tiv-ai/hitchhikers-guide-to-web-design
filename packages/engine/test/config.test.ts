@@ -4,7 +4,6 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -22,6 +21,7 @@ import {
   parseConfig,
 } from "../src/config.ts";
 import { defaultConfig as fromIndex, parseConfig as parseFromIndex } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const engineRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -235,7 +235,7 @@ test("missing config.json is defaults and does not create a directory", () => {
     assert.deepEqual(loadConfig(dir), defaultConfig());
     assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -258,7 +258,7 @@ test("loadConfig reads a present file and fills missing keys", () => {
     assert.equal(config.ai.effort.default, "high");
     assert.equal(config.ai.timeoutMs, AI_TIMEOUT_MS);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

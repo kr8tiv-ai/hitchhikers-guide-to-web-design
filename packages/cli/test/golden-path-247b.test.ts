@@ -6,14 +6,15 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync, mkdtempSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { hiddenChildOptions, packagedModule } from "@hitchhiker/engine";
 import { runSoLongCommand } from "../src/commands/so-long.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,7 +49,7 @@ test("towel sample walks every phase and the preview serves the page", async () 
     assert.equal(head, headBefore);
   } finally {
     if (opened) await closePreview(dir).catch(() => undefined);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -81,7 +82,7 @@ function gitHead(dir: string): Promise<string> {
       ["-c", `core.hooksPath=${hooks.replaceAll("\\", "/")}`, "-C", dir, "rev-parse", "HEAD"],
       hiddenChildOptions({ encoding: "utf8", timeout: 30_000 }),
       (error, stdout, stderr) => {
-        rmSync(hooks, { recursive: true, force: true });
+        removeTempDir(hooks);
         if (error) {
           reject(error instanceof Error ? error : new Error(String(stderr)));
           return;

@@ -2,12 +2,13 @@
  * BUG-046. The desk's own checkout, and every worktree of it, is not a site project.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { DESK_REPO_REFUSAL, deskRepoRoots, isInsideDeskRepo } from "../src/desk-repo.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -28,7 +29,7 @@ test("the desk repo and folders inside it are refused, and a parent is not", () 
     assert.equal(isInsideDeskRepo(outside), false);
     assert.equal(isInsideDeskRepo(path.join(outside, "site")), false);
   } finally {
-    rmSync(outside, { recursive: true, force: true });
+    removeTempDir(outside);
   }
   const roots = deskRepoRoots();
   assert.equal(roots.some((root) => path.resolve(root) === path.resolve(repo)), true);

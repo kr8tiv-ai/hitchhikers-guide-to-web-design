@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -30,6 +30,7 @@ import { parseState, playState, type TheatreCoreLike } from "../shared/theatre-l
 import { fadeTargetOpacity } from "../shared/vanilla.ts";
 import { claimCanvas, pauseCommand, shouldUsePoster } from "../shared/webgl.ts";
 import { listRecipes, listTemplates, scaffold, type TemplateId } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..");
@@ -331,7 +332,7 @@ test("fetch-assets writes a permitted file and refuses a forbidden licence", asy
       /escapes the output directory/,
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -407,7 +408,7 @@ test("a 3D array renders on the credits page and an entries file parses", async 
     });
     assert.deepEqual(notMedia, []);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -602,7 +603,7 @@ test("scaffold copies a starter and the chosen recipes without secret values", a
     assert.equal(/sk_live_|sk_test_|AKIA[0-9A-Z]{16}/.test(blob), false);
     await assert.rejects(() => scaffold("astro-default", dir, { recipes: ["nope"] }), /Unknown recipes/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -674,6 +675,6 @@ test("each starter builds and the blank bundle omits unused libraries", { timeou
       assert.deepEqual(used, [], `${template.id} blank bundle loaded ${used.join(", ")}`);
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });

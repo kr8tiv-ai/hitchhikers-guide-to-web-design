@@ -3,12 +3,13 @@
  * No deal means no picker and no decision log.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { decisionLogPath, readDecisionLog, rejectedDirectionNames, writeBrandKit } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempProject(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-direction-desk-"));
@@ -106,7 +107,7 @@ test("a desk pick writes the log and the next page hides the buttons", async () 
       assert.equal(rejectedDirectionNames(dir).includes(button[2]), true);
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -124,6 +125,6 @@ test("no saved deal means no picker and no log", async () => {
       assert.equal(existsSync(decisionLogPath(dir)), false);
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

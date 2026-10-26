@@ -2,13 +2,14 @@
  * BUG-041: /approve shows the coverage table and refuses a plan that drops a page.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -128,7 +129,7 @@ test("an uncovered page disables Approve and the server names it", async () => {
     assert.equal(readFileSync(file, "utf8"), home);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -178,6 +179,6 @@ test("brief Approve is on with no plan, then the plan Approve follows coverage",
     assert.doesNotMatch(built.body, /The build is started/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

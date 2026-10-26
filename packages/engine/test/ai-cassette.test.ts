@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   type JsonSchema,
   type SpawnLike,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const schema: JsonSchema = {
   type: "object",
@@ -78,7 +79,7 @@ test("replay hit returns the cassette and does not spawn", async () => {
     assert.equal(result.outputTokens, 1);
     assert.equal(result.raw, '{"ok":true}');
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -118,7 +119,7 @@ test("replay miss throws CassetteMissError with the key and does not spawn", asy
     );
     assert.equal(calls, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -168,7 +169,7 @@ test("record writes the result and leaves env values out of the file", async () 
     assert.equal(saved.inputTokens, 4);
     assert.equal(typeof saved.durationMs, "number");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -203,6 +204,6 @@ test("off calls the model and does not write a cassette", async () => {
     assert.equal(result.value.ok, true);
     assert.equal(existsSync(cassetteDir), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

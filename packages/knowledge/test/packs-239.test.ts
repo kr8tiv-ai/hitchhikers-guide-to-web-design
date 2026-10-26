@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { checkPacks, missingPackFields, packIsStale } from "../src/packs-check.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PACKS = ["three", "r3f", "drei", "vanilla", "node", "gsap", "motion-lib", "lenis", "glsl", "audio", "stack-astro"];
@@ -34,7 +35,7 @@ test("a major bump marks a pack stale and a patch writes a review note", async (
     assert.match(review, /1\.2\.4/);
     assert.equal(packIsStale(readFileSync(path.join(dir, "patch", "SKILL.md"), "utf8")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

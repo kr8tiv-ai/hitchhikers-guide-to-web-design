@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import { SAMPLE_LABEL, sampleProjectFile } from "../src/sample.ts";
 import { renderProbeExplain } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { renderReplayControl, renderTour, TOUR_STEPS } from "../src/tour.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("friendly errors keep a stack behind Details", () => {
   const stack = "The project file could not be read.\n    at loadProjectFile (load.ts:10:5)";
@@ -164,7 +165,7 @@ test("the empty desk offers the sample and the tour, and both round-trip", async
     assert.match(refused.body, /<summary>Details<\/summary>/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

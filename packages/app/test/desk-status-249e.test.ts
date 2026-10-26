@@ -3,7 +3,7 @@
  * that follows interview.json instead of the first page paint.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import { guideTurnText, mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { openRequiredCount } from "../src/server/card.ts";
 import { renderContextMain } from "../src/server/context-desk.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "../../../interview/tree.yaml");
@@ -76,7 +77,7 @@ test("the context panel names Don't Panic once the interview has saved answers",
     assert.match(html, /Phase: Don&#39;t Panic\./);
     assert.equal(html.includes("No phase yet"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -135,8 +136,8 @@ test("the finished screen says Interview done and Guide Entry once, from saved a
     else process.env.HH_PROJECT_HOME = previousHome;
     if (previousE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = previousE2e;
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(home);
   }
 });
 

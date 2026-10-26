@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,7 +79,7 @@ test.describe("desk identity", () => {
 
   test.afterAll(async () => {
     if (child !== undefined) await stopChild(child);
-    if (projectDir.length > 0) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir.length > 0) await removeTempDir(projectDir);
   });
 
   test("the desk head, favicon, and manifest resolve", async ({ page }) => {

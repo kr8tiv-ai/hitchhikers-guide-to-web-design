@@ -2,13 +2,14 @@
  * BUG-004. A Logo file upload is on the DP-1.1 call, by its original filename.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x11, 0x22]);
 
@@ -129,6 +130,6 @@ test("a Logo file upload is named on the DP-1.1 call and survives reload", async
     assert.match(judge, /role logo/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

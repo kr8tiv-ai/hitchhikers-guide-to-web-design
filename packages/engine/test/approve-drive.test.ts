@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import {
   type DriveExpected,
 } from "../src/spec/approve-drive.ts";
 import { generateSkeleton, type SiteSkeletonInput } from "../src/spec/site-prompts.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const AT = "2026-10-07T15:04:00.000Z";
 
@@ -126,7 +127,7 @@ test("a missing file is not a yes", () => {
     throwsDrive(() => assertDriveAllowed(null, expected), /missing file is not a yes/);
     throwsDrive(() => assertDriveAllowed(undefined, expected), /missing file is not a yes/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -191,7 +192,7 @@ test("the approval file round-trips and a corrupt file throws", () => {
     writeFileSync(file, "{");
     throwsDrive(() => readDriveApproval(dir), /not JSON/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

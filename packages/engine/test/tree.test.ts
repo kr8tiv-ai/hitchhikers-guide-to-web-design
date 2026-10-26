@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { TreeError, loadTree, questionsForDepth } from "../src/index.ts";
 import type { Question } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -57,7 +58,7 @@ function expectTreeError(body: string, field: string, pattern: RegExp): void {
       },
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 
@@ -257,7 +258,7 @@ test("quoted colons, hashes, and nested fields survive the loader", () => {
     assert.deepEqual(question.requiredFor, ["babel-fish.logo"]);
     assert.deepEqual(question.depth, ["express", "standard", "deep"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

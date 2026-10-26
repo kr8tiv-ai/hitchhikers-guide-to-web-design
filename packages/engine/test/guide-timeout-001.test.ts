@@ -3,7 +3,7 @@
  * A judge timeout keeps the typed answer and says so.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -19,6 +19,7 @@ import {
 import { GUIDE_CALL_TIMEOUT_MS, GUIDE_TIMEOUT_LINE, guideCallTimeoutMs } from "../src/guide/guide-progress.ts";
 import { GUIDE_MESSAGE_SCHEMA } from "../src/guide/schemas.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -119,7 +120,7 @@ test("a guide call that lasts 150s completes without a timeout", async (t) => {
     } catch {
       // The clock mock was not enabled.
     }
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -142,6 +143,6 @@ test("a judge timeout keeps the answer and names the timeout", async () => {
     assert.match(turn.message, /kept/i);
     assert.equal(turn.questionId, "DP-0.2");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

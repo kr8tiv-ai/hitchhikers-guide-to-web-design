@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,7 @@ import {
   quoteStt,
   type XaiTranscribeRequest,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const FIXTURE_KEY = "fixture-key-hh-023-do-not-leak";
 const FIXTURE_ENDPOINT = "https://api.x.ai/v1/stt";
@@ -216,7 +217,7 @@ test("the injected fetch receives the fixture endpoint and the bearer key", asyn
     assert.doesNotMatch(result.quote.label, /free/i);
   } finally {
     globalThis.fetch = original;
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -243,7 +244,7 @@ test("a caller-supplied https endpoint is the one that is posted", async () => {
     assert.equal(result.engine, "xai");
     assert.equal(result.quote.usd, quoteStt({ seconds: 2, mode: "rest" }).usd);
   } finally {
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -273,7 +274,7 @@ test("a failed response does not echo the API key", async () => {
       },
     );
   } finally {
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -297,7 +298,7 @@ test("a fetch error that contains the key is redacted", async () => {
       },
     );
   } finally {
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -319,7 +320,7 @@ test("fetchImpl is required and global fetch is not a fallback", async () => {
     assert.equal(globalCalls, 0);
   } finally {
     globalThis.fetch = original;
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -346,7 +347,7 @@ test("an endpoint that contains the key is refused before fetch", async () => {
     );
     assert.equal(calls, 0);
   } finally {
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 
@@ -385,7 +386,7 @@ test("missing audio does not call fetch", async () => {
     );
     assert.equal(calls, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -404,7 +405,7 @@ test("an empty API key throws before fetch", async () => {
     );
     assert.equal(calls, 0);
   } finally {
-    rmSync(clip.dir, { recursive: true, force: true });
+    removeTempDir(clip.dir);
   }
 });
 

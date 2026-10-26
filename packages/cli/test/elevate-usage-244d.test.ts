@@ -4,13 +4,14 @@
  * not ask for `--yes`.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ELEVATE_USAGE } from "../src/commands/elevate.ts";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const skillPath = path.resolve(here, "..", "..", "grok-plugin", "skills", "hh-elevate", "SKILL.md");
@@ -46,6 +47,6 @@ test("hh elevate --rounds does not demand --yes when the project is unbuilt", as
     assert.match(result.stdout, /Elevate refused\./);
     assert.match(result.stdout, /Missing: index\.html/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

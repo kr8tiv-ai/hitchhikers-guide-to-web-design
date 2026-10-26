@@ -4,13 +4,14 @@
  * A failing pre-build check keeps Start build disabled and does not start a build.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { deterministicBrief, renderSiteBrief, type SiteBrief, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = path.join(here, "../../engine/test/fixtures/project4-interview.json");
@@ -127,7 +128,7 @@ test("changing the sitemap revises it, stays waiting, and the wireframe follows 
     assert.equal(after.wireframe, undefined);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -167,7 +168,7 @@ test("a failing pre-build check keeps Start build disabled and does not start a 
     assert.equal(existsSync(path.join(hitch, "build-run.json")), false);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -234,7 +235,7 @@ test("the brief draft route keeps the Run 8 timeline out of Limits", async () =>
     if (handle !== undefined) await handle.close();
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = priorHome;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

@@ -8,7 +8,7 @@
  * The wide rule must set that to visible or the rail paints at height 0.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -19,6 +19,7 @@ import { mountDesk, type DeskEnv } from "../src/client/desk.ts";
 import { compactMapLabel, savedFooterLine } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "..", "..", "..", "interview", "tree.yaml");
@@ -60,7 +61,7 @@ async function withDesk(
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

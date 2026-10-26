@@ -3,11 +3,12 @@
  * Nothing starts until Resume. The stub never launches grok.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +35,7 @@ test("Drive shows Paused after 007 until Resume starts 008", async ({ page }) =>
     await expect(page.getByText("Paused after 007", { exact: true })).toHaveCount(0);
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -53,7 +54,7 @@ test("a pause while 001 is still running names that prompt", async ({ page }) =>
     expect(await spawnIds(projectDir)).toEqual([]);
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -74,7 +75,7 @@ test("a paused drive shows a turn-cap failure and Retry keeps the partial work",
     expect(await spawnIds(projectDir)).toEqual([]);
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -350,7 +351,7 @@ test("Retry on a paused queue clears the pause", async ({ page }) => {
     expect(await spawnIds(projectDir)).toContain("001");
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -372,7 +373,7 @@ test("a pause while 064 is running names 064, then the settled line", async ({ p
     await expect(page.getByText("Paused after 063", { exact: true })).toHaveCount(0);
   } finally {
     await stopDesk(running);
-    await rm(runningDir, { recursive: true, force: true });
+    await removeTempDir(runningDir);
   }
 
   const settledDir = await mkdtemp(path.join(tmpdir(), "hh-pause-047b-"));
@@ -391,7 +392,7 @@ test("a pause while 064 is running names 064, then the settled line", async ({ p
     await expect(page.getByText("still running")).toHaveCount(0);
   } finally {
     await stopDesk(settled);
-    await rm(settledDir, { recursive: true, force: true });
+    await removeTempDir(settledDir);
   }
 });
 

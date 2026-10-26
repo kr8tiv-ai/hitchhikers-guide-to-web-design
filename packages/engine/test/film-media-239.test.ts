@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   filmVideoSlot,
 } from "../src/spec/film-media.ts";
 import { writeSectionStillPlan } from "../src/spec/section-stills.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const motion = { score: 4, intensity: "quiet" as const, performanceCost: "low" as const, techniques: ["lenis"] };
 
@@ -68,6 +69,6 @@ test("writeSectionStillPlan stores a video slot only when the art direction call
     assert.match(slots, /hero-film/);
     assert.equal(slots.includes("TODO"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -5,7 +5,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -20,6 +19,7 @@ import {
   cliSubcommandsFromSource,
   validateSkill,
 } from "../src/commands.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
@@ -437,7 +437,7 @@ test("hh install copies skills, agents, the deny hook, and the rules", () => {
     const copied = statSync(path.join(project, ".grok", "skills", "hh-help", "SKILL.md"));
     assert.ok(copied.isFile());
   } finally {
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(project);
   }
 });
 
@@ -500,10 +500,10 @@ test("grok inspect lists the installed skills", { timeout: 120_000 }, (t: TestCo
     }
   } finally {
     if (original === null) {
-      if (existsSync(trustPath)) rmSync(trustPath);
+      if (existsSync(trustPath)) removeTempDir(trustPath);
     } else {
       writeFileSync(trustPath, original);
     }
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(project);
   }
 });

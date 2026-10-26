@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parseArgs, parseCli, parseQaArgs, runCli, runQa, type QaReportInput } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -176,7 +177,7 @@ test("hh mostly-harmless prints the report path and does not write it", async ()
     assert.equal(outcome.stdout.includes("!"), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "QA-REPORT.md")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

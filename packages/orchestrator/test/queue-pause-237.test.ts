@@ -3,13 +3,14 @@
  * Resume clears the flag. The rows stay as they were when none were paused.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { saveState, type GuideState } from "@hitchhiker/engine";
 import { advance, ProgressError } from "../src/progress.ts";
 import { loadQueue, pauseQueue, resumeQueue, saveQueue, type QueueFile } from "../src/queue-file.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const WHEN = "2026-10-15T12:00:00.000Z";
 
@@ -53,6 +54,6 @@ test("a queue-wide pause survives a reload and blocks advance until resume", asy
     const result = await advance({ projectDir: dir, finishedId: "001", outcome: "passed", commit: "abc1234" });
     assert.deepEqual(result, { nextId: "002" });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

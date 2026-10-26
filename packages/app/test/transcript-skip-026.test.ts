@@ -4,12 +4,13 @@
  * The stored interview value stays the brief's value.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { AnswerRecord } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const NA_STORED = "Not applicable: 3D is none, so the custom generation budget is not asked.";
 const NA_SHOWN = "Not asked: 3D is none, so the custom budget is not needed";
@@ -92,6 +93,6 @@ test("skips, auto not-applicable rows, and assumptions are not attributed to You
     assert.equal(saved.answers.find((item) => item.id === "DP-9.3")?.status, "SKIPPED");
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

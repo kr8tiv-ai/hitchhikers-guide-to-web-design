@@ -1,10 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,7 +66,7 @@ test("Deep Thought answers two open items at both viewports", async ({ page }) =
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -98,7 +99,7 @@ test("zero open items shows the jump card and asks nothing", async ({ page }) =>
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import {
   loadGolden,
   type GoldenName,
 } from "../src/golden.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 // The generator may quote them later.
 
@@ -39,7 +40,7 @@ test("loadGolden throws when a template file is missing", () => {
   try {
     assert.throws(() => loadGolden(dir));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

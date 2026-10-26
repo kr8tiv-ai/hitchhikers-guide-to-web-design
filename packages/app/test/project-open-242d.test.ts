@@ -5,12 +5,13 @@
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { createSiteProject, saveProjectFile } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const MARK = "NORTH-WIND-ONLY-BRIEF";
 
@@ -101,7 +102,7 @@ test("opening another .hhproject switches to it and leaves the open project byte
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTempDir(sandbox);
   }
 });
 
@@ -168,7 +169,7 @@ test("a missing sourceDir offers relocate and does not write into the open proje
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTempDir(sandbox);
   }
 });
 

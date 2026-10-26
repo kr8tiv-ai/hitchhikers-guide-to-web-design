@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
@@ -30,6 +30,7 @@ import type { DeviceProject, MatrixHooks } from "../src/device-matrix.ts";
 import { gatesJsonPath, type GateReport, type GateRunners } from "../src/gates/registry.ts";
 import { OPACITY_KEEP_MS, type PhoneSceneSample, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
 import { REVIEW_WIDTHS } from "../src/screenshots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(here, "..", "src", "elevate-rounds.ts");
@@ -90,7 +91,7 @@ writeFileSync(emptyGitConfig, "");
 
 function removeEmptyGitConfig(): void {
   try {
-    rmSync(emptyGitConfigDir, { recursive: true, force: true });
+    removeTempDir(emptyGitConfigDir);
   } catch {
     // Removal must never fail a test.
   }
@@ -157,7 +158,7 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
           const detail = String(stderr ?? "").trim();
           const message = detail.length > 0 ? detail : error.message;
           if (attempt < 8 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(message)) {
-            rmSync(path.join(dir, ".git", "index.lock"), { force: true });
+            removeTempDir(path.join(dir, ".git", "index.lock"));
             wait(400 * (attempt + 1)).then(() => git(dir, args, attempt + 1).then(resolve, reject), reject);
             return;
           }
@@ -487,7 +488,7 @@ async function replay(scenario: Scenario): Promise<void> {
       assert.equal(count, expected);
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 }
 
@@ -695,7 +696,7 @@ test("stopWhen can end the loop before a built-in rule fires", { timeout: 60_000
     assert.equal(run.prompts, 1);
     await assertGatesMatchHead(projectDir, run.result.gates);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 });
@@ -772,7 +773,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
       assert.match(markdown, /full-\d+\.png/);
       assert.equal(markdown.includes("!"), false);
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      removeTempDir(projectDir);
     }
   });
 
@@ -843,10 +844,10 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
         assert.match(jury.refused[0]?.reason ?? "", /jury score went down/);
         assert.equal(PLAIN.test(jury.refused[0]?.reason ?? ""), false);
       } finally {
-        rmSync(juryDir, { recursive: true, force: true });
+        removeTempDir(juryDir);
       }
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      removeTempDir(projectDir);
     }
   });
 
@@ -895,7 +896,7 @@ describe("regression revert and sourced menu", { concurrency: false }, () => {
       assert.match(markdown, /## Round 2/);
       assert.match(markdown, /design score went down/);
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
+      removeTempDir(projectDir);
     }
   });
 

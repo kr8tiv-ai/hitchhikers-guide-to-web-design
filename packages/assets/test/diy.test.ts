@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,13 +7,14 @@ import { test } from "node:test";
 import { DIY_SUFFIX, writeDiyPack } from "../src/diy-pack.ts";
 import { importDiyFiles } from "../src/diy-import.ts";
 import { readAssetTable, type AssetSlot } from "../src/slots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-diy-"));
 }
 
 function cleanup(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 function still(id: string, prompt = "a green towel on a dark table"): AssetSlot {

@@ -3,11 +3,12 @@
  * The answer is posted once.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +60,7 @@ test("reload reattaches to the running Guide job and the answer is stored once",
   } finally {
     await writeFile(hold, "go\n", "utf8").catch(() => undefined);
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

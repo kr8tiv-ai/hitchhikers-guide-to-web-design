@@ -3,13 +3,14 @@
  * brand kit the approve page reads. The model is stubbed.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { ThinkRequest, ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "Noted for this desk run.";
 const TYPE_ANSWER =
@@ -187,6 +188,6 @@ test("a picked direction rewrites the brand kit on Approvals", async () => {
     assert.match(kitText(stages.body), /Picked families: Boska and General Sans/);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

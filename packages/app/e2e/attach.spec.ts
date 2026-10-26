@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PNG = Buffer.from(
@@ -298,7 +299,7 @@ async function removeProject(dir: string): Promise<void> {
   let last: unknown = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      await rm(dir, { recursive: true, force: true });
+      await removeTempDir(dir);
       return;
     } catch (error) {
       last = error;

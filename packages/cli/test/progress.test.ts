@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { parseCli, runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-progress-"));
@@ -94,7 +95,7 @@ test("progress prints the slice and exits 1 when state is missing", async () => 
     assert.equal(outcome.stdout.includes("!"), false);
     assert.equal(readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8").includes("Towel Check"), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -129,7 +130,7 @@ test("pause stores the message and resume does not rewrite STATE.md", async () =
     assert.equal(loadState(dir)?.promptId, "interview:DP-4.2");
     assert.equal(loadState(dir)?.nextAction, "Pick up the palette.");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -146,6 +147,6 @@ test("resume and pause do not invent state or start a session", async () => {
     assert.equal(source.includes("grok -p"), false);
     assert.equal(source.includes(".planning"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

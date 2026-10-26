@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { defaultConfig, loadConfig, loadProjectFile, saveConfig, saveState } from "@hitchhiker/engine";
 import { postBrandDecision } from "../src/server/brand-desk.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "../src/server/project-desk.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-save-ui-"));
@@ -52,7 +53,7 @@ test("approving a brand section autosaves without approving the whole brand", as
   } finally {
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = priorHome;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -173,7 +174,7 @@ test("the save chrome lists a project, marks a missing file, and remove leaves t
   } finally {
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = priorHome;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -207,7 +208,7 @@ test("factory medium shows Extra high, and a saved Medium stays Medium", async (
   } finally {
     if (priorHome === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = priorHome;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 });

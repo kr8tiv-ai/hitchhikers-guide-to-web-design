@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -9,6 +9,7 @@ import { handleInstallClick } from "../src/client/tool-install.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import type { DeskPreflight, PreflightName } from "../src/server/card.ts";
 import type { ToolRuntime } from "../src/server/tool-desk.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const NAMES: PreflightName[] = ["grok", "playwright", "whisper", "pdftotext"];
 const SECRET = "sk-plantedkey12345678";
@@ -113,7 +114,7 @@ async function desk(clock?: { now: number }): Promise<{
     tools,
     async close() {
       await handle.close();
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     },
   };
 }

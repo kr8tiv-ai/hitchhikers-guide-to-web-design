@@ -2,7 +2,7 @@
  * BUG-034b: `hh next --resume` and `hh build --resume` continue one queue.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   type BuildSpawn,
 } from "@hitchhiker/engine";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -79,7 +80,7 @@ test("hh build --resume and hh next --resume start one run", { timeout: 20_000 }
     release();
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -98,6 +99,6 @@ test("hh build --resume with nothing waiting does not spawn", async () => {
   } finally {
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

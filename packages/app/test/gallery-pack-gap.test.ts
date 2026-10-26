@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 /**
  * On HEAD a malformed pack makes readPack return [] and the page says
@@ -50,8 +51,8 @@ test("a malformed gallery row is an error on the page, not an empty walk", async
     if (handle !== undefined) await handle.close();
     if (previous === undefined) delete process.env.HH_GALLERY_FILE;
     else process.env.HH_GALLERY_FILE = previous;
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(project, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(project);
   }
 });
 

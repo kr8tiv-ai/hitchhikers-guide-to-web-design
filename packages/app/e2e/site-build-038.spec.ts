@@ -3,12 +3,13 @@
  * and a paused queue. Retry runs 003 again, then 004. The stub never launches grok.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 import { approveDesignAndStart } from "./design-then-build.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TOP_UP = "Your Grok Build usage balance is used up. Top up your balance, then press Retry.";
@@ -48,7 +49,7 @@ test("a 402 at prompt 003 pauses the drive and Retry resumes", async ({ page }) 
     expect(after.indexOf("004")).toBeGreaterThan(after.lastIndexOf("003"));
   } finally {
     await stopDesk(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

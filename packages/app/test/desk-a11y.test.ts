@@ -5,7 +5,7 @@
  * No browser was opened. These assertions are HTML, CSS, and a fake document.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,6 +21,7 @@ import {
 } from "../src/client/desk.ts";
 import { color } from "../src/design/tokens.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NOT_SAVED = "The answer did not save. Try again, or skip.";
@@ -107,7 +108,7 @@ test("the desk page announces the question and keeps the mic off the action row"
     assert.equal(live?.[1], ask);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

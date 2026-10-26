@@ -3,7 +3,7 @@
  * Those steps run only when the interview is finished, or when a launch card is drawn.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import { think } from "../src/ai/think.ts";
 import { awaitPendingSummary } from "../src/context/index.ts";
 import { closingRecapCheckCount, readPendingClose, runTurn, type GuideSession } from "../src/guide/live-turn.ts";
 import { hostStepCount } from "../src/guide/named-host.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function hit<T>(value: T): ThinkResult<T> {
   return { value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" };
@@ -50,6 +51,6 @@ test("an ordinary answer does not run the closing recap or the host step", async
     );
   } finally {
     await awaitPendingSummary(projectDir);
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

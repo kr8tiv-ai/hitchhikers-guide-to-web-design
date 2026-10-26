@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { think, type JsonSchema } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const live = process.env.HH_LIVE === "1";
 
@@ -45,7 +46,7 @@ test(
       assert.equal(result.cassette, "live");
       assert.equal(result.durationMs >= 0, true);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   },
 );

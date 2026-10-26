@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { closeActiveApp } from "../src/commands/app.ts";
 import { runCli } from "../src/main.ts";
 import type { CommandRunner } from "../src/doctor.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const REPLAY_REFUSAL =
   "HH_CASSETTE=replay is set in this shell. The Guide would only replay recorded answers. Clear it (Remove-Item Env:HH_CASSETTE) or pass --cassette to keep it.\n";
@@ -112,7 +113,7 @@ test("hh app starts when cassette mode is opted in and the desk says so", async 
     await closeActiveApp();
   } finally {
     await closeActiveApp();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

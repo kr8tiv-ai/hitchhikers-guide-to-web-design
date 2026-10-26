@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import type { DevicePerformanceInput, DeviceRunInput } from "../src/performance-
 import { OPACITY_KEEP_MS, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
 import { renderSelfScore } from "../src/report.ts";
 import { readHeadings, scoreSelf, selfScoreVerdict, type SelfScoreInput } from "../src/self-score.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const floors = defaultConfig().gates;
@@ -356,7 +357,7 @@ test("a blocker feeds three fixes into the remediation loop", async () => {
     assert.equal(skipped.roundsRun, 0);
     assert.equal(skipped.filesWritten.length, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

@@ -3,7 +3,7 @@
  * Drive renders that sentence, the escalation, and the paused queue.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import { BILLING_CARD, billingCardError } from "../src/client/desk.ts";
 import { renderDriveDocument } from "../src/drive-markup.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleRaw } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function hit<T>(value: T): ThinkResult<T> {
   return { value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" };
@@ -122,7 +123,7 @@ test("a 402 on the judge keeps the question and the typed answer", async () => {
     assert.match(draft, /For myself\./);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -157,6 +158,6 @@ test("a 402 after the answer is stored still shows the top-up sentence", async (
     assert.match(saved, /For myself\./);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,6 +16,7 @@ import {
   writeMotionModule,
 } from "../src/spec/design-outputs.ts";
 import { prepareSiteBuild } from "../src/guide/site-build.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -159,7 +160,7 @@ test("a fixture brief writes a typed DESIGN.md and motion.ts, and every build pr
       assert.equal(/only use|do not use\s+\S+/i.test(text), false);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -187,7 +188,7 @@ test("a quiet brief still writes exact tokens, with the calmer band", async () =
     assert.equal(loaded.motionFov, 45);
     assert.equal(loaded.motionBloom.strength, 0.3);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -232,6 +233,6 @@ test("prepareSiteBuild writes both files and the rendered prompts name them", as
     assert.match(prompt, /DESIGN\.md/);
     assert.match(prompt, /src\/scripts\/motion\.ts/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

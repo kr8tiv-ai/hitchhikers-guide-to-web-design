@@ -4,7 +4,7 @@
  * The DP-7.2 skip from that interview renders as a note.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ import {
   type ThinkResult,
 } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = path.resolve(here, "..", "..", "engine", "test", "fixtures", "project4-interview.json");
@@ -176,6 +177,6 @@ test("a project4 draft is used, the coverage table is full, and DP-7.2 is a note
     assert.equal(notAsked.includes("Not applicable:"), false);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

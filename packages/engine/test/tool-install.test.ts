@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -26,6 +26,7 @@ import {
   type PlanContext,
   type PlanStep,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -311,7 +312,7 @@ test("a matching hash passes and a mismatch deletes the file", async () => {
     assert.equal(existsSync(bad), false);
     assert.equal(existsSync(badDest), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -412,7 +413,7 @@ test("cancel removes a partial file and a failed command keeps the stderr tail",
   assert.equal(failed.status, "failed");
   assert.match(failed.error ?? "", /exit 2: poppler exit 3: package missing from the stub/);
   assert.equal(failed.manualCommand, "scoop install poppler");
-  await rm(dir, { recursive: true, force: true });
+  await removeTempDir(dir);
 });
 
 test("confirm tokens expire, replay, and reject a mismatch without a second consume", () => {
@@ -463,6 +464,6 @@ test("commandOnPath sees a file placed on PATH", () => {
     assert.equal(commandOnPath("scoop", env, process.platform), true);
     assert.equal(commandOnPath("missing-tool", env, process.platform), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

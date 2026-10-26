@@ -1,10 +1,11 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const requireFromQa = createRequire(path.resolve(here, "../../qa/package.json"));
@@ -53,7 +54,7 @@ test.describe("desk clarity", () => {
 
   test.afterAll(async () => {
     if (child !== undefined) await stopChild(child);
-    if (projectDir.length > 0) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir.length > 0) await removeTempDir(projectDir);
   });
 
   test("the interview leads, the project bar is one row, and the composer is pinned", async ({ page }) => {

@@ -3,7 +3,7 @@
  * A Change something correction still wins for the field it names, once, in SITE-BRIEF.md.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { approveSiteBrief, draftSiteBrief, reviseSiteBrief } from "../src/guide/brief-desk.ts";
 import { readSiteBrief } from "../src/guide/brief-loop.ts";
 import { BRIEF_KEYS, type SiteBrief } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const UNSTATED = "The field is not stated yet.";
 const GOAL = "The site exists so a neighbor can order tea without calling.";
@@ -103,6 +104,6 @@ test("recorded answers fill unstated fields and a correction still wins", async 
     assert.equal(draftCall.effort, "xhigh");
     assert.equal(calls.filter((req) => req.task === "brief-revise").length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

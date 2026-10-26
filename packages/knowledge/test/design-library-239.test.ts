@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
 } from "../src/design-library.ts";
 import { ingestPolicy } from "../src/ingest-policy.ts";
 import { recheckLibrary, runIngest, type Clock, type GrokEntryDraft, type IngestCandidate, type IngestDeps, type IngestState } from "../src/ingest-pipeline.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const root = libraryRoot();
 
@@ -326,7 +327,7 @@ test("ingest fixtures honour license, feeds, robots, quota, resume, and the host
     await runIngest([{ url: "https://example.com/done", source: "candidate", via: "auto" }], state, deps(dir, async () => new Response("no", { status: 500 }), skipCalls));
     assert.equal(skipCalls.length, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -351,7 +352,7 @@ test("a URL is retired after two recheck failures and not after one", async () =
     const twice = await recheckLibrary(failing, once.state);
     assert.equal(twice.entries[0]?.retired, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

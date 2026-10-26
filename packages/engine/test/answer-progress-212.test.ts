@@ -3,7 +3,7 @@
  * A skip is not an answer, so it does not report those stages or call the judge.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import { defaultConfig, parseConfig } from "../src/config.ts";
 import { ANSWER_PROGRESS } from "../src/guide/guide-progress.ts";
 import { INTERVIEW_MODEL, planInterview } from "../src/guide/interview-call.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function hit<T>(value: T): ThinkResult<T> {
   return { value, raw: JSON.stringify(value), durationMs: 0, cassette: "hit" };
@@ -47,7 +48,7 @@ test("one answer emits Checking, Writing, then Saving, and a skip emits none", a
     assert.notEqual(skipped.questionId, "DP-0.2");
     assert.deepEqual(stages, [...ANSWER_PROGRESS]);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -83,6 +84,6 @@ test("an answer runs the judge and a skip does not, on grok-4.7-build-fast at th
       assert.equal(planned.effort, "high");
     }
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -23,6 +23,7 @@ import {
 } from "../src/review-runners.ts";
 import { falseVisualBans } from "../src/zaphod-vision.ts";
 import { REVIEW_WIDTHS } from "../src/screenshots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const STUBBED = ["runDeviceMatrix", "runMobileChecks", "runReducedMotion", "evaluateStateSweeps"] as const;
 
@@ -222,6 +223,6 @@ test("an offline towel brief runs the desk gates without a model or a deploy", {
     for (const name of STUBBED) assert.ok(called.includes(name), name);
   } finally {
     setReferenceTransport(null);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

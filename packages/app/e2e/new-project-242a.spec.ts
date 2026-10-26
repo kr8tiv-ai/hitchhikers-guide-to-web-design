@@ -5,12 +5,13 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { isInsideDeskRepo } from "@hitchhiker/engine";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../../..");
@@ -154,7 +155,7 @@ test("a new project approves the brief, the plan, and each design stage", async 
     expect(after).toBe(before);
   } finally {
     child.kill();
-    await rm(sandbox, { recursive: true, force: true });
+    await removeTempDir(sandbox);
   }
 });
 

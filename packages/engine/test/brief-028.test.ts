@@ -3,7 +3,7 @@
  * A recorded answer never renders as unstated. Pages and Features are fields.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -18,6 +18,7 @@ import {
   deterministicBrief,
 } from "../src/guide/brief-loop.ts";
 import { BRIEF_KEYS, type BriefKey, type Facts, type SiteBrief } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const UNSTATED = "The field is not stated yet.";
 const OLD_GOAL = "Help a visitor book a glass tour.";
@@ -176,7 +177,7 @@ test("a superseded answer is not used and a model unstated line cannot blank a f
     assert.match(req.input, /## Context packet/);
     assert.match(req.input, /private tour/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -207,6 +208,6 @@ test("max turns retries once, then keeps the recorded fields and an honest error
     assert.equal(again.error, BRIEF_DRAFT_ERROR);
     assert.match(again.draft?.goal ?? "", /private tour/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

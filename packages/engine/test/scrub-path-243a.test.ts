@@ -3,12 +3,13 @@
  * Real token shapes still redact. Path fields stay byte-exact.
  */
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { saveState, type GuideState } from "../src/index.ts";
 import { loadProjectFile, saveProjectFile, scrubText, scrubValue, SECRET_PATTERN } from "../src/project-file/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const FOLDER = "C:\\Users\\lucid\\Desktop\\desk-e2e-run11\\site";
 const TOKEN_DIR = "C:\\Users\\lucid\\Desktop\\sk-abcdefgh12345\\site";
@@ -67,7 +68,7 @@ test("a project saved under desk-e2e-run11 reopens with its folder intact", asyn
     assert.equal(brief?.text.includes(project), true);
     assert.equal(brief?.text.includes(PLANTED), false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -89,7 +90,7 @@ test("a real token inside the project folder stays in sourceDir, resume, and sna
     assert.equal(brief?.text.includes(project), true);
     assert.equal(brief?.text.includes(PLANTED), false);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 

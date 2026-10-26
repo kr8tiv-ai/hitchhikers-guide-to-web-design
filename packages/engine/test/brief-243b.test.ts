@@ -5,7 +5,7 @@
  * Two failed revises leave instruction fields as they were and keep a Retry error.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ import { reviseSiteBrief } from "../src/guide/brief-desk.ts";
 import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { type SiteBrief } from "../src/guide/schemas.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const RUN11 =
   "Motion: the home page opens with gentle motion on the hero photo only, no video file, since there is no video at launch. Action: say it once, without repeating the follow-up.";
@@ -89,7 +90,7 @@ test("a scoped instruction revises the field and does not replace it with the in
     assert.equal(action.toLowerCase().includes("without repeating"), false);
     assert.equal(revised.error, "");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -120,7 +121,7 @@ test("a short named value replaces the field, and a revise that already contains
     assert.equal((replaced.draft?.budget ?? "").includes("Pay later"), false);
     assert.equal((replaced.draft?.maintainer ?? "").includes("Someone else"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -147,6 +148,6 @@ test("two failed revises leave instruction fields unchanged and show Retry", asy
     assert.equal((revised.draft?.motion ?? "").includes("say it once"), false);
     assert.equal((revised.draft?.action ?? "").toLowerCase().includes("say it once"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

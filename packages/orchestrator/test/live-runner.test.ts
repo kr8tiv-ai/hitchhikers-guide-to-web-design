@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +18,7 @@ import { evaluateCommand } from "../src/policy.ts";
 import { advance } from "../src/progress.ts";
 import { loadQueue, saveQueue } from "../src/queue-file.ts";
 import { buildArgv } from "../src/runner.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function config(): GuideConfig {
   const next = defaultConfig();
@@ -114,7 +115,7 @@ describe("live runner", () => {
       assert.equal(sensor.kind, "sensor");
       assert.equal(sensor.verdict, "ok");
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -147,7 +148,7 @@ describe("live runner", () => {
         /paused/,
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -175,7 +176,7 @@ describe("live runner", () => {
       const queue = await loadQueue(dir);
       assert.equal(queue?.items.every((item) => item.status === "paused"), true);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -197,7 +198,7 @@ describe("live runner", () => {
       const queue = await loadQueue(dir);
       assert.deepEqual(queue?.items, [{ id: "003-visit", kind: "build", status: "paused" }]);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -218,7 +219,7 @@ describe("live runner", () => {
       );
       assert.equal(called, false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -238,7 +239,7 @@ describe("live runner", () => {
         (error: unknown) => error instanceof GrokMissingError,
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 

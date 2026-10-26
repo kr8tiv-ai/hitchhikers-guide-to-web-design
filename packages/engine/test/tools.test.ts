@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +17,7 @@ import {
   type RegistryMeta,
   type ToolOption,
 } from "../src/tools/legitimacy.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -479,7 +480,7 @@ test("a declined confirm runs nothing", async () => {
     await assert.rejects(readFile(path.join(dir, "NOTICE"), "utf8"));
     await assert.rejects(readFile(path.join(dir, ".grok", "config.toml"), "utf8"));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -504,7 +505,7 @@ test("a yes installs an npm package and records it in NOTICE", async () => {
     assert.match(notice, /https:\/\/github.com\/acme\/widget-kit/);
     assert.equal(notice.includes("!"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -541,7 +542,7 @@ test("GPL and a failed pnpm add do not write NOTICE", async () => {
     assert.equal(runs, 1);
     await assert.rejects(readFile(path.join(dir, "NOTICE"), "utf8"));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -582,7 +583,7 @@ test("an MCP install writes project config without secrets and records NOTICE", 
     assert.equal(mcpServerKey("com.acme/booking-mcp"), "booking-mcp");
     assert.match(secretAsk(["BOOKING_TOKEN"]), /environment or the OS keychain/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -630,7 +631,7 @@ test("a raw secret or a denied command is blocked before confirm", async () => {
     assert.equal(confirms, 0);
     assert.equal(runs, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -699,6 +700,6 @@ test("denyInstallPolicy uses the 097 deny reasons", () => {
       "allow",
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

@@ -2,7 +2,7 @@
  * Prompt 209 regression tests. These assert the post-209 contract and fail on 208.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import { followUpChoices } from "../src/guide/pushback-judge.ts";
 import { jargonHits, userFacingText } from "../src/guide/session-state.ts";
 import type { Facts } from "../src/guide/schemas.ts";
 import { loadTree, questionsForDepth, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -177,6 +178,6 @@ test("an old project with a removed mic answer still maps the other answers", as
     assert.equal(next.id, "DP-0.2");
     assert.notEqual(next.id, "DP-0.6");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

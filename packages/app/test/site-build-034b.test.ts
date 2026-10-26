@@ -4,7 +4,7 @@
  * Two Resume posts for an interrupted row still share one spawn.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,6 +24,7 @@ import {
 } from "@hitchhiker/engine";
 import { queueBodyHtml, type DriveRun } from "../src/drive-markup.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -275,7 +276,7 @@ test("desk start holds a finished prompt until Resume, then verifies and advance
   } finally {
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -339,6 +340,6 @@ test("two Resume posts start one run and the button is held while it is live", {
     release();
     await siteBuildSettled(dir);
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

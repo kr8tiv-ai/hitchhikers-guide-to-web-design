@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import { FLOW_TRANSITIONS as progressTable } from "../src/progress.ts";
 import { RunConfigError, runElevatePicks, FLOW_TRANSITIONS as runnerTable } from "../src/runner.ts";
 import { ScheduleError, insertReviews, scheduleElevatePicks, FLOW_TRANSITIONS as scheduleTable } from "../src/schedule.ts";
 import { saveQueue } from "../src/queue-file.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..", "..", "..");
@@ -188,7 +189,7 @@ test("a saved step wins, a quality-check file does not skip the interview, and p
     writeFileSync(path.join(dir, ".hitchhiker", "queue.json"), "{}\n", "utf8");
     assert.equal(readFlowFrom(dir), "so-long");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -241,10 +242,10 @@ test("an empty folder may take the next honest step, and a quality-check file me
     assert.equal(loadState(interview)?.nextAction, "answer");
     assert.deepEqual(loadState(interview)?.blockers, ["hold the towel"]);
   } finally {
-    rmSync(empty, { recursive: true, force: true });
-    rmSync(bare, { recursive: true, force: true });
-    rmSync(gated, { recursive: true, force: true });
-    rmSync(interview, { recursive: true, force: true });
+    removeTempDir(empty);
+    removeTempDir(bare);
+    removeTempDir(gated);
+    removeTempDir(interview);
   }
 });
 
@@ -298,7 +299,7 @@ test("Elevate picks and a finished prompt use the same table", async () => {
     assert.equal(existsSync(flowFilePath(dir)), false);
     assert.equal(loadState(dir)?.phase, "Don't Panic");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -347,6 +348,6 @@ test("a missing folder and an unreadable saved step do not move", async () => {
     assert.equal(bad.reason, "The saved step could not be read, so nothing moved.");
     assert.equal(readFileSync(flowFilePath(dir), "utf8"), "{");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

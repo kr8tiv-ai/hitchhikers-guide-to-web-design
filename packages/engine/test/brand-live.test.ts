@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -40,6 +40,7 @@ import { StoryLengthError, draftStory, storyLimits } from "../src/brand/live/sto
 import { TaglineCountError, draftTaglines } from "../src/brand/live/taglines.ts";
 import { draftVoiceKit } from "../src/brand/live/voice-kit.ts";
 import { runWhyFinder } from "../src/brand/live/why-finder.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -399,7 +400,7 @@ test("Why Finder asks at least 12 questions, one at a time, then compileWhy shap
     }
     assert.equal(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8"), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -432,7 +433,7 @@ test("discovery asks only SOFT and ASSUMED fields, one at a time", async () => {
     }
     assert.equal(readFileSync(path.join(dir, ".hitchhiker", "interview.json"), "utf8"), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -465,7 +466,7 @@ test("positioning keeps the grounded line, the 12-archetype label, and rejects a
     );
     assert.equal(bad.positioningCalls, 2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -549,7 +550,7 @@ test("story lengths stay inside the window, clip overflow, and ask two origin qu
     ]);
     assert.equal(fallback.tasks.filter((task) => task === "brand-story-origin").length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -573,7 +574,7 @@ test("voice kit is shaped by renderVoice and still passes lintClaims", async () 
       assert.equal(saved.items.find((item) => item.itemId === id)?.status, "pending");
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -652,7 +653,7 @@ test("taglines return 30 across 6 styles, cut to a top 5, and repair a short lis
     assert.equal(slogan.taglineCalls, 2);
     assert.equal(slogan.rankCalls, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -716,7 +717,7 @@ test("rejecting one tagline re-drafts only that item", async () => {
       assert.equal(next.status, item.status);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -788,8 +789,8 @@ test("cassette replay on Towel and Tea runs every live module with zero lintClai
     assert.equal(saved.items.filter((item) => item.kind === "tagline").length, 30);
     assert.equal(fx.tasks.includes("brand-story-origin"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(cassetteDir, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(cassetteDir);
   }
 });
 
@@ -862,7 +863,7 @@ test("approve cards give every item its own approve and reject", () => {
     const kept = path.join(tmpdir(), "hh-approve-cards.html");
     writeFileSync(kept, parsed.page, "utf8");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

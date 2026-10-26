@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { GitFlowError, backupBranchName } from "../src/git-flow.ts";
 import { PreflightError, preflight, type PreflightResult } from "../src/preflight.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DATE = "2026-10-07";
 const BRANCH = "hh/backup-2026-10-07";
@@ -289,7 +290,7 @@ test("existing baselines files stay in place", () => {
     assert.equal(existsSync(baselines), true);
     assert.equal(readFileSync(kept, "utf8"), "stay");
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -313,7 +314,7 @@ test("a failing mkdir is a reason and does not claim success", () => {
     assert.equal(readFileSync(marker, "utf8"), "keep");
     noBang(result);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

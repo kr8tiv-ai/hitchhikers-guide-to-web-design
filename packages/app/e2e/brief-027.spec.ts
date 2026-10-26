@@ -2,11 +2,12 @@
  * BUG-027: interview finish, draft, approve, and the build, with reloads.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -94,7 +95,7 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await expect(page.locator('[data-id="001"]')).toHaveCount(1);
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -164,7 +165,7 @@ test("an incomplete plan shows the coverage table and keeps Approve off", async 
     await expect(page.locator("body")).toContainText("Approve stays off until every row is covered.");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

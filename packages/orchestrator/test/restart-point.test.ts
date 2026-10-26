@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -8,6 +8,7 @@ import { loadProjectFile, nextPromptId, saveProjectFile, saveState, type GuideSt
 import { advance } from "../src/progress.ts";
 import { restartPointFromProjectFile } from "../src/restart.ts";
 import { saveQueue, type QueueFile } from "../src/queue-file.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function state(): GuideState {
   return {
@@ -69,7 +70,7 @@ test("restartPointFromProjectFile is last_done plus one", async () => {
     assert.equal(idlePoint, 1);
     assert.equal(idlePoint, nextPromptId(""));
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTempDir(root);
   }
 });
 
@@ -106,6 +107,6 @@ test("a completed build prompt autosaves last_done", async () => {
   } finally {
     if (prior === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = prior;
-    await rm(project, { recursive: true, force: true });
+    await removeTempDir(project);
   }
 });

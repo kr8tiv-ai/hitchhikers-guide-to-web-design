@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -32,6 +32,7 @@ import {
 import type { DispatchClients, PreviewHandoff } from "../src/dispatch.ts";
 import type { HostingerClient } from "../src/hostinger.ts";
 import type { StaticDeployClient } from "../src/poll.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BANNED = [
   "!",
@@ -191,7 +192,7 @@ test("a static record suggests Hostinger and allows all four hosts", async () =>
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
     await absent(path.join(dir, ".hitchhiker", "hostinger-yes.json"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -212,8 +213,8 @@ test("a server record suggests Hostinger and keeps Vercel as the other host", as
     assert.match(nodePick.reason, /Nothing is sent until you confirm/);
     assertPlain(nodePick.reason);
   } finally {
-    await rm(next, { recursive: true, force: true });
-    await rm(ssr, { recursive: true, force: true });
+    await removeTempDir(next);
+    await removeTempDir(ssr);
   }
 });
 
@@ -226,7 +227,7 @@ test("a static export of a server framework can use all four hosts", async () =>
     assert.deepEqual(pick.allowed, ["hostinger", "vercel", "netlify", "cloudflare"]);
     assertPlain(pick.reason);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -250,7 +251,7 @@ test("a declined yes calls no client and writes nothing", async () => {
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
     await absent(path.join(dir, ".hitchhiker", "hostinger-yes.json"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -265,7 +266,7 @@ test("a decline does not need a stack record", async () => {
     assert.deepEqual(outcome, { declined: true });
     assert.equal(vercel.uploads, 0);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -317,7 +318,7 @@ test("static hosts reach their adapters through the injected clients", async () 
     await absent(path.join(dir, ".hitchhiker", "hostinger-yes.json"));
     await absent(path.join(dir, ".hitchhiker", "deploy", "launch-checklist.json"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -334,7 +335,7 @@ test("a queued static upload stops when the poll cap is reached", async () => {
     assert.equal(vercel.uploads, 1);
     assert.equal(vercel.polls, 1);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -351,7 +352,7 @@ test("a server site on Hostinger uses the node upload", async () => {
     assert.equal(hostinger.staticUploads, 0);
     assert.equal(hostinger.polls, 1);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -372,7 +373,7 @@ test("a server site on Vercel uploads once through the injected client", async (
     assert.equal(vercel.polls, 1);
     assert.equal(netlify.uploads, 0);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -403,7 +404,7 @@ test("a server site on Netlify and Cloudflare is rejected with the existing mess
     assert.equal(cloudflare.polls, 0);
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -423,7 +424,7 @@ test("a server site on Netlify is still rejected when no client was injected", a
       /Cloudflare template is not wired/,
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -440,7 +441,7 @@ test("a missing connection is named and nothing is sent", async () => {
     );
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -475,7 +476,7 @@ test("preview calls only the injected handoff", async () => {
     assert.equal(seen[0]?.outputDir, "dist");
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -496,7 +497,7 @@ test("a server site can still ask for a local preview", async () => {
     });
     assert.equal("url" in outcome && outcome.url, "http://127.0.0.1:4317/server");
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -534,7 +535,7 @@ test("preview without an injected handoff serves the built pages and writes a zi
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
     await closePreview(dir);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -552,7 +553,7 @@ test("a declined preview writes no zip and does not ask a host", async () => {
     await absent(path.join(dir, ".hitchhiker", "deploy", "DEPLOYS.md"));
   } finally {
     await closePreview(dir);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -574,7 +575,7 @@ test("a server site without a handoff does not open a preview", async () => {
     await absent(previewZipPath(dir));
   } finally {
     await closePreview(dir);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -593,7 +594,7 @@ test("a static export is previewed from its page folder", async () => {
     assert.equal((await readFile(previewZipPath(dir))).includes(Buffer.from("Export")), true);
   } finally {
     await closePreview(dir);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -614,7 +615,7 @@ test("a second preview closes the earlier address and overwrites the zip", async
     assert.equal((await readFile(previewZipPath(dir))).includes(Buffer.from("First")), false);
   } finally {
     await closePreview(dir);
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

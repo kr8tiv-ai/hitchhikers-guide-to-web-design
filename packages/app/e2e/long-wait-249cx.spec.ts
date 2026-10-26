@@ -5,11 +5,12 @@
  * after the server cap (600s) while the check is still running.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NOTE = "This one is taking longer than usual. Your answer is saved; you can wait or leave the desk open and come back.";
@@ -82,7 +83,7 @@ async function runSize(
   } finally {
     await context.close();
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 }
 

@@ -4,12 +4,13 @@
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { hiddenChildOptions } from "@hitchhiker/engine";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PNG = Buffer.from(
@@ -63,7 +64,7 @@ test.describe("before and after pick cards", () => {
 
   test.afterAll(async () => {
     if (child !== undefined) await stopChild(child);
-    if (projectDir.length > 0) await rm(projectDir, { recursive: true, force: true });
+    if (projectDir.length > 0) await removeTempDir(projectDir);
   });
 
   test("approve and reject record a yes and stay inside 375", async ({ page }) => {
@@ -127,7 +128,7 @@ test("an empty project shows the waiting plate and writes nothing", async ({ pag
     expect(await overflow(page)).toBeLessThanOrEqual(1);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

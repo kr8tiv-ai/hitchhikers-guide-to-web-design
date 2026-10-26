@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import {
 } from "../src/guide/site-build.ts";
 import { loadQueue } from "../src/queue-file.ts";
 import type { PlannedPage } from "../src/spec/brief-plan.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRIEF = [
   "# Site Brief",
@@ -78,7 +79,7 @@ test("one supplied image and four sections keep the hero and plan three stills",
     assert.equal(same.slots.length, 3);
     assert.equal(same.kept.length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -104,6 +105,6 @@ test("the still runner fires once after the last art prompt and does not pause t
     setSectionStillRunner(dir, null);
     setProjectBuildRunner(dir, null);
     await siteBuildSettled(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

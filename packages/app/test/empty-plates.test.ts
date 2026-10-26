@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -8,6 +8,7 @@ import { replaceEmptyCard } from "../src/client/desk.ts";
 import { DRIVE_EMPTY_COPY } from "../src/drive-markup.ts";
 import { renderEmptyInterview, START_INTERVIEW_LABEL } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 /**
  * Layout note, no new CSS. 375 is a single column: shell padding is the
@@ -39,7 +40,7 @@ async function withDesk(run: (handle: ServerHandle, dir: string) => Promise<void
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

@@ -3,7 +3,7 @@
  * continues the queue once.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import {
   siteBuildSettled,
   type BuildSpawn,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 999_999;
 
@@ -46,7 +47,7 @@ async function cleanup(dir: string): Promise<void> {
   await Promise.race([siteBuildSettled(dir).catch(() => undefined), delay(400)]);
   resetSiteBuildWatch(dir);
   clearProjectBuildRunner(dir);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 async function queueFrom(dir: string, running: string): Promise<void> {

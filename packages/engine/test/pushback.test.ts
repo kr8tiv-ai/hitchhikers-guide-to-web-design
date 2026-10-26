@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   type AnswerRecord,
   type Question,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pushbackSource = path.resolve(here, "..", "src", "pushback.ts");
@@ -203,7 +204,7 @@ test("two soft answers push back and the third stores SOFT", async () => {
     assert.deepEqual(done.pushedIds, [{ id: "DP-5.3", count: 2 }]);
     assert.equal(session.lastPushback, null);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -231,7 +232,7 @@ test("a concrete answer stores ANSWERED and clears lastPushback", async () => {
     assert.equal(stored.value, sharp);
     assert.equal(held.lastPushback, null);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -256,7 +257,7 @@ test("skip and suggest during a hold store immediately", async () => {
     assert.equal(session.lastPushback, null);
     assert.equal(session.coverage().soft, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -289,7 +290,7 @@ test("resume keeps the push count for an id", async () => {
     assert.equal(third.next()?.id, "DP-9.9");
     assert.equal(readSaved(dir).answers.length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -315,7 +316,7 @@ test("a long answer is stored whole and a late soft phrase is not a push", async
     assert.equal(stored.value, early);
     assert.equal(stored.value.length, early.length);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -333,7 +334,7 @@ test("an empty answer is not stored as SOFT", async () => {
     assert.equal(session.coverage().soft, 0);
     assert.equal(session.next()?.id, "DP-5.3");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -359,7 +360,7 @@ test("a bare answer array still loads and an IMPORTED id is not pushed", async (
     assert.equal(readSaved(dir).answers.length, 1);
     assert.equal(readSaved(dir).answers[0]?.status, "IMPORTED");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

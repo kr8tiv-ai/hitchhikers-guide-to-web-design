@@ -3,7 +3,7 @@
  * only while a stub process is alive. Spawn args stay on grok-4.7-build-fast / xhigh.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-site-build-"));
@@ -112,7 +113,7 @@ test("a stub run passes, records files, and a second ensure does not spawn again
     releaseFirst(result(0));
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -135,7 +136,7 @@ test("a non-zero exit fails the row, stops the queue, and names a usage limit", 
     assert.equal((readBuildRun(dir)?.reason ?? "").includes("!"), false);
   } finally {
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -154,7 +155,7 @@ test("a missing grok command is a failed row, not a running one", async () => {
     assert.match(readBuildRun(dir)?.reason ?? "", /grok is not on PATH/);
   } finally {
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -193,7 +194,7 @@ test("a stale running row is interrupted and other running rows stay", async () 
     assert.equal(await reconcileSiteBuild(dir), false);
     assert.equal((await loadQueue(dir))?.items[0]?.status, "running");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -223,6 +224,6 @@ test("resume runs an interrupted prompt through the same stub", async () => {
   } finally {
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

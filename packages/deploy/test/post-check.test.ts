@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import {
   summarizePostCheck,
   type PostDeployReport,
 } from "../src/post-deploy-live.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PAGE = "<!doctype html><html><head><title>Milliways</title></head><body><h1>Milliways</h1></body></html>";
 
@@ -293,7 +294,7 @@ test("appending a post-check keeps the deploy row and lists the 404", async () =
     assert.equal(good?.target, "preview");
     assert.equal(good?.url, "https://good.example/");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -338,7 +339,7 @@ test("a recorded live check uses the injected runners and lists a 404", async ()
     assert.equal(seen.includes("phone https://milliways.example/"), true);
     assert.equal(seen.includes("https://milliways.example/missing"), true);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

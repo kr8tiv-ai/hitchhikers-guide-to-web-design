@@ -3,7 +3,7 @@
  * even if stdio `close` never arrives, and a dead child cannot stay running.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 999_999;
 
@@ -57,7 +58,7 @@ async function cleanup(dir: string): Promise<void> {
   await Promise.race([siteBuildSettled(dir).catch(() => undefined), delay(300)]);
   resetSiteBuildWatch(dir);
   clearProjectBuildRunner(dir);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 test("watch defaults stay at 30s and the build model stays xhigh", () => {

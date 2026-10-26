@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import {
   downloadVerifiedFile,
   type DownloadRequester,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const HUGGING = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
 const GITHUB = "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip";
@@ -66,7 +67,7 @@ test("a redirect stays on the source list, strips userinfo, and rejects http", a
     assert.equal(readFileSync(dest, "utf8"), "model-bytes");
     assert.equal(existsSync(`${dest}.partial`), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 
   const blocked = await mkdtemp(path.join(os.tmpdir(), "hh-dl-"));
@@ -104,7 +105,7 @@ test("a redirect stays on the source list, strips userinfo, and rejects http", a
       /us\.aws\.cdn\.hf\.co/,
     );
   } finally {
-    await rm(blocked, { recursive: true, force: true });
+    await removeTempDir(blocked);
   }
 });
 
@@ -163,7 +164,7 @@ test("a dropped connection resumes with Range and a checksum mismatch deletes th
     assert.equal(existsSync(`${badDest}.partial`), false);
     assert.match(checksumMessage(wrong, "cd".repeat(32)), /Expected/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -218,6 +219,6 @@ test("low disk, offline, and cancel leave no partial file", async () => {
     assert.equal(existsSync(`${dest}.partial`), false);
     assert.equal(existsSync(dest), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });

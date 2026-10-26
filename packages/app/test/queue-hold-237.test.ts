@@ -3,7 +3,7 @@
  * row. Drive shows paused. Nothing starts until Resume.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,6 +20,7 @@ import {
   type ThinkResult,
 } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const WHEN = "2026-10-15T12:00:00.000Z";
 const PAUSE_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -154,7 +155,7 @@ test("desk start holds a legacy paused queue and Drive shows paused", { timeout:
   } finally {
     await siteBuildSettled(started.dir);
     await started.handle.close();
-    rmSync(started.dir, { recursive: true, force: true });
+    removeTempDir(started.dir);
   }
 });
 
@@ -176,7 +177,7 @@ test("desk start holds an interrupted running prompt without rewriting rows", { 
   } finally {
     await siteBuildSettled(dir);
     await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -190,6 +191,6 @@ test("desk start leaves an existing pause flag in place and does not start", { t
   } finally {
     await siteBuildSettled(started.dir);
     await started.handle.close();
-    rmSync(started.dir, { recursive: true, force: true });
+    removeTempDir(started.dir);
   }
 });

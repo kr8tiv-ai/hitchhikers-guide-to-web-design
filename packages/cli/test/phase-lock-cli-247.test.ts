@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import { runBriefCommand } from "../src/commands/brief.ts";
 import { runBuildCommand } from "../src/commands/context.ts";
 import { runElevateCommand } from "../src/commands/elevate.ts";
 import { runSoLongCommand } from "../src/commands/so-long.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const phaseLockHref = pathToFileURL(
@@ -75,7 +76,7 @@ test("hh brief, hh elevate, hh so-long, and hh build call the table", async () =
     assert.doesNotMatch(usage.stdout, /Finish the/);
 
     await saveState(dir, guide("Don't Panic"));
-    rmSync(savedFlowPath(dir));
+    removeTempDir(savedFlowPath(dir));
     const approved = await runBriefCommand(["--approve", "--project", dir], dir, (async () => {
       throw new Error("think should not run");
     }) as never);
@@ -105,7 +106,7 @@ test("hh brief, hh elevate, hh so-long, and hh build call the table", async () =
     assert.equal(build.exitCode, 1);
     assert.equal(build.stdout, "Finish the brief before building.\n");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 
   const fresh = tempProject();
@@ -115,6 +116,6 @@ test("hh brief, hh elevate, hh so-long, and hh build call the table", async () =
     assert.equal(resumed.stdout, "No site build is queued.\n");
     assert.equal(savedPhase(fresh), "build");
   } finally {
-    rmSync(fresh, { recursive: true, force: true });
+    removeTempDir(fresh);
   }
 });

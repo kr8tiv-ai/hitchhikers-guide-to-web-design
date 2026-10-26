@@ -3,7 +3,7 @@
  * Start build is the only call that spawns the billed runner.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,6 +20,7 @@ import { clearProjectBuildRunner, setProjectBuildRunner, siteBuildSettled, type 
 import { loadQueue } from "../src/queue-file.ts";
 import { loadState } from "../src/state.ts";
 import type { SiteBrief } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -117,6 +118,6 @@ test("plan approval and every design stage spawn nothing, and Start build spawns
     release(0);
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

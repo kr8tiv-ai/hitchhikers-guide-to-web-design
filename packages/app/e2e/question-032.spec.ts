@@ -2,12 +2,13 @@
  * BUG-032. DP-9.3's heading is the question. The recap sits underneath it.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { loadTree, saveState } from "@hitchhiker/engine";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "../../../interview/tree.yaml");
@@ -48,7 +49,7 @@ test("DP-9.3 shows the question as the heading and the recap below", async ({ pa
     expect((helpBox?.y ?? 0) > (headingBox?.y ?? 0)).toBe(true);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

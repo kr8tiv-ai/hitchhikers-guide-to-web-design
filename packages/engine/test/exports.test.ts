@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { exportPdf, ExportPdfError } from "../src/exports/prd-pdf.ts";
 import { extractPdfText } from "../src/ingest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRAND = "Northglass Studio";
 const VOICE = "Direct, not rude.";
@@ -60,7 +61,7 @@ test("agency PDFs are written, named, and withhold unapproved sections", { timeo
     assert.ok(has(coveredText, "Prepared for Ada North"), coveredText.slice(0, 800));
     assert.ok(mediaWidth(readFileSync(covered)) < 600);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -85,7 +86,7 @@ test("a missing brand name and a bad cover fail before a file is written", async
     );
     assert.equal(existsSync(path.join(hitch, "exports")), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 

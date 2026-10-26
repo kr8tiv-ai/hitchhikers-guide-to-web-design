@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { think, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { runToolsCommand, type ToolOption } from "../src/commands/tools.ts";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-tools-cli-"));
@@ -118,7 +119,7 @@ test("search prints a blocked GPL option and does not call the network", async (
     assert.match(shortlist, /gpl-widget/);
     assert.equal(shortlist.includes("sk-"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -140,7 +141,7 @@ test("install without a yes runs nothing", async () => {
     assert.deepEqual(runs, []);
     assert.equal(existsSync(path.join(dir, "NOTICE")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -188,7 +189,7 @@ test("install --yes records NOTICE and a blocked package does not run", async ()
     assert.match(blocked.stdout, /package license is denied/);
     assert.equal(runs.length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -219,6 +220,6 @@ test("an MCP yes asks for the keychain and does not store the secret", async () 
     assert.match(toml, /\$\{BOOKING_TOKEN\}/);
     assert.equal(toml.includes("sk-"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

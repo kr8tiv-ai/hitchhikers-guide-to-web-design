@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -23,6 +23,7 @@ import {
   type SpawnLike,
   type ThinkDeps,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const okSchema: JsonSchema = {
   type: "object",
@@ -170,7 +171,7 @@ test("images switch to --prompt-json content blocks", () => {
     assert.equal(typeof blocks[1]?.data, "string");
     assert.ok((blocks[1]?.data ?? "").length > 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -253,7 +254,7 @@ test("a bad answer then a good answer is one repair and two calls", async () => 
     assert.equal(result.outputTokens, 3);
     assert.equal(result.raw, '{"ok":true}');
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -280,7 +281,7 @@ test("two bad answers throw ThinkSchemaError and stop", async () => {
     );
     assert.equal(calls, 2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -305,7 +306,7 @@ test("streaming-json usage is parsed and a direct JSON object validates", async 
     assert.equal(result.inputTokens, 5);
     assert.equal(result.outputTokens, 2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -343,7 +344,7 @@ test("the log drops an xai- key, an email, and env values", async () => {
     assert.equal(log.includes("\r"), false);
     assert.equal(redact(`bearer ${secret}`).includes(secret), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -365,7 +366,7 @@ test("usage limit and auth errors throw once and do not repair", async () => {
     );
     assert.equal(calls, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -383,7 +384,7 @@ test("a timeout throws ThinkTimeoutError and does not repair", async () => {
     );
     assert.equal(calls, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -410,7 +411,7 @@ test("grok missing on PATH throws GrokMissingError with the doctor hint", async 
       },
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -440,7 +441,7 @@ test("a cmd shim beside grok.exe resolves to the exe", () => {
     const resolved = resolveGrokCommand({ PATH: work, PATHEXT: ".CMD;.BAT" });
     assert.equal(resolved, path.join(work, "grok.cmd"));
   } finally {
-    rmSync(work, { recursive: true, force: true });
+    removeTempDir(work);
   }
 });
 
@@ -461,7 +462,7 @@ test("a Windows cmd shim moves an inline prompt into a file", () => {
     const kept = promptOffCmdLine("C:\\tools\\grok.cmd", plan, dir, false);
     assert.equal(kept.argv.includes("-p"), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -474,7 +475,7 @@ test("resolveGrokCommand walks PATH and prefers the PATHEXT order", () => {
       writeFileSync(path.join(dir, "grok.com"), "");
       const resolved = resolveGrokCommand({ PATH: dir, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
       assert.equal(resolved, path.join(dir, "grok.com"));
-      rmSync(path.join(dir, "grok.com"));
+      removeTempDir(path.join(dir, "grok.com"));
       const cmd = resolveGrokCommand({ PATH: dir, PATHEXT: ".CMD" });
       assert.equal(cmd, path.join(dir, "grok.cmd"));
     } else {
@@ -483,7 +484,7 @@ test("resolveGrokCommand walks PATH and prefers the PATHEXT order", () => {
       assert.equal(resolveGrokCommand({ PATH: dir }), file);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -499,7 +500,7 @@ test("timeout kills the child process tree", async () => {
     });
     assert.equal(output.timedOut, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -534,6 +535,6 @@ test("a Windows batch shim receives the prompt as an argument", { skip: process.
     assert.deepEqual(percentArgs, ["-p", "100%PATH%"]);
     assert.equal(percentArgs[1]?.includes(process.env.PATH ?? "no-such-path"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

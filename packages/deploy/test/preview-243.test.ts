@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -8,6 +8,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { openPreview as previewFromIndex, previewZipPath as zipFromIndex } from "../src/index.ts";
 import { openPreview, previewZipPath, type PreviewSession } from "../src/preview.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const SOURCE = readFileSync(fileURLToPath(new URL("../src/preview.ts", import.meta.url)), "utf8");
 
@@ -84,7 +85,7 @@ test("a built folder is served with 200, a zip is written, and no call leaves th
     await assert.rejects(() => request(session.port, "GET", "/"));
   } finally {
     await session?.close();
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -98,7 +99,7 @@ test("a missing page folder writes no zip and does not listen", async () => {
     );
     await absent(previewZipPath(dir));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -113,7 +114,7 @@ test("a folder with no front page writes no zip", async () => {
     );
     await absent(previewZipPath(dir));
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -136,8 +137,8 @@ test("a folder outside the project is refused", async () => {
     );
     await absent(previewZipPath(dir));
   } finally {
-    await rm(dir, { recursive: true, force: true });
-    await rm(outside, { recursive: true, force: true });
+    await removeTempDir(dir);
+    await removeTempDir(outside);
   }
 });
 

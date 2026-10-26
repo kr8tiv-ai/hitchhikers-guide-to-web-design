@@ -2,11 +2,12 @@
  * BUG-003. A concrete answer advances. A cited soft gap asks once, then advances.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CITED = "Which part is missing from that month?";
@@ -49,7 +50,7 @@ test("a concrete answer advances and a cited gap asks only once", async ({ page 
     await expect(page.locator("#hh-card-ask")).not.toContainText("missing");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -83,7 +84,7 @@ test("named colours and Yes advance with no pushback", async ({ page }) => {
     await expect(page.locator("body")).not.toContainText("still soft");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

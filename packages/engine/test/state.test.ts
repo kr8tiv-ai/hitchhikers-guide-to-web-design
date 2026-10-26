@@ -4,7 +4,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -20,6 +19,7 @@ import { openInterview } from "../src/interview.ts";
 import { LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import { scaffoldProject } from "../src/spec/scaffold.ts";
 import { loadState, saveState, type GuideState } from "../src/state.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DEAD_PID = 2147483646;
 
@@ -55,7 +55,7 @@ test("a missing STATE.md loads as null", () => {
     assert.equal(loadState(dir), null);
     assert.equal(loadStateFromIndex(dir), null);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -83,7 +83,7 @@ test("STATE.md round-trips a colon and a quote", async () => {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
     assert.equal(raw.includes(".planning/"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -101,7 +101,7 @@ test("a live lock blocks saveState", async () => {
     );
     assert.equal(loadState(dir), null);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -118,7 +118,7 @@ test("a dead lock older than 30 seconds is taken over by saveState", async () =>
     assert.deepEqual(loadState(dir), state);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -179,7 +179,7 @@ test("the home index dedupes by project path", async () => {
       false,
     );
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 });
 
@@ -216,7 +216,7 @@ test("a scaffolded STATE.md loads and the interview opens on the first question"
     const afterOpen = readFileSync(path.join(dir, ".hitchhiker", "STATE.md"), "utf8");
     assert.equal(afterOpen, raw);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -261,7 +261,7 @@ test("a position block defaults fields the template does not carry", () => {
       updatedAt: "",
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -284,7 +284,7 @@ test("a broken STATE.md throws a missing heading", async () => {
     );
     assert.throws(() => loadState(dir), /STATE\.md is missing heading: Prompt id/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -302,6 +302,6 @@ test("a missing project path throws before the home lock", async () => {
     );
     assert.equal(existsSync(path.join(home, ".hitchhiker")), false);
   } finally {
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(home);
   }
 });

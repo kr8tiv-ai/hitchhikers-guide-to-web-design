@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,7 @@ import {
   type SectionShot,
 } from "../src/beauty-gate.ts";
 import { falseVisualBans } from "../src/zaphod-vision.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const NOW = "2026-10-19T15:00:00.000Z";
 const ART = "Editorial world, slow Lenis, warm film grade.";
@@ -90,7 +91,7 @@ test("a text-only section fails and queues one remediation prompt", async () => 
     assert.match(body, /effort: xhigh/);
     assert.match(body, /## Design language/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -155,7 +156,7 @@ test("a third failed round stops the queue", async () => {
     const saved = await loadQueue(dir);
     assert.equal(saved?.pause?.after, "011");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

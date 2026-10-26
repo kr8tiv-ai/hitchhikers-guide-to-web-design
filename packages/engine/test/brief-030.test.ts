@@ -2,7 +2,7 @@
  * BUG-030: one revise replaces the pending draft and is not a question answer.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ import { loadDecisions, syncAnswer } from "../src/context/index.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
 import { BRIEF_SAME_NOTE, BRIEF_REVISE_STAGES, draftSiteBrief, reviseSiteBrief } from "../src/guide/brief-desk.ts";
 import type { SiteBrief } from "../src/guide/schemas.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 const NEXT = "The site helps a visitor book a tour.";
@@ -81,7 +82,7 @@ test("a revise replaces the pending draft and does not become the DP-2.1 answer"
     const facts = loadFacts(dir);
     assert.equal(facts.answers.some((item) => item.id === "DP-2.1" && item.value === CORRECTION), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -119,6 +120,6 @@ test("one revise is in flight, and an identical draft says so", async () => {
     assert.equal(revised.note, BRIEF_SAME_NOTE);
   } finally {
     release();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

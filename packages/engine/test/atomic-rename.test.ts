@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { rename as renameFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import {
   withExclusiveFile,
 } from "../src/atomic-rename.ts";
 import { replaceViaTemp } from "../src/lock.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function errno(code: string): NodeJS.ErrnoException {
   const error = new Error(`${code}: rename failed`) as NodeJS.ErrnoException;
@@ -52,7 +53,7 @@ test("renameReplacing retries EPERM on the first N attempts and then replaces th
       assert.equal(readFileSync(to, "utf8"), `body-${failures}`);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -97,7 +98,7 @@ test("a permanent EPERM stops at the attempt cap and ENOENT does not retry", asy
     );
     assert.equal(enoent, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -124,7 +125,7 @@ test("EACCES and EBUSY retry once, then the rename replaces the file", async () 
       assert.equal(readFileSync(to, "utf8"), code);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -146,7 +147,7 @@ test("two replaceViaTemp calls on one file both finish and leave a whole body", 
     const text = readFileSync(target, "utf8");
     assert.ok(text === "one\n" || text === "two\n");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

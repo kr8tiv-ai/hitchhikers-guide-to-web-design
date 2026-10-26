@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   planElevateModel,
   type ElevateColdRead,
 } from "../src/elevate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(here, "..", "src", "elevate.ts");
@@ -334,6 +335,6 @@ test("planElevateModel replays a recorded cassette and applies nothing", async (
     assert.deepEqual(second, first);
     assert.equal(readFileSync(siteFile, "utf8"), before);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

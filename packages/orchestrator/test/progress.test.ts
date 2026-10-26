@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { LockHeld, STATE_LOCK_NAME, loadState, saveState, type GuideState } from "@hitchhiker/engine";
 import { advance, ProgressError } from "../src/progress.ts";
 import { loadQueue, saveQueue, type QueueFile, type QueueStatus } from "../src/queue-file.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempProject(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-progress-"));
@@ -91,10 +92,10 @@ test("a pass updates the queue and STATE together", async () => {
       assert.equal(readFileSync(queueFile(dir), "utf8"), readFileSync(queueFile(other), "utf8"));
       assert.equal(readFileSync(stateFile(dir), "utf8").includes("\r"), false);
     } finally {
-      rmSync(other, { recursive: true, force: true });
+      removeTempDir(other);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -118,7 +119,7 @@ test("passing the last item sets the next id null and the next action to Drive i
     assert.equal(loaded?.items[1]?.status, "passed");
     assert.equal(loaded?.items[2]?.status, "escalated");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -138,7 +139,7 @@ test("the next action is the next queued id, skipping a fixing row", async () =>
     assert.equal(loadState(dir)?.nextAction, "003");
     assert.equal((await loadQueue(dir))?.items[1]?.status, "fixing");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -167,7 +168,7 @@ test("an escalation appends a blocker and keeps the old good commit", async () =
     assert.equal((await loadQueue(dir))?.items[1]?.status, "escalated");
     assert.equal((await loadQueue(dir))?.items[0]?.status, "passed");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -189,7 +190,7 @@ test("a second escalation appends again and does not clear blockers", async () =
     assert.equal(loadState(dir)?.lastGoodCommit, "abc1234");
     assert.equal(loadState(dir)?.nextAction, "001");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -216,7 +217,7 @@ test("a missing STATE.md becomes a minimal guide state", async () => {
       updatedAt: state?.updatedAt,
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -239,7 +240,7 @@ test("escalating with no prior state records the blocker and an empty good commi
     assert.equal(state?.promptId, "014");
     assert.equal(state?.nextAction, "014");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -258,7 +259,7 @@ test("a null commit on a pass does not move lastGoodCommit", async () => {
     assert.equal(loadState(dir)?.nextAction, "002");
     assert.equal((await loadQueue(dir))?.items[0]?.status, "passed");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -302,10 +303,10 @@ test("bad shas are rejected and neither file changes", async () => {
       assert.equal(existsSync(stateFile(empty)), false);
       assert.equal(existsSync(queueFile(empty)), false);
     } finally {
-      rmSync(empty, { recursive: true, force: true });
+      removeTempDir(empty);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -333,7 +334,7 @@ test("an unknown id throws and leaves the queue and STATE", async () => {
     assert.equal(readFileSync(stateFile(dir), "utf8"), stateBefore);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -353,7 +354,7 @@ test("a missing queue throws and does not create STATE.md", async () => {
     assert.equal(existsSync(stateFile(dir)), false);
     assert.equal(existsSync(queueFile(dir)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -404,7 +405,7 @@ test("a paused queue throws until the drive is resumed", async () => {
     });
     assert.deepEqual(result, { nextId: "002" });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -432,7 +433,7 @@ test("a held state lock rejects advance before either file changes", async () =>
     assert.equal(readFileSync(queueFile(dir), "utf8"), queueBefore);
     assert.equal(readFileSync(stateFile(dir), "utf8"), stateBefore);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -456,7 +457,7 @@ test("corrupt queue JSON throws and stays on disk", async () => {
     assert.equal(readFileSync(queueFile(dir), "utf8"), raw);
     assert.equal(readFileSync(stateFile(dir), "utf8"), stateBefore);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -18,6 +18,7 @@ import {
   type GallerySource,
   type GalleryStyleWorld,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 /**
  * The shipped pack holds at least 120 original rows. Lando Norris stays
@@ -119,7 +120,7 @@ test("the loader rejects SOTY 2026", () => {
     const spaced = writePack(dir, [row({ award: "  soty   2026 winner" })]);
     assert.throws(() => loadCurated(spaced), /SOTY 2026/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -131,7 +132,7 @@ test("the loader accepts SOTY 2025 and rejects a SOTD row that says SOTY", () =>
     const mixed = writePack(dir, [row({ award: "SOTD SOTY", url: "https://example.com/mixed" })]);
     assert.throws(() => loadCurated(mixed), /Site of the Day/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -144,7 +145,7 @@ test("duplicate urls throw at load", () => {
     ]);
     assert.throws(() => loadCurated(file), /Duplicate gallery url: https:\/\/example.com\/same/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -168,7 +169,7 @@ test("snake_case pack fields load into GalleryEntry", () => {
     assert.equal(loaded[0]?.styleWorld, "brutalist");
     assert.equal(loaded[0]?.motionLevel, 3);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -335,7 +336,7 @@ test("refresh GETs only the allow-listed URL and writes a cache", async () => {
     assert.deepEqual(again, { status: "ok", reason: "cache fresh" });
     assert.equal(readFileSync(cachePath, "utf8").includes(now.toISOString()), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -369,7 +370,7 @@ test("a cache older than 7 days is not used", async () => {
     assert.ok(stored && typeof stored === "object" && "fetchedAt" in stored);
     assert.equal(stored.fetchedAt, now.toISOString());
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -410,7 +411,7 @@ test("a JSON object is not treated as a gallery API, and SOTY 2026 is not cached
     );
     assert.throws(() => readFileSync(badPath, "utf8"));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

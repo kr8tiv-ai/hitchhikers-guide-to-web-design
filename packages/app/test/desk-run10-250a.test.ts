@@ -4,7 +4,7 @@
  * hole on source.questionId. Both stay explicit and do not throw.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -16,6 +16,7 @@ import { renderCard, type CardState } from "../src/card.ts";
 import { approveMain } from "../src/server/brief-page.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleRaw } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "../../../interview/tree.yaml");
@@ -258,7 +259,7 @@ test("answering the last question returns an explicit null id and the brief step
     else process.env.HH_PROJECT_HOME = previousHome;
     if (previousE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = previousE2e;
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(home);
   }
 });

@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { renderApproval } from "../src/approval.ts";
 import { renderBrandKit, type BrandKitModel } from "../src/brand-kit.ts";
 import { listAppRoutes } from "../src/polish.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shotDir = path.join(here, "screens", "polish");
@@ -62,7 +63,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
     expect(route.states.length).toBeGreaterThan(0);
   }
 
-  rmSync(shotDir, { recursive: true, force: true });
+  removeTempDir(shotDir);
   mkdirSync(shotDir, { recursive: true });
 
   const projectDir = await mkdtemp(path.join(tmpdir(), "hh-polish-"));
@@ -196,7 +197,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
         state: "empty",
         ready: "[data-hh-ready]",
         async open(target) {
-          await rm(path.join(projectDir, ".hitchhiker", "queue.json"), { force: true });
+          await removeTempDir(path.join(projectDir, ".hitchhiker", "queue.json"));
           await target.goto(`${deskUrl}hh-dashboard`);
         },
       },
@@ -259,7 +260,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
       }, axeNotes);
     } finally {
       await stopChild(openChild);
-      await rm(jumpOpen, { recursive: true, force: true });
+      await removeTempDir(jumpOpen);
     }
 
     const jumpClear = await mkdtemp(path.join(tmpdir(), "hh-polish-jump-"));
@@ -282,7 +283,7 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
       }, axeNotes);
     } finally {
       await stopChild(clearChild);
-      await rm(jumpClear, { recursive: true, force: true });
+      await removeTempDir(jumpClear);
     }
 
     const unexpected = consoleErrors.filter((line) => !isExpectedConsole(line));
@@ -292,8 +293,8 @@ test("every screen at 375, 768, and 1440 in light and dark", async ({ page }) =>
     expect(axeNotes, axeNotes.join("\n")).toEqual([]);
   } finally {
     await stopChild(desk);
-    await rm(projectDir, { recursive: true, force: true });
-    await rm(cacheDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
+    await removeTempDir(cacheDir);
   }
 });
 
@@ -328,8 +329,8 @@ test("the desk meets the same phone gate as a generated site", async () => {
     }
   } finally {
     await stopChild(desk);
-    await rm(projectDir, { recursive: true, force: true });
-    await rm(cacheDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
+    await removeTempDir(cacheDir);
   }
 });
 
@@ -641,7 +642,7 @@ function row(source: string, name: string, url: string): unknown {
 }
 
 async function resetGallery(projectDir: string): Promise<void> {
-  await rm(path.join(projectDir, ".hitchhiker", "gallery-walk.json"), { force: true });
+  await removeTempDir(path.join(projectDir, ".hitchhiker", "gallery-walk.json"));
 }
 
 async function writeQueue(projectDir: string, broken: boolean): Promise<void> {

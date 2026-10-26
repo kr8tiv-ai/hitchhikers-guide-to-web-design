@@ -3,11 +3,12 @@
  * and focus is inside it. 1440x900 and 390x844. The model is stubbed.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../../..");
@@ -55,7 +56,7 @@ test("the tour is in view and focused after create and replay", async ({ page })
     await expect(page.locator("[data-tour]")).toHaveCount(0);
   } finally {
     await stopChild(child);
-    await rm(sandbox, { recursive: true, force: true });
+    await removeTempDir(sandbox);
   }
 });
 

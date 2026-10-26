@@ -5,12 +5,13 @@
  * This spec does not call a host and does not bind port 4175.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { hiddenChildOptions, packagedModule, restoreProject } from "@hitchhiker/engine";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sample = path.resolve(here, "../../../samples/towel-day.hhproject");
@@ -67,7 +68,7 @@ test.describe("golden path on the desk", () => {
       }
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -108,7 +109,7 @@ test.describe("golden path on the desk", () => {
       }
     } finally {
       if (childRef.child !== undefined) await stopChild(childRef.child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 });

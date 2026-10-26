@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,6 +9,7 @@ import { BRAND_SECTIONS } from "../src/brand/approve.ts";
 import { acquire, release, LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import type { AnswerRecord } from "../src/required.ts";
 import { onPhaseStart, savePartial, loadPartial, writeBack, type BeforeJumpAnswer, type BeforeJumpCard, type BeforeJumpPhase } from "../src/phases/before-jump-hook.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 type ThinkFn = typeof engineThink;
 
@@ -138,7 +139,7 @@ function reply(card: BeforeJumpCard, text: string, action: BeforeJumpAnswer["act
 }
 
 function cleanup(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 test("writeBack stores a brief field in SITE-BRIEF and interview.json", async () => {

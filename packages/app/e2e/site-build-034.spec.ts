@@ -3,12 +3,13 @@
  * stdio, still advances the queue. Prompt 003 is that shape.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { approveDesignAndStart } from "./design-then-build.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,7 +36,7 @@ test("queue advances through an end-then-exit prompt that never closes", async (
     await expect(page.locator("[data-id='004']")).toHaveAttribute("data-status", "passed");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 
@@ -92,7 +93,7 @@ test("a turn cap fails the row, names the desk cap, and Retry keeps the partial 
     await expect(page.locator('[data-id="002"]')).toHaveAttribute("data-status", "queued");
   } finally {
     child.kill();
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

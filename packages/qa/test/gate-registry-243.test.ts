@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -35,6 +35,7 @@ import {
 import { GATE_IDS as exportedIds, runAllGates as exportedRun } from "../src/index.ts";
 import { PHONE_FRAME_MAX_MS, type PhoneSceneSample, OPACITY_KEEP_MS, type ReducedSample, type TierZeroStill } from "../src/reduced-motion.ts";
 import { loadBrandScale } from "../src/spacing-gate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 /** The eleven dimensions in spec 243. Motion and 3D are the motion-3d pair. Device is mobile/device. */
 const SPEC_DIMENSIONS = [
@@ -128,7 +129,7 @@ test("runAllGates writes GATES.json for the project commit", { timeout: 30_000 }
     assert.deepEqual(copyEvidence.voice, []);
     assert.equal(copyEvidence.placeholder, false);
   } finally {
-    rmSync(project.root, { recursive: true, force: true });
+    removeTempDir(project.root);
   }
 });
 
@@ -400,7 +401,7 @@ test("folded gates return FIX or BLOCKER in plain words", { timeout: 30_000 }, a
     assert.equal(result(pause, "3d").status, "PASS");
     assertPlain(pause);
   } finally {
-    rmSync(project.root, { recursive: true, force: true });
+    removeTempDir(project.root);
   }
 });
 
@@ -477,7 +478,7 @@ test("spacing over 10 percent is FIX and body contrast is a blocker", { timeout:
     assert.match(JSON.stringify(result(both, "color").evidence), /Accent covers half the page/);
     assertPlain(both);
   } finally {
-    rmSync(project.root, { recursive: true, force: true });
+    removeTempDir(project.root);
   }
 });
 
@@ -513,7 +514,7 @@ test("the device report keeps the emulation limits and the widened widths", { ti
     }
     assertPlain(report);
   } finally {
-    rmSync(project.root, { recursive: true, force: true });
+    removeTempDir(project.root);
   }
 });
 

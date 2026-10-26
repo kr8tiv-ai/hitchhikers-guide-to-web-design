@@ -2,7 +2,7 @@
  * Prompt 209 session state. A logo on file is named. A file from another job is not.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -17,6 +17,7 @@ import {
   sessionBlock,
 } from "../src/guide/session-state.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -67,7 +68,7 @@ test("a DP-0.4 logo upload is the logo, and DP-1.1 confirms that file", () => {
     );
     assert.equal(projectMentionsQuotes(state), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -80,7 +81,7 @@ test("quote, estimate, and invoice stay out unless the project is about that wor
     assert.equal(filterGuideText("Attach the invoice.", state, false), null);
     assert.equal(filterGuideText("Send the quote today.", state, true), "Send the quote today.");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

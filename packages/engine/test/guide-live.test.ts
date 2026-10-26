@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -32,6 +32,7 @@ import { validateGuideMessage } from "../src/guide/validators.ts";
 import { openInterview } from "../src/interview.ts";
 import { pushbackFor } from "../src/pushback.ts";
 import type { Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const cassetteDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "cassettes", "guide");
 
@@ -177,7 +178,7 @@ test("a model-only vague answer is stored as SOFT after two pushes", async () =>
     assert.equal(stored[0]?.status, "SOFT");
     assert.equal(stored[0]?.value, text);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -254,7 +255,7 @@ test("express writes ASSUMED for ids the mode does not ask", async () => {
     };
     assert.equal(again.answers.filter((answer) => answer.id === "DP-0.5").length, 1);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -282,7 +283,7 @@ test("express run skips an assumed id and asks the next one", async () => {
     };
     assert.match(saved.answers.find((answer) => answer.id === "DP-0.5")?.value ?? "", /^ASSUMED: /);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -309,7 +310,7 @@ test("two questions are asked again once, then the valid line is kept", async ()
     assert.match(result.message, /rest of this shop/);
     assert.equal(result.calm, undefined);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -332,7 +333,7 @@ test("two invalid guide messages fall back to the tree ask", async () => {
     const next = (await openInterview(projectDir, "deep")).next();
     assert.equal(next?.ask, "What came before this shop site?");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -353,7 +354,7 @@ test("a cassette miss keeps the answer and the tree ask", async () => {
     };
     assert.equal(saved.answers.find((answer) => answer.id === "DP-0.1")?.status, "ANSWERED");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -370,7 +371,7 @@ test("a scripted cassette miss is quiet and keeps the answer", async () => {
     assert.equal(result.questionId, "DP-0.2");
     assert.equal(result.message, CALM_MESSAGE);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -392,7 +393,7 @@ test("Grok unavailable keeps the answer and the tree ask", async () => {
     const next = (await openInterview(projectDir, "deep")).next();
     assert.equal(next?.id, "DP-0.2");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -433,7 +434,7 @@ test("an ACP string is the guide message, including one re-ask, without a guide 
     assert.equal(prompts, 2);
     assert.equal(result.message, "What should the shop be called?");
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -459,7 +460,7 @@ test("a Spanish answer is answered in Spanish", async () => {
     assert.match(result.message, /sitio/);
     assert.equal(result.calm, undefined);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -541,7 +542,7 @@ test("ten Towel and Tea turns push twice, suggest four cards, and approve the br
     assert.match(brief, /quieter than before/);
     assert.equal(brief.includes("!"), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 

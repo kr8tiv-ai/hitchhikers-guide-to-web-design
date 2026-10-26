@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -20,6 +20,7 @@ import {
   type OpenOptions,
   type PinBytes,
 } from "../src/pinterest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const source = readFileSync(
   fileURLToPath(new URL("../src/pinterest.ts", import.meta.url)),
@@ -133,7 +134,7 @@ test("capture stays off unless the flag is true", async () => {
     assert.deepEqual(off.events, []);
     assert.equal(existsSync(path.join(root, ".hitchhiker")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -154,7 +155,7 @@ test("a disallowed board never opens or sleeps", async () => {
     assert.deepEqual(blocked.events, ["robots"]);
     assert.equal(blocked.sleeps.length, 0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -176,7 +177,7 @@ test("the guide user-agent is the one robots.txt is checked against", async () =
     );
     assert.deepEqual(blocked.events, ["robots"]);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -193,7 +194,7 @@ test("a missing robots file still allows a public board", async () => {
     assert.equal(file.endsWith(`${path.sep}.hitchhiker${path.sep}uploads${path.sep}mood${path.sep}pin-01.png`), true);
     assert.equal(readFileSync(file).equals(bytes), true);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -211,7 +212,7 @@ test("robots.txt errors never open the board", async () => {
     );
     assert.deepEqual(failed.events, ["robots"]);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -228,7 +229,7 @@ test("user info in the board url is refused before any fetch", async () => {
     );
     assert.deepEqual(called.events, []);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -244,7 +245,7 @@ test("a login wall returns an empty list and asks for exports", async () => {
     assert.equal(wall.events.includes("close"), true);
     assert.equal(existsSync(path.join(root, ".hitchhiker")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -263,7 +264,7 @@ test("a login redirect is treated as a wall even when the flag is clear", async 
     assert.equal(boardMessage(saved), LOGIN_WALL_MESSAGE);
     assert.equal(wall.sleeps.length, 0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -306,7 +307,7 @@ test("scrolls wait 1.5 seconds and stop at 60 pins", async () => {
     assert.equal(readFileSync(first).equals(bytes), true);
     assert.equal(board.closed, 1);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -319,7 +320,7 @@ test("the first screen of 60 pins does not scroll", async () => {
     assert.deepEqual(board.sleeps, []);
     assert.equal(board.events.includes("scroll"), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -332,7 +333,7 @@ test("an empty public board asks for exported images", async () => {
     assert.equal(boardMessage(saved), EMPTY_BOARD_MESSAGE);
     assert.equal(existsSync(path.join(root, ".hitchhiker")), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

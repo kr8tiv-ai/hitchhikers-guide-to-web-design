@@ -4,13 +4,14 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { NO_ART_DIRECTION_NOTE } from "@hitchhiker/engine";
 import { artDirectionNoteHtml } from "../src/art-direction-note.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("served drive markup rewrites the art-direction note and that module is JavaScript", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-art-note-250y-"));
@@ -42,7 +43,7 @@ test("served drive markup rewrites the art-direction note and that module is Jav
     assertSyntax(noteJs, "hh-art-direction-note-check.js");
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -60,5 +61,5 @@ function assertSyntax(source: string, name: string): void {
   writeFileSync(file, source);
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
-  rmSync(file, { force: true });
+  removeTempDir(file);
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import {
   type QueueFile,
   type QueueStatus,
 } from "@hitchhiker/engine";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempProject(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-engine-queue-"));
@@ -43,7 +44,7 @@ test("save and load round-trip, and a missing file returns null", async () => {
     const onDisk = JSON.parse(readFileSync(queueFile(dir), "utf8")) as QueueFile;
     assert.deepEqual(onDisk, queue);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -57,7 +58,7 @@ test("corrupt JSON throws and is left in place", async () => {
     await assert.rejects(() => loadQueue(dir), QueueFileError);
     assert.equal(readFileSync(filePath, "utf8"), raw);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -97,7 +98,7 @@ test("a second save is refused while the state lock is held", async () => {
     });
     assert.equal(existsSync(queueFile(dir)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -137,6 +138,6 @@ test("a load waits while this process still holds the state lock", async () => {
   } finally {
     releaseHold();
     await held;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

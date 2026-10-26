@@ -7,7 +7,7 @@
  * These checks read HTML and CSS. A browser pass is recorded in the prompt summary.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,6 +31,7 @@ import {
 } from "../src/server/card.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "..", "..", "..", "interview", "tree.yaml");
@@ -50,7 +51,7 @@ async function withDesk(run: (handle: ServerHandle, dir: string) => Promise<void
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

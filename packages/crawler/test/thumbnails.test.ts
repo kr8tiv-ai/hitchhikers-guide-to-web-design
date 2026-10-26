@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import {
   thumbnailPaths,
   type CrawlLike,
 } from "../src/thumbnails.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "hh-thumb-"));
@@ -61,7 +62,7 @@ test("captureThumbnail caches a shot for 30 days and refreshes after that", asyn
     assert.equal(again.placeholder, false);
     assert.equal(calls, 2);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -87,7 +88,7 @@ test("a robots denial is a placeholder and is not captured again inside 30 days"
     assert.equal(second.note, ROBOTS_NOTE);
     assert.equal(calls, 1);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -122,7 +123,7 @@ test("a failed capture and a bad url become placeholders without a bypass", asyn
     assert.equal(userinfo.placeholder, true);
     assert.equal(calls, 1);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

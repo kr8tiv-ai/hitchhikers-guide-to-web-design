@@ -3,7 +3,7 @@
  * The next prompt stays put until Resume, including after a restart.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -22,6 +22,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const WHEN = "2026-10-15T12:00:00.000Z";
 
@@ -47,7 +48,7 @@ function seed(dir: string): void {
 async function cleanup(dir: string): Promise<void> {
   await Promise.race([siteBuildSettled(dir).catch(() => undefined), delay(300)]);
   clearProjectBuildRunner(dir);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 test("pause during a running item lets it finish and holds the next item", { timeout: 15_000 }, async () => {

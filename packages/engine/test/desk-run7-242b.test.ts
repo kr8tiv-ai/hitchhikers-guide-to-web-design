@@ -4,7 +4,7 @@
  * and every brief page is a coverage row.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -34,6 +34,7 @@ import { readRecentProjects } from "../src/project-file/locate.ts";
 import { projectHome } from "../src/project-file/locate.ts";
 import { planFromBrief } from "../src/spec/brief-plan.ts";
 import { saveState } from "../src/state.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,7 +101,7 @@ test("Run 7 loves are the directions, and Cereal and docs are not", () => {
     assert.match(deal.directions[0]?.name ?? "", /quiet photography/i);
     assert.match(deal.directions[1]?.description ?? "", /quiet/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -124,7 +125,7 @@ test("a re-pick appends a decision and the latest pick wins", () => {
     assert.equal(names.includes(second.name), false);
     assert.equal(names.includes(first.name), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -262,7 +263,7 @@ test("the build-started line follows the queue, not a stale pending flag", () =>
     writeFileSync(path.join(hitch, "queue.json"), "{}\n");
     assert.equal(readBriefDesk(dir).buildStarted, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -299,6 +300,6 @@ test("a typed project name survives the folder name", async () => {
     else process.env.HH_PROJECT_HOME = previousHome;
     if (previousE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = previousE2e;
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

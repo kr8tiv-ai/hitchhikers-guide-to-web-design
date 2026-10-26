@@ -3,7 +3,7 @@
  * Deny rules are best effort. The audit is what the desk records.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import {
   type BuildSpawnResult,
 } from "../src/index.ts";
 import { SITE_RULES } from "../src/spec/site-rules.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-site-043-"));
@@ -132,7 +133,7 @@ test("win32 rules from a project path with spaces deny siblings and not its own 
     assert.equal(spawn[spawn.indexOf("--sandbox") + 1], "workspace");
     assert.ok(denyRules(spawn).length > 0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -167,7 +168,7 @@ test("generated prompts name files relatively and keep the workspace rule", asyn
     const sources = /^Content sources:\s*(.+)$/m.exec(prompt)?.[1] ?? "";
     if (sources !== "") assert.equal(/[A-Za-z]:[\\/]/.test(sources), false);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -250,7 +251,7 @@ test("a read outside warns on the run record and the queue continues", async () 
   } finally {
     clearProjectBuildRunner(project);
     resetSiteBuildWatch(project);
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 
@@ -281,6 +282,6 @@ test("a write outside fails the prompt and does not start the next one", async (
   } finally {
     clearProjectBuildRunner(project);
     resetSiteBuildWatch(project);
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

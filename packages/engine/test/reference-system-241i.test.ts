@@ -5,7 +5,7 @@
  * no markup. robots.txt and a login wall stop the read before a write.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -17,6 +17,7 @@ import {
   tokensFromPublicHtml,
   type ReferenceTransport,
 } from "../src/brand/reference-system.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const SENTENCE =
   "The long sentence about the kiln that must never be copied into the token file or the library note at all.";
@@ -139,7 +140,7 @@ test("a fixture page writes tokens that match the computed colors and no long co
       true,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -185,7 +186,7 @@ test("robots.txt disallow writes nothing and does not open the page", async () =
     assert.equal(existsSync(path.join(dir, "tokens")), false);
     assert.equal(existsSync(path.join(dir, "entries")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -227,6 +228,6 @@ test("a password page and a logged-in request are refused", async () => {
     assert.equal(session.calls.robots, 0);
     assert.equal(session.calls.page, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

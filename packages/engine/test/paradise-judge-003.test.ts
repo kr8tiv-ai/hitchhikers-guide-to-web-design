@@ -3,7 +3,7 @@
  * The judge still runs. A cited gap may push once. The same line is not repeated.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import { GUIDE_FAIL_LINE } from "../src/guide/guide-progress.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
 import { judgePushback } from "../src/guide/pushback-judge.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const treeFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "interview", "tree.yaml");
 const NOTE = "accepted after one follow-up";
@@ -249,7 +250,7 @@ test("after one cited follow-up the desk keeps the answer and moves on", async (
     assert.equal(stored[0]?.status, "ANSWERED");
     assert.equal(stored[0]?.value, text);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -342,6 +343,6 @@ test("a colour list and Yes advance with no pushback", async () => {
     assert.equal(second.questionId, "DP-2.1");
     assert.equal(second.message.includes("still soft"), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });

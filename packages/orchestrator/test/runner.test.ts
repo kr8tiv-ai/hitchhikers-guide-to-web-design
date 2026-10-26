@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -22,6 +22,7 @@ import {
   type RunRequest,
   type SpawnImpl,
 } from "../src/runner.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const UUID_A = "11111111-1111-4111-8111-111111111111";
 const UUID_B = "22222222-2222-4222-8222-222222222222";
@@ -269,7 +270,7 @@ test("a prompt over the OS argv limit uses --prompt-file and records the path", 
     assert.equal(spawnArgv[0], req.bin);
     assert.equal(readFileSync(written ?? "", "utf8"), promptText);
   } finally {
-    if (recorded !== undefined) rmSync(recorded, { force: true });
+    if (recorded !== undefined) removeTempDir(recorded);
   }
 });
 
@@ -461,7 +462,7 @@ test("an empty pick list commits nothing and writes no queue", async () => {
     assert.equal((await git(dir, ["rev-list", "--count", "HEAD"])).trim(), "1");
     assert.equal((await git(dir, ["log", "-1", "--format=%s"])).trim(), "start");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -500,7 +501,7 @@ test("each accepted pick is one prompt and one commit", async () => {
       ],
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -537,6 +538,6 @@ test("a failed pick saves nothing for that prompt and says so in plain words", a
     assert.equal(queue?.items[1]?.status, "failed");
     assert.equal(queue?.items.length, 2);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

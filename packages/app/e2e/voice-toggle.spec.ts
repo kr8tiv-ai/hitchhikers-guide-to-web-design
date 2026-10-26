@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,6 +12,7 @@ import {
   VOICE_RESTART_CAP,
   VOICE_STOP_WAIT_MS,
 } from "../src/client/desk.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 /**
  * Click to talk. The fake recognizer can deliver a final after stop(), and it
@@ -48,14 +49,14 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (child !== null) await stopChild(child);
-  if (projectDir !== "") await rm(projectDir, { recursive: true, force: true });
+  if (projectDir !== "") await removeTempDir(projectDir);
 });
 
 // These tests share one project and each opens a new page. The desk restores a saved draft.
 // An answer returns a job id and publishes the next session when that job ends.
 // The next page must not open while that publish is still pending.
 test.beforeEach(async ({ request }) => {
-  if (projectDir !== "") await rm(path.join(projectDir, ".hitchhiker", "drafts.json"), { force: true });
+  if (projectDir !== "") await removeTempDir(path.join(projectDir, ".hitchhiker", "drafts.json"));
   if (deskUrl === "") return;
   await expect
     .poll(async () => {

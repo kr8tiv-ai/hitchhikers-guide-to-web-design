@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import https from "node:https";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +22,7 @@ import { checkLinks } from "../src/link-check.ts";
 import { startFixtureSite } from "../src/playwright-opener.ts";
 import { ONCE_OVER_ID, insertOnceOver, writeOnceOver, type QueueEntry } from "../src/site-once-over.ts";
 import { falseVisualBans, zaphodReview, type SitePrompt } from "../src/zaphod-vision.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PILLARS = ["copy", "visuals", "color", "type", "spacing", "experience", "motion", "brand"] as const;
 
@@ -214,7 +215,7 @@ describe("live gates", { concurrency: false }, () => {
       assert.equal(second.truths[0]?.status, "FOUND");
       assert.deepEqual(second.jury, first.jury);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -259,7 +260,7 @@ describe("live gates", { concurrency: false }, () => {
       assert.match(path.basename(result.filesWritten[0] ?? ""), /^round-1-fix-1\.md$/);
       assert.match(path.basename(result.filesWritten[1] ?? ""), /^round-2-fix-1\.md$/);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -285,7 +286,7 @@ describe("live gates", { concurrency: false }, () => {
       assert.equal(result.filesWritten.length, 0);
       assert.equal(calls, 0);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 
@@ -363,7 +364,7 @@ describe("live gates", { concurrency: false }, () => {
       assert.equal(promptFile.includes("!"), false);
       assert.equal(promptFile.includes("\u2014"), false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   });
 

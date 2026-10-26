@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,7 @@ import {
 } from "../src/commands-table.ts";
 import { nodeIsSupported, type CommandRunner } from "../src/doctor.ts";
 import { cliEntryArgs, runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DOCTOR_REPORT =
   /^node: |^git: |^grok: |^auth: |^session-id: |^effort: |^warning: |playwright: not installed/m;
@@ -112,7 +113,7 @@ test("a fixture plugin supplies the skill-only list", () => {
       assert.match(table, new RegExp(`^  hh ${command}$`, "m"));
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });
 

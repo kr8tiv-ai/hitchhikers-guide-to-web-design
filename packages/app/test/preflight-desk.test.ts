@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import type { DeskPreflight } from "../src/server/card.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 /**
  * Width note, from the shell rules already in components.css. This file checks
@@ -50,7 +51,7 @@ async function withDesk(
     await run(handle);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 

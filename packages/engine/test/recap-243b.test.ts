@@ -4,7 +4,7 @@
  * An answer replaces the motion fact the recap quotes. Skip stores the conflict as one sentence.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +12,7 @@ import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
 import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const FILM = "The home page is a short calm film.";
 const RECAP =
@@ -106,7 +107,7 @@ test("a closing recap that asks a question leaves that question open", async () 
     assert.match(motion, /gentle motion only/);
     assert.equal(motion.includes(FILM), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -128,7 +129,7 @@ test("skipping the recap question stores the conflict as one sentence and finish
     const filmSentences = motion.split(/(?<=\.)\s+/).filter((part) => part.includes("short calm film"));
     assert.equal(filmSentences.length, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -144,6 +145,6 @@ test("a recap whose only question is the generic closer is done", async () => {
     assert.match(done.message, /What did I get wrong\?/);
     assert.equal(pending(dir), null);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

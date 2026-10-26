@@ -12,17 +12,16 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { hiddenChildOptions, launchSpec } from "@hitchhiker/engine";
+import { removeTempDir } from "./remove-temp.ts";
 
 const DESK_PORT = 4175;
 const TARBALL_BUDGET = 25 * 1024 * 1024;
@@ -134,10 +133,10 @@ test("npm pack stays within 25 MB and the installed hh serves the desk", { timeo
     assert.ok(body.length > 0, "the desk returned an empty page");
   } finally {
     await stopChild(desk);
-    rmSync(work, { recursive: true, force: true });
+    removeTempDir(work);
     await resetManifest(original);
     for (const name of tgzNames(cliRoot)) {
-      if (!beforeTgz.has(name)) rmSync(path.join(cliRoot, name), { force: true });
+      if (!beforeTgz.has(name)) removeTempDir(path.join(cliRoot, name));
     }
   }
 });
@@ -151,7 +150,7 @@ async function resetManifest(original: string): Promise<void> {
     restorePackManifest: () => Promise<void>;
   };
   await mod.restorePackManifest();
-  await rm(path.join(os.tmpdir(), "hitchhikers-guide-pack-backup.json"), { force: true });
+  await removeTempDir(path.join(os.tmpdir(), "hitchhikers-guide-pack-backup.json"));
   if (readFileSync(manifestPath, "utf8") !== original) writeFileSync(manifestPath, original);
 }
 

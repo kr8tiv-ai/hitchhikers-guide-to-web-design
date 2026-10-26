@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { rmSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -12,6 +12,7 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { captureReviewShots, startFixtureSite } from "../src/playwright-opener.ts";
 import { runGates } from "../src/site-once-over.ts";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 function points(score: number): number {
   return score <= 1 ? score * 100 : score;
@@ -83,7 +84,7 @@ describe("real phone gate", { concurrency: false }, () => {
       assert.equal(gates.pass, true, detail);
     } finally {
       await site.close();
-      rmSync(shotsDir, { recursive: true, force: true });
+      removeTempDir(shotsDir);
     }
   });
 });

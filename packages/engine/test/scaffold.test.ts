@@ -5,7 +5,6 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -16,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { LockHeld, STATE_LOCK_NAME } from "../src/lock.ts";
 import { ScaffoldError, scaffoldProject, type ProjectInfo } from "../src/spec/scaffold.ts";
 import { TemplateError } from "../src/templates.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PHASE_DIRS = [
   "01-dont-panic",
@@ -168,7 +168,7 @@ test("a fresh directory gets four spine files, six phase dirs, and no PRD", asyn
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "config.json")), false);
     assert.equal(existsSync(path.join(dir, ".planning")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -184,7 +184,7 @@ test("the date is the UTC day from the injected clock", async () => {
     assert.match(readSpine(dir, "REQUIREMENTS.md"), /2026-01-15/);
     assert.equal(readSpine(dir, "PROJECT.md").includes("2026-01-16"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -197,7 +197,7 @@ test("an omitted clock still writes a UTC day", async () => {
     const project = readSpine(dir, "PROJECT.md");
     assert.ok(project.includes(before) || project.includes(after));
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -225,7 +225,7 @@ test("empty siteWhy, empty hosting, and a newline in the name write nothing", as
       assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
       assert.equal(existsSync(path.join(dir, ".planning")), false);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
     }
   }
 });
@@ -257,7 +257,7 @@ test("an existing .planning directory blocks the scaffold and stays put", async 
     assert.equal(readFileSync(marker, "utf8"), "keep-this-planning\n");
     assert.equal(readFileSync(nested, "utf8"), "also-keep\n");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -277,7 +277,7 @@ test("acknowledging .planning writes .hitchhiker and does not touch the foreign 
     assert.equal(readSpine(dir, "PROJECT.md").includes(".planning"), false);
     assert.match(readSpine(dir, "STATE.md"), /Deep Thought/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -303,7 +303,7 @@ test("an existing PROJECT.md is left unchanged", async () => {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "STATE.md")), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "PRD.md")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -329,7 +329,7 @@ test("a live state lock blocks the write", async () => {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "PROJECT.md")), false);
     assert.equal(existsSync(lockPath), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -342,7 +342,7 @@ test("a name that introduces a template token writes nothing", async () => {
     );
     assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

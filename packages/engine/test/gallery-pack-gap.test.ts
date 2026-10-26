@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { dealRound, emptyWalk, loadGallery, nextRound, recordVerdict } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const packFile = path.resolve(
   import.meta.dirname,
@@ -52,7 +53,7 @@ test("the loader accepts source recent", async () => {
     assert.equal(loaded[0]?.source, "recent");
     assert.equal(loaded[0]?.id, "recent-probe");
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -102,7 +103,7 @@ test("the shipped pack has at least 120 rows and the loader names the row index 
     );
     assert.throws(() => loadGallery(file), /Gallery entry 0 \(bad-row\)/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

@@ -4,12 +4,13 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os, { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { hiddenChildOptions, OPACITY_KEEP_MS, phonePerformanceBudget } from "@hitchhiker/engine";
 import { runElevateCommand } from "../src/commands/elevate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const GATE_NAMES = [
   "judgeBeauty",
@@ -169,7 +170,7 @@ test("elevate on a built fixture runs the review gates", async () => {
     assert.match(result.stdout, /No picks\. This round changes nothing\./);
     assert.equal(thought, 1);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -199,7 +200,7 @@ test("elevate on an unbuilt project names what is missing", async () => {
     assert.equal(log.length, 0);
     assert.equal(thought, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -242,9 +243,9 @@ test("elevate names the one input that is absent", async () => {
     assert.match(missingHeavy.stdout, /Elevate does not invent it/);
     assert.equal(log.length, 0);
   } finally {
-    rmSync(pageOnly, { recursive: true, force: true });
-    rmSync(labOnly, { recursive: true, force: true });
-    rmSync(thin, { recursive: true, force: true });
+    removeTempDir(pageOnly);
+    removeTempDir(labOnly);
+    removeTempDir(thin);
   }
 });
 
@@ -274,7 +275,7 @@ writeFileSync(emptyGitConfig, "");
 
 function removeEmptyGitConfig(): void {
   try {
-    rmSync(emptyGitConfigDir, { recursive: true, force: true });
+    removeTempDir(emptyGitConfigDir);
   } catch {
     // Removal must never fail a test.
   }
@@ -341,7 +342,7 @@ function git(dir: string, args: readonly string[], attempt = 0): Promise<string>
           const detail = String(stderr ?? "").trim();
           const message = detail.length > 0 ? detail : error.message;
           if (attempt < 8 && /permission denied|unable to write file|index\.lock|updating files failed/i.test(message)) {
-            rmSync(path.join(dir, ".git", "index.lock"), { force: true });
+            removeTempDir(path.join(dir, ".git", "index.lock"));
             wait(400 * (attempt + 1)).then(() => git(dir, args, attempt + 1).then(resolve, reject), reject);
             return;
           }
@@ -559,7 +560,7 @@ test("elevate --rounds 2 --pick all uses both rounds when the scores climb", asy
     assert.equal(report.results.length, 11);
     assert.equal(log.length > 0, true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -583,7 +584,7 @@ test("elevate --rounds stops when the measurements or the scores are missing", a
     assert.equal(missingScores.exitCode, 1, missingScores.stdout);
     assert.match(missingScores.stdout, /Each round needs a design score, a jury score, and a review result\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -598,6 +599,6 @@ test("elevate --rounds rejects a count outside 1 to 99", async () => {
     assert.equal(missing.exitCode, 2);
     assert.match(missing.stdout, /Missing --rounds\./);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

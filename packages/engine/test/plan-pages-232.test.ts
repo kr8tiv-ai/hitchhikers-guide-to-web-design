@@ -3,7 +3,7 @@
  * The Run 4 brief was cut at 300 characters, so Eco-Building and the rest never reached the generator.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,7 @@ import type { Facts } from "../src/guide/schemas.ts";
 import { generateBriefPlan, planFromBrief } from "../src/spec/brief-plan.ts";
 import { PlanCoverageError, planCoverageRows } from "../src/spec/plan-coverage.ts";
 import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -219,6 +220,6 @@ test("an existing plan that misses pages is left on disk", async () => {
     assert.equal(readFileSync(path.join(prompts, "001.md"), "utf8"), home);
     assert.equal(readFileSync(path.join(prompts, "001.md"), "utf8").includes("REQ-PAGE-about"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

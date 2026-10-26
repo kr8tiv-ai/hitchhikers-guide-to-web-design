@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   resolveDeskProvider,
   type ImaginePageDriver,
 } from "../src/section-generate.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
@@ -53,7 +54,7 @@ test("the CLI provider names image_gen and video_gen and strips API keys", async
     const polled = await provider.pollVideo?.(started.id);
     assert.ok(polled?.bytes && polled.bytes.byteLength > 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -135,7 +136,7 @@ test("toggle off never calls the browser driver, and a captcha does not reach th
     );
     assert.equal(apiCalls, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -200,6 +201,6 @@ test("browser video bytes are on disk before the next job, and a missing plan dr
     const note = readFileSync(path.join(dir, ".hitchhiker", "assets", "fallback.md"), "utf8");
     assert.match(note, /Stills and motion only/);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

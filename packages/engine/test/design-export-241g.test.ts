@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { designTokenTree, type DesignTokenNode } from "../src/spec/design-md-lint.ts";
 import { exportDesignMd, writeDesignExports } from "../src/spec/design-export.ts";
 import { renderDesignMd, writeDesignMd } from "../src/spec/design-outputs.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BROKEN = [
   "---",
@@ -96,10 +97,10 @@ test("a valid DESIGN.md exports Tailwind v4 and DTCG from the same token tree", 
       assert.match(css, /--color-ink:/);
       assert.match(tokens, /"hex":/);
     } finally {
-      rmSync(project, { recursive: true, force: true });
+      removeTempDir(project);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -111,6 +112,6 @@ test("a DESIGN.md that fails lint produces neither export", () => {
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "design", "tailwind-theme.css")), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", "design", "tokens.json")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

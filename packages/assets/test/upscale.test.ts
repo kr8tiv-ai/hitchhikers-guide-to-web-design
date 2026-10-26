@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -27,6 +27,7 @@ import {
   upscalePlan,
 } from "../src/upscale.ts";
 import { ensureUpscaler as ensureFromIndex, grade as gradeFromIndex, runUpscale as runFromIndex, upscalePlan as planFromIndex } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WEIGHT_EXT = new Set([".pth", ".bin", ".param", ".onnx"]);
@@ -110,7 +111,7 @@ async function withCache(run: (cacheDir: string) => Promise<void>): Promise<void
   try {
     await run(cacheDir);
   } finally {
-    await rm(cacheDir, { recursive: true, force: true });
+    await removeTempDir(cacheDir);
   }
 }
 

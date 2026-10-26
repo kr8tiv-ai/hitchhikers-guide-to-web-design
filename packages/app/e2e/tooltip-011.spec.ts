@@ -2,11 +2,12 @@
  * BUG-011. The Suggest tooltip stays off the answer box and the options.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WIDTHS = [
@@ -75,7 +76,7 @@ test("the Suggest tooltip misses the answer and the options, and it closes", asy
     await expect(openTip(page)).toBeHidden();
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

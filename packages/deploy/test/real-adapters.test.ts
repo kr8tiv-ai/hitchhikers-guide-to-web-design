@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import { hostingerMcpLaunchPlan, selectDeployTool } from "../src/hostinger-mcp.t
 import type { McpClient, McpToolInfo } from "../src/hostinger-mcp.ts";
 import type { Keychain } from "../src/hostinger-api.ts";
 import { parseSiteShape, readSiteShape } from "../src/shape.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const TOKEN = "hh-test-hostinger-token";
 
@@ -123,7 +124,7 @@ test("readSiteShape loads STACK-DECISION.md from the project", async () => {
     assert.equal(decision.shape, "static");
     await assert.rejects(() => readSiteShape(path.join(dir, "missing")), /STACK-DECISION.md is missing/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -139,7 +140,7 @@ test("the file list for a Node project omits node_modules", async () => {
     assert.equal(files.some((file) => file.path.includes("node_modules")), false);
     assert.equal(files.some((file) => file.path === "src/index.js"), true);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -158,7 +159,7 @@ test("a declined yes does not spawn, call a host, or write a deploy record", asy
     assert.deepEqual(calls.names, []);
     await noRecord(dir);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -191,7 +192,7 @@ test("Hostinger MCP deploys with a tool that was listed", async () => {
     assert.match(record, /hosting_deploy-static-website/);
     assert.equal(record.includes(TOKEN), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -237,7 +238,7 @@ test("MCP falls back to the API when the tool list has no deploy tool", async ()
     assert.match(record, /No unlisted tool was called/);
     assert.equal(record.includes(TOKEN), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -273,7 +274,7 @@ test("the API token stays in the keychain and a failed response does not echo it
       /keychain/,
     );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -313,7 +314,7 @@ test("a Node API build is posted once and then polled", async () => {
     assert.match(record, /hostinger — node — completed/);
     assert.equal(record.includes(TOKEN), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -346,7 +347,7 @@ test("a Node MCP deploy polls the listed status tool and does not write twice", 
     assert.equal(calls.names.includes("hosting_list-js-deployments"), true);
     assert.equal(calls.n, 0);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -372,7 +373,7 @@ test("host.json refuses a token field", async () => {
     assert.equal(calls.n, 0);
     await noRecord(dir);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -416,7 +417,7 @@ test("Vercel, Netlify, and Wrangler run after yes and capture the URL", async ()
     assert.match(record, /cloudflare — static — completed — https:\/\/milliways\.pages\.dev/);
     assert.equal(record.includes(TOKEN), false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -439,7 +440,7 @@ test("a non-zero CLI exit writes no deploy record", async () => {
     );
     await noRecord(dir);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 
@@ -487,7 +488,7 @@ test("Node is rejected on Netlify and Cloudflare and uses Vercel prebuilt", asyn
     const record = await recordText(dir);
     assert.match(record, /vercel — node — completed — https:\/\/milliways-next\.vercel\.app/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await removeTempDir(dir);
   }
 });
 

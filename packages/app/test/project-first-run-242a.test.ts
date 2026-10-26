@@ -3,7 +3,7 @@
  * Empty open, the repo, and a resume row whose source is the repo are refused.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { saveProjectFile, saveState, upsertRecentProject } from "@hitchhiker/engine";
 import { projectChrome } from "../src/server/project-desk.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -110,7 +111,7 @@ test("first run shows a project prompt and refuses the desk repo", async () => {
     else process.env.HH_PROJECT_HOME = priorHome;
     if (priorE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = priorE2e;
-    rmSync(sandbox, { recursive: true, force: true });
+    removeTempDir(sandbox);
   }
 });
 
@@ -210,7 +211,7 @@ test("resume rows open, show a local date, and use the desk question count", asy
   } finally {
     if (prior === undefined) delete process.env.HH_PROJECT_HOME;
     else process.env.HH_PROJECT_HOME = prior;
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

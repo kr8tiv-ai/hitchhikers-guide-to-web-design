@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WHY_NUDGE =
@@ -143,8 +144,8 @@ test("walks a fixture pack to 10 loves and a 4 site shortlist at 375 and 1440", 
     }
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
-    await rm(cacheDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
+    await removeTempDir(cacheDir);
   }
 });
 
@@ -271,8 +272,8 @@ async function openDesk(
     errors,
     stop: async () => {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
-      await rm(cacheDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
+      await removeTempDir(cacheDir);
     },
   };
 }

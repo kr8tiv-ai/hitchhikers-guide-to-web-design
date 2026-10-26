@@ -4,7 +4,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -22,6 +21,7 @@ import {
   type AnswerRecord,
   type InterviewSession,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const treeFile = path.join(repoRoot, "interview", "tree.yaml");
@@ -129,7 +129,7 @@ test("open offers one question and does not write answers yet", async () => {
       imported: 0,
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -159,7 +159,7 @@ test("resume continues at the third question", async () => {
     assert.deepEqual(file.pushedIds, []);
     assert.equal(loadStateFromIndex(dir)?.promptId, "interview:DP-0.3");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -185,7 +185,7 @@ test("an empty answer throws and does not skip", async () => {
     assert.equal(existsSync(answersPath(dir)), false);
     assert.equal(session.coverage().skipped, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -215,7 +215,7 @@ ${questionYaml("DP-9.9", "express, standard, deep", null)}`;
       imported: 0,
     });
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -294,7 +294,7 @@ test("skip stores the DP-6.2 default and express never offers DP-0.5", async () 
       walked - REQUIRED_BESIDES_MOTION.length - 1 + hiddenDefaults.length,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -324,7 +324,7 @@ ${questionYaml("DP-0.1", "express", "Yourself.")}`;
     );
     assert.equal(existsSync(path.join(dir, ".planning")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -346,7 +346,7 @@ test("corrupt interview.json throws and the file stays", async () => {
     assert.equal(readFileSync(file, "utf8"), "{");
     assert.equal(existsSync(file), true);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -371,7 +371,7 @@ test("express does not resume on an id outside the depth", async () => {
     assert.notEqual(expected.id, "DP-0.5");
     assert.equal(continued.next()?.id, expected.id);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -382,7 +382,7 @@ test("standard resumes on DP-0.5 when that id is still unanswered", async () => 
     const session = await openInterview(dir, "standard");
     assert.equal(session.next()?.id, "DP-0.5");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -395,7 +395,7 @@ test("a stored id is not asked again when STATE still names it", async () => {
     const session = await openInterview(dir, "deep");
     assert.equal(session.next()?.id, deep[1]?.id);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -419,7 +419,7 @@ test("coverage counts every saved status", async () => {
     });
     assert.equal(session.next()?.id, "DP-0.5");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -446,7 +446,7 @@ test("command keeps phase, slice, blockers, and commit, and stamps the clock", a
     assert.equal(raw.includes("\r"), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker", STATE_LOCK_NAME)), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -472,7 +472,7 @@ test("a fresh save names Don't Panic and the next question", async () => {
     assert.equal(record?.status, "SKIPPED");
     assert.equal(record?.value, deep[0]?.skipDefault);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -493,7 +493,7 @@ test("a live lock blocks the command and writes no answer", async () => {
     assert.equal(session.next()?.id, "DP-0.1");
     assert.equal(session.coverage().skipped, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -513,7 +513,7 @@ test("overlapping command calls are rejected", async () => {
     assert.equal(readAnswers(dir).length, 1);
     assert.equal(session.next()?.id, "DP-0.2");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

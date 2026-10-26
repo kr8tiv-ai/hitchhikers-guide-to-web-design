@@ -4,7 +4,6 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -21,6 +20,7 @@ import {
 import { BRAND_WORD_CAP, compileBrand } from "../src/brand/brain.ts";
 import type { BrandParts } from "../src/brand/brain.ts";
 import { LockHeld, STATE_LOCK_NAME, withStateLock } from "../src/lock.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.resolve(here, "..", "src", "brand", "approve.ts");
@@ -76,7 +76,7 @@ function tempProject(): { dir: string; markdown: string } {
 }
 
 function discard(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 function readFlags(dir: string): Record<string, unknown> {

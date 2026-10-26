@@ -4,7 +4,7 @@
  * The generic concrete-detail line is not used after the step 704 answer.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ import { emptyContextPacket } from "../src/context/index.ts";
 import { runTurn, type GuideSession } from "../src/guide/live-turn.ts";
 import { judgePushback } from "../src/guide/pushback-judge.ts";
 import { loadTree, type Question } from "../src/tree.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const treeFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "interview", "tree.yaml");
 const ASK = "What do you love about a site you admire, and what makes you wince?";
@@ -101,7 +102,7 @@ test("the step 704 answer advances and does not ask the generic follow-up", asyn
     assert.equal(stored?.status, "ANSWERED");
     assert.equal(stored?.value, STEP_704);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 
@@ -118,7 +119,7 @@ test("a one-sided love answer gets a follow-up that names the wince", async () =
     assert.equal(turn.message, Wince);
     assert.equal(turn.message.includes("one concrete detail the site should use"), false);
   } finally {
-    rmSync(projectDir, { recursive: true, force: true });
+    removeTempDir(projectDir);
   }
 });
 

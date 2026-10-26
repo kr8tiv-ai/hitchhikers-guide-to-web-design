@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { removeTempDir } from "../test/remove-temp.ts";
 
 /**
  * Suggest and a weak answer offer pick-on-the-spot choices on the question
@@ -56,7 +57,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -97,7 +98,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -128,7 +129,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -157,7 +158,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -186,7 +187,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -224,7 +225,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -280,7 +281,7 @@ for (const viewport of VIEWPORTS) {
       ]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 
@@ -308,7 +309,7 @@ for (const viewport of VIEWPORTS) {
       expect(errors).toEqual([]);
     } finally {
       await stopChild(child);
-      await rm(projectDir, { recursive: true, force: true });
+      await removeTempDir(projectDir);
     }
   });
 }
@@ -368,7 +369,7 @@ test("a click only selects, Answer sends the last pick, and the next card drops 
     expect(errors).toEqual([]);
   } finally {
     await stopChild(child);
-    await rm(projectDir, { recursive: true, force: true });
+    await removeTempDir(projectDir);
   }
 });
 

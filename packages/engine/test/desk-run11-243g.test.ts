@@ -5,7 +5,7 @@
  * does not repeat a section. The model is not called.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -16,6 +16,7 @@ import { typeScaleFor } from "../src/brand/type-scale.ts";
 import { planFromBrief } from "../src/spec/brief-plan.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import { renderDesignMd } from "../src/spec/design-outputs.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const TYPE_ANSWER =
   "No fonts yet. Light, wide, airy sans for headings like the logo; easy-reading body. Show me pairings.";
@@ -365,6 +366,6 @@ test("Run 11 sitemap, wireframe, and style guide follow the brief and the sans w
     assert.match(prompt, /Families: General Sans\./);
     assert.equal(prompt.includes("Boska"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

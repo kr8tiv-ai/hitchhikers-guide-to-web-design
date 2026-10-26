@@ -3,13 +3,14 @@
  * The brief for that value is complete sentences. A shortened field ends on punctuation.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { deterministicBrief } from "../src/guide/brief-loop.ts";
 import { FOLLOW_UP_MARK, joinFollowUpReply } from "../src/guide/session-state.ts";
 import { loadFacts } from "../src/guide/suggest.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const ACTION = "Send an inquiry about one farm they can see. The form is prefilled with that farm ID.";
 const ACTION_COPY = "Send an inquiry about one farm they can see; the form is prefilled with that farm ID.";
@@ -45,7 +46,7 @@ test("the deterministic brief for a duplicated follow-up is complete sentences",
     assert.match(action, /[.?;]$/);
     assert.equal(action.endsWith("with the form"), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -68,6 +69,6 @@ test("a shortened brief field ends on a sentence", () => {
     assert.match(action, /[.?;]$/);
     assert.equal(/word\d+$/.test(action), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

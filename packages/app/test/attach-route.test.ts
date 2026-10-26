@@ -4,7 +4,7 @@
  * One bad file does not erase the valid files in the same request.
  */
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ import { test } from "node:test";
 import { MAX_ATTACH_REQUEST_BYTES, MAX_UPLOAD_BYTES } from "../src/client/attach.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h2v2H0z"/></svg>');
@@ -43,7 +44,7 @@ async function withDesk(
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 
@@ -311,7 +312,7 @@ test("a symlink target is not written through", async () => {
     assert.equal(sent.status, 400);
     assert.deepEqual(readdirSync(escaped), []);
 
-    unlinkSync(link);
+    removeTempDir(link);
     mkdirSync(path.join(uploads, "DP-1.1"), { recursive: true });
     const outside = path.join(dir, "outside-target.png");
     writeFileSync(outside, Buffer.from("sentinel"));

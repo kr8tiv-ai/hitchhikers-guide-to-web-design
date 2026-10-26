@@ -3,7 +3,7 @@
  * one interview counter, and a build line that follows real state.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,7 @@ import { renderCard, specimenSvg, type CardState } from "../src/card.ts";
 import { brandBriefMain } from "../src/server/brief-page.ts";
 import { projectChrome } from "../src/server/project-desk.ts";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const treeFile = path.resolve(here, "../../../interview/tree.yaml");
@@ -148,7 +149,7 @@ test("after the interview every counter says 61 of 61", async () => {
     assert.equal(again.includes("1 of 1"), false);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -185,6 +186,6 @@ test("Paradise Calm in site stays Paradise Calm on the desk", async () => {
     else process.env.HH_PROJECT_HOME = previousHome;
     if (previousE2e === undefined) delete process.env.HH_E2E_PROJECT;
     else process.env.HH_E2E_PROJECT = previousE2e;
-    rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   }
 });

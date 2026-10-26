@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -14,6 +14,7 @@ import {
   siteBuildSettled,
   type BuildSpawn,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 test("explicit Retry clears a persisted queue pause and an automatic hold does not", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "hh-pause-239-"));
@@ -42,6 +43,6 @@ test("explicit Retry clears a persisted queue pause and an automatic hold does n
     await siteBuildSettled(dir).catch(() => undefined);
     resetSiteBuildWatch(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

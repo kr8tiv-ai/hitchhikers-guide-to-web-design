@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { createImagineClient } from "../src/imagine-http.ts";
 import { readSpend, runBatch } from "../src/imagine-run.ts";
 import type { AssetSlot } from "../src/slots.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const key = (process.env.XAI_API_KEY ?? "").trim();
 const live = process.env.HH_LIVE === "1" && key.length > 0;
@@ -52,7 +53,7 @@ test(
       const safe = key.length >= 8 ? message.split(key).join("[redacted]") : message;
       throw new Error(safe);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await removeTempDir(dir);
     }
   },
 );

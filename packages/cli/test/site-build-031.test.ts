@@ -2,7 +2,7 @@
  * BUG-031: `hh brief --approve` and `hh next --run` share the site build runner.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -24,6 +24,7 @@ import {
 } from "@hitchhiker/engine";
 import { runBriefCommand } from "../src/commands/brief.ts";
 import { runCli } from "../src/main.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const LINE = "The site helps a visitor book a visit.";
 
@@ -110,6 +111,6 @@ test("Start build and hh next --run spawn through the injected runner once", asy
     release(0);
     await siteBuildSettled(dir);
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

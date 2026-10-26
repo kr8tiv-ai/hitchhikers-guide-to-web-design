@@ -4,11 +4,12 @@
  * GitHub Pages is recognized in text and has no deploy --host flag.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { briefHostingText, namedHostFromBrief } from "../src/guide/named-host.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const CLOUDFLARE = "No web address yet. Use paradisefound.farm, hosted on Cloudflare Pages (free tier).";
 
@@ -74,6 +75,6 @@ test("brief hosting is read from the pending draft, then from the site brief", (
     );
     assert.equal(briefHostingText(dir), CLOUDFLARE);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

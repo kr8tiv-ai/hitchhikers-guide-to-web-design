@@ -4,11 +4,12 @@
  * in the model log, and in the design-language block.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { designLibraryArtDirection, prepareSiteBuild, setDesignLibraryDir } from "../src/guide/site-build.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const BRIEF = `# Site Brief
 
@@ -71,8 +72,8 @@ async function expectRecorded(body: string): Promise<void> {
     assert.equal(designLibraryArtDirection(dir), "none");
   } finally {
     setDesignLibraryDir(null);
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(library, { recursive: true, force: true });
+    removeTempDir(dir);
+    removeTempDir(library);
   }
 }
 
@@ -90,6 +91,6 @@ test("a broken design library is recorded and the plan still writes prompts", as
     assert.equal(designLibraryArtDirection(dir), "");
   } finally {
     setDesignLibraryDir(null);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

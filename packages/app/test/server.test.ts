@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,6 +19,7 @@ import { browserLaunch, openBrowser, windowsBrowserLaunch } from "../src/server/
 import { createSseHub, HEARTBEAT_MS } from "../src/server/sse.ts";
 import { startServer, checkHost, type ServerHandle, type StartServerOptions, type TurnHandler } from "../src/server/server.ts";
 import { settleRaw, settleResponse } from "./settle-guide-job.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cliEntry = path.resolve(here, "../../cli/src/main.ts");
@@ -54,7 +55,7 @@ async function withDesk(
     await run(handle, dir);
   } finally {
     if (handle !== undefined) await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 }
 
@@ -149,7 +150,7 @@ test("a fixed port that is taken fails with a clear message", async () => {
     );
   } finally {
     await first.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -808,7 +809,7 @@ test("browser open uses the platform command and survives a missing opener", asy
     assert.match(handle.url, /^http:\/\/127\.0\.0\.1:\d+\/$/);
   } finally {
     await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -845,7 +846,7 @@ test("the desk opens the browser once across requests and an SSE reconnect", asy
     assert.equal(calls.length, 1);
   } finally {
     await handle.close();
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -918,7 +919,7 @@ test("hh app prints a loopback URL and hh sessions prints the command table", as
     assert.match(await page.text(), /hh-shell/);
   } finally {
     await stopChild(child);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -973,7 +974,7 @@ function assertSyntax(source: string, name: string): void {
   writeFileSync(file, source);
   const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
-  rmSync(file, { force: true });
+  removeTempDir(file);
 }
 
 function readUrl(child: ChildProcess): Promise<string> {

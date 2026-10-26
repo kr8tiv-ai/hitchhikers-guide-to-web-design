@@ -3,7 +3,7 @@
  * row. It does not rewrite the other rows and it does not start a prompt.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -21,6 +21,7 @@ import {
   type BuildSpawn,
   type QueueFile,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const WHEN = "2026-10-15T12:00:00.000Z";
 
@@ -86,7 +87,7 @@ test("a project with no queue file is left untouched", async () => {
     assert.equal(await holdInterruptedQueue(dir, new Date(WHEN)), false);
     assert.equal(existsSync(path.join(dir, ".hitchhiker")), false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -109,7 +110,7 @@ test("a legacy paused queue is held after the last finished prompt", async () =>
     assert.deepEqual(seen, []);
   } finally {
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -136,7 +137,7 @@ test("an interrupted running item is held and the other rows stay", async () => 
     assert.equal((await loadQueue(dir))?.items.find((item) => item.id === "008")?.status, "running");
   } finally {
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 
@@ -157,6 +158,6 @@ test("a live running prompt is left alone", async () => {
     assert.deepEqual(seen, []);
   } finally {
     clearProjectBuildRunner(dir);
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });

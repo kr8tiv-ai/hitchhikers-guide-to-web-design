@@ -2,13 +2,14 @@
  * BUG-039: every approved page and brief feature gets its own build prompt.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
 import { prepareSiteBuild } from "../src/guide/site-build.ts";
 import { generateSkeleton, type SitePromptSkeleton } from "../src/spec/site-prompts.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 const PAGES = [
   "Home",
@@ -153,7 +154,7 @@ test("prepareSiteBuild writes a prompt file for every Paradise Found page", asyn
       assert.match(written, /REQ-FEAT-/);
     }
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
 

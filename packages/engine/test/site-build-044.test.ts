@@ -4,7 +4,7 @@
  * keeps the previous log, and auto-retries once.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -26,6 +26,7 @@ import {
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
+import { removeTempDir } from "./remove-temp.ts";
 
 function tempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "hh-site-044-"));
@@ -71,7 +72,7 @@ async function cleanup(dir: string): Promise<void> {
   setSiteBuildGate(dir, null);
   clearProjectBuildRunner(dir);
   resetSiteBuildWatch(dir);
-  rmSync(dir, { recursive: true, force: true });
+  removeTempDir(dir);
 }
 
 test("end_turn with the cap words inside tool output passes the gate", async () => {
@@ -322,6 +323,6 @@ test("stderr cap needs a non-zero exit, and an old run file still loads", () => 
     assert.equal(run?.autoRetried, false);
     assert.equal(run?.turnLimited, false);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeTempDir(dir);
   }
 });
