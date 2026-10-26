@@ -7,9 +7,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
-import { brandKitFromAnswers, type BrandAnswer } from "../brand/kit-from-interview.ts";
+import { syncResolvedFamilies } from "../brand/directions.ts";
+import { brandKitFromAnswers, contrastRatio, type BrandAnswer } from "../brand/kit-from-interview.ts";
 import { pickType } from "../brand/tokens.ts";
-import { typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
+import { resolveTypeRoles, winsSentence } from "../brand/type-conflict.ts";
+import { familiesSentence, typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
 import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
@@ -98,11 +100,14 @@ export function renderDesignMd(
   const families = [chosen.display, chosen.body];
   const paletteSource = colourFromKit(answers) ? "brand kit" : "default tokens";
   const no3d = refuses3d(documentText(brief, answers));
+  const button = buttonPair(palette);
+  const inkOnPaper = contrastRatio(palette.ink, palette.paper);
+  const mutedOnPaper = contrastRatio(palette.muted, palette.paper);
   const markdown = [
-    frontMatter(palette, scale, families),
+    frontMatter(palette, scale, families, button),
     "# Design",
     "",
-    "These tokens are a starting point. Remix them. Any appropriate library may carry a technique.",
+    "The style guide records the tokens the build starts from.",
     "",
     "## Overview",
     "",
@@ -113,24 +118,18 @@ export function renderDesignMd(
     `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
     `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
     `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
+    `Body text ${palette.ink} on ${palette.paper} at ${ratioText(inkOnPaper)} to 1.`,
+    `Secondary text ${palette.muted} on ${palette.paper} at ${ratioText(mutedOnPaper)} to 1.`,
+    `Button text ${button.text} on ${button.background} at ${ratioText(button.ratio)} to 1.`,
     `Grade: ${art.colorGrade} Light: ${art.light}`,
     "",
     "## Color",
     "",
-    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
-    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
-    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
-    `Grade: ${art.colorGrade} Light: ${art.light}`,
+    "See Colors.",
     "",
     "## Typography",
     "",
-    scale.familiesLine,
-    `Ratio: ${scale.ratio} (${scale.ratioName}).`,
-    `World: ${scale.world}.`,
-    `Display over body minimum: ${scale.minimum}.`,
-    "",
-    "## Type scale",
-    "",
+    ...(chosen.conflict === "" ? [] : [chosen.conflict, ""]),
     scale.familiesLine,
     `Ratio: ${scale.ratio} (${scale.ratioName}).`,
     `World: ${scale.world}.`,
@@ -142,6 +141,10 @@ export function renderDesignMd(
     `- title: ${scale.title}, line-height 1.2`,
     `- body: ${scale.body}, line-height ${scale.bodyLineHeight}`,
     `- caption: ${scale.caption}, line-height 1.4`,
+    "",
+    "## Type scale",
+    "",
+    "See Typography.",
     "",
     "## Layout",
     "",
@@ -172,7 +175,7 @@ export function renderDesignMd(
     "",
     "## Components",
     "",
-    "Buttons use the accent on paper, padding 12px 20px, and a minimum height of 44px.",
+    "Buttons use the body-size pair named under Colors, padding 12px 20px, and a minimum height of 44px.",
     "Links use ink with a 3px underline offset.",
     "Cards use 24px padding and a 1px muted border.",
     "A component may use another library when that serves the section.",
@@ -209,6 +212,7 @@ function frontMatter(
   palette: { paper: string; ink: string; accent: string; muted: string },
   scale: { display: string; body: string; bodyLineHeight: number },
   families: readonly string[],
+  button: { text: string; background: string },
 ): string {
   const display = families[0] ?? "Switzer";
   const body = families[1] ?? display;
@@ -222,6 +226,8 @@ function frontMatter(
     `  accent: ${yamlScalar(palette.accent)}`,
     `  muted: ${yamlScalar(palette.muted)}`,
     `  primary: ${yamlScalar(palette.ink)}`,
+    `  button: ${yamlScalar(button.background)}`,
+    `  onButton: ${yamlScalar(button.text)}`,
     "typography:",
     "  display:",
     `    fontFamily: ${yamlScalar(display)}`,
@@ -246,8 +252,8 @@ function frontMatter(
     "  space-8: \"96px\"",
     "components:",
     "  button:",
-    "    backgroundColor: \"{colors.accent}\"",
-    "    textColor: \"{colors.paper}\"",
+    "    backgroundColor: \"{colors.button}\"",
+    "    textColor: \"{colors.onButton}\"",
     "    padding: \"12px\"",
     "    rounded: \"{rounded.sm}\"",
     "---",
@@ -378,6 +384,12 @@ export function writeDesignMd(
   const markdown = renderDesignMd(brief, answers, fonts);
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
+  if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
+    const chosen = fontChoice(brief, answers, fonts);
+    if (chosen.display !== fonts.display.trim() || chosen.body !== fonts.body.trim()) {
+      syncResolvedFamilies(projectDir, chosen.display, chosen.body);
+    }
+  }
   return file;
 }
 
@@ -413,11 +425,21 @@ export function flagIgnoredMotionTokens(files: readonly { path: string; source: 
   return hits;
 }
 
-function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: DesignFontChoice | null): DesignFontChoice & { line: string } {
+function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: DesignFontChoice | null): DesignFontChoice & { line: string; conflict: string } {
+  const wish = typeWishFrom(brief, answers);
+  const pack = (display: string, body: string, source: string, withSource: boolean, givenDisplay: string, givenBody: string): DesignFontChoice & { line: string; conflict: string } => {
+    const resolved = resolveTypeRoles(display, body, wish);
+    const conflict = resolved.display === display.trim() ? "" : winsSentence(givenDisplay, givenBody, wish);
+    return {
+      display: resolved.display,
+      body: resolved.body,
+      source,
+      line: familyLine(resolved.display, resolved.body, withSource ? source : null),
+      conflict,
+    };
+  };
   if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
-    const display = fonts.display.trim();
-    const body = fonts.body.trim();
-    return { display, body, source: fonts.source, line: `Families: ${display} and ${body}. Source: ${fonts.source}.` };
+    return pack(fonts.display, fonts.body, fonts.source, true, fonts.display.trim(), fonts.body.trim());
   }
   const typeAnswer = answeredValue(answers, "DP-1.5");
   if (typeAnswer !== "") {
@@ -427,14 +449,66 @@ function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: Desi
     const dealt = pickType(mood === "" ? null : mood);
     const display = dealt.families[0] ?? "Switzer";
     const body = dealt.families[1] ?? display;
-    return { display, body, source: "brand kit", line: `Families: ${display} and ${body}. Source: brand kit.` };
+    return pack(display, body, "brand kit", true, display, body);
   }
   const choice = typeChoiceFor(documentText(brief, answers));
   const display = choice.families[0] ?? "Switzer";
   const body = choice.families[1] ?? display;
-  const same = body === display;
-  const line = same ? `Families: ${display}.` : `Families: ${display} and ${body}.`;
-  return { display, body, source: "default tokens", line };
+  return pack(display, body, "default tokens", false, display, body);
+}
+
+function familyLine(display: string, body: string, source: string | null): string {
+  const base = familiesSentence(body === display ? [display] : [display, body]);
+  if (source === null || source.trim() === "") return base;
+  return `${base} Source: ${source}.`;
+}
+
+function typeWishFrom(brief: string, answers: readonly BrandAnswer[]): string {
+  const answered = answeredValue(answers, "DP-1.5");
+  if (answered !== "") return answered;
+  return briefSection(brief, "Type") || briefSection(brief, "Typography");
+}
+
+function briefSection(markdown: string, heading: string): string {
+  const match = new RegExp(`^##\\s+${heading}\\s*$`, "im").exec(markdown);
+  if (match === null) return "";
+  const rest = markdown.slice(match.index + match[0].length);
+  const next = /^##\s+/m.exec(rest);
+  return (next === null ? rest : rest.slice(0, next.index)).trim();
+}
+
+function buttonPair(palette: { paper: string; ink: string; accent: string }): { text: string; background: string; ratio: number } {
+  const ranked = [
+    { text: palette.ink, background: palette.accent },
+    { text: palette.paper, background: palette.ink },
+    { text: palette.ink, background: palette.paper },
+  ];
+  for (const pair of ranked) {
+    const ratio = contrastRatio(pair.text, pair.background);
+    if (ratio >= 4.5) return { text: pair.text, background: pair.background, ratio };
+  }
+  let accent = palette.accent;
+  for (let step = 0; step < 24; step += 1) {
+    accent = shadeHex(accent, 0.82);
+    const inkOn = contrastRatio(palette.ink, accent);
+    if (inkOn >= 4.5) return { text: palette.ink, background: accent, ratio: inkOn };
+    const paperOn = contrastRatio(palette.paper, accent);
+    if (paperOn >= 4.5) return { text: palette.paper, background: accent, ratio: paperOn };
+  }
+  const ratio = contrastRatio(palette.paper, palette.ink);
+  return { text: palette.paper, background: palette.ink, ratio };
+}
+
+function shadeHex(hex: string, factor: number): string {
+  const channels = [0, 1, 2].map((index) => {
+    const value = Math.max(0, Math.min(255, Math.round(Number.parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16) * factor)));
+    return value.toString(16).padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+function ratioText(value: number): string {
+  return value.toFixed(2);
 }
 
 function answeredValue(answers: readonly BrandAnswer[], id: string): string {

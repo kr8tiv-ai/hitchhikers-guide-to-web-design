@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { chooseDirection, onDirectionPicked, readDirectionDeal } from "../brand/directions.ts";
 import type { BrandAnswer } from "../brand/kit-from-interview.ts";
-import { planFromBrief, type BriefAnswer } from "./brief-plan.ts";
+import { planFromBrief, type BriefAnswer, type PlannedPage } from "./brief-plan.ts";
 import { writeDesignMd, type DesignFontChoice } from "./design-outputs.ts";
 import { runPrebuildChecks, type PrebuildReport } from "./prebuild-checks.ts";
 
@@ -82,7 +82,7 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
   const state = readApprovals(projectDir);
 
   if (!existsSync(sitemapPath)) {
-    writeFileSync(sitemapPath, renderSitemap(brief, answers), "utf8");
+    writeFileSync(sitemapPath, renderSitemap(projectDir, brief, answers), "utf8");
     return result("sitemap", projectDir);
   }
 
@@ -91,7 +91,7 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
   if (state.sitemap === undefined) return result("none", projectDir);
 
   if (!existsSync(wireframePath)) {
-    writeFileSync(wireframePath, renderWireframe(readFileSync(sitemapPath, "utf8"), brief, answers), "utf8");
+    writeFileSync(wireframePath, renderWireframe(projectDir, readFileSync(sitemapPath, "utf8"), brief, answers), "utf8");
     return result("wireframe", projectDir);
   }
 
@@ -188,9 +188,9 @@ function result(wrote: DesignStageResult["wrote"], projectDir: string): DesignSt
 
 function applyChange(projectDir: string, brief: string, answers: readonly BrandAnswer[], text: string): DesignStageResult {
   const sitemapPath = path.join(projectDir, SITEMAP_REL);
-  if (!existsSync(sitemapPath)) writeFileSync(sitemapPath, renderSitemap(brief, answers), "utf8");
+  if (!existsSync(sitemapPath)) writeFileSync(sitemapPath, renderSitemap(projectDir, brief, answers), "utf8");
   const parsed = parseSitemap(readFileSync(sitemapPath, "utf8"));
-  const base = parsed.length > 0 ? parsed : pagesFromBrief(brief, answers);
+  const base = parsed.length > 0 ? parsed : pagesFromBrief(projectDir, brief, answers);
   const edited = reviseSitemap(base, text);
   if (!edited.applied) return result("none", projectDir);
   writeFileSync(sitemapPath, renderSitemapPages(edited.pages), "utf8");
@@ -204,8 +204,8 @@ function removeIfExists(file: string): void {
   if (existsSync(file)) rmSync(file);
 }
 
-function renderSitemap(brief: string, answers: readonly BrandAnswer[]): string {
-  return renderSitemapPages(pagesFromBrief(brief, answers));
+function renderSitemap(projectDir: string, brief: string, answers: readonly BrandAnswer[]): string {
+  return renderSitemapPages(pagesFromBrief(projectDir, brief, answers));
 }
 
 function renderSitemapPages(pages: readonly SitemapPage[]): string {
@@ -227,9 +227,9 @@ function pushPage(lines: string[], page: SitemapPage): void {
   for (const section of page.sections) lines.push(`  - ${section}`);
 }
 
-function renderWireframe(sitemap: string, brief: string, answers: readonly BrandAnswer[]): string {
+function renderWireframe(projectDir: string, sitemap: string, brief: string, answers: readonly BrandAnswer[]): string {
   const parsed = parseSitemap(sitemap);
-  const pages = parsed.length > 0 ? parsed : pagesFromBrief(brief, answers);
+  const pages = parsed.length > 0 ? parsed : pagesFromBrief(projectDir, brief, answers);
   const lines = ["# Wireframe", ""];
   for (const page of pages) {
     lines.push(`## ${page.title}`, "");
@@ -239,13 +239,100 @@ function renderWireframe(sitemap: string, brief: string, answers: readonly Brand
   return lines.join("\n");
 }
 
-function pagesFromBrief(brief: string, answers: readonly BrandAnswer[]): SitemapPage[] {
-  return planFromBrief(brief, briefAnswers(answers)).pages.map((page) => ({
+function pagesFromBrief(projectDir: string, brief: string, answers: readonly BrandAnswer[]): SitemapPage[] {
+  const planned = planFromBrief(brief, briefAnswers(answers));
+  const direction = pickedHomeSections(projectDir);
+  return planned.pages.map((page) => ({
     title: page.title,
     route: page.route,
-    sections: [...page.sections],
+    sections: sectionsForPage(page, planned.features, direction),
     group: FOOTER_TITLES.has(page.title.toLowerCase()) ? "footer" : "primary",
   }));
+}
+
+const SECTION_KEYWORDS: readonly { id: string; pattern: RegExp }[] = [
+  { id: "grid", pattern: /\bgrid\b/i },
+  { id: "map", pattern: /\bmap\b/i },
+  { id: "filters", pattern: /\bfilters?\b/i },
+  { id: "gallery", pattern: /\bgallery\b/i },
+  { id: "specs", pattern: /\bspecs?\b/i },
+  { id: "inquiry", pattern: /\binquir(?:y|ies)\b/i },
+  { id: "steps", pattern: /\bsteps?\b/i },
+  { id: "glossary", pattern: /\bglossary\b/i },
+  { id: "sign-up", pattern: /\bsign-up\b/i },
+  { id: "hero", pattern: /\bhero\b/i },
+  { id: "story", pattern: /\bstory\b/i },
+  { id: "visit", pattern: /\bvisit\b/i },
+  { id: "cards", pattern: /\bcards?\b/i },
+  { id: "essay", pattern: /\bessay\b/i },
+];
+
+function pickedHomeSections(projectDir: string): readonly string[] {
+  try {
+    const deal = readDirectionDeal(projectDir);
+    if (deal?.pickedId === null || deal?.pickedId === undefined) return [];
+    const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
+    return picked?.sectionOrder ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function pageNote(page: PlannedPage): string {
+  return page.contentSources
+    .filter((source) => source !== "src/data/routes.ts" && source !== "src/data/copy.ts")
+    .join(" ");
+}
+
+function noteSlice(pageId: string, note: string): string {
+  const at = note.search(/detail page/i);
+  if (at < 0) return note;
+  if (pageId === "farms") return note.slice(0, at);
+  if (pageId === "farm-detail") return note.slice(at);
+  return note;
+}
+
+function keywordsIn(note: string): string[] {
+  const hits: { id: string; at: number }[] = [];
+  for (const keyword of SECTION_KEYWORDS) {
+    const match = keyword.pattern.exec(note);
+    if (match?.index === undefined) continue;
+    hits.push({ id: keyword.id, at: match.index });
+  }
+  hits.sort((left, right) => left.at - right.at);
+  const ids: string[] = [];
+  for (const hit of hits) {
+    if (!ids.includes(hit.id)) ids.push(hit.id);
+  }
+  return ids;
+}
+
+function featureSections(pageId: string, features: readonly string[]): string[] {
+  const ids: string[] = [];
+  for (const feature of features) {
+    const name = feature.toLowerCase();
+    if (pageId === "farms" && /filter/.test(name)) ids.push("filters");
+    if ((pageId === "farms" || pageId === "farm-detail") && /\bmap\b/.test(name)) ids.push("map");
+    if (pageId === "farm-detail" && /\bgallery\b/.test(name)) ids.push("gallery");
+    if (pageId === "farm-detail" && /inquir/.test(name)) ids.push("inquiry");
+    if (pageId === "live-on-the-land" && /sign-up|caretaker/.test(name)) ids.push("sign-up");
+  }
+  return ids;
+}
+
+function sectionsForPage(page: PlannedPage, features: readonly string[], homeDirection: readonly string[]): string[] {
+  const merged: string[] = [];
+  const add = (id: string): void => {
+    const next = id.trim();
+    if (next !== "" && !merged.includes(next)) merged.push(next);
+  };
+  if (page.id === "home") {
+    for (const section of homeDirection) add(section);
+  }
+  for (const section of keywordsIn(noteSlice(page.id, pageNote(page)))) add(section);
+  for (const section of featureSections(page.id, features)) add(section);
+  if (merged.length > 0) return merged;
+  return [...page.sections];
 }
 
 function parseSitemap(text: string): SitemapPage[] {

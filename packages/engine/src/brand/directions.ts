@@ -372,6 +372,14 @@ function ranPromptIds(projectDir: string): Set<string> {
   }
 }
 
+/** The style guide resolved a conflicting display. Unbuilt prompts follow the same pair. */
+export function syncResolvedFamilies(projectDir: string, display: string, body: string): void {
+  const families = familiesSentence(display === body ? [display] : [display, body]);
+  rewriteBrandType(projectDir, families, "");
+  rewriteBrandModule(projectDir, display, body);
+  rewritePromptStyles(projectDir, families, "");
+}
+
 function rewritePromptStyles(projectDir: string, families: string, wins: string): void {
   const folder = path.join(projectDir, ".hitchhiker", "prompts");
   if (!existsSync(folder)) return;
@@ -413,7 +421,7 @@ export function renderDirectionBlock(deal: DirectionDeal): string {
       `### ${direction.name}`,
       "",
       direction.description,
-      `Reference: ${direction.title}. ${direction.url}`,
+      `Reference: ${referenceLabel(direction)}. ${direction.url}`,
       `Type: ${direction.display} and ${direction.body}.`,
       `Sections: ${direction.sectionOrder.join(", ")}.`,
       `Hue: ${direction.hue}.`,
@@ -421,6 +429,60 @@ export function renderDirectionBlock(deal: DirectionDeal): string {
     );
   }
   return lines.join("\n").replaceAll("!", ".").replaceAll("\u2014", "-");
+}
+
+let gallerySiteNames: Map<string, string> | null = null;
+
+/** Site name from the named list, then gallery metadata, then the URL host. */
+function referenceLabel(direction: Direction): string {
+  const named = NAMED_REFERENCES.find((entry) => entry.id === direction.citationId || entry.url === direction.url);
+  if (named !== undefined) return named.title;
+  const names = loadGallerySiteNames();
+  const byId = names.get(`id:${direction.citationId}`);
+  if (byId !== undefined && byId !== "") return byId;
+  const byUrl = names.get(`url:${direction.url}`);
+  if (byUrl !== undefined && byUrl !== "") return byUrl;
+  return hostLabel(direction.url);
+}
+
+function hostLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return url;
+  }
+}
+
+function loadGallerySiteNames(): Map<string, string> {
+  if (gallerySiteNames !== null) return gallerySiteNames;
+  const names = new Map<string, string>();
+  const file = path.join(packagedPath(["knowledge"], "packs"), "galleries", "curated.json");
+  if (!existsSync(file)) {
+    gallerySiteNames = names;
+    return names;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    gallerySiteNames = names;
+    return names;
+  }
+  if (!Array.isArray(value)) {
+    gallerySiteNames = names;
+    return names;
+  }
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const url = typeof item.url === "string" ? item.url.trim() : "";
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (name === "") continue;
+    if (id !== "") names.set(`id:${id}`, name);
+    if (url !== "") names.set(`url:${url}`, name);
+  }
+  gallerySiteNames = names;
+  return names;
 }
 
 function asDeal(value: unknown): DirectionDeal | null {

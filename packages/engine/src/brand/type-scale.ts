@@ -23,7 +23,8 @@ export const TYPE_SCALE = {
 
 export type TypeScaleWorld = keyof typeof TYPE_SCALE;
 
-export const TYPE_SCALE_VIEWPORT = { min: 375, max: 1440 } as const;
+export const TYPE_SCALE_VIEWPORT = { min: 360, max: 1440 } as const;
+const TYPE_ROOT_PX = 16;
 export const TYPE_BODY_MIN_REM = 1;
 export const TYPE_BODY_PREFERRED_REM = 1.125;
 export const TYPE_BODY_LINE_HEIGHT = 1.5;
@@ -98,9 +99,13 @@ export function familiesSentence(families: readonly string[]): string {
 }
 
 export function fluidClamp(minRem: number, maxRem: number): string {
-  const range = TYPE_SCALE_VIEWPORT.max - TYPE_SCALE_VIEWPORT.min;
-  const slope = (100 * (maxRem - minRem)) / range;
-  const intercept = minRem - (slope * TYPE_SCALE_VIEWPORT.min) / 100;
+  const minVp = TYPE_SCALE_VIEWPORT.min;
+  const maxVp = TYPE_SCALE_VIEWPORT.max;
+  const range = maxVp - minVp;
+  // vw is a percent of the viewport in px. Multiply by the root so the
+  // preferred size is the minimum at 360px and the maximum at 1440px.
+  const slope = (100 * (maxRem - minRem) * TYPE_ROOT_PX) / range;
+  const intercept = minRem - (slope * minVp) / (100 * TYPE_ROOT_PX);
   return `clamp(${trimNum(minRem)}rem, ${trimNum(intercept)}rem + ${trimNum(slope)}vw, ${trimNum(maxRem)}rem)`;
 }
 
