@@ -499,11 +499,19 @@ async function advance(
 /** Motion answers a closing contradiction can correct. Same ids as BRIEF_SOURCES.motion. */
 const MOTION_SOURCE_IDS = ["DP-6.1", "DP-6.2", "DP-6.3", "DP-6.4", "DP-6.6"];
 
+let closingRecapChecks = 0;
+
+/** How many times a turn has looked for a question inside a closing recap. */
+export function closingRecapCheckCount(): number {
+  return closingRecapChecks;
+}
+
 /**
  * A real question in the closing recap stays open.
  * The generic closer "What did I get wrong?" does not.
  */
 function pendingCloseFor(message: string, facts: Facts): PendingClose | null {
+  closingRecapChecks += 1;
   const questions = openQuestions(message);
   if (questions.length === 0) return null;
   const questionId = conflictQuestionId(message, facts);

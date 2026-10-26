@@ -76,6 +76,7 @@ function isStatus(value: string): value is AnswerStatus {
 }
 
 async function readText(filePath: string): Promise<string | null> {
+  if (!existsSync(filePath)) return null;
   let info;
   try {
     info = await stat(filePath);

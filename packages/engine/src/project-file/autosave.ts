@@ -69,8 +69,14 @@ export function autosaveProject(projectDir: string, options: SaveOptions = {}): 
       return;
     }
     if (slot.timer !== null) clearTimeout(slot.timer);
+    const delay = slot.options.immediate === true ? 0 : DELAY_MS;
+    if (delay === 0) {
+      slot.timer = null;
+      void run(key);
+      return;
+    }
     slot.timer = setTimeout(() => {
       void run(key);
-    }, DELAY_MS);
+    }, delay);
   });
 }

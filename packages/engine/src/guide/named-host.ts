@@ -24,6 +24,13 @@ interface HostNeedle {
   cost: string;
 }
 
+let hostStepReads = 0;
+
+/** How many times a host was read from a brief. Ordinary answers do not do this. */
+export function hostStepCount(): number {
+  return hostStepReads;
+}
+
 const HOST_NEEDLES: readonly HostNeedle[] = [
   { needle: "cloudflare pages", id: "cloudflare", label: "Cloudflare Pages", flag: "cloudflare", cost: "free tier" },
   { needle: "github pages", id: "github", label: "GitHub Pages", flag: null, cost: "free tier" },
@@ -35,6 +42,7 @@ const HOST_NEEDLES: readonly HostNeedle[] = [
 
 /** The host named in hosting text, or null when none of the known hosts appear. */
 export function namedHostFromBrief(hosting: string): NamedHost | null {
+  hostStepReads += 1;
   const text = hosting.trim();
   if (text === "") return null;
   const lower = text.toLowerCase();
@@ -53,6 +61,7 @@ export function namedHostFromBrief(hosting: string): NamedHost | null {
  * Site Brief is the fallback. An empty string means the field is absent.
  */
 export function briefHostingText(projectDir: string): string {
+  hostStepReads += 1;
   const pending = pendingHosting(projectDir);
   if (pending !== null && pending.trim() !== "") return pending.trim();
   return hostingFromMarkdown(readBriefMarkdown(projectDir));

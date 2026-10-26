@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 /**
  * Interview tree loader for interview/tree.yaml.
@@ -98,7 +98,26 @@ const QUESTION_KEYS = new Set([
 
 const KEY_RE = /^([A-Za-z_][A-Za-z0-9_-]*):(.*)$/;
 
+/**
+ * Parsed trees are reused until the file's size or mtime changes.
+ * One answer used to parse the packaged tree about ten times.
+ * Callers must not mutate the returned question objects.
+ */
+const treeCache = new Map<string, { mtimeMs: number; size: number; questions: Question[] }>();
+
 export function loadTree(file: string): Question[] {
+  let mtimeMs = 0;
+  let size = 0;
+  try {
+    const info = statSync(file);
+    mtimeMs = info.mtimeMs;
+    size = info.size;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "unreadable";
+    throw new TreeError("file", `cannot read tree: ${detail}`);
+  }
+  const cached = treeCache.get(file);
+  if (cached !== undefined && cached.mtimeMs === mtimeMs && cached.size === size) return cached.questions;
   let text: string;
   try {
     text = readFileSync(file, "utf8");
@@ -106,7 +125,9 @@ export function loadTree(file: string): Question[] {
     const detail = error instanceof Error ? error.message : "unreadable";
     throw new TreeError("file", `cannot read tree: ${detail}`);
   }
-  return questionsFromYaml(text);
+  const questions = questionsFromYaml(text);
+  treeCache.set(file, { mtimeMs, size, questions });
+  return questions;
 }
 
 /** Keeps file order. A mode is a filter, not a second tree. */

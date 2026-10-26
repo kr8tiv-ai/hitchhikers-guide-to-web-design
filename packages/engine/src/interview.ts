@@ -9,6 +9,7 @@ import type { AnswerRecord } from "./required.ts";
 import { advanceDesignStages, type DesignStageRequest, type DesignStageResult } from "./spec/design-stages.ts";
 import { loadState, type GuideState } from "./state.ts";
 import { interviewTreeFile } from "./packaged-dir.ts";
+import { autosaveProject } from "./project-file/autosave.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 /**
@@ -272,8 +273,9 @@ class InterviewRun {
       this.#clock,
       nextQuestion,
     );
-    const { autosaveProject } = await import("./project-file/autosave.ts");
-    await autosaveProject(this.#projectDir);
+    // The portable copy has to be on disk before this returns. The next card
+    // is waiting on that file, so this write does not sit through the burst delay.
+    await autosaveProject(this.#projectDir, { immediate: true });
   }
 
   #countFor(id: string): number {

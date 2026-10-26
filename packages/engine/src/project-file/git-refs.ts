@@ -3,9 +3,22 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { hiddenChildOptions } from "../hidden-child.ts";
 import type { ProjectGit } from "./schema.ts";
 import { scrubText } from "./scrub.ts";
+
+/** True when this folder or a parent has a .git file or directory. No process spawn. */
+function repoExists(projectDir: string): boolean {
+  let current = path.resolve(projectDir);
+  for (;;) {
+    if (existsSync(path.join(current, ".git"))) return true;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
 
 function runGit(projectDir: string, args: readonly string[]): Promise<string | null> {
   return new Promise((resolve) => {
@@ -30,6 +43,16 @@ function runGit(projectDir: string, args: readonly string[]): Promise<string | n
 }
 
 export async function readGitRefs(projectDir: string, lastGoodCommit: string | null): Promise<ProjectGit> {
+  const gitDir = process.env.GIT_DIR;
+  if ((gitDir === undefined || gitDir.trim() === "") && !repoExists(projectDir)) {
+    return {
+      present: false,
+      branch: null,
+      head: null,
+      lastGoodCommit: lastGoodCommit && lastGoodCommit.length > 0 ? lastGoodCommit : null,
+      remoteUrl: null,
+    };
+  }
   const branch = await runGit(projectDir, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (branch === null) {
     return {

@@ -38,6 +38,11 @@ export interface SaveOptions {
   version?: string;
   /** After the temp file is flushed and before it replaces the target. Tests use this to kill a write. */
   holdBeforeRename?: () => Promise<void>;
+  /**
+   * Write on this turn instead of waiting out the burst delay.
+   * The interview card is waiting on the portable file.
+   */
+  immediate?: boolean;
 }
 
 export interface SaveResult {
