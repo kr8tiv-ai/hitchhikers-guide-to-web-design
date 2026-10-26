@@ -3855,10 +3855,21 @@ function renderApproveBrief(
         ${launchCard(token, projectDir)}`,
     script: "/client/brief-change.js",
   });
+  html = withApproveDirection(html, projectDir);
   if (html.includes("data-pick-direction") && !html.includes("/client/direction.js")) {
     html = html.replace("</body>", `    <script type="module" src="/client/direction.js"></script>\n  </body>`);
   }
   return html;
+}
+
+/** The plan page shows the same picker the desk uses, beside the brand kit. */
+function withApproveDirection(html: string, projectDir: string): string {
+  if (projectDir.trim() === "" || html.includes("data-direction-desk")) return html;
+  const picker = renderDirectionPicker(projectDir);
+  if (picker === "") return html;
+  const placed = html.replace(/(<section data-brand-kit>[\s\S]*?<\/section>)/, (section) => `${section}\n        ${picker}`);
+  if (placed !== html) return placed;
+  return html.replace("</main>", `${picker}\n        </main>`);
 }
 
 function launchYesPath(projectDir: string): string {

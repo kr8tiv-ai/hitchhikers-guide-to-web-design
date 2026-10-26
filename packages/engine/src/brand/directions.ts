@@ -278,12 +278,25 @@ export function chooseDirection(
   recordDirectionChoice(projectDir, deal, id, reasons, at);
   const picked = pickDirection(deal, id);
   saveDirectionDeal(projectDir, picked);
+  noteBrandKitPick(projectDir, picked);
   afterDirectionPicked?.(projectDir);
   return picked;
 }
 
+function noteBrandKitPick(projectDir: string, deal: DirectionDeal): void {
+  const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
+  if (picked === undefined) return;
+  const file = path.join(projectDir, ".hitchhiker", "brand", "BRAND.md");
+  if (!existsSync(file)) return;
+  const text = readFileSync(file, "utf8");
+  const next = text.replace(/## Directions\r?\n\r?\n(?:Pick one|Picked [^\n]+)\./, () => `## Directions\n\nPicked ${picked.name}.`);
+  if (next !== text) writeFileSync(file, next, "utf8");
+}
+
 export function renderDirectionBlock(deal: DirectionDeal): string {
-  const lines = ["## Directions", "", "Pick one.", ""];
+  const picked = deal.pickedId === null ? undefined : deal.directions.find((direction) => direction.id === deal.pickedId);
+  const lead = picked === undefined ? "Pick one." : `Picked ${picked.name}.`;
+  const lines = ["## Directions", "", lead, ""];
   for (const direction of deal.directions) {
     lines.push(
       `### ${direction.name}`,

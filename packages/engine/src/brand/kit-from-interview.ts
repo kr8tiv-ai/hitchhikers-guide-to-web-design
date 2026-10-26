@@ -3,7 +3,7 @@
  * Palette pairs meet WCAG 2.2 SC 1.4.3. 4.499 does not pass as 4.5.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { dealDirections, designLibraryRoot, renderDirectionBlock, saveDirectionDeal, type DirectionDeal } from "./directions.ts";
 import { familiesSentence } from "./type-scale.ts";
@@ -66,19 +66,23 @@ export function defaultPalette(): BrandPalette {
 export function brandKitFromAnswers(
   answers: readonly BrandAnswer[],
   deal: DirectionDeal = dealDirections(),
+  briefMarkdown?: string | null,
 ): { markdown: string; moduleSource: string; palette: BrandPalette } {
-  const offer = answered(answers, "DP-2.7") || "The offer is the sentence the owner already gave.";
-  const action = answered(answers, "DP-3.1") || "Get in touch.";
-  const voice = answered(answers, "DP-1.6") || "Clear, calm, specific.";
-  const vibe = answered(answers, "DP-5.3") || "Calm, editorial, and specific.";
-  const references = answered(answers, "DP-5.1") || "No reference site was named.";
-  const colour = answered(answers, "DP-1.2");
-  const type = answered(answers, "DP-1.5") || "No type yet. Show a quiet pairing with one clear size jump.";
-  const imagery = answered(answers, "DP-5.6") || "Photography of the work, in the light the owner described.";
-  const light = answered(answers, "DP-5.5") || "Soft daylight.";
-  const motion = answered(answers, "DP-6.2") || "Polished, not a spectacle.";
+  const fields = briefFields(briefMarkdown);
+  const offer = kitField(fields, ["Offer"], answered(answers, "DP-2.7")) || "The offer is the sentence the owner already gave.";
+  const action = kitField(fields, ["Action"], answered(answers, "DP-3.1")) || "Get in touch.";
+  const voice = kitField(fields, ["Voice"], answered(answers, "DP-1.6")) || "Clear, calm, specific.";
+  const vibeSource = kitField(fields, ["Vibe"], answered(answers, "DP-5.3"));
+  const vibe = vibeSource || "Calm, editorial, and specific.";
+  const references = kitField(fields, ["References"], answered(answers, "DP-5.1")) || "No reference site was named.";
+  const colour = kitField(fields, ["Colours", "Colour", "Colors", "Color"], answered(answers, "DP-1.2"));
+  const typeSource = kitField(fields, ["Type", "Typography"], answered(answers, "DP-1.5"));
+  const type = typeSource || "No type yet. Show a quiet pairing with one clear size jump.";
+  const imagery = kitField(fields, ["Imagery"], answered(answers, "DP-5.6")) || "Photography of the work, in the light the owner described.";
+  const light = closeSentence(answered(answers, "DP-5.5") || "Soft daylight.");
+  const motion = motionProse(kitField(fields, ["Motion"], answered(answers, "DP-6.2")) || "Polished, not a spectacle.");
   const logo = answered(answers, "DP-1.1");
-  const mood = moodForPalette(answers);
+  const mood = moodForPalette(answered(answers, "DP-1.4"), typeSource, vibeSource);
   const moodPalette = colour !== "" || mood === "" ? null : paletteFromMood(mood);
   const palette = colour !== "" ? paletteFromWords(colour) : (moodPalette ?? defaultPalette());
   const dealt = pickType(typeDeal(type));
@@ -87,7 +91,13 @@ export function brandKitFromAnswers(
   const logoLine = logo === ""
     ? "Wordmark in the chosen type, one color on the light ground and one on the dark ground. The build draws the SVG from the wordmark spec. A symbol stays abstract and does not imitate a known logo."
     : `Use the logo the owner supplied. ${logo}`;
-  const stem = `Concept image. ${imagery} Light: ${light}. Grade: ${palette.paper} paper and ${palette.ink} ink. Never show: ${neverShow}`;
+  const stem = joinSentences([
+    "Concept image",
+    imagery,
+    `Light: ${light}`,
+    `Grade: ${palette.paper} paper and ${palette.ink} ink`,
+    `Never show: ${neverShow}`,
+  ]);
   const markdown = [
     "# Brand",
     "",
@@ -157,7 +167,7 @@ export function brandKitFromAnswers(
 
 export function writeBrandKit(projectDir: string, answers: readonly BrandAnswer[]): string {
   const deal = dealDirections(designLibraryRoot(), projectDir);
-  const kit = brandKitFromAnswers(answers, deal);
+  const kit = brandKitFromAnswers(answers, deal, readApprovedBrief(projectDir));
   const brandDir = path.join(projectDir, ".hitchhiker", "brand");
   const dataDir = path.join(projectDir, "src", "data");
   mkdirSync(brandDir, { recursive: true });
@@ -177,15 +187,72 @@ function typeDeal(type: string): string | null {
   return type;
 }
 
-function moodForPalette(answers: readonly BrandAnswer[]): string {
+function moodForPalette(images: string, type: string, vibe: string): string {
   const parts: string[] = [];
-  const images = answered(answers, "DP-1.4");
   if (images !== "") parts.push(images);
-  const type = answered(answers, "DP-1.5");
   if (type !== "" && !/^no type yet\b/i.test(type)) parts.push(type);
-  const vibe = answered(answers, "DP-5.3");
   if (vibe !== "") parts.push(vibe);
   return parts.join(" ");
+}
+
+/** An approved Site Brief wins. A file without brief-yes.json stays unused. */
+function readApprovedBrief(projectDir: string): string | null {
+  const hitch = path.join(projectDir, ".hitchhiker");
+  const yesFile = path.join(hitch, "brief-yes.json");
+  const briefFile = path.join(hitch, "SITE-BRIEF.md");
+  if (!existsSync(yesFile) || !existsSync(briefFile)) return null;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(yesFile, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    if ((parsed as { approved?: unknown }).approved !== true) return null;
+    const text = readFileSync(briefFile, "utf8");
+    return text.trim() === "" ? null : text;
+  } catch {
+    return null;
+  }
+}
+
+function briefFields(markdown: string | null | undefined): Map<string, string> | null {
+  if (markdown === undefined || markdown === null || markdown.trim() === "") return null;
+  const fields = new Map<string, string>();
+  for (const part of markdown.split(/^## /m).slice(1)) {
+    const breakAt = part.indexOf("\n");
+    const heading = (breakAt < 0 ? part : part.slice(0, breakAt)).trim();
+    const body = (breakAt < 0 ? "" : part.slice(breakAt + 1)).replace(/\s+/g, " ").trim();
+    if (heading === "" || body === "" || body === "The field is not stated yet.") continue;
+    fields.set(heading, body);
+  }
+  return fields;
+}
+
+function kitField(fields: Map<string, string> | null, headings: readonly string[], fallback: string): string {
+  if (fields === null) return fallback;
+  for (const heading of headings) {
+    const text = fields.get(heading);
+    if (text !== undefined && text !== "") return text;
+  }
+  return fallback;
+}
+
+/** A motion answer that is only the 1-10 score is not a sentence. */
+function motionProse(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  const score = /^(\d{1,2})\.?$/.exec(trimmed);
+  if (score?.[1] !== undefined) {
+    const level = Number(score[1]);
+    if (level >= 1 && level <= 10) return `Motion appetite ${level} of 10.`;
+  }
+  return trimmed;
+}
+
+function closeSentence(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (trimmed === "") return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function joinSentences(parts: readonly string[]): string {
+  return parts.map(closeSentence).filter((part) => part !== "").join(" ");
 }
 
 function paletteNote(colour: string, moodPalette: BrandPalette | null): string {
