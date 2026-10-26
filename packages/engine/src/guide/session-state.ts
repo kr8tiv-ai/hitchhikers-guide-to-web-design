@@ -965,11 +965,49 @@ const FOLLOW_STOP = new Set([
 /** Joins a follow-up reply onto the answer it continues. The transcript keeps the two apart. */
 export const FOLLOW_UP_MARK = "\nFollow-up: ";
 
+/** Case, spacing, and punctuation do not make a second copy a new fact. */
+function normalizedReply(text: string): string {
+  let out = "";
+  let spaced = false;
+  for (const ch of text.toLowerCase()) {
+    const code = ch.codePointAt(0) ?? 0;
+    const keep = (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+    if (keep) {
+      out += ch;
+      spaced = false;
+      continue;
+    }
+    if (!spaced && out !== "") {
+      out += " ";
+      spaced = true;
+    }
+  }
+  return out.trim();
+}
+
+/** Drops a Follow-up part that only repeats the answer already stored. */
+export function collapseDuplicateFollowUp(text: string): string {
+  const parts = text.split(/\n\s*Follow-up:\s*/i);
+  if (parts.length < 2) return text.trim();
+  const base = (parts[0] ?? "").trim();
+  const baseKey = normalizedReply(base);
+  const extras: string[] = [];
+  for (const part of parts.slice(1)) {
+    const trimmed = part.trim();
+    if (trimmed === "" || normalizedReply(trimmed) === baseKey) continue;
+    if (extras.some((item) => normalizedReply(item) === normalizedReply(trimmed))) continue;
+    extras.push(trimmed);
+  }
+  if (extras.length === 0) return base;
+  return [base, ...extras].join(FOLLOW_UP_MARK);
+}
+
 export function joinFollowUpReply(original: string, reply: string): string {
   const base = original.trim();
   const next = reply.trim();
   if (base === "") return next;
   if (next === "") return base;
+  if (normalizedReply(base) === normalizedReply(next)) return base;
   if (next.startsWith(base)) {
     const rest = next.slice(base.length).trim();
     if (rest === "") return base;

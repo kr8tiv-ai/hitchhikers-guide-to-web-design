@@ -21,7 +21,7 @@ import {
   type SiteBrief,
 } from "./schemas.ts";
 import { INTERVIEW_MODEL } from "./interview-call.ts";
-import { budgetCardCopy } from "./session-state.ts";
+import { budgetCardCopy, collapseDuplicateFollowUp } from "./session-state.ts";
 import { spaceAfterTerminal } from "./sentence-space.ts";
 import { loadFacts } from "./suggest.ts";
 import { interviewTreeFile } from "../packaged-dir.ts";
@@ -130,6 +130,10 @@ export const BRIEF_DRAFT_BUDGET = 1200;
 export const BRIEF_DRAFT_ERROR =
   "The brief draft stopped early. These fields stay filled from the interview. Use Retry to ask again.";
 
+/** Shown when both revises fail and the brief had no error yet. The fields stay put. */
+const CHANGE_FAILED_ERROR =
+  "The change did not go through. The fields stay as they were. Use Retry to ask again.";
+
 const UNSTATED = "The field is not stated yet.";
 
 /** Keys a stub may omit. The recorded answer fills them. The schema still requires them. */
@@ -185,7 +189,9 @@ export async function* briefLoop(
   let note: unknown = yield { draft, approved: false, error, fallback };
   while (!isApproval(typeof note === "string" ? note : "")) {
     const correction = typeof note === "string" ? note : "";
-    draft = await reviseOrFallback(s, facts, draft, correction, bound);
+    const revised = await reviseOrFallback(s, facts, draft, correction, bound);
+    draft = revised.brief;
+    if (revised.failed && error.trim() === "") error = CHANGE_FAILED_ERROR;
     note = yield { draft, approved: false, error, fallback };
   }
   await writeSiteBrief(s.projectDir, draft);
@@ -252,24 +258,64 @@ async function reviseOrFallback(
   draft: SiteBrief,
   correction: string,
   deps: { think: typeof think },
-): Promise<SiteBrief> {
+): Promise<{ brief: SiteBrief; failed: boolean }> {
   const recorded = deterministicBrief(facts, s.language);
   const first = await askRevise(s, facts, draft, correction, recorded, deps);
-  if (first !== null) return applyNamedEdits(first, correction);
+  if (first !== null) return { brief: applyNamedEdits(first, correction, true), failed: false };
   const second = await askRevise(s, facts, draft, correction, recorded, deps);
-  if (second !== null) return applyNamedEdits(second, correction);
+  if (second !== null) return { brief: applyNamedEdits(second, correction, true), failed: false };
   // A failed revise keeps the brief under correction. The recorded answers must not replace it.
-  return applyNamedEdits(draft, correction);
+  // A literal "Budget: 50 dollars" still writes. An instruction never does.
+  return { brief: applyNamedEdits(draft, correction, false), failed: true };
 }
 
-/** "Budget: ..." writes that field. Other prose stays with the model. */
-function applyNamedEdits(draft: SiteBrief, correction: string): SiteBrief {
+/**
+ * A "Heading: text" clause is a new value only when it is short and has no
+ * instruction words (say, keep, drop, remove, repeat, treat, don't, do not,
+ * without, please, make sure, since, because). "Budget: 50 dollars" is a value.
+ * "Action: say it once, without repeating the follow-up" is an instruction.
+ * An instruction scopes the revise. The model applies it to the current field.
+ * The instruction text is never written as the field value.
+ * A literal is written only when the revised field does not already contain it.
+ * After both revises fail, only literals are written. Instructions stay as they were.
+ */
+const INSTRUCTION_WORDS = new Set([
+  "say",
+  "keep",
+  "drop",
+  "remove",
+  "repeat",
+  "treat",
+  "don't",
+  "dont",
+  "without",
+  "please",
+  "since",
+  "because",
+]);
+
+function isLiteralBriefValue(text: string): boolean {
+  const clean = text.trim();
+  if (clean.length > 80) return false;
+  const words = clean.split(/\s+/).filter((word) => word !== "");
+  if (words.length > 12) return false;
+  const lower = clean.toLowerCase();
+  if (lower.includes("do not") || lower.includes("make sure")) return false;
+  for (const word of words) {
+    const bare = word.toLowerCase().replace(/^[^a-z']+|[^a-z']+$/g, "");
+    if (INSTRUCTION_WORDS.has(bare)) return false;
+  }
+  return true;
+}
+
+function applyNamedEdits(draft: SiteBrief, correction: string, revised: boolean): SiteBrief {
   const edits = namedBriefEdits(correction);
   const next = { ...draft };
   for (const key of BRIEF_KEYS) {
     const value = edits[key];
-    if (value === undefined) continue;
-    const capped = shortenAtBoundary(value, briefFieldTarget(key));
+    if (value === undefined || !isLiteralBriefValue(value)) continue;
+    if (revised && next[key].toLowerCase().includes(value.trim().toLowerCase())) continue;
+    const capped = droppedFragment(value, shortenAtBoundary(value, briefFieldTarget(key)));
     if (capped.trim() !== "") next[key] = capped.trim();
   }
   return next;
@@ -741,7 +787,7 @@ function summarizeCoverage(covered: readonly string[], uncovered: readonly strin
 }
 
 function cleanAnswer(id: string, value: string): string {
-  let text = value.trim();
+  let text = collapseDuplicateFollowUp(value.trim());
   text = text.replace(/^yes, that is right\.\s*/i, "");
   text = text.replace(/^also:\s*/i, "");
   text = text.trim();
@@ -755,6 +801,20 @@ function cleanAnswer(id: string, value: string): string {
 }
 
 /**
+ * A shortened field ends on a sentence. A trailing fragment is dropped.
+ * Text that was not shortened is left as it is, even without a final period.
+ */
+function droppedFragment(before: string, after: string): string {
+  const next = after.trim();
+  const prev = before.trim();
+  if (next === "" || next.length >= prev.length) return next;
+  if (/[.?;]$/.test(next)) return next;
+  const end = Math.max(next.lastIndexOf("."), next.lastIndexOf("?"), next.lastIndexOf(";"));
+  if (end >= 0) return next.slice(0, end + 1).trim();
+  return "";
+}
+
+/**
  * Drop a repeated phrase inside one field, then a sentence copied from another field's answer.
  * Shorten to the field target. An empty result falls back to the recorded line.
  */
@@ -762,9 +822,10 @@ function shapeBrief(brief: SiteBrief, facts: Facts, recorded: SiteBrief): SiteBr
   const next = { ...brief };
   for (const key of BRIEF_KEYS) {
     let text = dedupePhrases(next[key]);
+    text = droppedFragment(next[key], text);
     text = stripForeignSentences(text, key, facts);
     if (text.trim() === "") text = recorded[key];
-    text = shortenAtBoundary(text, briefFieldTarget(key));
+    text = droppedFragment(text, shortenAtBoundary(text, briefFieldTarget(key)));
     text = restoreListed(key, text, recorded[key]);
     next[key] = text.trim() === "" ? UNSTATED : text.trim();
   }

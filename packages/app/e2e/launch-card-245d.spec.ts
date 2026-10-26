@@ -4,7 +4,7 @@
  * It does not publish. The card fits a phone.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -62,6 +62,65 @@ test("the launch card records a yes and stays inside a phone screen", async ({ p
     expect(readFileSync(path.join(projectDir, "marker.txt"), "utf8")).toBe("site-marker\n");
     const after = await page.locator("body").innerText();
     expect(after.includes("!")).toBe(false);
+  } finally {
+    await stopChild(child);
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("the launch card suggests the host named in the brief", async ({ page }) => {
+  test.setTimeout(60_000);
+  const projectDir = await mkdtemp(path.join(tmpdir(), "hh-launch-named-"));
+  writeFileSync(path.join(projectDir, "marker.txt"), "site-marker\n", "utf8");
+  const hitch = path.join(projectDir, ".hitchhiker");
+  mkdirSync(hitch, { recursive: true });
+  writeFileSync(
+    path.join(hitch, "brief-pending.json"),
+    `${JSON.stringify(
+      {
+        status: "pending",
+        draft: {
+          hosting: "No web address yet. Use paradisefound.farm, hosted on Cloudflare Pages (free tier).",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const child = startDesk(projectDir);
+  try {
+    const url = await readUrl(child);
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto(new URL("/approve", url).href, { waitUntil: "domcontentloaded" });
+    const card = page.locator("[data-launch-card]");
+    await expect(card).toBeVisible();
+    await expect(card.locator("[data-launch-host]")).toContainText("Cloudflare Pages is the suggested host.");
+    await expect(card.locator("[data-launch-cost]")).toContainText("none");
+    await expect(card.locator("[data-launch-cost]")).toContainText("free tier");
+    const hostBox = await card.locator("[data-launch-host]").boundingBox();
+    const costBox = await card.locator("[data-launch-cost]").boundingBox();
+    expect(hostBox).not.toBeNull();
+    expect(costBox).not.toBeNull();
+    expect(costBox?.y ?? 0).toBeGreaterThan(hostBox?.y ?? 0);
+    const text = await page.locator("body").innerText();
+    expect(text.includes("Hostinger is the suggested host.")).toBe(false);
+    expect(text.includes("!")).toBe(false);
+    expect(await overflow(page)).toBeLessThanOrEqual(1);
+
+    await card.locator("[data-launch-yes]").click();
+    await expect(page.locator("[data-launch-state]")).toHaveText("Yes recorded. Nothing has been sent.");
+    const saved = JSON.parse(readFileSync(path.join(projectDir, ".hitchhiker", "deploy", "launch-yes.json"), "utf8")) as {
+      yes: boolean;
+      host: string;
+      cost: string;
+      previewCost: string;
+    };
+    expect(saved.yes).toBe(true);
+    expect(saved.host).toBe("cloudflare");
+    expect(saved.cost).toBe("free tier");
+    expect(saved.previewCost).toBe("none");
+    expect(existsSync(path.join(projectDir, ".hitchhiker", "deploy", "DEPLOYS.md"))).toBe(false);
   } finally {
     await stopChild(child);
     await rm(projectDir, { recursive: true, force: true });

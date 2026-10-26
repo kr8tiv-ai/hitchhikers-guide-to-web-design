@@ -16,7 +16,7 @@ import { validateJson } from "../ai/schema-validate.ts";
 import { InterviewError, openInterview } from "../interview.ts";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
 import { PersonaError, buildSystemPrompt } from "../persona.ts";
-import { awaitPendingSummary, bindPacket, refreshSummary, syncInterviewFacts } from "../context/index.ts";
+import { awaitPendingSummary, bindPacket, refreshSummary, syncAnswer, syncInterviewFacts } from "../context/index.ts";
 import { interviewTreeFile, packagedPackage } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
 import type { AnswerRecord } from "../required.ts";
@@ -67,12 +67,21 @@ import { INTERVIEW_EFFORT_DEFAULT, INTERVIEW_MODEL } from "./interview-call.ts";
  * record matches the turn.
  */
 
+/** A closing recap that still asks something the person can answer. */
+export interface PendingClose {
+  questionId: string;
+  ask: string;
+  recap: string;
+}
+
 export interface GuideSession {
   projectDir: string;
   depth: "express" | "standard" | "deep";
   language: string;
   pushes: Record<string, number>;
   shown?: string[];
+  /** Set when the closing recap asks a question. Cleared once it is answered or skipped. */
+  pendingClose?: PendingClose;
   /** Last follow-up on this question, so the same line is not shown twice. */
   lastFallback?: { id: string; message: string } | undefined;
   /**
@@ -286,6 +295,7 @@ async function perform(
   const interview = await openInterview(s.projectDir, s.depth);
   const current = interview.next();
   if (current === null) {
+    if (s.pendingClose !== undefined) return settlePendingClose(s, input);
     return { message: CLOSE_MESSAGE, questionId: null, status: "done" };
   }
   if (input.kind === "answer") {
@@ -470,10 +480,190 @@ async function advance(
     const combined = `${lines[0]}\n${lines[1]}\n${lines[2]}\n${guide.message}`;
     if (validateGuideMessage(combined, { language: s.language, facts }).length === 0) message = combined;
   }
+  if (next === null) {
+    // Match the model's own recap. Mirror lines restate every answer and are not the question.
+    const pending = pendingCloseFor(guide.message, facts);
+    if (pending !== null) {
+      s.pendingClose = { questionId: pending.questionId, ask: message, recap: message };
+      const open: GuideTurn = { message, questionId: pending.questionId, status: "asked" };
+      if (guide.calm) open.calm = true;
+      return open;
+    }
+  }
   const status = next === null ? "done" : wasSoft ? "soft" : "asked";
   const turn: GuideTurn = { message, questionId: next === null ? null : next.id, status };
   if (guide.calm) turn.calm = true;
   return turn;
+}
+
+/** Motion answers a closing contradiction can correct. Same ids as BRIEF_SOURCES.motion. */
+const MOTION_SOURCE_IDS = ["DP-6.1", "DP-6.2", "DP-6.3", "DP-6.4", "DP-6.6"];
+
+/**
+ * A real question in the closing recap stays open.
+ * The generic closer "What did I get wrong?" does not.
+ */
+function pendingCloseFor(message: string, facts: Facts): PendingClose | null {
+  const questions = openQuestions(message);
+  if (questions.length === 0) return null;
+  const questionId = conflictQuestionId(message, facts);
+  if (questionId === null) return null;
+  const ask = message.trim();
+  return { questionId, ask, recap: ask };
+}
+
+function openQuestions(message: string): string[] {
+  const stripped = message
+    .replace(/answer,\s*suggest for me,\s*or skip\.?/gi, " ")
+    .replace(/skipping is allowed\.?/gi, " ");
+  const found: string[] = [];
+  let current = "";
+  for (const ch of stripped) {
+    current += ch;
+    if (ch !== "?" && ch !== ".") continue;
+    const trimmed = current.trim();
+    current = "";
+    if (!trimmed.endsWith("?") || isGenericCloser(trimmed)) continue;
+    found.push(trimmed);
+  }
+  return found;
+}
+
+function isGenericCloser(sentence: string): boolean {
+  const words = wordsOf(sentence).join(" ");
+  return words === "what did i get wrong" || words.endsWith(" what did i get wrong");
+}
+
+function conflictQuestionId(recap: string, facts: Facts): string | null {
+  const recapWords = wordsOf(recap);
+  const allowed = new Set(MOTION_SOURCE_IDS);
+  let bestId: string | null = null;
+  let best = 0;
+  for (const answer of facts.answers) {
+    if (!allowed.has(answer.id)) continue;
+    const score = sharedRun(recapWords, wordsOf(answer.value));
+    if (score > best) {
+      best = score;
+      bestId = answer.id;
+    }
+  }
+  return best >= 3 ? bestId : null;
+}
+
+function sharedRun(left: readonly string[], right: readonly string[]): number {
+  let best = 0;
+  for (let start = 0; start < left.length; start += 1) {
+    for (let at = 0; at < right.length; at += 1) {
+      let len = 0;
+      while (
+        start + len < left.length &&
+        at + len < right.length &&
+        left[start + len] === right[at + len]
+      ) {
+        len += 1;
+      }
+      if (len > best) best = len;
+    }
+  }
+  return best;
+}
+
+function wordsOf(text: string): string[] {
+  const words: string[] = [];
+  let current = "";
+  for (const ch of text.toLowerCase()) {
+    const code = ch.codePointAt(0) ?? 0;
+    const keep = (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+    if (keep) {
+      current += ch;
+      continue;
+    }
+    if (current !== "") words.push(current);
+    current = "";
+  }
+  if (current !== "") words.push(current);
+  return words;
+}
+
+function conflictSentence(recap: string): string {
+  const parts = sentencesOf(recap);
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.includes("you said") && lower.includes("also said")) return finishSentence(part);
+  }
+  const statements = parts.filter((part) => !part.endsWith("?"));
+  const last = statements[statements.length - 1];
+  return finishSentence(last ?? recap);
+}
+
+function sentencesOf(text: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  for (const ch of text) {
+    current += ch;
+    if (ch !== "." && ch !== "?") continue;
+    const trimmed = current.trim();
+    if (trimmed !== "") parts.push(trimmed);
+    current = "";
+  }
+  const tail = current.trim();
+  if (tail !== "") parts.push(tail);
+  return parts;
+}
+
+function finishSentence(text: string): string {
+  const trimmed = text.trim().replace(/[.?!]+$/g, "").trim();
+  return trimmed === "" ? "" : `${trimmed}.`;
+}
+
+function suggestionFor(ask: string): string {
+  const questions = openQuestions(ask);
+  const last = questions[questions.length - 1] ?? ask;
+  const bare = last.replace(/^\s*should i\s+/i, "").replace(/[?]+\s*$/g, "").trim();
+  if (bare === "") return "Keep the answer as it stands.";
+  const sentence = bare.charAt(0).toUpperCase() + bare.slice(1);
+  return sentence.endsWith(".") ? sentence : `${sentence}.`;
+}
+
+/** Answer, suggest, or skip the question the closing recap left open. No model call. */
+async function settlePendingClose(s: GuideSession, input: GuideTurnInput): Promise<GuideTurn> {
+  const pending = s.pendingClose;
+  if (pending === undefined) return { message: CLOSE_MESSAGE, questionId: null, status: "done" };
+  if (input.kind === "suggest") {
+    return { message: suggestionFor(pending.ask), questionId: pending.questionId, status: "asked" };
+  }
+  const replacement = input.kind === "skip" ? conflictSentence(pending.recap) : (input.text ?? "").trim();
+  if (replacement !== "") {
+    await replaceAnswerValue(s.projectDir, pending.questionId, replacement);
+    await syncAnswer(s.projectDir, {
+      questionId: pending.questionId,
+      text: replacement,
+      source: "answer",
+      moveCursor: false,
+      summarize: false,
+    });
+  }
+  delete s.pendingClose;
+  return { message: CLOSE_MESSAGE, questionId: null, status: "done" };
+}
+
+async function replaceAnswerValue(projectDir: string, questionId: string, text: string): Promise<void> {
+  await withStateLock(projectDir, async () => {
+    const saved = readInterviewFile(projectDir);
+    let index = -1;
+    for (let cursor = 0; cursor < saved.answers.length; cursor += 1) {
+      if (saved.answers[cursor]?.id === questionId) index = cursor;
+    }
+    if (index < 0) return;
+    const answers = saved.answers.map((answer, cursor) =>
+      cursor === index ? { id: answer.id, status: answer.status, value: text } : answer,
+    );
+    await writeFile(
+      path.join(projectDir, ".hitchhiker", "interview.json"),
+      `${JSON.stringify({ version: 1, answers, cursor: saved.cursor, pushedIds: saved.pushedIds }, null, 2)}\n`,
+      "utf8",
+    );
+  });
 }
 
 async function askGuide(
@@ -832,6 +1022,8 @@ async function hydrate(s: GuideSession): Promise<void> {
   if (saved.lastFallback !== undefined) s.lastFallback = saved.lastFallback;
   if (saved.shownAsks !== undefined) s.shownAsks = saved.shownAsks;
   if (saved.attemptAnswers !== undefined) s.attemptAnswers = saved.attemptAnswers;
+  if (saved.pendingClose !== undefined) s.pendingClose = saved.pendingClose;
+  else delete s.pendingClose;
 }
 
 async function persistSession(s: GuideSession): Promise<void> {
@@ -843,6 +1035,7 @@ async function persistSession(s: GuideSession): Promise<void> {
     ...(s.lastFallback === undefined ? {} : { lastFallback: s.lastFallback }),
     ...(hasLines(s.shownAsks) ? { shownAsks: s.shownAsks } : {}),
     ...(hasLines(s.attemptAnswers) ? { attemptAnswers: s.attemptAnswers } : {}),
+    ...(s.pendingClose === undefined ? {} : { pendingClose: s.pendingClose }),
   };
   await withStateLock(s.projectDir, async () => {
     await writeFile(
@@ -860,6 +1053,7 @@ function readGuideFile(projectDir: string): {
   lastFallback?: { id: string; message: string };
   shownAsks?: Record<string, string[]>;
   attemptAnswers?: Record<string, string[]>;
+  pendingClose?: PendingClose;
 } {
   const empty = { language: "", pushes: {} as Record<string, number>, shown: [] as string[] };
   const file = path.join(projectDir, ".hitchhiker", SESSION_FILE);
@@ -887,6 +1081,7 @@ function readGuideFile(projectDir: string): {
         : undefined;
     const shownAsks = readStringMap(value.shownAsks);
     const attemptAnswers = readStringMap(value.attemptAnswers);
+    const pendingClose = readPendingCloseValue(value.pendingClose);
     return {
       language,
       pushes,
@@ -894,10 +1089,25 @@ function readGuideFile(projectDir: string): {
       ...(lastFallback === undefined ? {} : { lastFallback }),
       ...(shownAsks === undefined ? {} : { shownAsks }),
       ...(attemptAnswers === undefined ? {} : { attemptAnswers }),
+      ...(pendingClose === undefined ? {} : { pendingClose }),
     };
   } catch {
     return empty;
   }
+}
+
+function readPendingCloseValue(value: unknown): PendingClose | undefined {
+  if (!isRecord(value)) return undefined;
+  const questionId = typeof value.questionId === "string" ? value.questionId.trim() : "";
+  const ask = typeof value.ask === "string" ? value.ask.trim() : "";
+  const recap = typeof value.recap === "string" ? value.recap.trim() : "";
+  if (questionId === "" || ask === "" || recap === "") return undefined;
+  return { questionId, ask, recap };
+}
+
+/** The open closing question, or null once it has been answered or skipped. */
+export function readPendingClose(projectDir: string): PendingClose | null {
+  return readGuideFile(projectDir).pendingClose ?? null;
 }
 
 function readInterviewFile(projectDir: string): {

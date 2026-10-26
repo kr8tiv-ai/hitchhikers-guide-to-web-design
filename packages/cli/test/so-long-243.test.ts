@@ -46,6 +46,17 @@ function tempProject(): string {
   return mkdtempSync(path.join(os.tmpdir(), "hh-so-long-"));
 }
 
+function writeHosting(dir: string, hosting: string): void {
+  const folder = path.join(dir, ".hitchhiker");
+  mkdirSync(folder, { recursive: true });
+  // Idle keeps the phase lock on the launch step. A pending status would stop so-long before the host question.
+  writeFileSync(
+    path.join(folder, "brief-pending.json"),
+    `${JSON.stringify({ status: "idle", draft: { hosting } }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 function writeStack(dir: string): void {
   const folder = path.join(dir, ".hitchhiker", "research");
   mkdirSync(folder, { recursive: true });
@@ -239,6 +250,65 @@ test("an omitted host recommends Hostinger and asks", async () => {
       assert.match(outcome.stdout, /Nothing was written/);
       assertQuiet(outcome.stdout);
     }
+    assert.deepEqual(calls, []);
+    assertUnwritten(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a brief that names Cloudflare Pages suggests that host", async () => {
+  const dir = tempProject();
+  const calls: string[] = [];
+  try {
+    writeStack(dir);
+    writeGates(dir, HEAD);
+    writeHosting(dir, "No web address yet. Use paradisefound.farm, hosted on Cloudflare Pages (free tier).");
+    const outcome = await run(dir, [], {
+      clients: armed(calls),
+      build: async () => {
+        calls.push("build");
+      },
+    });
+    assert.equal(outcome.exitCode, 2);
+    assert.match(outcome.stdout, /Cloudflare Pages is the suggested host/);
+    assert.match(outcome.stdout, /free tier/);
+    assert.match(outcome.stdout, /--host cloudflare --yes/);
+    assert.match(outcome.stdout, /--host preview --yes/);
+    assert.equal(outcome.stdout.includes("Hostinger is the suggested host"), false);
+    assert.match(outcome.stdout, /Nothing was written/);
+    assertQuiet(outcome.stdout);
+    const hostAt = outcome.stdout.indexOf("Cloudflare Pages is the suggested host");
+    const costAt = outcome.stdout.indexOf("free tier");
+    assert.ok(hostAt >= 0 && costAt > hostAt);
+    assert.deepEqual(calls, []);
+    assertUnwritten(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a brief that names GitHub Pages suggests it and offers only the preview flag", async () => {
+  const dir = tempProject();
+  const calls: string[] = [];
+  try {
+    writeStack(dir);
+    writeGates(dir, HEAD);
+    writeHosting(dir, "The farm site lives on GitHub Pages.");
+    const outcome = await run(dir, [], {
+      clients: armed(calls),
+      build: async () => {
+        calls.push("build");
+      },
+    });
+    assert.equal(outcome.exitCode, 2);
+    assert.match(outcome.stdout, /GitHub Pages is the suggested host/);
+    assert.match(outcome.stdout, /free tier/);
+    assert.match(outcome.stdout, /--host preview --yes/);
+    assert.equal(/--host github/.test(outcome.stdout), false);
+    assert.equal(outcome.stdout.includes("Hostinger is the suggested host"), false);
+    assert.match(outcome.stdout, /Nothing was written/);
+    assertQuiet(outcome.stdout);
     assert.deepEqual(calls, []);
     assertUnwritten(dir);
   } finally {

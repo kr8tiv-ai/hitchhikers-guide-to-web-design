@@ -57,6 +57,7 @@ import {
   bannedAnswer,
   dropInternalCopy,
   guidanceCorpus,
+  readPendingClose,
   runTurn,
   seedExpressAssumptions,
   think,
@@ -79,6 +80,8 @@ import {
   readPromptTasks,
   readSiteBrief,
   renderSiteBrief,
+  briefHostingText,
+  namedHostFromBrief,
   type CoverageRequirement,
   type CoverageTask,
   type BriefDeskView,
@@ -713,6 +716,39 @@ function createLiveTurn(
     let finished: GuideTurn | null = null;
     try {
       const current = getInterview().next();
+      if (current === null) {
+        const pending = readPendingClose(projectDir);
+        if (pending !== null && pending.questionId === input.questionId) {
+          const session: GuideSession = {
+            projectDir,
+            depth,
+            language: "en",
+            pushes: {},
+            maxFollowUps: 1,
+          };
+          started = true;
+          const turnInput: {
+            kind: "answer" | "suggest" | "skip";
+            text?: string;
+            assumed?: boolean;
+          } = { kind: input.kind };
+          if (input.text !== undefined) turnInput.text = input.text;
+          if (input.assumed === true) turnInput.assumed = true;
+          finished = await runTurn(session, turnInput, {
+            think: model,
+            onProgress: (stage) => hooks?.publish("answer-progress", { stage }),
+          });
+          await reload();
+          return {
+            next: getInterview().next(),
+            events: [
+              { type: "turn", kind: input.kind, questionId: input.questionId },
+              { type: "session", questionId: finished.questionId },
+            ],
+            live: overlayFrom(finished),
+          };
+        }
+      }
       if (current === null || current.id !== input.questionId) {
         // A previous answer posts to the same /api/answer path. Same text stays
         // "already saved". A different text replaces that record in place.
@@ -1914,9 +1950,10 @@ async function handleApproveForm(
       await enterFlow(projectDir, "so-long", { publish: false, write: false });
       const file = path.join(projectDir, ".hitchhiker", "deploy", "launch-yes.json");
       await mkdir(path.dirname(file), { recursive: true });
+      const recorded = recordedLaunch(projectDir);
       await replaceViaTemp(
         file,
-        `${JSON.stringify({ yes: true, host: "hostinger", cost: "host plan", previewCost: "none" }, null, 2)}\n`,
+        `${JSON.stringify({ yes: true, host: recorded.host, cost: recorded.cost, previewCost: "none" }, null, 2)}\n`,
       );
       res.writeHead(303, { location: "/approve" });
       res.end();
@@ -2732,6 +2769,13 @@ function buildSession(
     const sessionState = loadSessionState(projectDir, questions);
     const gate = gateQuestion(question, sessionState, questions);
     if (gate.action !== "skip" && gate.ask !== question.ask) question = { ...question, ask: gate.ask };
+  }
+  if (question === null && projectDir !== "") {
+    const pending = readPendingClose(projectDir);
+    if (pending !== null) {
+      const found = questions.find((item) => item.id === pending.questionId);
+      if (found !== undefined) question = { ...found, ask: pending.ask };
+    }
   }
   const saved = loadState(projectDir);
   const notes = readGuideNotes(projectDir);
@@ -3831,9 +3875,22 @@ function readLaunchYes(projectDir: string): boolean {
   }
 }
 
+function recordedLaunch(projectDir: string): { host: string; cost: string } {
+  const named = namedHostFromBrief(briefHostingText(projectDir));
+  if (named === null) return { host: "hostinger", cost: "host plan" };
+  return {
+    host: named.flag ?? named.id,
+    cost: named.cost === "your host plan" ? "host plan" : named.cost,
+  };
+}
+
 function launchCard(token: string, projectDir: string): string {
   if (projectDir.trim() === "") return "";
-  return renderLaunchCard({ token, confirmed: readLaunchYes(projectDir) });
+  return renderLaunchCard({
+    token,
+    confirmed: readLaunchYes(projectDir),
+    hosting: briefHostingText(projectDir),
+  });
 }
 
 function renderApprove(

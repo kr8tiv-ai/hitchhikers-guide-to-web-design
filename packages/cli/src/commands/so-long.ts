@@ -4,7 +4,8 @@
  * The ship gate runs first. A red or stale check stops before a build,
  * a host, or a record. The plan is shown next. When --host is omitted,
  * Hostinger is the suggestion and a preview on this computer is the other
- * offer. Neither starts until the host is named and --yes is present.
+ * offer, unless the Site Brief already names a host. Neither starts until
+ * the host is named and --yes is present.
  * A missing yes writes nothing. After that yes, the site build runs, then
  * the dispatcher, then the deploy record. A connected checker then looks
  * at the live address and the record gains a post-check section. A failed
@@ -21,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { hiddenChildOptions, packagedModule } from "@hitchhiker/engine";
+import { briefHostingText, hiddenChildOptions, namedHostFromBrief, packagedModule } from "@hitchhiker/engine";
 import { runGit } from "../improve/git.ts";
 import { buildPnpmInvocation, quoteCmdArg } from "../improve/pnpm-command.ts";
 import { enterCliFlow } from "./flow-entry.ts";
@@ -326,12 +327,27 @@ function asDispatch(value: unknown): DispatchOutcome | null {
 }
 
 function planLines(parsed: ParsedSoLong, recommendation: Recommendation): string[] {
-  const lines = [recommendation.reason];
+  const named = parsed.host === null ? namedHostFromBrief(briefHostingText(parsed.projectDir)) : null;
+  const reason =
+    named === null
+      ? recommendation.reason
+      : recommendation.reason.replace("Hostinger is the suggested host.", `${named.label} is the suggested host.`);
+  const lines = [reason];
   if (parsed.host === null) {
-    lines.push("Hostinger is the suggested host.");
+    if (named === null) {
+      lines.push("Hostinger is the suggested host.");
+      lines.push("A preview on this computer is the other choice.");
+      lines.push("Name the host and confirm before anything is sent.");
+      lines.push(`hh so-long --project ${parsed.projectDir} --host hostinger --yes`);
+      lines.push(`hh so-long --project ${parsed.projectDir} --host preview --yes`);
+      return lines;
+    }
+    lines.push(`Cost for a preview on this computer: none. Cost for ${named.label}: ${named.cost}.`);
     lines.push("A preview on this computer is the other choice.");
     lines.push("Name the host and confirm before anything is sent.");
-    lines.push(`hh so-long --project ${parsed.projectDir} --host hostinger --yes`);
+    if (named.flag !== null) {
+      lines.push(`hh so-long --project ${parsed.projectDir} --host ${named.flag} --yes`);
+    }
     lines.push(`hh so-long --project ${parsed.projectDir} --host preview --yes`);
     return lines;
   }

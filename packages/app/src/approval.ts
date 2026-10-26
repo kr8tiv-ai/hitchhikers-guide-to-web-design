@@ -5,7 +5,7 @@
  * Nothing here starts the build, calls a model, or writes the approval file.
  */
 
-import { planCoverageMessage, type CoverageGap } from "@hitchhiker/engine";
+import { namedHostFromBrief, planCoverageMessage, type CoverageGap } from "@hitchhiker/engine";
 import { escapeHtml } from "./card.ts";
 
 export class ApprovalError extends Error {
@@ -248,21 +248,32 @@ export interface LaunchCardInput {
   token: string;
   /** True after the desk has recorded a yes. The card still does not publish. */
   confirmed?: boolean;
+  /** Site Brief Hosting field. Empty when the brief names no host. */
+  hosting?: string;
 }
 
 /**
  * Desk Launch card. It says what a launch does, what it costs, and which
- * host is suggested. The yes button records a yes. It does not publish.
+ * host is suggested. A host named in the brief is the suggestion. Hostinger
+ * stays the suggestion when the brief names none. The yes button records a
+ * yes. It does not publish.
  */
 export function renderLaunchCard(input: LaunchCardInput): string {
   if (typeof input.token === "string") {
-    return renderLaunchCardBody(input.token, input.confirmed === true);
+    const hosting = typeof input.hosting === "string" ? input.hosting : "";
+    return renderLaunchCardBody(input.token, input.confirmed === true, hosting);
   }
   throw new ApprovalError("Launch token must be a string.");
 }
 
-function renderLaunchCardBody(rawToken: string, confirmed: boolean): string {
+function renderLaunchCardBody(rawToken: string, confirmed: boolean, hosting: string): string {
   const token = escapeHtml(rawToken);
+  const named = namedHostFromBrief(hosting);
+  const hostLine = named === null ? "Hostinger is the suggested host." : `${named.label} is the suggested host.`;
+  const costLine =
+    named === null
+      ? "Cost for a preview on this computer: none. Cost for a host: your host plan."
+      : `Cost for a preview on this computer: none. Cost for ${named.label}: ${named.cost}.`;
   const state = confirmed
     ? `<p data-launch-state>Yes recorded. Nothing has been sent.</p>`
     : `<p data-launch-state>Nothing is sent until you press yes.</p>`;
@@ -273,8 +284,8 @@ function renderLaunchCardBody(rawToken: string, confirmed: boolean): string {
       <h2 class="hh-title" id="launch-title">Launch</h2>
       <p data-launch-happens>The quality check runs first. If it is clear, a preview can open on this computer, or the site can be published to the host you confirm. A failed live check is explained in plain language, and the last working publish can go back up after another yes.</p>
       <p data-journey>When the quality check is clear, a preview can open on this computer. Publishing still waits for you to name the host.</p>
-      <p data-launch-cost>Cost for a preview on this computer: none. Cost for a host: your host plan.</p>
-      <p data-launch-host>Hostinger is the suggested host.</p>
+      <p data-launch-host>${escapeHtml(hostLine)}</p>
+      <p data-launch-cost>${escapeHtml(costLine)}</p>
       ${state}
       <form method="post" action="/approve" data-launch-form>
         <input type="hidden" name="csrf" value="${token}" />

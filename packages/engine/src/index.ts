@@ -199,6 +199,8 @@ export {
   BRIEF_HEADINGS,
   BRIEF_SOURCES,
 } from "./guide/brief-loop.ts";
+export { briefHostingText, namedHostFromBrief } from "./guide/named-host.ts";
+export type { NamedHost } from "./guide/named-host.ts";
 export {
   BRIEF_BUILD_ID,
   BRIEF_PROGRESS_STAGE,
@@ -363,7 +365,8 @@ export type {
 } from "./guide/site-build.ts";
 export { judgeTurnCap, turnLimitReason } from "./guide/site-turn.ts";
 export type { TurnCap, TurnCapInput } from "./guide/site-turn.ts";
-export { CALM_MESSAGE, guideThinkFromScript, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
+export { CALM_MESSAGE, guideThinkFromScript, readPendingClose, runTurn, seedExpressAssumptions } from "./guide/live-turn.ts";
+export type { PendingClose } from "./guide/live-turn.ts";
 export {
   GUIDANCE_MARKERS,
   INTERNAL_LINES,
