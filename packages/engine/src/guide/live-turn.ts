@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CassetteError, CassetteMissError } from "../ai/cassette.ts";
@@ -19,6 +19,7 @@ import { PersonaError, buildSystemPrompt } from "../persona.ts";
 import { awaitPendingSummary, bindPacket, refreshSummary, syncAnswer, syncInterviewFacts } from "../context/index.ts";
 import { interviewTreeFile, packagedPackage } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
+import { readUtf8Cached } from "../text-cache.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
 import {
@@ -1065,9 +1066,15 @@ function readGuideFile(projectDir: string): {
 } {
   const empty = { language: "", pushes: {} as Record<string, number>, shown: [] as string[] };
   const file = path.join(projectDir, ".hitchhiker", SESSION_FILE);
-  if (!existsSync(file)) return empty;
+  let text: string | null;
   try {
-    const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+    text = readUtf8Cached(file);
+  } catch {
+    return empty;
+  }
+  if (text === null) return empty;
+  try {
+    const value: unknown = JSON.parse(text);
     if (!isRecord(value)) return empty;
     const language = typeof value.language === "string" ? value.language : "";
     const pushes: Record<string, number> = {};
@@ -1125,9 +1132,15 @@ function readInterviewFile(projectDir: string): {
 } {
   const empty = { answers: [] as AnswerRecord[], cursor: 0, pushedIds: [] as Array<{ id: string; count: number }> };
   const file = path.join(projectDir, ".hitchhiker", "interview.json");
-  if (!existsSync(file)) return empty;
+  let text: string | null;
   try {
-    const value: unknown = JSON.parse(readFileSync(file, "utf8"));
+    text = readUtf8Cached(file);
+  } catch {
+    return empty;
+  }
+  if (text === null) return empty;
+  try {
+    const value: unknown = JSON.parse(text);
     if (Array.isArray(value)) return { answers: parseAnswers(value), cursor: 0, pushedIds: [] };
     if (!isRecord(value)) return empty;
     const answers = Array.isArray(value.answers) ? parseAnswers(value.answers) : [];

@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { GuideConfig } from "../config.ts";
 import { planInterview } from "../guide/interview-call.ts";
 import { hiddenChildOptions } from "../hidden-child.ts";
+import { findNamedFile, listDirCached } from "../path-names.ts";
 import { launchProcess } from "../process-launch.ts";
 import type { ThinkRequest } from "./think.ts";
 
@@ -91,14 +92,6 @@ function isFile(candidate: string): boolean {
   }
 }
 
-function directoryEntries(dir: string): readonly string[] | undefined {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Resolve `grok` through PATH and, on Windows, PATHEXT.
  * `.EXE` wins over `.CMD` when both exist and PATHEXT lists EXE first.
@@ -119,16 +112,11 @@ export function resolveGrokCommand(env: NodeJS.ProcessEnv): string {
         .filter((ext) => ext.length > 0)
     : [""];
   for (const dir of dirs) {
-    const entries = directoryEntries(dir);
-    if (entries === undefined) continue;
     for (const ext of exts) {
       const suffix = ext.length === 0 || ext.startsWith(".") ? ext : `.${ext}`;
-      const wanted = `grok${suffix}`;
-      const needle = windows ? wanted.toLowerCase() : wanted;
-      const found = entries.find((entry) => (windows ? entry.toLowerCase() : entry) === needle);
-      if (found === undefined) continue;
-      const candidate = path.join(dir, found);
-      if (isFile(candidate)) return preferSiblingGrokExe(candidate);
+      const found = findNamedFile(dir, `grok${suffix}`);
+      if (found === null) continue;
+      return preferSiblingGrokExe(found);
     }
   }
   throw new GrokMissingError();
@@ -153,7 +141,7 @@ export function grokExeBeside(command: string, entries: readonly string[]): stri
 
 function preferSiblingGrokExe(command: string): string {
   if (process.platform !== "win32") return command;
-  const picked = grokExeBeside(command, directoryEntries(path.dirname(command)) ?? []);
+  const picked = grokExeBeside(command, listDirCached(path.dirname(command)) ?? []);
   if (picked === command) return command;
   return isFile(picked) ? picked : command;
 }

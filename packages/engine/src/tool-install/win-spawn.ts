@@ -4,8 +4,8 @@
  * Arguments stay an array until the one cmd.exe command line is quoted.
  */
 
-import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { findNamedFile } from "../path-names.ts";
 
 export interface LaunchSpec {
   file: string;
@@ -47,22 +47,12 @@ export function resolveOnPath(command: string, env: NodeJS.ProcessEnv): string {
     .map((ext) => ext.trim())
     .filter((ext) => ext.length > 0);
   for (const dir of dirs) {
-    let entries: readonly string[] = [];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      continue;
-    }
     for (const ext of exts) {
       const suffix = ext.startsWith(".") ? ext : `.${ext}`;
-      const needle = `${command}${suffix}`.toLowerCase();
-      const found = entries.find((entry) => entry.toLowerCase() === needle);
-      if (found === undefined) continue;
-      // Host join. readdirSync already opened `dir` on this machine.
-      // path.win32.join rewrites `/tmp/shim` to `\tmp\shim`, which stat misses
-      // on Linux and macOS. On Windows, path.join is path.win32.join.
-      const candidate = path.join(dir, found);
-      if (isFile(candidate)) return candidate;
+      // Host join. path.win32.join rewrites `/tmp/shim` to `\tmp\shim`, which
+      // stat misses on Linux and macOS. On Windows, path.join is path.win32.join.
+      const found = findNamedFile(dir, `${command}${suffix}`);
+      if (found !== null) return found;
     }
   }
   return command;
@@ -114,12 +104,4 @@ function comSpecFrom(env: NodeJS.ProcessEnv): string {
     if (typeof value === "string") return value;
   }
   return "cmd.exe";
-}
-
-function isFile(filePath: string): boolean {
-  try {
-    return statSync(filePath).isFile();
-  } catch {
-    return existsSync(filePath);
-  }
 }

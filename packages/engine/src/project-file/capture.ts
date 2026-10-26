@@ -252,10 +252,48 @@ async function hashDir(dir: string): Promise<NamedHash[]> {
   return listed;
 }
 
+async function fileNames(dir: string): Promise<Set<string>> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const names = new Set<string>();
+    for (const entry of entries) {
+      if (entry.isFile()) names.add(entry.name);
+    }
+    return names;
+  } catch {
+    return new Set();
+  }
+}
+
+function hasFileName(names: Set<string>, name: string): boolean {
+  if (names.has(name)) return true;
+  if (process.platform !== "win32") return false;
+  const needle = name.toLowerCase();
+  for (const entry of names) {
+    if (entry.toLowerCase() === needle) return true;
+  }
+  return false;
+}
+
 async function snapshotOf(hitch: string): Promise<SnapshotFile[]> {
   const sourceDir = path.dirname(hitch);
+  const rootNames = await fileNames(hitch);
+  const nested = new Map<string, Set<string>>();
   const files: SnapshotFile[] = [];
   for (const relative of SNAPSHOTS) {
+    const slash = relative.indexOf("/");
+    if (slash === -1) {
+      if (!hasFileName(rootNames, relative)) continue;
+    } else {
+      const folder = relative.slice(0, slash);
+      const base = relative.slice(slash + 1);
+      let names = nested.get(folder);
+      if (names === undefined) {
+        names = await fileNames(path.join(hitch, folder));
+        nested.set(folder, names);
+      }
+      if (!hasFileName(names, base)) continue;
+    }
     const text = await readText(path.join(hitch, relative));
     if (text === null) continue;
     files.push({ path: relative, text: scrubText(text, [sourceDir]) });

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { renameReplacing, withExclusiveFile, writeClosedTemp } from "./atomic-rename.ts";
@@ -10,6 +10,7 @@ import { advanceDesignStages, type DesignStageRequest, type DesignStageResult } 
 import { loadState, type GuideState } from "./state.ts";
 import { interviewTreeFile } from "./packaged-dir.ts";
 import { autosaveProject } from "./project-file/autosave.ts";
+import { readUtf8Cached } from "./text-cache.ts";
 import { loadTree, questionsForDepth, type Question } from "./tree.ts";
 
 /**
@@ -343,9 +344,10 @@ export async function writeRevisitId(projectDir: string, id: string): Promise<vo
 
 export function readRevisitId(projectDir: string): string | null {
   const file = path.join(projectDir, ".hitchhiker", REVISIT_FILE);
-  if (!existsSync(file)) return null;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const text = readUtf8Cached(file);
+    if (text === null) return null;
+    const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
     const id = (parsed as { id?: unknown }).id;
     return typeof id === "string" && id.trim() !== "" ? id : null;
@@ -461,8 +463,8 @@ function resolveTreePath(projectDir: string): string {
 }
 
 function loadInterview(filePath: string): { answers: AnswerRecord[]; pushedIds: PushedCount[] } {
-  if (!existsSync(filePath)) return { answers: [], pushedIds: [] };
-  const raw = readFileSync(filePath, "utf8");
+  const raw = readUtf8Cached(filePath);
+  if (raw === null) return { answers: [], pushedIds: [] };
   let value: unknown;
   try {
     value = JSON.parse(raw);

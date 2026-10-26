@@ -1,7 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { replaceViaTemp, withStateLock } from "./lock.ts";
+import { readUtf8Cached } from "./text-cache.ts";
 import {
   ToolInstallRecordError,
   readToolInstalls,
@@ -484,8 +484,9 @@ export function parseConfig(raw: unknown): GuideConfig {
  */
 export function loadConfig(dir: string): GuideConfig {
   const file = path.join(dir, ".hitchhiker", "config.json");
-  if (!existsSync(file)) return defaultConfig();
-  const text = readFileSync(file, "utf8").replace(/^\uFEFF/, "");
+  const loaded = readUtf8Cached(file);
+  if (loaded === null) return defaultConfig();
+  const text = loaded.replace(/^\uFEFF/, "");
   let raw: unknown;
   try {
     raw = JSON.parse(text);

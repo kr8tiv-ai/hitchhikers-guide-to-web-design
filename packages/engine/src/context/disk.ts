@@ -1,12 +1,13 @@
 /**
  * Read and write the five context files under `.hitchhiker/`.
- * Every read hits disk. Nothing is cached for the session.
+ * Reads reuse the file bytes until size or mtime changes.
  * Fact writes take the existing STATE lock and never call saveState inside it.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
+import { readUtf8Cached } from "../text-cache.ts";
 import { loadState, saveState } from "../state.ts";
 import {
   ANSWER_SOURCES,
@@ -72,8 +73,9 @@ function normalize(text: string): string {
 }
 
 function readText(filePath: string): string | null {
-  if (!existsSync(filePath)) return null;
-  return normalize(readFileSync(filePath, "utf8"));
+  const text = readUtf8Cached(filePath);
+  if (text === null) return null;
+  return normalize(text);
 }
 
 function emptyProject(): string {
@@ -126,9 +128,10 @@ export function loadBuildSummary(projectDir: string): string {
 
 export function readLogoAsset(projectDir: string): AssetRecord | null {
   const file = hitch(projectDir, path.join("brand", "logo-intake.json"));
-  if (!existsSync(file)) return null;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const text = readUtf8Cached(file);
+    if (text === null) return null;
+    const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== "object" || parsed === null) return null;
     const record = parsed as { safeName?: unknown; originalName?: unknown; questionId?: unknown };
     if (typeof record.safeName !== "string" || record.safeName.trim() === "") return null;
@@ -146,9 +149,10 @@ export function readLogoAsset(projectDir: string): AssetRecord | null {
 
 export function readInterviewFacts(projectDir: string): InterviewFact[] {
   const file = hitch(projectDir, "interview.json");
-  if (!existsSync(file)) return [];
   try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const text = readUtf8Cached(file);
+    if (text === null) return [];
+    const parsed: unknown = JSON.parse(text);
     const list = Array.isArray(parsed)
       ? parsed
       : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { answers?: unknown }).answers)

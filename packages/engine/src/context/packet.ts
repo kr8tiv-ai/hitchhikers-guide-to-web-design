@@ -83,10 +83,11 @@ export function liveAssets(projectDir: string): AssetRecord[] {
 }
 
 export function buildContextPacket(projectDir: string, purpose: string, options: PacketOptions = {}): ContextPacket {
-  const decisions = loadDecisions(projectDir).filter(isLive);
+  const allDecisions = loadDecisions(projectDir);
+  const decisions = allDecisions.filter(isLive);
   const assets = liveAssets(projectDir);
   const state = loadState(projectDir);
-  const recentAll = recentAnswers(loadDecisions(projectDir), options.recentLimit ?? DEFAULT_RECENT_LIMIT);
+  const recentAll = recentAnswers(allDecisions, options.recentLimit ?? DEFAULT_RECENT_LIMIT);
   const packet: ContextPacket = {
     purpose,
     project: loadProjectSections(projectDir),
@@ -322,6 +323,8 @@ export function bindPacket(
   const wrapped: typeof think = async (req, deps) => {
     // The summary call builds its own incremental prompt. A second packet would paste the history back on.
     if (req.task === "context-summary") return thinkFn(req, deps);
+    // Judge and other callers already pasted a packet. Building another one does not change the prompt.
+    if (req.input.includes("## Context packet")) return thinkFn(req, deps);
     const next = await withContextPacket(projectDir, purpose, req, undefined, options);
     return thinkFn(next, deps);
   };

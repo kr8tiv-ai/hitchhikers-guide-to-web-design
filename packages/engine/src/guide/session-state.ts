@@ -2,12 +2,13 @@
  * One picture of what this project has already decided.
  * Built from files on disk. Guide calls receive it and may not invent files.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { assetsFileExists, decisionsFileExists, isLive, loadAssets, loadDecisions } from "../context/disk.ts";
 import { ANSWER_SOURCES } from "../context/types.ts";
 import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
+import { readUtf8Cached } from "../text-cache.ts";
 
 export const SESSION_TOPICS = [
   "audience",
@@ -714,10 +715,11 @@ function decideTopics(
 
 function readAnswers(projectDir: string): SessionAnswer[] {
   const file = path.join(projectDir, ".hitchhiker", "interview.json");
-  if (!existsSync(file)) return [];
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(file, "utf8"));
+    const text = readUtf8Cached(file);
+    if (text === null) return [];
+    parsed = JSON.parse(text);
   } catch {
     return [];
   }
@@ -765,10 +767,11 @@ function readUploads(projectDir: string): SessionUpload[] {
     }
     for (const folder of folders) {
       const manifest = path.join(root, folder, "manifest.json");
-      if (!existsSync(manifest)) continue;
       let parsed: unknown;
       try {
-        parsed = JSON.parse(readFileSync(manifest, "utf8"));
+        const text = readUtf8Cached(manifest);
+        if (text === null) continue;
+        parsed = JSON.parse(text);
       } catch {
         continue;
       }
@@ -802,9 +805,10 @@ function readUploads(projectDir: string): SessionUpload[] {
     }
   }
   const intakePath = path.join(projectDir, ".hitchhiker", "brand", "logo-intake.json");
-  if (existsSync(intakePath)) {
-    try {
-      const intake: unknown = JSON.parse(readFileSync(intakePath, "utf8"));
+  try {
+    const intakeText = readUtf8Cached(intakePath);
+    if (intakeText !== null) {
+      const intake: unknown = JSON.parse(intakeText);
       if (isRecord(intake) && typeof intake.safeName === "string") {
         const safe = intake.safeName.replace(/\\/g, "/");
         const questionId = typeof intake.questionId === "string" ? intake.questionId : safe.split("/")[0] ?? "";
@@ -824,9 +828,9 @@ function readUploads(projectDir: string): SessionUpload[] {
           });
         }
       }
-    } catch {
-      // A broken intake file does not invent a logo.
     }
+  } catch {
+    // A broken intake file does not invent a logo.
   }
   for (const file of files) {
     if (file.role === "logo") continue;

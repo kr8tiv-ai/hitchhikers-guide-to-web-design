@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { replaceViaTemp, withStateLock } from "./lock.ts";
+import { readUtf8Cached } from "./text-cache.ts";
 
 export interface GuideState {
   phase: string;
@@ -193,9 +193,9 @@ function statePath(projectDir: string): string {
  * A file that is neither throws `STATE.md is missing heading`.
  */
 export function loadState(projectDir: string): GuideState | null {
-  const filePath = statePath(projectDir);
-  if (!existsSync(filePath)) return null;
-  return parseState(readFileSync(filePath, "utf8"));
+  const text = readUtf8Cached(statePath(projectDir));
+  if (text === null) return null;
+  return parseState(text);
 }
 
 /**
