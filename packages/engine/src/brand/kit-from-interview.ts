@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { dealDirections, designLibraryRoot, renderDirectionBlock, saveDirectionDeal, type DirectionDeal } from "./directions.ts";
 import { familiesSentence } from "./type-scale.ts";
+import { winsSentence } from "./type-conflict.ts";
 import { pickType, proposePalettes } from "./tokens.ts";
 
 export interface BrandAnswer {
@@ -86,6 +87,9 @@ export function brandKitFromAnswers(
   const moodPalette = colour !== "" || mood === "" ? null : paletteFromMood(mood);
   const palette = colour !== "" ? paletteFromWords(colour) : (moodPalette ?? defaultPalette());
   const dealt = pickType(typeDeal(type));
+  const displayName = dealt.families[0] ?? "";
+  const bodyName = dealt.families[1] ?? displayName;
+  const wins = winsSentence(displayName, bodyName, type);
   const neverShow = "No identifiable faces, no real listing, and no fake person.";
   const sound = optsIntoSound(motion) ? "Ambient sound is opt-in, off until a labelled control is pressed." : "Sound stays off.";
   const logoLine = logo === ""
@@ -93,7 +97,7 @@ export function brandKitFromAnswers(
     : `Use the logo the owner supplied. ${logo}`;
   const stem = joinSentences([
     "Concept image",
-    imagery,
+    pictureImagery(imagery),
     `Light: ${light}`,
     `Grade: ${palette.paper} paper and ${palette.ink} ink`,
     `Never show: ${neverShow}`,
@@ -122,6 +126,7 @@ export function brandKitFromAnswers(
     type,
     "",
     dealtLine(dealt.families),
+    ...(wins === "" ? [] : [wins]),
     `Adjectives: ${adjectiveLine(dealt.adjectives)}.`,
     `License: ${dealt.license}.`,
     "",
@@ -157,6 +162,8 @@ export function brandKitFromAnswers(
     `  ink: "${palette.ink}",`,
     `  accent: "${palette.accent}",`,
     `  muted: "${palette.muted}",`,
+    `  display: ${JSON.stringify(displayName)},`,
+    `  body: ${JSON.stringify(bodyName)},`,
     `  imagineStem: ${JSON.stringify(stem)},`,
     `  neverShow: ${JSON.stringify(neverShow)},`,
     "} as const;",
@@ -243,6 +250,21 @@ function motionProse(text: string): string {
     if (level >= 1 && level <= 10) return `Motion appetite ${level} of 10.`;
   }
   return trimmed;
+}
+
+function pictureImagery(imagery: string): string {
+  const kept = imagery
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part !== "" && !isSourcingSentence(part));
+  return kept.join(" ");
+}
+
+function isSourcingSentence(sentence: string): boolean {
+  return (
+    /\b(?:stock|open-license|open license|my own|ai stills|fill gaps|dollars|budget|no video)\b/i.test(sentence) ||
+    /^a mix:/i.test(sentence)
+  );
 }
 
 function closeSentence(text: string): string {

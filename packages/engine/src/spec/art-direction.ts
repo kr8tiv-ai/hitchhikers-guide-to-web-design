@@ -6,6 +6,7 @@
  * It never means the absence of motion.
  */
 
+import { headingPhrase, headingWish, typeLead, winsSentence } from "../brand/type-conflict.ts";
 import { familiesSentence, typeChoiceFor } from "../brand/type-scale.ts";
 
 export type StyleWorld = "editorial" | "3d-world" | "playful" | "brutalist";
@@ -32,8 +33,18 @@ export interface SectionArt {
   transitionOut: string;
 }
 
+/** A picked direction. Used where the brief is silent. */
+export interface ArtPick {
+  display: string;
+  body: string;
+  hue?: string;
+  name?: string;
+}
+
 export interface ArtDirection {
   styleWorld: StyleWorld;
+  /** Words printed on the Style world line. The enum stays on styleWorld. */
+  styleWords: string;
   concept: string;
   mood: string;
   light: string;
@@ -88,12 +99,43 @@ function sectionBody(markdown: string, heading: string): string {
   return (next === null ? rest : rest.slice(0, next.index)).trim();
 }
 
-function plain(text: string, max = 220): string {
-  return text
-    .replace(/[!！\u2014]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
+function finishSentence(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim().replace(/[;,:]+$/, "").trim();
+  if (trimmed === "") return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/** Shorten at a sentence or clause end. A single long token is kept whole. */
+function clip(text: string, max = 220): string {
+  const cleaned = text.replace(/[!！\u2014]/g, " ").replace(/\s+/g, " ").trim();
+  if (cleaned === "") return "";
+  if (cleaned.length <= max) return finishSentence(cleaned);
+  const window = cleaned.slice(0, max);
+  let end = -1;
+  for (let index = 0; index < window.length; index += 1) {
+    const ch = window[index];
+    if (ch === "." || ch === "?" || ch === ";") end = index + 1;
+  }
+  if (end > 0) return finishSentence(cleaned.slice(0, end));
+  const comma = window.lastIndexOf(",");
+  if (comma > 0) return finishSentence(cleaned.slice(0, comma));
+  const space = window.lastIndexOf(" ");
+  if (space > 0) return finishSentence(cleaned.slice(0, space));
+  return finishSentence(cleaned);
+}
+
+function answerValue(answers: readonly ArtAnswer[], id: string): string {
+  const found = answers.find((answer) => answer.id === id);
+  if (found === undefined) return "";
+  if (found.status !== undefined && SKIPPED.has(found.status)) return "";
+  return found.value.replace(/\s+/g, " ").trim();
+}
+
+function isSourcingSentence(sentence: string): boolean {
+  return (
+    /\b(?:stock|open-license|open license|my own|ai stills|fill gaps|dollars|budget|no video)\b/i.test(sentence) ||
+    /^a mix:/i.test(sentence)
+  );
 }
 
 function corpusOf(brief: string, answers: readonly ArtAnswer[]): string {
@@ -163,12 +205,22 @@ function conceptFor(world: StyleWorld): string {
   return "One visual concept: a slow editorial visit, calm and warm, with generous whitespace.";
 }
 
-function typeVoiceFor(world: StyleWorld, text: string): string {
-  const families = familiesSentence(typeChoiceFor(text).families);
-  if (world === "3d-world") return `A geometric sans display. The exact scale is yours to set. ${families}`;
-  if (world === "playful") return `A rounded display with an easy reading size. The exact scale is yours to set. ${families}`;
-  if (world === "brutalist") return `A raw grotesque display. The exact scale is yours to set. ${families}`;
-  return `A large serif display scale, with generous whitespace. The exact scale is yours to set. ${families}`;
+function typeVoiceFor(world: StyleWorld, text: string, typeText: string, pick?: ArtPick): string {
+  const choice = typeChoiceFor(text);
+  const display = pick?.display.trim() || choice.families[0] || "";
+  const bodyName = pick?.body.trim() || choice.families[1] || display;
+  const families = familiesSentence(bodyName === display ? [display] : [display, bodyName]);
+  const wish = headingWish(typeText);
+  const owner = typeLead(typeText);
+  let lead: string;
+  if ((wish === "sans" || wish === "serif") && owner !== "") lead = finishSentence(owner);
+  else if (world === "3d-world") lead = "A geometric sans display.";
+  else if (world === "playful") lead = "A rounded display with an easy reading size.";
+  else if (world === "brutalist") lead = "A raw grotesque display.";
+  else lead = "A large serif display scale, with generous whitespace.";
+  const voice = `${lead} The exact scale is yours to set. ${families}`;
+  const wins = winsSentence(display, bodyName, typeText);
+  return wins === "" ? voice : `${voice} ${wins}`;
 }
 
 function lightFor(world: StyleWorld): { light: string; colorGrade: string } {
@@ -208,18 +260,21 @@ function characterFor(world: StyleWorld, motion: ArtMotion): string {
   return "Hard cuts and direct moves.";
 }
 
-function layoutFor(world: StyleWorld, sectionId: string): string {
+function layoutFor(world: StyleWorld, sectionId: string, typeText: string): string {
   if (world === "3d-world") return "A full-bleed technical frame. You choose whether this section is an island.";
   if (world === "playful") return "A bright rhythmic layout with clear groups.";
   if (world === "brutalist") return "A hard grid with raw type and little decoration.";
   if (sectionId === "hero" || sectionId.endsWith("-hero")) {
+    if (headingWish(typeText) === "sans") {
+      return `Generous whitespace, ${headingPhrase(typeText)} as a starting scale, and a quiet first frame.`;
+    }
     return "Generous whitespace, a large serif display as a starting scale, and a quiet first frame.";
   }
   return "An editorial grid with generous whitespace and overlapping media where the story needs it.";
 }
 
-function mediaFor(world: StyleWorld): string {
-  const grade = world === "editorial" ? "the warm film grade" : "the shared grade";
+function mediaFor(world: StyleWorld, namedColours: boolean): string {
+  const grade = world === "editorial" && !namedColours ? "the warm film grade" : "the shared grade";
   return `Layered media in ${grade}. Use the supplied image when it fits, otherwise the generated concept set. A real person, place, product, or listing is never generated.`;
 }
 
@@ -242,10 +297,74 @@ function sectionMotion(sectionId: string, signature: string, reveals: string, ca
   return reveals;
 }
 
+function firstLovePhrase(text: string): string {
+  const match = /:\s*love\.\s*([^.]*)/i.exec(text);
+  return match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function firstPictureSentence(text: string): string {
+  for (const part of text.split(/(?<=[.!?])\s+/)) {
+    const sentence = part.replace(/\s+/g, " ").trim();
+    if (sentence === "" || isSourcingSentence(sentence)) continue;
+    return sentence.replace(/[.!?]+$/, "").trim();
+  }
+  return "";
+}
+
+function colourText(brief: string, answers: readonly ArtAnswer[]): string {
+  const fromBrief =
+    sectionBody(brief, "Colours") ||
+    sectionBody(brief, "Colour") ||
+    sectionBody(brief, "Colors") ||
+    sectionBody(brief, "Color");
+  if (fromBrief !== "") return fromBrief;
+  return answerValue(answers, "DP-1.2");
+}
+
+function typeTextOf(brief: string, answers: readonly ArtAnswer[]): string {
+  const fromBrief = sectionBody(brief, "Type") || sectionBody(brief, "Typography");
+  if (fromBrief !== "") return fromBrief;
+  return answerValue(answers, "DP-1.5");
+}
+
+function styleWordsFor(
+  brief: string,
+  answers: readonly ArtAnswer[],
+  world: StyleWorld,
+  pick?: ArtPick,
+): string {
+  const references = sectionBody(brief, "References") || answerValue(answers, "DP-5.1");
+  const loved = firstLovePhrase(references);
+  if (loved !== "") return loved;
+  const imagery = sectionBody(brief, "Imagery") || answerValue(answers, "DP-5.6");
+  const picture = firstPictureSentence(imagery);
+  if (picture !== "") return picture;
+  const name = pick?.name?.replace(/\s+/g, " ").trim() ?? "";
+  if (name !== "") return name;
+  return world;
+}
+
+function lightText(brief: string, answers: readonly ArtAnswer[], world: StyleWorld): string {
+  const fromAnswer = answerValue(answers, "DP-5.5");
+  if (fromAnswer !== "") return finishSentence(fromAnswer);
+  const fromBrief = sectionBody(brief, "Light");
+  if (fromBrief !== "") return clip(fromBrief, 180);
+  return lightFor(world).light;
+}
+
+function gradeText(brief: string, answers: readonly ArtAnswer[], world: StyleWorld, pick?: ArtPick): string {
+  const colours = colourText(brief, answers);
+  if (colours !== "") return clip(colours, 220);
+  const hue = pick?.hue?.trim() ?? "";
+  if (hue !== "") return `Hue ${hue}.`;
+  return lightFor(world).colorGrade;
+}
+
 export function translateBrief(
   brief: string,
   answers: readonly ArtAnswer[] = [],
   sections: readonly string[] = [],
+  pick?: ArtPick,
 ): ArtDirection {
   const corpus = corpusOf(brief, answers);
   const vibe = sectionBody(brief, "Vibe");
@@ -256,11 +375,12 @@ export function translateBrief(
   const motion = motionBand(readScore(corpus, styleWorld));
   const cards = /\bcards?\b/i.test(corpus) && /fade|stagger|400/i.test(corpus);
   const heroParallax = /parallax/i.test(corpus) && /hero/i.test(corpus);
-  const grade = lightFor(styleWorld);
+  const typeText = typeTextOf(brief, answers);
+  const namedColours = colourText(brief, answers) !== "";
   const signatureHero = signatureFor(styleWorld, motion, heroParallax);
   const reveals = revealsFor(motion, cards);
-  const moodSource = plain(vibe, 160);
-  const imagerySource = plain(sectionBody(brief, "Imagery"), 180);
+  const moodSource = clip(vibe, 160);
+  const imagerySource = clip(sectionBody(brief, "Imagery"), 180);
   const seen = new Set<string>();
   const sectionArts: SectionArt[] = [];
   for (const sectionId of sections) {
@@ -270,30 +390,34 @@ export function translateBrief(
     const transition = transitionsFor(motion);
     sectionArts.push({
       sectionId: id,
-      layout: layoutFor(styleWorld, id),
-      media: mediaFor(styleWorld),
+      layout: layoutFor(styleWorld, id, typeText),
+      media: mediaFor(styleWorld, namedColours),
       motion: sectionMotion(id, signatureHero, reveals, cards),
       transitionIn: transition.transitionIn,
       transitionOut: transition.transitionOut,
     });
   }
   const imagery = imagerySource === ""
-    ? mediaFor(styleWorld)
-    : `${imagerySource} Generated pictures are concept art. A real person, place, product, or listing is never generated.`;
+    ? mediaFor(styleWorld, namedColours)
+    : clip(
+        `${imagerySource} Generated pictures are concept art. A real person, place, product, or listing is never generated.`,
+        320,
+      );
   return {
     styleWorld,
+    styleWords: styleWordsFor(brief, answers, styleWorld, pick),
     concept: conceptFor(styleWorld),
     mood: moodSource === "" ? conceptFor(styleWorld) : moodSource,
-    light: grade.light,
-    colorGrade: grade.colorGrade,
-    typeVoice: typeVoiceFor(styleWorld, corpus),
+    light: lightText(brief, answers, styleWorld),
+    colorGrade: gradeText(brief, answers, styleWorld, pick),
+    typeVoice: typeVoiceFor(styleWorld, corpus, typeText, pick),
     motionCharacter: characterFor(styleWorld, motion),
     signatureHero,
     scroll: scrollFor(styleWorld, motion),
     reveals,
-    imagery: plain(imagery, 320),
-    palette: plain(sectionBody(brief, "Colours"), 220),
-    logo: plain(sectionBody(brief, "Logo"), 180),
+    imagery,
+    palette: clip(sectionBody(brief, "Colours"), 220),
+    logo: clip(sectionBody(brief, "Logo"), 180),
     motionNote: `Motion score ${motion.score} is a starting point. Intensity is ${motion.intensity}. Performance-cost ceiling is ${motion.performanceCost}. A score never means the absence of motion.`,
     motion,
     sections: sectionArts,
@@ -303,7 +427,7 @@ export function translateBrief(
 
 export function directionAcceptance(art: ArtDirection): string[] {
   return [
-    `Style world: ${art.styleWorld}.`,
+    `Style world: ${art.styleWords}`,
     `Concept: ${art.concept}`,
     `Mood: ${art.mood}`,
     `Light: ${art.light}`,
@@ -319,7 +443,9 @@ export function directionAcceptance(art: ArtDirection): string[] {
     art.motionNote,
     `Starting techniques: ${art.motion.techniques.join("; ")}.`,
     ...art.freedom,
-  ].filter((line) => line.trim() !== "");
+  ]
+    .map((line) => finishSentence(line))
+    .filter((line) => line.trim() !== "");
 }
 
 export function sectionAcceptance(section: SectionArt, art: ArtDirection): string[] {

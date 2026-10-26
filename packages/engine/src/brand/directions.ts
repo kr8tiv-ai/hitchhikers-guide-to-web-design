@@ -4,12 +4,14 @@
  * and one section order is only a hue change, and it fails. No ingest.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { packagedPath } from "../packaged-dir.ts";
 import { DecisionLogError, recordDirectionChoice, rejectedDirectionNames } from "./decision-canvas.ts";
 import { isOverusedFamily } from "./tokens.ts";
+import { winsSentence } from "./type-conflict.ts";
 import { TYPE_LIBRARY, type TypePairing } from "./type-library.ts";
+import { familiesSentence } from "./type-scale.ts";
 
 export interface StudiedPage {
   id: string;
@@ -279,6 +281,7 @@ export function chooseDirection(
   const picked = pickDirection(deal, id);
   saveDirectionDeal(projectDir, picked);
   noteBrandKitPick(projectDir, picked);
+  applyPickedDirection(projectDir, picked);
   afterDirectionPicked?.(projectDir);
   return picked;
 }
@@ -291,6 +294,114 @@ function noteBrandKitPick(projectDir: string, deal: DirectionDeal): void {
   const text = readFileSync(file, "utf8");
   const next = text.replace(/## Directions\r?\n\r?\n(?:Pick one|Picked [^\n]+)\./, () => `## Directions\n\nPicked ${picked.name}.`);
   if (next !== text) writeFileSync(file, next, "utf8");
+}
+
+const RAN_PROMPT = new Set(["running", "passed", "failed", "interrupted", "fixing", "escalated"]);
+
+/** A pick rewrites the type line, brand.ts, and unbuilt prompt style lines. */
+function applyPickedDirection(projectDir: string, deal: DirectionDeal): void {
+  const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
+  if (picked === undefined) return;
+  const families = familiesSentence(picked.display === picked.body ? [picked.display] : [picked.display, picked.body]);
+  const wins = winsSentence(picked.display, picked.body, typeWishText(projectDir));
+  rewriteBrandType(projectDir, families, wins);
+  rewriteBrandModule(projectDir, picked.display, picked.body);
+  rewritePromptStyles(projectDir, families, wins);
+}
+
+function typeWishText(projectDir: string): string {
+  const briefFile = path.join(projectDir, ".hitchhiker", "SITE-BRIEF.md");
+  if (existsSync(briefFile)) {
+    const brief = readFileSync(briefFile, "utf8");
+    const fromBrief = briefSection(brief, "Type") || briefSection(brief, "Typography");
+    if (fromBrief !== "") return fromBrief.replace(/\s+/g, " ").trim();
+  }
+  const fromAnswer = readInterviewAnswers(projectDir).find((answer) => answer.id === "DP-1.5")?.value ?? "";
+  return fromAnswer.replace(/\s+/g, " ").trim();
+}
+
+function briefSection(markdown: string, heading: string): string {
+  const match = new RegExp(`^##\\s+${heading}\\s*$`, "im").exec(markdown);
+  if (match === null) return "";
+  const rest = markdown.slice(match.index + match[0].length);
+  const next = /^##\s+/m.exec(rest);
+  return (next === null ? rest : rest.slice(0, next.index)).trim();
+}
+
+function rewriteBrandType(projectDir: string, families: string, wins: string): void {
+  const file = path.join(projectDir, ".hitchhiker", "brand", "BRAND.md");
+  if (!existsSync(file)) return;
+  const pickedLine = families.replace(/^Families:/, "Picked families:");
+  let text = readFileSync(file, "utf8");
+  text = text.replace(/^(?:Dealt|Picked) families: .+$/m, pickedLine);
+  text = text.replace(/[ \t]*The owner's words win over [^.\n]+\.?\n?/g, "");
+  if (wins !== "") text = text.replace(pickedLine, `${pickedLine}\n${wins}`);
+  writeFileSync(file, text, "utf8");
+}
+
+function rewriteBrandModule(projectDir: string, display: string, body: string): void {
+  const file = path.join(projectDir, "src", "data", "brand.ts");
+  if (!existsSync(file)) return;
+  const displayLine = `display: ${JSON.stringify(display)}`;
+  const bodyLine = `body: ${JSON.stringify(body)}`;
+  let text = readFileSync(file, "utf8");
+  if (/^\s*display: /m.test(text)) text = text.replace(/display: (?:"(?:\\.|[^"\\])*")/, displayLine);
+  else text = text.replace(/imagineStem: /, `${displayLine},\n  ${bodyLine},\n  imagineStem: `);
+  if (/^\s*body: /m.test(text)) text = text.replace(/body: (?:"(?:\\.|[^"\\])*")/, bodyLine);
+  writeFileSync(file, text, "utf8");
+}
+
+function ranPromptIds(projectDir: string): Set<string> {
+  const file = path.join(projectDir, ".hitchhiker", "queue.json");
+  if (!existsSync(file)) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as { items?: unknown }).items)) {
+      return new Set();
+    }
+    const ids = new Set<string>();
+    for (const item of (parsed as { items: unknown[] }).items) {
+      if (typeof item !== "object" || item === null) continue;
+      const id = (item as { id?: unknown }).id;
+      const status = (item as { status?: unknown }).status;
+      if (typeof id === "string" && typeof status === "string" && RAN_PROMPT.has(status)) ids.add(id);
+    }
+    return ids;
+  } catch {
+    return new Set();
+  }
+}
+
+function rewritePromptStyles(projectDir: string, families: string, wins: string): void {
+  const folder = path.join(projectDir, ".hitchhiker", "prompts");
+  if (!existsSync(folder)) return;
+  let names: string[] = [];
+  try {
+    names = readdirSync(folder);
+  } catch {
+    return;
+  }
+  const ran = ranPromptIds(projectDir);
+  for (const name of names) {
+    const id = /^(\d{3})\.md$/.exec(name)?.[1];
+    if (id === undefined || ran.has(id)) continue;
+    const file = path.join(folder, name);
+    let text = "";
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const next = rewriteStyleText(text, families, wins);
+    if (next !== text) writeFileSync(file, next, "utf8");
+  }
+}
+
+function rewriteStyleText(text: string, families: string, wins: string): string {
+  let next = text.replace(/ ?The owner's words win over [^.\n]+\./g, "");
+  next = next.replace(/Families: [^.\n]+\./g, families);
+  if (wins !== "" && next.includes(families)) next = next.replaceAll(families, `${wins} ${families}`);
+  return next;
 }
 
 export function renderDirectionBlock(deal: DirectionDeal): string {
