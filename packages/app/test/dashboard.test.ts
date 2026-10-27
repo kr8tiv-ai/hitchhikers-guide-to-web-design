@@ -230,7 +230,13 @@ test("the build run panel sits above the queue and hides temp noise", () => {
       effort: "xhigh",
       elapsedMs: 1200,
       lastLines: ["Wrote the tokens.", blob, short],
-      filesWritten: ["src/styles/tokens.css", ".grok-write-abc.tmp", "src/.grok-write-xyz.tmp"],
+      filesWritten: [
+        "src/styles/tokens.css",
+        ".grok-write-abc.tmp",
+        "src/.grok-write-xyz.tmp",
+        ".playwright-mcp/console-004.log",
+        ".playwright-mcp/page-004.yml",
+      ],
       reason: "",
     },
   );
@@ -238,6 +244,9 @@ test("the build run panel sits above the queue and hides temp noise", () => {
   const table = html.indexOf('<table class="hh-table"');
   assert.ok(panel >= 0 && table > panel);
   assert.equal(html.includes(".grok-write-"), false);
+  assert.equal(html.includes(".playwright-mcp"), false);
+  assert.equal(html.includes("console-004.log"), false);
+  assert.equal(html.includes("page-004.yml"), false);
   assert.equal(html.includes(blob), false);
   assert.match(html, /src\/styles\/tokens\.css/);
   assert.match(html, /Wrote the tokens\./);

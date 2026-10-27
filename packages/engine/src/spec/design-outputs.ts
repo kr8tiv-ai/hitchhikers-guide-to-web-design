@@ -7,7 +7,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
-import { dealDirections, syncResolvedFamilies } from "../brand/directions.ts";
+import { dealDirections, readDirectionDeal, syncResolvedFamilies } from "../brand/directions.ts";
 import { brandKitFromAnswers, contrastRatio, type BrandAnswer, type BrandPalette } from "../brand/kit-from-interview.ts";
 import { pickType } from "../brand/tokens.ts";
 import { displayRhythm, ownerHeadingSentence, resolveTypeRoles, type DisplayRhythm } from "../brand/type-conflict.ts";
@@ -531,17 +531,26 @@ export function writeDesignMd(
 ): string {
   const file = path.join(projectDir, DESIGN_MD_PATH);
   mkdirSync(projectDir, { recursive: true });
-  const markdown = renderDesignMd(brief, answers, fonts, readProjectDisplayName(projectDir));
+  const effectiveFonts = fonts === undefined ? pickedFontsFromDeal(projectDir) : fonts;
+  const markdown = renderDesignMd(brief, answers, effectiveFonts, readProjectDisplayName(projectDir));
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
-  if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
-    const chosen = fontChoice(brief, answers, fonts);
-    if (chosen.display !== fonts.display.trim() || chosen.body !== fonts.body.trim()) {
-      const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
-      syncResolvedFamilies(projectDir, chosen.display, chosen.body, rhythm.fontWeight);
-    }
-  }
+  const chosen = fontChoice(brief, answers, effectiveFonts);
+  const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
+  syncResolvedFamilies(projectDir, chosen.display, chosen.body, rhythm.fontWeight);
   return file;
+}
+
+function pickedFontsFromDeal(projectDir: string): DesignFontChoice | null {
+  try {
+    const deal = readDirectionDeal(projectDir);
+    if (deal === null || deal.pickedId === null) return null;
+    const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
+    if (picked === undefined || picked.display.trim() === "" || picked.body.trim() === "") return null;
+    return { display: picked.display.trim(), body: picked.body.trim(), source: "picked direction" };
+  } catch {
+    return null;
+  }
 }
 
 export function writeMotionModule(

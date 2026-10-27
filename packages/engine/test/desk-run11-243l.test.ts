@@ -8,7 +8,9 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { contrastRatio } from "../src/brand/kit-from-interview.ts";
+import { chooseDirection, readDirectionDeal, saveDirectionDeal } from "../src/brand/directions.ts";
+import { contrastRatio, writeBrandKit } from "../src/brand/kit-from-interview.ts";
+import { writeSectionStillPlan } from "../src/spec/section-stills.ts";
 import { displayRhythm } from "../src/brand/type-conflict.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import { renderDesignMd, writeDesignMd } from "../src/spec/design-outputs.ts";
@@ -248,6 +250,51 @@ test("Run 11 draft names the business, keeps the five colours, and drops stub se
     for (const title of ["Live on the Land", "Contact", "Blog", "Privacy", "Terms", "About", "Eco-Building and Food"]) {
       assert.deepEqual(wireSections(wireframe, title), pageSections(sitemap, title), title);
     }
+  } finally {
+    removeTempDir(dir);
+  }
+});
+
+test("prepare steps keep a picked direction and write its families into still prompts", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "hh-243q-direction-"));
+  try {
+    const brief = run11Brief();
+    const hitch = path.join(dir, ".hitchhiker");
+    mkdirSync(hitch, { recursive: true });
+    writeFileSync(path.join(hitch, "SITE-BRIEF.md"), brief, "utf8");
+    writeFileSync(path.join(hitch, "project.json"), `${JSON.stringify({ name: "Paradise Found" })}\n`, "utf8");
+    writeBrandKit(dir, ANSWERS);
+    const dealt = readDirectionDeal(dir);
+    assert.ok(dealt);
+    const first = dealt.directions[0];
+    assert.ok(first);
+    saveDirectionDeal(dir, {
+      pickedId: null,
+      directions: dealt.directions.map((direction, index) =>
+        index === 0 ? { ...direction, display: "Boska", body: "General Sans" } : direction,
+      ),
+    });
+    chooseDirection(dir, first.id, "The direction fits the farms.");
+    writeSectionStillPlan(dir, brief, ANSWERS, [
+      { id: "home", title: "Home", route: "/", sections: ["hero", "farms"], contentSources: ["src/data/home.ts"] },
+    ]);
+    writeBrandKit(dir, ANSWERS);
+    writeDesignMd(dir, brief, ANSWERS);
+    const kept = readDirectionDeal(dir);
+    assert.equal(kept?.pickedId, first.id);
+    const design = readFileSync(path.join(dir, "DESIGN.md"), "utf8");
+    assert.match(design, /Families: General Sans\. Source: picked direction\./);
+    assert.equal(design.includes("Boska"), false);
+    const brand = readFileSync(path.join(dir, ".hitchhiker", "brand", "BRAND.md"), "utf8");
+    const type = /## Type\n\n([\s\S]*?)\n## /.exec(brand)?.[1] ?? "";
+    assert.match(type, /Picked families: General Sans\./);
+    assert.equal(type.includes("Boska"), false);
+    const source = readFileSync(path.join(dir, "src", "data", "brand.ts"), "utf8");
+    assert.match(source, /display: "General Sans"/);
+    assert.match(source, /body: "General Sans"/);
+    const slots = readFileSync(path.join(dir, ".hitchhiker", "assets", "slots.json"), "utf8");
+    assert.match(slots, /Families: General Sans\./);
+    assert.equal(slots.includes("Boska"), false);
   } finally {
     removeTempDir(dir);
   }

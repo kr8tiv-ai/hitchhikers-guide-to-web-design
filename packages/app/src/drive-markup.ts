@@ -588,7 +588,8 @@ function runPanel(run: DriveRun): string {
 }
 
 function isTransientTempFile(relPath: string): boolean {
-  return /(^|\/)\.grok-write-[^/]*$/i.test(relPath.replace(/\\/g, "/"));
+  const normalized = relPath.replace(/\\/g, "/");
+  return /(^|\/)\.grok-write-[^/]*$/i.test(normalized) || /(^|\/)\.playwright-mcp(\/|$)/i.test(normalized);
 }
 
 function shownLines(lines: readonly string[]): string[] {

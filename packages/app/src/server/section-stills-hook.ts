@@ -76,7 +76,9 @@ export async function attachSectionStills(projectDir: string): Promise<void> {
   });
 }
 
-function spawnGrok(request: {
+const STILL_EXIT_DRAIN_MS = 500;
+
+export function spawnGrok(request: {
   command: string;
   args: readonly string[];
   cwd: string;
@@ -97,14 +99,38 @@ function spawnGrok(request: {
     let stderr = "";
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let drain: ReturnType<typeof setTimeout> | undefined;
+    const killTree = (): void => {
+      if (process.platform === "win32" && child.pid !== undefined) {
+        try {
+          const killer = spawn(
+            "taskkill",
+            ["/pid", String(child.pid), "/T", "/F"],
+            hiddenChildOptions({ stdio: "ignore" as const }),
+          );
+          killer.on("error", () => undefined);
+          killer.unref();
+        } catch {
+          // The process is already gone.
+        }
+      }
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The process is already gone.
+      }
+    };
     const finish = (result: SpawnOutput): void => {
       if (settled) return;
       settled = true;
       if (timer !== undefined) clearTimeout(timer);
+      if (drain !== undefined) clearTimeout(drain);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
       resolve(result);
     };
     timer = setTimeout(() => {
-      child.kill();
+      killTree();
       finish({ status: null, stdout, stderr, timedOut: true, errorCode: "TIMEOUT" });
     }, request.timeoutMs);
     child.stdout?.setEncoding("utf8");
@@ -117,6 +143,14 @@ function spawnGrok(request: {
     });
     child.on("error", (error: NodeJS.ErrnoException) => {
       finish({ status: null, stdout, stderr: error.message, timedOut: false, errorCode: error.code ?? "ENOENT" });
+    });
+    child.on("exit", (status) => {
+      if (settled || drain !== undefined) return;
+      drain = setTimeout(() => {
+        if (settled) return;
+        killTree();
+        finish({ status, stdout, stderr, timedOut: false, errorCode: null });
+      }, STILL_EXIT_DRAIN_MS);
     });
     child.on("close", (status) => {
       finish({ status, stdout, stderr, timedOut: false, errorCode: null });

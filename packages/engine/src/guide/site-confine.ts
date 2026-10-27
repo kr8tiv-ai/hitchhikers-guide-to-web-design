@@ -277,6 +277,13 @@ function denyRootTree(rootPath: string, projects: readonly string[]): string[] {
       if (patternHitsProject(pattern, projects, rootPlatform)) continue;
       for (const tool of DENY_TOOLS) rules.push(`${tool}(${pattern})`);
     }
+    if (!coversProject) continue;
+    const HOME_DOT_DIRS = [".agents", ".claude", ".cursor"] as const;
+    for (const dotDir of HOME_DOT_DIRS) {
+      const dotSlash = `${slash}/${dotDir}`;
+      if (aligned.some((project) => isInsideProject([dotSlash], project, rootPlatform))) continue;
+      for (const tool of TOOLS) rules.push(`${tool}(${dotSlash}/**)`);
+    }
   }
   return rules;
 }
@@ -375,30 +382,41 @@ function looksLikePath(value: string): boolean {
 }
 
 function shellPaths(command: string): string[] {
+  const cleaned = command.replace(/\\["']/g, " ");
   const found: string[] = [];
   const quoted = /['"]([A-Za-z]:[\\/][^'"]+|~?\/[^'"]+|\.\.?[\\/][^'"]+)['"]/g;
   const windows = /[A-Za-z]:[\\/][^\s"'|&;<>]+/g;
   const posix = /(?:^|[\s"'=])((?:\/|~\/)[^\s"'|&;<>]+)/g;
   const relative = /(?:^|[\s"'=])(\.\.?[\\/][^\s"'|&;<>]+)/g;
-  for (const match of command.matchAll(quoted)) {
-    if (match[1] !== undefined) found.push(match[1]);
-  }
-  for (const match of command.matchAll(windows)) {
-    if (match[0] !== undefined) found.push(match[0]);
-  }
-  for (const match of command.matchAll(posix)) {
-    if (match[1] !== undefined) found.push(match[1]);
-  }
-  for (const match of command.matchAll(relative)) {
-    if (match[1] !== undefined) found.push(match[1]);
-  }
+  const push = (value: string | undefined): void => {
+    if (value === undefined || !keepShellPath(value)) return;
+    found.push(value);
+  };
+  for (const match of cleaned.matchAll(quoted)) push(match[1]);
+  for (const match of cleaned.matchAll(windows)) push(match[0]);
+  for (const match of cleaned.matchAll(posix)) push(match[1]);
+  for (const match of cleaned.matchAll(relative)) push(match[1]);
   return found;
 }
 
+/** Real filesystem paths only. Regex literals, routes, and code are not reads. */
+function keepShellPath(candidate: string): boolean {
+  if (/[()[\]{}*?+^$;]/.test(candidate)) return false;
+  if (candidate.startsWith("/") && !candidate.startsWith("~/")) {
+    if (/[()[\]{}*?+^$\\;:]/.test(candidate)) return false;
+    if (/^\/[^/]+\/[dgimsuvy]*(?:\.[A-Za-z_$][\w$]*)*$/.test(candidate)) return false;
+    if (!/^\/(?:tmp|var|Users|home|etc|usr|opt|mnt|private|Volumes|root|workspace|srv|run|dev|proc|sys|bin|sbin|lib|lib64|boot|media|work|projects|app|data|c|d|e)(?:\/|$)/i.test(candidate)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function shellWrites(command: string, filePath: string): boolean {
-  if (!/\b(set-content|out-file|add-content|new-item|tee-object|remove-item|move-item|copy-item)\b/i.test(command) &&
-      !/(?:^|[\s;|&])(?:rm|del|erase|mv|move|cp|copy)\b/i.test(command) &&
-      !/[>]{1,2}/.test(command)) {
+  const noArrows = command.replace(/=>|->|>=|[0-9]*>&[0-9]*/g, "  ");
+  if (!/\b(set-content|out-file|add-content|new-item|tee-object|remove-item|move-item|copy-item)\b/i.test(noArrows) &&
+      !/(?:^|[\s;|&])(?:rm|del|erase|mv|move|cp|copy)\b/i.test(noArrows) &&
+      !/[>]{1,2}/.test(noArrows)) {
     return false;
   }
   const folded = command.replace(/\\/g, "/").toLowerCase();

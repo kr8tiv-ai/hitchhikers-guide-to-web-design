@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { hiddenChildOptions } from "../hidden-child.ts";
 import { packagedModule } from "../packaged-dir.ts";
 import { GrokMissingError, resolveGrokCommand } from "../ai/grok-cli.ts";
 import { appendAiOutcome } from "../ai/think.ts";
@@ -76,7 +77,7 @@ export const BUILD_EXIT_GRACE_MS = 5_000;
 
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
-const SKIP_DIRS = new Set(["node_modules", ".git", ".hitchhiker"]);
+const SKIP_DIRS = new Set(["node_modules", ".git", ".hitchhiker", ".playwright-mcp"]);
 const LINE_CAP = 6;
 const LINE_CHARS = 180;
 const FILE_CAP = 40;
@@ -583,6 +584,19 @@ export function spawnLiveBuild(
     done,
     exited,
     stop: () => {
+      if ((launch.platform ?? process.platform) === "win32" && child.pid !== undefined) {
+        try {
+          const killer = spawn(
+            "taskkill",
+            ["/pid", String(child.pid), "/T", "/F"],
+            hiddenChildOptions({ stdio: "ignore" as const }),
+          );
+          killer.on("error", () => undefined);
+          killer.unref();
+        } catch {
+          // The process is already gone.
+        }
+      }
       try {
         child.kill();
       } catch {
@@ -1902,6 +1916,10 @@ async function maybeRunSectionStills(projectDir: string, promptId: string): Prom
     const text = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${item.id}.md`));
     if (ART_REQUIREMENT.test(text)) return;
   }
+  const currentRun = readRunFile(projectDir);
+  if (currentRun !== null) {
+    writeRun(projectDir, { ...currentRun, reason: "Generating section concept stills before the next build step." });
+  }
   try {
     await runner(projectDir);
   } catch (error: unknown) {
@@ -1909,6 +1927,10 @@ async function maybeRunSectionStills(projectDir: string, promptId: string): Prom
     const dir = path.join(projectDir, ".hitchhiker", "assets");
     mkdirSync(dir, { recursive: true });
     appendFileSync(path.join(dir, "fallback.md"), `Section stills did not run. ${reason}\n`, "utf8");
+  } finally {
+    if (currentRun !== null && readRunFile(projectDir)?.promptId === currentRun.promptId) {
+      writeRun(projectDir, currentRun);
+    }
   }
 }
 
@@ -2508,7 +2530,8 @@ function pushLines(lines: string[], chunk: string): void {
 }
 
 function isTransientTempFile(relPath: string): boolean {
-  return /(^|\/)\.grok-write-[^/]*$/i.test(relPath.replace(/\\/g, "/"));
+  const normalized = relPath.replace(/\\/g, "/");
+  return /(^|\/)\.grok-write-[^/]*$/i.test(normalized) || /(^|\/)\.playwright-mcp(\/|$)/i.test(normalized);
 }
 
 function isRawBase64Line(line: string): boolean {

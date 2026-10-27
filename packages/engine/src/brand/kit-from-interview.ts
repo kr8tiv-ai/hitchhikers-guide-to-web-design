@@ -5,7 +5,15 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { dealDirections, designLibraryRoot, renderDirectionBlock, saveDirectionDeal, type DirectionDeal } from "./directions.ts";
+import {
+  applyPickedDirection,
+  dealDirections,
+  designLibraryRoot,
+  readDirectionDeal,
+  renderDirectionBlock,
+  saveDirectionDeal,
+  type DirectionDeal,
+} from "./directions.ts";
 import { familiesSentence } from "./type-scale.ts";
 import { winsSentence } from "./type-conflict.ts";
 import { pickType, proposePalettes } from "./tokens.ts";
@@ -193,7 +201,8 @@ export function brandKitFromAnswers(
 }
 
 export function writeBrandKit(projectDir: string, answers: readonly BrandAnswer[]): string {
-  const deal = dealDirections(designLibraryRoot(), projectDir);
+  const existing = readDirectionDeal(projectDir);
+  const deal = existing !== null && existing.directions.length > 0 ? existing : dealDirections(designLibraryRoot(), projectDir);
   const kit = brandKitFromAnswers(answers, deal, readApprovedBrief(projectDir));
   const brandDir = path.join(projectDir, ".hitchhiker", "brand");
   const dataDir = path.join(projectDir, "src", "data");
@@ -202,6 +211,10 @@ export function writeBrandKit(projectDir: string, answers: readonly BrandAnswer[
   writeFileSync(path.join(brandDir, "BRAND.md"), kit.markdown, "utf8");
   writeFileSync(path.join(dataDir, "brand.ts"), kit.moduleSource, "utf8");
   saveDirectionDeal(projectDir, deal);
+  if (deal.pickedId !== null) {
+    applyPickedDirection(projectDir, deal);
+    return readFileSync(path.join(brandDir, "BRAND.md"), "utf8");
+  }
   return kit.markdown;
 }
 

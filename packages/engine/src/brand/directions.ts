@@ -298,8 +298,8 @@ function noteBrandKitPick(projectDir: string, deal: DirectionDeal): void {
 
 const RAN_PROMPT = new Set(["running", "passed", "failed", "interrupted", "fixing", "escalated"]);
 
-/** A pick rewrites the type line, brand.ts, and unbuilt prompt style lines. */
-function applyPickedDirection(projectDir: string, deal: DirectionDeal): void {
+/** A pick rewrites the type line, brand.ts, unbuilt prompt style lines, and still prompts. */
+export function applyPickedDirection(projectDir: string, deal: DirectionDeal): void {
   const picked = deal.directions.find((direction) => direction.id === deal.pickedId);
   if (picked === undefined) return;
   const families = familiesSentence(picked.display === picked.body ? [picked.display] : [picked.display, picked.body]);
@@ -307,6 +307,7 @@ function applyPickedDirection(projectDir: string, deal: DirectionDeal): void {
   rewriteBrandType(projectDir, families, wins, null);
   rewriteBrandModule(projectDir, picked.display, picked.body);
   rewritePromptStyles(projectDir, families, wins);
+  rewriteSlotStyles(projectDir, families, wins);
 }
 
 function typeWishText(projectDir: string): string {
@@ -388,6 +389,32 @@ export function syncResolvedFamilies(
   rewriteBrandType(projectDir, families, "", displayWeight ?? null);
   rewriteBrandModule(projectDir, display, body);
   rewritePromptStyles(projectDir, families, "");
+  rewriteSlotStyles(projectDir, families, "");
+}
+
+function rewriteSlotStyles(projectDir: string, families: string, wins: string): void {
+  const file = path.join(projectDir, ".hitchhiker", "assets", "slots.json");
+  if (!existsSync(file)) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
+  const slots = (parsed as { slots?: unknown }).slots;
+  if (!Array.isArray(slots)) return;
+  let changed = false;
+  for (const slot of slots) {
+    if (typeof slot !== "object" || slot === null) continue;
+    const prompt = (slot as { prompt?: unknown }).prompt;
+    if (typeof prompt !== "string") continue;
+    const next = rewriteStyleText(prompt, families, wins);
+    if (next === prompt) continue;
+    (slot as { prompt: string }).prompt = next;
+    changed = true;
+  }
+  if (changed) writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
 }
 
 function rewritePromptStyles(projectDir: string, families: string, wins: string): void {

@@ -26,6 +26,7 @@ import {
   resetSiteBuildWatch,
   saveQueue,
   setProjectBuildRunner,
+  setSectionStillRunner,
   type BuildSpawn,
   type BuildSpawnResult,
 } from "../src/index.ts";
@@ -87,7 +88,7 @@ function assertSupportedDenyRules(
 test("SITE_RULES tells the build to stay in this folder", () => {
   assert.match(SITE_RULES, /The workspace is this folder only/);
   assert.match(SITE_RULES, /use relative paths/);
-  assert.match(SITE_RULES, /do not read or list the parent folder, sibling projects, or other drives/);
+  assert.match(SITE_RULES, /do not read or list the parent folder, sibling projects, dot-folders such as \.agents or \.claude, or other drives/);
   assert.match(SITE_RULES, /\.hitchhiker\/tmp/);
   assert.match(SITE_RULES, /git commit -m/);
   assert.equal(SITE_RULES.includes("!"), false);
@@ -310,6 +311,32 @@ function tempTreeDenied(project: string): boolean {
   return rules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, sample, hostPlatform()));
 }
 
+test("a project under the home directory still denies skill dot-folders", () => {
+  const home = homedir();
+  const project = path.join(home, "Desktop", "site-c");
+  const rules = denyRules(buildConfinementArgs(project, { siblings: ["notes"] }));
+  const platform = hostPlatform();
+  for (const dot of [".agents", ".claude", ".cursor"]) {
+    const sample = path.join(home, dot, "skills", "SKILL.md");
+    assert.equal(
+      rules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, sample, platform)),
+      true,
+      dot,
+    );
+  }
+  const own = path.join(project, "src", "styles", "tokens.css");
+  assert.equal(rules.some((rule) => confinementRuleMatches(rule, own, platform)), false);
+  const insideClaude = path.join(home, ".claude", "site-c");
+  const claudeRules = denyRules(buildConfinementArgs(insideClaude, { siblings: [] }));
+  const claudeOwn = path.join(insideClaude, "src", "index.ts");
+  assert.equal(claudeRules.some((rule) => confinementRuleMatches(rule, claudeOwn, platform)), false);
+  const agentsSample = path.join(home, ".agents", "skills", "SKILL.md");
+  assert.equal(
+    claudeRules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, agentsSample, platform)),
+    true,
+  );
+});
+
 test("os temp is denied for a desktop project and open when the project is inside it", () => {
   const desktop = "C:/Users/lucid/Desktop/site-c";
   assert.equal(tempTreeDenied(desktop), true);
@@ -488,6 +515,110 @@ test("transient grok write files and raw base64 lines stay out of build-run.json
     resetSiteBuildWatch(project);
     removeTempDir(root);
   }
+});
+
+test("playwright mcp artifacts stay out of the run file list", async () => {
+  const root = tempDir();
+  const project = path.join(root, "site-c");
+  const spawn: BuildSpawn = () => {
+    const mcp = path.join(project, ".playwright-mcp");
+    mkdirSync(mcp, { recursive: true });
+    writeFileSync(path.join(mcp, "console-004.log"), "log\n", "utf8");
+    writeFileSync(path.join(mcp, "page-004.yml"), "page\n", "utf8");
+    mkdirSync(path.join(project, "src"), { recursive: true });
+    writeFileSync(path.join(project, "src", "page.astro"), "<html></html>\n", "utf8");
+    return { pid: 424242, done: Promise.resolve(result(0)) };
+  };
+  setProjectBuildRunner(project, spawn);
+  try {
+    await twoPromptProject(root, project);
+    writeFileSync(
+      path.join(project, ".hitchhiker", "build-run.json"),
+      `${JSON.stringify({
+        promptId: "001",
+        status: "running",
+        model: "grok-4.7-build-fast",
+        effort: "xhigh",
+        startedAt: "2026-10-27T00:00:00.000Z",
+        elapsedMs: 1,
+        lastLines: [],
+        filesWritten: [".playwright-mcp/console-1.log", "src/.playwright-mcp/page-1.yml"],
+        reason: "",
+        pid: null,
+        recovery: "",
+        recoveryRerun: false,
+      })}\n`,
+      "utf8",
+    );
+    await ensureSiteBuild(project);
+    const files = readBuildRun(project)?.filesWritten ?? [];
+    assert.ok(files.includes("src/page.astro"));
+    assert.equal(files.some((file) => file.toLowerCase().includes(".playwright-mcp")), false);
+  } finally {
+    clearProjectBuildRunner(project);
+    resetSiteBuildWatch(project);
+    removeTempDir(root);
+  }
+});
+
+test("section stills stamp a visible reason and then restore the run", async () => {
+  const root = tempDir();
+  const project = path.join(root, "site-c");
+  const prompts = path.join(project, ".hitchhiker", "prompts");
+  mkdirSync(prompts, { recursive: true });
+  writeFileSync(path.join(prompts, "001.md"), "Requirements: REQ-ART-hero\n", "utf8");
+  writeFileSync(path.join(prompts, "002.md"), "Requirements: REQ-TOKENS\n", "utf8");
+  let during = "";
+  let afterSpawn = "";
+  let stamped = false;
+  const spawn: BuildSpawn = (request) => {
+    if (stamped && afterSpawn === "") afterSpawn = readBuildRun(request.cwd)?.reason ?? "";
+    return { pid: 424242, done: Promise.resolve(result(0)) };
+  };
+  setProjectBuildRunner(project, spawn);
+  setSectionStillRunner(project, async () => {
+    stamped = true;
+    during = readBuildRun(project)?.reason ?? "";
+  });
+  try {
+    await saveQueue(project, {
+      items: [
+        { id: "001", kind: "build", status: "queued" },
+        { id: "002", kind: "build", status: "queued" },
+      ],
+    });
+    await ensureSiteBuild(project);
+    assert.equal(during, "Generating section concept stills before the next build step.");
+    assert.equal(during.includes("!"), false);
+    assert.notEqual(afterSpawn, "Generating section concept stills before the next build step.");
+    const restored = readBuildRun(project)?.reason ?? "";
+    assert.notEqual(restored, "Generating section concept stills before the next build step.");
+  } finally {
+    setSectionStillRunner(project, null);
+    clearProjectBuildRunner(project);
+    resetSiteBuildWatch(project);
+    removeTempDir(root);
+  }
+});
+
+test("a node eval with regex literals, routes, and arrow functions is not an outside path", () => {
+  const project = "C:\\Users\\lucid\\Desktop\\site-c";
+  const command = String.raw`node --input-type=module -e "const ids=[...html.matchAll(/data-component=\"([^\"]+)\"/g)].map(m => m[1]); const sections=[...html.matchAll(/data-section=\"([^\"]+)\"/g)]; const hrefs=[...html.matchAll(/href=\"(\/farms[^\"]*)\"/g)]; if(/investment/i.test(html)) total += 1; const marked=html.includes('data-path=\"/farms\"');"`;
+  const audit = auditOutsideAccess(toolCall("run_terminal_command", { command }), project);
+  assert.deepEqual(audit.hits, []);
+  assert.equal(audit.writePath, "");
+  assert.equal(audit.readPath, "");
+  const outside = auditOutsideAccess(
+    toolCall("run_terminal_command", { command: "Get-Content 'C:\\work\\other\\voice.ts'" }),
+    "C:\\work\\My Site\\project5",
+  );
+  assert.ok(outside.hits.some((hit) => hit.path.includes("voice.ts")));
+  assert.equal(outside.writePath, "");
+  const redirected = auditOutsideAccess(
+    toolCall("run_terminal_command", { command: "node -e \"console.log(1)\" > C:\\work\\other\\out.txt" }),
+    "C:\\work\\My Site\\project5",
+  );
+  assert.ok(redirected.writePath.includes("out.txt"));
 });
 
 test("a write outside fails the prompt and does not start the next one", async () => {
