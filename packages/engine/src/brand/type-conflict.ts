@@ -150,6 +150,38 @@ export function winsSentence(display: string, body: string, typeText: string): s
   return `The owner's words win over ${display.trim()}: ${phrase}, and the direction supplies ${rest}.`;
 }
 
+/**
+ * What the style guide tells the owner. The replaced face stays in the
+ * decision log. It is not named here.
+ */
+export function ownerHeadingSentence(display: string, typeText: string, rhythm: DisplayRhythm): string {
+  const family = display.trim();
+  if (family === "") return "";
+  const phrase = headingPhrase(typeText);
+  const qualifiers: string[] = [];
+  if (rhythm.fontWeight !== null) qualifiers.push("at a light weight");
+  if (rhythm.words.includes("wide")) qualifiers.push("with wide tracking");
+  const qualifier = qualifiers.length === 0 ? "" : ` ${qualifiers.join(" ")}`;
+  return `Headings use ${family}${qualifier}, from the owner's wish for ${phrase}.`;
+}
+
+/** Axes recorded for this family, display role and body role together. */
+export function familyAxes(family: string): readonly string[] {
+  const name = family.trim();
+  if (name === "") return [];
+  const axes: string[] = [];
+  const add = (list: readonly string[]): void => {
+    for (const axis of list) {
+      if (!axes.includes(axis)) axes.push(axis);
+    }
+  };
+  for (const pair of TYPE_LIBRARY) {
+    if (pair.display === name) add(pair.axes);
+    if (pair.body === name) add(pair.bodyAxes);
+  }
+  return axes;
+}
+
 function classifyFace(text: string): FaceClass | null {
   if (/\b(?:mono|monospace)\b/i.test(text)) return "mono";
   if (/\bscript\b/i.test(text)) return "script";
@@ -164,12 +196,7 @@ function wishAdjectives(typeText: string): string[] {
 }
 
 function familyHasWeightAxis(family: string): boolean {
-  const name = family.trim();
-  if (name === "") return false;
-  return TYPE_LIBRARY.some((pair) => {
-    if (pair.display === name && pair.axes.includes("wght")) return true;
-    return pair.body === name && pair.bodyAxes.includes("wght");
-  });
+  return familyAxes(family).includes("wght");
 }
 
 function scoreClause(clause: string, tone: readonly string[], adjectives: readonly string[]): number {

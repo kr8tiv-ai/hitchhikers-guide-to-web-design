@@ -10,7 +10,7 @@ import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { dealDirections, syncResolvedFamilies } from "../brand/directions.ts";
 import { brandKitFromAnswers, contrastRatio, type BrandAnswer, type BrandPalette } from "../brand/kit-from-interview.ts";
 import { pickType } from "../brand/tokens.ts";
-import { displayRhythm, resolveTypeRoles, winsSentence, type DisplayRhythm } from "../brand/type-conflict.ts";
+import { displayRhythm, ownerHeadingSentence, resolveTypeRoles, type DisplayRhythm } from "../brand/type-conflict.ts";
 import { familiesSentence, typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
 import { readProjectDisplayName } from "../project-file/display-name.ts";
@@ -98,14 +98,15 @@ export function renderDesignMd(
   const palette = brandKitFromAnswers(answers, dealDirections(), brief).palette;
   const chosen = fontChoice(brief, answers, fonts);
   const scale = { ...typeScaleFor(documentText(brief, answers)), familiesLine: chosen.line };
-  const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
+  const wish = typeWishFrom(brief, answers);
+  const rhythm = displayRhythm(wish, chosen.display);
   const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
   const families = [chosen.display, chosen.body];
-  const paletteSource = colourFromKit(answers, brief) ? "brand kit" : "default tokens";
   const no3d = refuses3d(documentText(brief, answers));
   const button = buttonPair(palette);
   const name = styleGuideName(brief, answers, projectName);
   const weightNote = rhythm.fontWeight === null ? "" : `, weight ${rhythm.fontWeight}`;
+  const heading = chosen.replaced ? ownerHeadingSentence(chosen.display, wish, rhythm) : "";
   const markdown = [
     frontMatter(palette, scale, families, button, rhythm, name),
     "# Design",
@@ -118,12 +119,12 @@ export function renderDesignMd(
     "",
     "## Colors",
     "",
-    ...colourProse(palette, paletteSource, button),
+    ...colourProse(palette, button),
     `Grade: ${art.colorGrade} Light: ${art.light}`,
     "",
     "## Typography",
     "",
-    ...(chosen.conflict === "" ? [] : [chosen.conflict, ""]),
+    ...(heading === "" ? [] : [heading, ""]),
     scale.familiesLine,
     `Ratio: ${scale.ratio} (${scale.ratioName}).`,
     `World: ${scale.world}.`,
@@ -177,7 +178,7 @@ export function renderDesignMd(
     "",
     "## Tokens",
     "",
-    `Color tokens: ${colourTokenList(palette)}. Source: ${paletteSource}.`,
+    `Color tokens: ${colourTokenList(palette)}.`,
     "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
     "Motion tokens live in src/scripts/motion.ts.",
     "",
@@ -284,51 +285,65 @@ function colourYaml(palette: BrandPalette, button: { text: string; background: s
 
 function colourTokenList(palette: BrandPalette): string {
   const parts = [
-    `paper ${palette.paper}`,
-    `ink ${palette.ink}`,
-    `accent ${palette.accent}`,
-    `muted ${palette.muted}`,
+    `paper ${palette.paper} Source: ${palette.sources.paper}`,
+    `ink ${palette.ink} Source: ${palette.sources.ink}`,
+    `accent ${palette.accent} Source: ${palette.sources.accent}`,
+    `muted ${palette.muted} Source: ${palette.sources.muted}`,
   ];
   for (const swatch of palette.swatches) {
     const key = colourTokenKey(swatch.name);
     if (key === "") continue;
-    parts.push(`${key} ${swatch.hex}`);
+    parts.push(`${key} ${swatch.hex} Source: ${swatch.source}`);
   }
   return parts.join(", ");
 }
 
 function colourProse(
   palette: BrandPalette,
-  paletteSource: string,
   button: { text: string; background: string; ratio: number },
 ): string[] {
   const lines = [
-    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
-    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
-    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
+    sourcedLine(
+      `Paper ${palette.paper} carries ink ${palette.ink}`,
+      palette.sources.paper,
+      palette.sources.ink,
+      `Paper ${palette.paper}`,
+      `Ink ${palette.ink} is the body text`,
+    ),
+    `Accent ${palette.accent} is for large text and marks. Source: ${palette.sources.accent}.`,
+    `Muted ${palette.muted} is for secondary text. Source: ${palette.sources.muted}.`,
     `Body text ${palette.ink} on ${palette.paper} at ${ratioText(contrastRatio(palette.ink, palette.paper))} to 1.`,
     `Secondary text ${palette.muted} on ${palette.paper} at ${ratioText(contrastRatio(palette.muted, palette.paper))} to 1.`,
     `Button text ${button.text} on ${button.background} at ${ratioText(button.ratio)} to 1.`,
   ];
   if (palette.swatches.length === 0) return lines;
   for (const swatch of palette.swatches) lines.push(swatchSentence(swatch, palette));
-  lines.push(
-    `Muted ${palette.muted} is not a colour the owner named. It is darkened until secondary text on the page clears 4.5 to 1.`,
-  );
+  if (palette.sources.muted === "derived for contrast") {
+    lines.push(
+      `Muted ${palette.muted} is not a colour the owner named. It is darkened until secondary text on the page clears 4.5 to 1.`,
+    );
+  }
   return lines;
 }
 
-function swatchSentence(swatch: { name: string; hex: string }, palette: BrandPalette): string {
+/** One source when paper and ink share it. Two sentences when they do not. */
+function sourcedLine(shared: string, paperSource: string, inkSource: string, paperLead: string, inkLead: string): string {
+  if (paperSource === inkSource) return `${shared}. Source: ${paperSource}.`;
+  return `${paperLead}. Source: ${paperSource}. ${inkLead}. Source: ${inkSource}.`;
+}
+
+function swatchSentence(swatch: { name: string; hex: string; source: string }, palette: BrandPalette): string {
   const label = swatch.name.charAt(0).toUpperCase() + swatch.name.slice(1);
   const hex = swatch.hex;
   const paper = palette.paper;
   const ratio = contrastRatio(hex, paper);
   const stated = ratioText(ratio);
+  const withSource = (sentence: string): string => `${sentence} Source: ${swatch.source}.`;
   if (hex.toLowerCase() === paper.toLowerCase()) {
-    return `${label} ${hex} is the page colour, mapped to paper.`;
+    return withSource(`${label} ${hex} is the page colour, mapped to paper.`);
   }
   if (hex.toLowerCase() === palette.ink.toLowerCase()) {
-    return `${label} text ${hex} on ${paper} at ${stated} to 1. ${label} is the ink.`;
+    return withSource(`${label} text ${hex} on ${paper} at ${stated} to 1. ${label} is the ink.`);
   }
   const body = ratio >= 4.5;
   const large = ratio >= 3;
@@ -336,16 +351,16 @@ function swatchSentence(swatch: { name: string; hex: string }, palette: BrandPal
     const aa = large
       ? "That passes AA for large text and does not pass AA for body text, so it is not a body colour."
       : "That does not pass AA for text, so it is not used for type.";
-    return `${label} ${hex} is the accent. Contrast with the page ${paper} is ${stated} to 1. ${aa}`;
+    return withSource(`${label} ${hex} is the accent. Contrast with the page ${paper} is ${stated} to 1. ${aa}`);
   }
   if (body) {
     const role = hex.toLowerCase() === palette.accent.toLowerCase() ? ` ${label} is the accent.` : "";
-    return `${label} text ${hex} on ${paper} at ${stated} to 1.${role}`;
+    return withSource(`${label} text ${hex} on ${paper} at ${stated} to 1.${role}`);
   }
   if (large) {
-    return `${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That passes AA for large text and does not pass AA for body text, so it is not a body colour.`;
+    return withSource(`${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That passes AA for large text and does not pass AA for body text, so it is not a body colour.`);
   }
-  return `${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That does not pass AA for text, so it is not used for type.`;
+  return withSource(`${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That does not pass AA for text, so it is not used for type.`);
 }
 
 function rhythmSentence(rhythm: DisplayRhythm): string {
@@ -522,7 +537,8 @@ export function writeDesignMd(
   if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
     const chosen = fontChoice(brief, answers, fonts);
     if (chosen.display !== fonts.display.trim() || chosen.body !== fonts.body.trim()) {
-      syncResolvedFamilies(projectDir, chosen.display, chosen.body);
+      const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
+      syncResolvedFamilies(projectDir, chosen.display, chosen.body, rhythm.fontWeight);
     }
   }
   return file;
@@ -560,21 +576,61 @@ export function flagIgnoredMotionTokens(files: readonly { path: string; source: 
   return hits;
 }
 
-function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: DesignFontChoice | null): DesignFontChoice & { line: string; conflict: string } {
+export interface ResolvedDesignType {
+  display: string;
+  body: string;
+  /** The pair before the owner's type wish was applied. */
+  givenDisplay: string;
+  givenBody: string;
+  rhythm: DisplayRhythm;
+  replaced: boolean;
+}
+
+/** The families, weights, and override the style guide writes. Checks use this same result. */
+export function resolveDesignType(
+  brief: string,
+  answers: readonly BrandAnswer[] = [],
+  fonts?: DesignFontChoice | null,
+): ResolvedDesignType {
+  const chosen = fontChoice(brief, answers, fonts);
+  return {
+    display: chosen.display,
+    body: chosen.body,
+    givenDisplay: chosen.givenDisplay,
+    givenBody: chosen.givenBody,
+    rhythm: displayRhythm(typeWishFrom(brief, answers), chosen.display),
+    replaced: chosen.replaced,
+  };
+}
+
+function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: DesignFontChoice | null): DesignFontChoice & {
+  line: string;
+  replaced: boolean;
+  givenDisplay: string;
+  givenBody: string;
+} {
   const wish = typeWishFrom(brief, answers);
-  const pack = (display: string, body: string, source: string, withSource: boolean, givenDisplay: string, givenBody: string): DesignFontChoice & { line: string; conflict: string } => {
+  const pack = (display: string, body: string, source: string, withSource: boolean): DesignFontChoice & {
+    line: string;
+    replaced: boolean;
+    givenDisplay: string;
+    givenBody: string;
+  } => {
     const resolved = resolveTypeRoles(display, body, wish);
-    const conflict = resolved.display === display.trim() ? "" : winsSentence(givenDisplay, givenBody, wish);
+    const givenDisplay = display.trim();
+    const givenBody = body.trim() === "" ? givenDisplay : body.trim();
     return {
       display: resolved.display,
       body: resolved.body,
       source,
       line: familyLine(resolved.display, resolved.body, withSource ? source : null),
-      conflict,
+      replaced: resolved.display !== givenDisplay || resolved.body !== givenBody,
+      givenDisplay,
+      givenBody,
     };
   };
   if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
-    return pack(fonts.display, fonts.body, fonts.source, true, fonts.display.trim(), fonts.body.trim());
+    return pack(fonts.display, fonts.body, fonts.source, true);
   }
   const typeAnswer = answeredValue(answers, "DP-1.5");
   if (typeAnswer !== "") {
@@ -584,12 +640,12 @@ function fontChoice(brief: string, answers: readonly BrandAnswer[], fonts?: Desi
     const dealt = pickType(mood === "" ? null : mood);
     const display = dealt.families[0] ?? "Switzer";
     const body = dealt.families[1] ?? display;
-    return pack(display, body, "brand kit", true, display, body);
+    return pack(display, body, "brand kit", true);
   }
   const choice = typeChoiceFor(documentText(brief, answers));
   const display = choice.families[0] ?? "Switzer";
   const body = choice.families[1] ?? display;
-  return pack(display, body, "default tokens", false, display, body);
+  return pack(display, body, "default tokens", false);
 }
 
 function familyLine(display: string, body: string, source: string | null): string {
@@ -651,16 +707,6 @@ function answeredValue(answers: readonly BrandAnswer[], id: string): string {
   if (found === undefined) return "";
   if (found.status === "SKIPPED" || found.status === "NOT_APPLICABLE" || found.status === "UNANSWERED") return "";
   return found.value.trim();
-}
-
-function colourFromKit(answers: readonly BrandAnswer[], brief: string): boolean {
-  if (answeredValue(answers, "DP-1.2") !== "") return true;
-  return (
-    briefSection(brief, "Colours") !== "" ||
-    briefSection(brief, "Colour") !== "" ||
-    briefSection(brief, "Colors") !== "" ||
-    briefSection(brief, "Color") !== ""
-  );
 }
 
 function refuses3d(text: string): boolean {

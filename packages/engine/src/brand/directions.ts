@@ -304,7 +304,7 @@ function applyPickedDirection(projectDir: string, deal: DirectionDeal): void {
   if (picked === undefined) return;
   const families = familiesSentence(picked.display === picked.body ? [picked.display] : [picked.display, picked.body]);
   const wins = winsSentence(picked.display, picked.body, typeWishText(projectDir));
-  rewriteBrandType(projectDir, families, wins);
+  rewriteBrandType(projectDir, families, wins, null);
   rewriteBrandModule(projectDir, picked.display, picked.body);
   rewritePromptStyles(projectDir, families, wins);
 }
@@ -328,14 +328,19 @@ function briefSection(markdown: string, heading: string): string {
   return (next === null ? rest : rest.slice(0, next.index)).trim();
 }
 
-function rewriteBrandType(projectDir: string, families: string, wins: string): void {
+function rewriteBrandType(projectDir: string, families: string, wins: string, displayWeight: string | null): void {
   const file = path.join(projectDir, ".hitchhiker", "brand", "BRAND.md");
   if (!existsSync(file)) return;
   const pickedLine = families.replace(/^Families:/, "Picked families:");
   let text = readFileSync(file, "utf8");
+  text = text.replace(/^[ \t]*Display weight: .+\n?/gm, "");
   text = text.replace(/^(?:Dealt|Picked) families: .+$/m, pickedLine);
   text = text.replace(/[ \t]*The owner's words win over [^.\n]+\.?\n?/g, "");
   if (wins !== "") text = text.replace(pickedLine, `${pickedLine}\n${wins}`);
+  if (displayWeight !== null && displayWeight !== "") {
+    const anchor = wins !== "" ? wins : pickedLine;
+    text = text.replace(anchor, `${anchor}\nDisplay weight: ${displayWeight}.`);
+  }
   writeFileSync(file, text, "utf8");
 }
 
@@ -373,9 +378,14 @@ function ranPromptIds(projectDir: string): Set<string> {
 }
 
 /** The style guide resolved a conflicting display. Unbuilt prompts follow the same pair. */
-export function syncResolvedFamilies(projectDir: string, display: string, body: string): void {
+export function syncResolvedFamilies(
+  projectDir: string,
+  display: string,
+  body: string,
+  displayWeight?: string | null,
+): void {
   const families = familiesSentence(display === body ? [display] : [display, body]);
-  rewriteBrandType(projectDir, families, "");
+  rewriteBrandType(projectDir, families, "", displayWeight ?? null);
   rewriteBrandModule(projectDir, display, body);
   rewritePromptStyles(projectDir, families, "");
 }

@@ -213,8 +213,8 @@ test("the style guide uses the Run 8 kit, then the picked pair, and skips 3D on 
     });
     chooseDirection(dir, first.id, "Boska fits the calm page.");
     const after = readFileSync(path.join(dir, "DESIGN.md"), "utf8");
-    assert.match(after, /Boska/);
     assert.match(after, /General Sans/);
+    assert.equal(after.includes("Boska"), false);
     assert.match(after, /Source: picked direction/);
     assert.match(after, /#f3e6d0/);
     assert.match(after, /#8a6a12/);
@@ -261,8 +261,9 @@ test("pre-build checks read the Run 8 artefacts and a failure keeps the build ga
     }
     const type = byId.get("type");
     assert.ok(type);
-    assert.match(type.detail, /Boska/);
     assert.match(type.detail, /General Sans/);
+    assert.match(type.detail, /wght 300/);
+    assert.equal(type.detail.includes("Boska"), false);
     for (const other of ["Gambetta", "Erode", "Tanker", "Clash Display", "Switzer", "Unbounded", "Gambarino", "Author"]) {
       assert.equal(type.detail.includes(other), false, other);
       assert.equal(type.findings.join(" ").includes(other), false, other);

@@ -352,7 +352,8 @@ function sectionsForPage(
     add(section);
   }
   if (merged.length === 0) add(sectionFromPurpose(page.title));
-  return merged.length > 0 ? merged : ["overview"];
+  const ids = merged.length > 0 ? merged : ["overview"];
+  return placeFiltersBeforeResults(ids);
 }
 
 function purposeSections(page: PlannedPage, corpus: string): string[] {
@@ -386,7 +387,19 @@ function shownSections(sections: readonly string[]): string[] {
     if (next === "" || ids.includes(next)) continue;
     ids.push(next);
   }
-  return ids.length > 0 ? ids : ["overview"];
+  return placeFiltersBeforeResults(ids.length > 0 ? ids : ["overview"]);
+}
+
+/** Filters come before a grid or a map of results. Other sections keep their order. */
+function placeFiltersBeforeResults(sections: readonly string[]): string[] {
+  const filterAt = sections.indexOf("filters");
+  if (filterAt < 0) return [...sections];
+  const firstResult = sections.findIndex((id) => id === "grid" || id === "map");
+  if (firstResult < 0 || filterAt < firstResult) return [...sections];
+  const next = sections.filter((id) => id !== "filters");
+  const insertAt = next.findIndex((id) => id === "grid" || id === "map");
+  next.splice(insertAt, 0, "filters");
+  return next;
 }
 
 function parseSitemap(text: string): SitemapPage[] {

@@ -9,11 +9,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { readDirectionDeal } from "../brand/directions.ts";
-import { contrastRatio } from "../brand/kit-from-interview.ts";
+import { contrastRatio, type BrandAnswer } from "../brand/kit-from-interview.ts";
 import { isOverusedFamily } from "../brand/tokens.ts";
+import { familyAxes } from "../brand/type-conflict.ts";
 import { TYPE_LIBRARY } from "../brand/type-library.ts";
 import { critiquePlan, draftPlan } from "./plan-critique.ts";
 import { assertPhoneBudgetBefore3d, briefAsksForWebglHero, briefHasPhoneBudget, PhoneBudgetError } from "./phone-budget.ts";
+import { resolveDesignType, type DesignFontChoice } from "./design-outputs.ts";
 
 export type PrebuildStatus = "pass" | "warn" | "fail";
 
@@ -42,15 +44,15 @@ export function runPrebuildChecks(brief: string, projectDir?: string): PrebuildR
   const sitemap = readOptional(projectDir, ".hitchhiker/sitemap.md");
   const wireframe = readOptional(projectDir, ".hitchhiker/wireframe.md");
   const styleGuide = readOptional(projectDir, "DESIGN.md");
-  const pair = pickedPair(projectDir, styleGuide);
+  const type = resolvedType(text, projectDir, styleGuide);
   const checks: PrebuildCheck[] = [
     critiqueCheck(brief),
     deviceCheck(styleGuide, sitemap, wireframe),
-    phoneCheck(text, styleGuide, pair),
+    phoneCheck(text, styleGuide, type),
     webglCheck(text, styleGuide),
     elevateCheck(sitemap, wireframe, styleGuide),
-    aiLookCheck(styleGuide, pair),
-    typeCheck(pair),
+    aiLookCheck(styleGuide, type),
+    typeCheck(type),
     awwwardsCheck(text, styleGuide, sitemap, wireframe),
   ];
   return { pass: checks.every((check) => check.status !== "fail"), checks };
@@ -131,22 +133,22 @@ function deviceCheck(styleGuide: string, sitemap: string, wireframe: string): Pr
   return check("devices", "Devices", status, findings, fixes.join(" "));
 }
 
-function phoneCheck(brief: string, styleGuide: string, pair: FontPair | null): PrebuildCheck {
+function phoneCheck(brief: string, styleGuide: string, type: CheckedType | null): PrebuildCheck {
   const score = motionScore(brief);
-  const bytes = fontBytes(pair);
+  const total = type === null ? HEADLINE_BUDGET + BODY_BUDGET : type.faces.reduce((sum, face) => sum + face.bytes, 0);
   const jsBudget = score <= 3 ? 80000 : score <= 6 ? 140000 : 220000;
-  const fontOk = bytes.display <= HEADLINE_BUDGET && bytes.body <= BODY_BUDGET && bytes.display + bytes.body <= ALL_BUDGET;
+  const fontOk = type !== null && facesInsideBudget(type) && total <= ALL_BUDGET;
   const hero = /hero image budget:\s*200KB/i.test(styleGuide);
   const findings = [
-    pair === null
+    type === null
       ? "No picked pair is on the guide yet, so the font budget cannot be checked."
-      : `${pair.display} and ${pair.body} estimate ${bytes.display} and ${bytes.body} bytes.`,
+      : budgetSentence(type),
     `Hero image budget is ${hero ? "200KB" : "not stated"}.`,
     `JS and motion budget for motion ${score} is ${jsBudget} bytes.`,
   ];
   let status: PrebuildStatus = "pass";
-  if (!fontOk) status = "fail";
-  else if (!hero || pair === null) status = "warn";
+  if (type !== null && !fontOk) status = "fail";
+  else if (!hero || type === null) status = "warn";
   return check(
     "phone",
     "Mobile performance budget",
@@ -196,11 +198,15 @@ function elevateCheck(sitemap: string, wireframe: string, styleGuide: string): P
   return check("elevate", "Elevate", "pass", kept.slice(0, 3), "");
 }
 
-function aiLookCheck(styleGuide: string, pair: FontPair | null): PrebuildCheck {
+function aiLookCheck(styleGuide: string, type: CheckedType | null): PrebuildCheck {
   const findings: string[] = [];
   const fixes: string[] = [];
-  if (pair !== null && (isOverusedFamily(pair.display) || isOverusedFamily(pair.body))) {
-    findings.push(`${pair.display} and ${pair.body} are an overused default pairing.`);
+  if (type !== null && (isOverusedFamily(type.display) || isOverusedFamily(type.body))) {
+    findings.push(
+      type.faces.length === 1
+        ? `${type.display} is an overused default.`
+        : `${type.display} and ${type.body} are an overused default pairing.`,
+    );
     fixes.push("Pick a pair that is not an overused default.");
   }
   if (/linear-gradient\([^)]*#(?:4f46e5|7c3aed)/i.test(styleGuide) || /generic gradient/i.test(styleGuide)) {
@@ -215,36 +221,23 @@ function aiLookCheck(styleGuide: string, pair: FontPair | null): PrebuildCheck {
     findings.push("The guide still has stock phrasing.");
     fixes.push("Replace the stock phrase with the owner's words.");
   }
-  if (pair !== null) {
-    const library = libraryPair(pair);
-    const xHeight = library?.xCapBody;
-    findings.push(
-      xHeight === null || xHeight === undefined
-        ? `${pair.display} and ${pair.body} are the pair being checked.`
-        : `${pair.display} x-height ${library?.xCapDisplay ?? "n/a"}, ${pair.body} x-height ${xHeight}. Readable at body size.`,
-    );
-  }
+  if (type !== null) findings.push(xHeightSentence(type));
   if (findings.length === 0) findings.push("No overused face, generic gradient, centred-everything hero, or stock phrase.");
   const failed = findings.some((item) => /overused|generic purple|centred everything|stock phrasing/i.test(item));
   return check("ai-look", "AI-look and typography", failed ? "fail" : "pass", findings, fixes.join(" "));
 }
 
-function typeCheck(pair: FontPair | null): PrebuildCheck {
-  if (pair === null) {
+function typeCheck(type: CheckedType | null): PrebuildCheck {
+  if (type === null) {
     return check("type", "Picked type pair", "fail", ["No picked pair is on the style guide."], "Approve a direction or a brand-kit pair before the build.");
   }
-  const library = libraryPair(pair);
-  if (library === undefined) {
-    return check("type", "Picked type pair", "fail", [`${pair.display} and ${pair.body} are not a library pair.`], "Use the picked pair from the library.");
+  if (!type.acceptable) {
+    const names = type.faces.length === 1 ? `${type.display} is not a library pair.` : `${type.display} and ${type.body} are not a library pair.`;
+    return check("type", "Picked type pair", "fail", [names], "Use the picked pair from the library.");
   }
-  const weights = library.axes.length > 0 ? library.axes.join(", ") : "one weight";
-  const bodyWeights = library.bodyAxes.length > 0 ? library.bodyAxes.join(", ") : "one weight";
-  const findings = [
-    `${pair.display} and ${pair.body}.`,
-    `Weights: ${pair.display} ${weights}, ${pair.body} ${bodyWeights}.`,
-    `x-height display ${library.xCapDisplay ?? "n/a"}, body ${library.xCapBody ?? "n/a"}.`,
-  ];
-  const low = library.xCapBody !== null && library.xCapBody < 0.62;
+  const findings = typeFindings(type);
+  const bodyX = type.faces[type.faces.length - 1]?.xHeight ?? null;
+  const low = bodyX !== null && bodyX < 0.62;
   return check(
     "type",
     "Picked type pair",
@@ -284,23 +277,154 @@ function awwwardsCheck(brief: string, styleGuide: string, sitemap: string, wiref
   );
 }
 
-interface FontPair {
-  display: string;
-  body: string;
+interface CheckedFace {
+  family: string;
+  bytes: number;
+  weight: string;
+  xHeight: number | null;
 }
 
-function pickedPair(projectDir: string | undefined, styleGuide: string): FontPair | null {
-  if (projectDir !== undefined && projectDir.trim() !== "") {
-    try {
-      const deal = readDirectionDeal(projectDir);
-      const picked = deal?.directions.find((direction) => direction.id === deal.pickedId);
-      if (picked !== undefined && picked.display.trim() !== "" && picked.body.trim() !== "") {
-        return { display: picked.display.trim(), body: picked.body.trim() };
-      }
-    } catch {
-      // A damaged deal falls through to the guide.
-    }
+interface CheckedType {
+  display: string;
+  body: string;
+  faces: readonly CheckedFace[];
+  /** A catalog pair, or an owner override the style guide recorded whose families are in the library. */
+  acceptable: boolean;
+}
+
+function resolvedType(brief: string, projectDir: string | undefined, styleGuide: string): CheckedType | null {
+  const direction = directionFonts(projectDir);
+  const guide = fontsFromGuide(styleGuide);
+  const fonts = direction ?? guide;
+  if (fonts === null) return null;
+  const answers = readInterviewAnswers(projectDir);
+  const guideRecordedOverride =
+    direction !== null &&
+    guide !== null &&
+    (guide.display.toLowerCase() !== direction.display.toLowerCase() || guide.body.toLowerCase() !== direction.body.toLowerCase());
+  const resolved = resolveDesignType(brief, answers, guideRecordedOverride ? guide : fonts);
+  const replaced = resolved.replaced || guideRecordedOverride;
+  return describeType(resolved.display, resolved.body, resolved.rhythm, replaced);
+}
+
+function describeType(
+  display: string,
+  body: string,
+  rhythm: { fontWeight: string | null },
+  replaced: boolean,
+): CheckedType {
+  const same = display.toLowerCase() === body.toLowerCase();
+  const faces = same
+    ? [faceFacts(display, body, "display", rhythm, true)]
+    : [faceFacts(display, body, "display", rhythm, false), faceFacts(display, body, "body", rhythm, false)];
+  const exact = libraryEntry(display, body);
+  const acceptable = exact !== undefined || (replaced && familyKnown(display) && familyKnown(body));
+  return { display, body, faces, acceptable };
+}
+
+function budgetSentence(type: CheckedType): string {
+  const first = type.faces[0];
+  const second = type.faces[1];
+  if (first === undefined) return "No picked pair is on the guide yet, so the font budget cannot be checked.";
+  if (second === undefined) return `${first.family} estimates ${first.bytes} bytes.`;
+  return `${first.family} and ${second.family} estimate ${first.bytes} and ${second.bytes} bytes.`;
+}
+
+function facesInsideBudget(type: CheckedType): boolean {
+  return type.faces.every((face, index) => {
+    const cap = type.faces.length === 1 || index === 0 ? HEADLINE_BUDGET : BODY_BUDGET;
+    return face.bytes <= cap;
+  });
+}
+
+function xHeightSentence(type: CheckedType): string {
+  const first = type.faces[0];
+  const second = type.faces[1];
+  if (first === undefined) return "No picked pair is on the guide yet.";
+  if (second === undefined || first.family.toLowerCase() === second.family.toLowerCase()) {
+    return `${first.family} x-height ${first.xHeight ?? "n/a"}. Readable at body size.`;
   }
+  if (second.xHeight === null && first.xHeight === null) return `${type.display} and ${type.body} are the pair being checked.`;
+  return `${first.family} x-height ${first.xHeight ?? "n/a"}, ${second.family} x-height ${second.xHeight ?? "n/a"}. Readable at body size.`;
+}
+
+function typeFindings(type: CheckedType): string[] {
+  const first = type.faces[0];
+  const second = type.faces[1];
+  if (first === undefined) return ["No picked pair is on the style guide."];
+  if (second === undefined) {
+    return [
+      `${first.family}.`,
+      `Weights: ${first.family} ${first.weight}.`,
+      `x-height ${first.xHeight ?? "n/a"}.`,
+    ];
+  }
+  return [
+    `${type.display} and ${type.body}.`,
+    `Weights: ${type.display} ${first.weight}, ${type.body} ${second.weight}.`,
+    `x-height display ${first.xHeight ?? "n/a"}, body ${second.xHeight ?? "n/a"}.`,
+  ];
+}
+
+function faceFacts(
+  display: string,
+  body: string,
+  role: "display" | "body",
+  rhythm: { fontWeight: string | null },
+  same: boolean,
+): CheckedFace {
+  const family = same || role === "display" ? display : body;
+  const axes = roleAxes(display, body, role, same);
+  const bytes = axes.length > 0 ? 28000 : same || role === "display" ? 18000 : 22000;
+  return { family, bytes, weight: weightPhrase(axes, role, rhythm), xHeight: roleXHeight(display, body, role, same) };
+}
+
+function weightPhrase(axes: readonly string[], role: "display" | "body", rhythm: { fontWeight: string | null }): string {
+  if (role === "display" && rhythm.fontWeight !== null) {
+    return axes.includes("wght") ? `wght ${rhythm.fontWeight}` : rhythm.fontWeight;
+  }
+  if (axes.length > 0) return axes.join(", ");
+  return "one weight";
+}
+
+function roleAxes(display: string, body: string, role: "display" | "body", same: boolean): readonly string[] {
+  if (same) return familyAxes(display);
+  const exact = libraryEntry(display, body);
+  if (exact !== undefined) return role === "display" ? exact.axes : exact.bodyAxes;
+  const family = role === "display" ? display : body;
+  const asDisplay = TYPE_LIBRARY.find((item) => sameName(item.display, family));
+  const asBody = TYPE_LIBRARY.find((item) => sameName(item.body, family));
+  if (role === "display") return asDisplay?.axes ?? asBody?.bodyAxes ?? [];
+  return asBody?.bodyAxes ?? [];
+}
+
+function roleXHeight(display: string, body: string, role: "display" | "body", same: boolean): number | null {
+  if (same) {
+    const self = libraryEntry(display, body);
+    if (self !== undefined) return self.xCapDisplay ?? self.xCapBody;
+  }
+  const exact = libraryEntry(display, body);
+  if (exact !== undefined) return role === "display" ? exact.xCapDisplay : exact.xCapBody;
+  const family = role === "display" ? display : body;
+  const asDisplay = TYPE_LIBRARY.find((item) => sameName(item.display, family));
+  const asBody = TYPE_LIBRARY.find((item) => sameName(item.body, family));
+  if (role === "display") return asDisplay?.xCapDisplay ?? asBody?.xCapBody ?? null;
+  return asBody?.xCapBody ?? asDisplay?.xCapDisplay ?? null;
+}
+
+function directionFonts(projectDir: string | undefined): DesignFontChoice | null {
+  if (projectDir === undefined || projectDir.trim() === "") return null;
+  try {
+    const deal = readDirectionDeal(projectDir);
+    const picked = deal?.directions.find((direction) => direction.id === deal.pickedId);
+    if (picked === undefined || picked.display.trim() === "" || picked.body.trim() === "") return null;
+    return { display: picked.display.trim(), body: picked.body.trim(), source: "picked direction" };
+  } catch {
+    return null;
+  }
+}
+
+function fontsFromGuide(styleGuide: string): DesignFontChoice | null {
   const match = /Families:\s*([^\n]+)/.exec(styleGuide);
   if (match?.[1] === undefined) return null;
   const raw = match[1].replace(/\.\s*Source:.*$/i, "").replace(/\.$/, "").trim();
@@ -309,21 +433,49 @@ function pickedPair(projectDir: string | undefined, styleGuide: string): FontPai
   const display = parts[0]?.trim() ?? "";
   const body = (parts.length > 1 ? parts.slice(1).join(" and ") : display).trim();
   if (display === "") return null;
-  return { display, body };
+  const source = /Source:\s*([^.]+)/i.exec(match[1])?.[1]?.trim() || "style guide";
+  return { display, body, source };
 }
 
-function libraryPair(pair: FontPair): (typeof TYPE_LIBRARY)[number] | undefined {
-  return TYPE_LIBRARY.find(
-    (item) => item.display.toLowerCase() === pair.display.toLowerCase() && item.body.toLowerCase() === pair.body.toLowerCase(),
-  );
+function readInterviewAnswers(projectDir: string | undefined): BrandAnswer[] {
+  if (projectDir === undefined || projectDir.trim() === "") return [];
+  const file = path.join(projectDir, ".hitchhiker", "interview.json");
+  if (!existsSync(file)) return [];
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const list = Array.isArray(parsed)
+      ? parsed
+      : isRecord(parsed) && Array.isArray(parsed.answers)
+        ? parsed.answers
+        : [];
+    const answers: BrandAnswer[] = [];
+    for (const item of list) {
+      if (!isRecord(item) || typeof item.value !== "string") continue;
+      const answer: BrandAnswer = { value: item.value };
+      if (typeof item.id === "string") answer.id = item.id;
+      if (typeof item.status === "string") answer.status = item.status;
+      answers.push(answer);
+    }
+    return answers;
+  } catch {
+    return [];
+  }
 }
 
-function fontBytes(pair: FontPair | null): { display: number; body: number } {
-  if (pair === null) return { display: HEADLINE_BUDGET + 1, body: BODY_BUDGET + 1 };
-  const library = libraryPair(pair);
-  const display = library !== undefined && library.axes.length > 0 ? 28000 : 18000;
-  const body = library !== undefined && library.bodyAxes.length > 0 ? 28000 : 22000;
-  return { display, body };
+function libraryEntry(display: string, body: string): (typeof TYPE_LIBRARY)[number] | undefined {
+  return TYPE_LIBRARY.find((item) => sameName(item.display, display) && sameName(item.body, body));
+}
+
+function familyKnown(name: string): boolean {
+  return TYPE_LIBRARY.some((item) => sameName(item.display, name) || sameName(item.body, name));
+}
+
+function sameName(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function motionScore(brief: string): number {

@@ -16,9 +16,20 @@ export interface BrandAnswer {
   status?: string;
 }
 
+/** Where a colour in the style guide actually came from. */
+export type ColourSource = "owner (DP-1.2)" | "brand kit" | "derived for contrast" | "default tokens";
+
 export interface BrandSwatch {
   name: string;
   hex: string;
+  source: ColourSource;
+}
+
+export interface ColourSources {
+  paper: ColourSource;
+  ink: ColourSource;
+  accent: ColourSource;
+  muted: ColourSource;
 }
 
 export interface BrandPalette {
@@ -30,6 +41,7 @@ export interface BrandPalette {
   large: number;
   /** Named colours from the answer. Empty when the kit is using the default palette. */
   swatches: readonly BrandSwatch[];
+  sources: ColourSources;
 }
 
 const SKIPPED = new Set(["SKIPPED", "NOT_APPLICABLE", "UNANSWERED"]);
@@ -61,6 +73,12 @@ export function defaultPalette(): BrandPalette {
     body: contrastRatio(INK, PAPER),
     large: contrastRatio(ACCENT, PAPER),
     swatches: [],
+    sources: {
+      paper: "default tokens",
+      ink: "default tokens",
+      accent: "default tokens",
+      muted: "derived for contrast",
+    },
   };
 }
 
@@ -76,7 +94,9 @@ export function brandKitFromAnswers(
   const vibeSource = kitField(fields, ["Vibe"], answered(answers, "DP-5.3"));
   const vibe = vibeSource || "Calm, editorial, and specific.";
   const references = kitField(fields, ["References"], answered(answers, "DP-5.1")) || "No reference site was named.";
+  const colourAnswer = answers.find((answer) => answer.id === "DP-1.2");
   const colour = kitField(fields, ["Colours", "Colour", "Colors", "Color"], answered(answers, "DP-1.2"));
+  const namedSource: ColourSource = colourAnswer?.status === "IMPORTED" ? "brand kit" : "owner (DP-1.2)";
   const typeSource = kitField(fields, ["Type", "Typography"], answered(answers, "DP-1.5"));
   const type = typeSource || "No type yet. Show a quiet pairing with one clear size jump.";
   const imagery = kitField(fields, ["Imagery"], answered(answers, "DP-5.6")) || "Photography of the work, in the light the owner described.";
@@ -85,7 +105,7 @@ export function brandKitFromAnswers(
   const logo = answered(answers, "DP-1.1");
   const mood = moodForPalette(answered(answers, "DP-1.4"), typeSource, vibeSource);
   const moodPalette = colour !== "" || mood === "" ? null : paletteFromMood(mood);
-  const palette = colour !== "" ? paletteFromWords(colour) : (moodPalette ?? defaultPalette());
+  const palette = colour !== "" ? paletteFromWords(colour, namedSource) : (moodPalette ?? defaultPalette());
   const dealt = pickType(typeDeal(type));
   const displayName = dealt.families[0] ?? "";
   const bodyName = dealt.families[1] ?? displayName;
@@ -287,8 +307,10 @@ function paletteFromMood(mood: string): BrandPalette | null {
   const first = proposePalettes({ seedHex: null, vibe: mood })[0];
   if (first === undefined) return null;
   let accent = first.signal;
+  let accentSource: ColourSource = "default tokens";
   if (!passesLargeContrast(accent, first.paper)) {
     accent = passesLargeContrast(ACCENT, first.paper) ? ACCENT : first.ink;
+    accentSource = "derived for contrast";
   }
   const muted = mutedOn(first.paper);
   const palette: BrandPalette = {
@@ -299,6 +321,12 @@ function paletteFromMood(mood: string): BrandPalette | null {
     body: contrastRatio(first.ink, first.paper),
     large: contrastRatio(accent, first.paper),
     swatches: [],
+    sources: {
+      paper: "default tokens",
+      ink: "default tokens",
+      accent: accentSource,
+      muted: "derived for contrast",
+    },
   };
   if (!passesBodyContrast(palette.ink, palette.paper)) return null;
   if (!passesBodyContrast(palette.muted, palette.paper)) return null;
@@ -350,18 +378,26 @@ function swatchLine(palette: BrandPalette): string {
   return `Swatches: ${palette.swatches.map((swatch) => `${swatch.name} ${swatch.hex}`).join(", ")}.`;
 }
 
-function paletteFromWords(words: string): BrandPalette {
+function paletteFromWords(words: string, namedSource: ColourSource): BrandPalette {
   const palette = defaultPalette();
   const named = NAMED_COLOURS.filter((colour) => colour.pattern.test(words));
   if (named.length > 0) {
-    const paper = named.find((colour) => colour.role === "paper")?.hex ?? palette.paper;
-    const ink = named.find((colour) => colour.role === "ink")?.hex ?? palette.ink;
-    let accent = named.find((colour) => colour.role === "accent")?.hex ?? palette.accent;
-    if (!passesLargeContrast(accent, paper)) accent = darkenUntil(accent, paper, 3);
+    const namedPaper = named.find((colour) => colour.role === "paper");
+    const namedInk = named.find((colour) => colour.role === "ink");
+    const namedAccent = named.find((colour) => colour.role === "accent");
+    const paper = namedPaper?.hex ?? palette.paper;
+    const ink = namedInk?.hex ?? palette.ink;
+    let accent = namedAccent?.hex ?? palette.accent;
+    let accentSource: ColourSource = namedAccent === undefined ? "default tokens" : namedSource;
+    if (!passesLargeContrast(accent, paper)) {
+      accent = darkenUntil(accent, paper, 3);
+      accentSource = "derived for contrast";
+    }
     const muted = darkenUntil("#5c6570", paper, 4.5);
     const swatches = named.map((colour) => ({
       name: colour.name,
       hex: colour.role === "accent" ? accent : colour.hex,
+      source: colour.role === "accent" && accentSource === "derived for contrast" ? accentSource : namedSource,
     }));
     return {
       paper,
@@ -371,11 +407,22 @@ function paletteFromWords(words: string): BrandPalette {
       body: contrastRatio(ink, paper),
       large: contrastRatio(accent, paper),
       swatches,
+      sources: {
+        paper: namedPaper === undefined ? "default tokens" : namedSource,
+        ink: namedInk === undefined ? "default tokens" : namedSource,
+        accent: accentSource,
+        muted: "derived for contrast",
+      },
     };
   }
   const hex = /#[0-9a-fA-F]{6}/.exec(words);
   if (hex?.[0] !== undefined && passesBodyContrast(hex[0], PAPER)) {
-    return { ...palette, accent: hex[0], large: contrastRatio(hex[0], PAPER) };
+    return {
+      ...palette,
+      accent: hex[0],
+      large: contrastRatio(hex[0], PAPER),
+      sources: { ...palette.sources, accent: namedSource },
+    };
   }
   return palette;
 }
