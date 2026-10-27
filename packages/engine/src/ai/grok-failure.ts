@@ -50,13 +50,17 @@ export function isBillingFailure(error: unknown): boolean {
   return false;
 }
 
+const JSON_PROPERTY = /"[A-Za-z0-9_$-]+"\s*:\s*(?:\{|\[|"|-?\d|true|false|null\b)/;
+
 /** A line that is only a JSON fragment. Human sentences stay. */
 export function isRawJsonLine(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed === "") return false;
   if (/^[{}\[\],\s]+$/.test(trimmed)) return true;
+  if (trimmed.startsWith('{"') || trimmed.startsWith("[{")) return true;
   if (/^"[^"]*"\s*:/.test(trimmed)) return true;
-  const outside = trimmed.replace(/"(?:\\.|[^"\\])*"/g, "");
+  if (JSON_PROPERTY.test(trimmed)) return true;
+  const outside = trimmed.replace(/"(?:\\.|[^"\\])*"/g, "").replace(/\b(?:true|false|null)\b/g, "");
   return /[{}]/.test(trimmed) && !/[A-Za-z]/.test(outside);
 }
 

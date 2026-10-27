@@ -74,10 +74,27 @@ export const BUILD_WATCHDOG_INTERVAL_MS = 30_000;
 export const BUILD_IDLE_MS = 30 * 60 * 1000;
 /** After a stream `end` event, wait this long for the child to exit. */
 export const BUILD_EXIT_GRACE_MS = 5_000;
+/**
+ * Silence after a finished turn (`available_commands` then `usage`) before
+ * stopping a child that never emits `end`. A background dev server can hold
+ * grok open after the turn is done. The wait is at least this long.
+ */
+const TURN_TAIL_FLOOR_MS = 5_000;
 
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
-const SKIP_DIRS = new Set(["node_modules", ".git", ".hitchhiker", ".playwright-mcp"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".hitchhiker",
+  ".playwright-mcp",
+  ".astro",
+  ".next",
+  ".svelte-kit",
+  ".vercel",
+  ".output",
+  "dist",
+]);
 const LINE_CAP = 6;
 const LINE_CHARS = 180;
 const FILE_CAP = 40;
@@ -1633,9 +1650,13 @@ interface Settlement {
 }
 
 /**
- * Settle on the first of child exit/close or a streaming-json `end` event.
- * An `end` event waits a bounded grace for the exit code so a late close
- * cannot leave the row running. The promise resolves exactly once.
+ * Settle on the first of child exit/close, a streaming-json `end` event,
+ * or silence after a finished turn. An `end` event waits a bounded grace
+ * for the exit code. A turn that already printed `available_commands` and
+ * then `usage`, with no later tool call, text, or thinking, waits at least
+ * TURN_TAIL_FLOOR_MS and then stops the child. An orphan `pnpm dev` or
+ * `astro preview` otherwise holds grok open and the `end` line never arrives.
+ * The promise resolves exactly once.
  */
 function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement {
   let resolveOut: (result: BuildSpawnResult) => void = () => undefined;
@@ -1645,7 +1666,9 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
   let finished = false;
   let endReason: string | null = null;
   let buffer = "";
+  let sawAvailableCommands = false;
   let grace: ReturnType<typeof setTimeout> | null = null;
+  let turnTimer: ReturnType<typeof setTimeout> | null = null;
 
   const finish = (result: BuildSpawnResult): void => {
     if (finished) return;
@@ -1653,6 +1676,10 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
     if (grace !== null) {
       clearTimeout(grace);
       grace = null;
+    }
+    if (turnTimer !== null) {
+      clearTimeout(turnTimer);
+      turnTimer = null;
     }
     resolveOut(result);
   };
@@ -1677,6 +1704,28 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
       if (endReason === "end_turn") finish(snapshotResult(0));
       else finish({ code: null, stdout: "", stderr: "", errorCode: "ENDED" });
     }, graceMs);
+  };
+
+  const clearTurnTimer = (): void => {
+    if (turnTimer === null) return;
+    clearTimeout(turnTimer);
+    turnTimer = null;
+  };
+
+  const armTurnTimer = (): void => {
+    if (finished || endReason !== null) return;
+    clearTurnTimer();
+    turnTimer = setTimeout(() => {
+      turnTimer = null;
+      if (finished || endReason !== null) return;
+      endReason = "end_turn";
+      try {
+        handle.stop?.();
+      } catch {
+        // Stopping a dead child is fine.
+      }
+      finish(snapshotResult(0));
+    }, Math.max(graceMs, TURN_TAIL_FLOOR_MS));
   };
 
   if (handle.exited !== undefined) {
@@ -1708,11 +1757,17 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
     force: finish,
     feed: (chunk) => {
       if (finished || endReason !== null) return;
+      clearTurnTimer();
+      if (containsNdjsonType(chunk, "available_commands")) sawAvailableCommands = true;
       buffer = (buffer + chunk).slice(-32_000);
+      if (containsNdjsonType(buffer, "available_commands")) sawAvailableCommands = true;
       const reason = readEndReason(buffer);
-      if (reason === null) return;
-      endReason = reason;
-      if (!finished) armGrace();
+      if (reason !== null) {
+        endReason = reason;
+        if (!finished) armGrace();
+        return;
+      }
+      if (hasCompletedTurnTail(buffer, sawAvailableCommands)) armTurnTimer();
     },
   };
 }
@@ -1733,6 +1788,44 @@ function readEndReason(buffer: string): string | null {
     }
   }
   return found;
+}
+
+function ndjsonType(line: string): string | null {
+  const start = line.indexOf("{");
+  if (start < 0) return null;
+  const slice = line.slice(start).trim();
+  if (!/"type"\s*:\s*"/.test(slice)) return null;
+  try {
+    const parsed = JSON.parse(slice) as { type?: unknown };
+    return typeof parsed.type === "string" ? parsed.type : null;
+  } catch {
+    return null;
+  }
+}
+
+function containsNdjsonType(text: string, type: string): boolean {
+  for (const line of text.split(/\r?\n/)) {
+    if (ndjsonType(line) === type) return true;
+  }
+  return false;
+}
+
+/**
+ * True when the buffer ends on a `usage` line and an `available_commands`
+ * line was already seen. A later `tool_call`, `text`, or `thinking` line
+ * means the turn is still going, so the last line is no longer `usage`.
+ */
+function hasCompletedTurnTail(buffer: string, sawAvailableCommands: boolean): boolean {
+  const lines = buffer.split(/\r?\n/);
+  let end = lines.length;
+  while (end > 0 && (lines[end - 1] ?? "").trim() === "") end -= 1;
+  if (end === 0) return false;
+  if (ndjsonType(lines[end - 1] ?? "") !== "usage") return false;
+  if (sawAvailableCommands) return true;
+  for (let index = 0; index < end - 1; index += 1) {
+    if (ndjsonType(lines[index] ?? "") === "available_commands") return true;
+  }
+  return false;
 }
 
 async function settleItem(
@@ -2530,7 +2623,9 @@ function pushLines(lines: string[], chunk: string): void {
 }
 
 function isTransientTempFile(relPath: string): boolean {
-  const normalized = relPath.replace(/\\/g, "/");
+  const normalized = relPath.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "");
+  const first = normalized.split("/")[0] ?? "";
+  if (SKIP_DIRS.has(first)) return true;
   return /(^|\/)\.grok-write-[^/]*$/i.test(normalized) || /(^|\/)\.playwright-mcp(\/|$)/i.test(normalized);
 }
 

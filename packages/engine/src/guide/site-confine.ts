@@ -321,14 +321,28 @@ function samePath(left: string, right: string, platform: "win32" | "posix"): boo
 }
 
 function isInsideProject(projects: readonly string[], candidate: string, platform: "win32" | "posix"): boolean {
+  return insideAllowedRoots(candidate, projects, platform);
+}
+
+/**
+ * Project roots, plus Grok CLI's own session logs.
+ * A background shell tells the model to read ~/.grok/sessions/.../terminal/call-*.log.
+ * That read or write is not a project escape.
+ */
+function insideAllowedRoots(
+  candidate: string,
+  allowedRoots: readonly string[],
+  platform: "win32" | "posix",
+): boolean {
   const trimmed = candidate.trim();
   if (trimmed === "" || trimmed === ".") return true;
+  if (/[\\/]\.grok[\\/]sessions(?:[\\/]|$)/i.test(trimmed)) return true;
   if (/^https?:\/\//i.test(trimmed)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return true;
   if (platform === "posix" && /^[A-Za-z]:[\\/]/.test(trimmed)) return false;
   const api = platform === "win32" ? path.win32 : path.posix;
   const fold = platform === "win32" ? (value: string) => value.toLowerCase() : (value: string) => value;
-  for (const project of projects) {
+  for (const project of allowedRoots) {
     if (platformForPath(project) !== platform) continue;
     const absolute = api.isAbsolute(trimmed) ? api.resolve(trimmed) : api.resolve(project, trimmed);
     const left = fold(toSlash(project));
