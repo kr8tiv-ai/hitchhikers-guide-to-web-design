@@ -58,6 +58,26 @@ function toolCall(tool: string, input: Record<string, string>): string {
   return JSON.stringify({ type: "tool_call", toolName: tool, rawInput: input });
 }
 
+const DENY_PREFIXES = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"] as const;
+
+/** Parent, sibling, and home paths each get a supported prefix, and never List(. */
+function assertSupportedDenyRules(
+  args: readonly string[],
+  targets: { parent: string; sibling: string; home: string },
+  platform: "win32" | "posix",
+): void {
+  const rules = denyRules(args);
+  assert.equal(rules.some((rule) => rule.startsWith("List(")), false);
+  for (const prefix of DENY_PREFIXES) {
+    for (const [label, file] of Object.entries(targets) as [string, string][]) {
+      const matched = rules.some(
+        (rule) => rule.startsWith(`${prefix}(`) && confinementRuleMatches(rule, file, platform),
+      );
+      assert.equal(matched, true, `${prefix} denies ${label}`);
+    }
+  }
+}
+
 test("SITE_RULES tells the build to stay in this folder", () => {
   assert.match(SITE_RULES, /The workspace is this folder only/);
   assert.match(SITE_RULES, /use relative paths/);
@@ -72,6 +92,11 @@ test("spawn args sandbox the project and still omit --max-turns", () => {
   assert.equal(args.includes("--deny"), true);
   assert.equal(args[args.indexOf("-m") + 1], "grok-4.7-build-fast");
   assert.equal(args[args.indexOf("--effort") + 1], "xhigh");
+  const rules = denyRules(args);
+  for (const prefix of DENY_PREFIXES) {
+    assert.equal(rules.some((rule) => rule.startsWith(`${prefix}(`)), true, prefix);
+  }
+  assert.equal(rules.some((rule) => rule.startsWith("List(")), false);
 });
 
 test("posix rules match the parent, a sibling, and bugs/BUG-038.md, never the project", () => {
@@ -98,6 +123,11 @@ test("posix rules match the parent, a sibling, and bugs/BUG-038.md, never the pr
     assert.equal(rule.includes("\\"), false, rule);
     assert.equal(inside(project, ruleBase(rule), "posix"), false, rule);
   }
+  assertSupportedDenyRules(args, {
+    parent,
+    sibling: `${parent}/bugs/BUG-038.md`,
+    home: homedir(),
+  }, "posix");
 });
 
 test("win32 rules from a project path with spaces deny siblings and not its own files", () => {
@@ -132,6 +162,9 @@ test("win32 rules from a project path with spaces deny siblings and not its own 
     assert.equal(spawn.includes("--max-turns"), false);
     assert.equal(spawn[spawn.indexOf("--sandbox") + 1], "workspace");
     assert.ok(denyRules(spawn).length > 0);
+    const coverage = { parent: root, sibling: siblingVoice, home: homedir() };
+    assertSupportedDenyRules(args, coverage, "win32");
+    assertSupportedDenyRules(spawn, coverage, "win32");
   } finally {
     removeTempDir(root);
   }

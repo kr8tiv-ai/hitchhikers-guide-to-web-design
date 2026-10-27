@@ -6,11 +6,13 @@
  * over an allow. The driver uses --sandbox workspace and rules shaped
  * Read(** /.ssh/ **), Bash(*...*), Edit(...), and Write(...).
  * Docs name Bash, Edit, Read, Grep, MCPTool, WebFetch, and WebSearch.
- * They do not say whether a glob is matched on an absolute path, whether
- * List or Glob are filters, or whether Read matches the live tool name
- * read_file. build-002.log calls list_dir, grep, read_file, write,
- * search_replace, and run_terminal_command. The deny list is best effort.
- * The audit below is what the desk records after the run.
+ * grok 0.0.15 also accepts Glob and Write. It rejects List(...) with
+ * "unknown tool prefix", so list_dir is not a --deny filter. The audit
+ * below still records list_dir from the NDJSON stream. They do not say
+ * whether a glob is matched on an absolute path, or whether Read matches
+ * the live tool name read_file. build-002.log calls list_dir, grep,
+ * read_file, write, search_replace, and run_terminal_command. The deny
+ * list is best effort. The audit is what the desk records after the run.
  * A Windows project path uses path.win32 even when this process is POSIX.
  * When realpath differs from the path as given (macOS /var and /private/var),
  * both spellings are confined and stripped.
@@ -19,7 +21,9 @@ import { readdirSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const TOOLS = ["Read", "Grep", "Glob", "List", "Edit", "Write"] as const;
+const TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"] as const;
+/** Bash is a supported --deny prefix. List is not, so it stays out of this list. */
+const DENY_TOOLS = [...TOOLS, "Bash"] as const;
 const OUTSIDE_CAP = 10;
 const PATH_CHARS = 240;
 
@@ -60,7 +64,7 @@ export function outsideWriteReason(filePath: string): string {
   return `The build wrote outside its folder: ${filePath}.`;
 }
 
-/** Sandbox profile plus deny rules for the parent and each sibling. */
+/** Sandbox profile plus deny rules for the parent, each sibling, and home. */
 export function buildConfinementArgs(projectDir: string, options: ConfinementOptions = {}): string[] {
   const args = ["--sandbox", "workspace"];
   for (const rule of confinementDenyRules(projectDir, options)) args.push("--deny", rule);
@@ -73,13 +77,15 @@ export function confinementDenyRules(projectDir: string, options: ConfinementOpt
   const projects = pathSpellings(projectDir, api, options.siblings === undefined);
   const rules: string[] = [];
   const seen = new Set<string>();
+  const push = (rule: string): void => {
+    if (seen.has(rule)) return;
+    seen.add(rule);
+    rules.push(rule);
+  };
   for (const project of projects) {
-    for (const rule of denyRulesFor(project, api, platform, options.siblings)) {
-      if (seen.has(rule)) continue;
-      seen.add(rule);
-      rules.push(rule);
-    }
+    for (const rule of denyRulesFor(project, api, platform, options.siblings)) push(rule);
   }
+  for (const rule of homeDenyRules(projects)) push(rule);
   return rules;
 }
 
@@ -219,15 +225,50 @@ function denyRulesFor(
   const names = siblings ?? readSiblingNames(parent);
   const rules: string[] = [];
   const parentSlash = toSlash(parent);
-  for (const tool of TOOLS) rules.push(`${tool}(${parentSlash})`);
+  for (const tool of DENY_TOOLS) rules.push(`${tool}(${parentSlash})`);
   for (const name of names) {
     if (!usableName(name)) continue;
     const full = api.resolve(parent, name);
     if (samePath(full, project, platform)) continue;
     const pattern = `${toSlash(full)}/**`;
-    for (const tool of TOOLS) rules.push(`${tool}(${pattern})`);
+    for (const tool of DENY_TOOLS) rules.push(`${tool}(${pattern})`);
   }
   return rules;
+}
+
+/**
+ * Deny the home directory. When the project lives under home, the rule is the
+ * home path itself: home/** would also deny the project. Otherwise home and
+ * home/** are both denied.
+ */
+function homeDenyRules(projects: readonly string[]): string[] {
+  const home = os.homedir().trim();
+  if (home === "") return [];
+  const homePlatform = platformForPath(home);
+  const homes = pathSpellings(home, pathApi(homePlatform), true);
+  const rules: string[] = [];
+  for (const root of homes) {
+    if (projects.some((project) => samePath(root, project, homePlatform))) continue;
+    if (projects.some((project) => isInsideProject([project], root, homePlatform))) continue;
+    const slash = toSlash(root);
+    const coversProject = projects.some((project) => isInsideProject([root], project, homePlatform));
+    const patterns = coversProject ? [slash] : [slash, `${slash}/**`];
+    for (const pattern of patterns) {
+      if (patternHitsProject(pattern, projects, homePlatform)) continue;
+      for (const tool of DENY_TOOLS) rules.push(`${tool}(${pattern})`);
+    }
+  }
+  return rules;
+}
+
+function patternHitsProject(pattern: string, projects: readonly string[], platform: "win32" | "posix"): boolean {
+  const rule = `Read(${pattern})`;
+  for (const project of projects) {
+    const file = `${toSlash(project)}/src/index.ts`;
+    if (confinementRuleMatches(rule, project, platform)) return true;
+    if (confinementRuleMatches(rule, file, platform)) return true;
+  }
+  return false;
 }
 
 function readSiblingNames(parent: string): string[] {
