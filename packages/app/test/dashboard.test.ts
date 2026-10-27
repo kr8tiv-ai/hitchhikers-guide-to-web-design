@@ -215,6 +215,37 @@ test("a queue read error stays styled and drops markup in the message", () => {
   assert.match(hostile, /The queue file could not be read\./);
 });
 
+test("the build run panel sits above the queue and hides temp noise", () => {
+  const blob = "A".repeat(64);
+  const short = "B".repeat(39);
+  const html = queueBodyHtml(
+    [
+      { id: "001", kind: "build", status: "passed" },
+      { id: "003", kind: "build", status: "running" },
+    ],
+    {
+      promptId: "003",
+      status: "running",
+      model: "grok-4.7-build-fast",
+      effort: "xhigh",
+      elapsedMs: 1200,
+      lastLines: ["Wrote the tokens.", blob, short],
+      filesWritten: ["src/styles/tokens.css", ".grok-write-abc.tmp", "src/.grok-write-xyz.tmp"],
+      reason: "",
+    },
+  );
+  const panel = html.indexOf('data-region="build-run"');
+  const table = html.indexOf('<table class="hh-table"');
+  assert.ok(panel >= 0 && table > panel);
+  assert.equal(html.includes(".grok-write-"), false);
+  assert.equal(html.includes(blob), false);
+  assert.match(html, /src\/styles\/tokens\.css/);
+  assert.match(html, /Wrote the tokens\./);
+  assert.match(html, new RegExp(short));
+  assert.equal(copy(html).includes("!"), false);
+  assert.equal(copy(html).includes("\u2014"), false);
+});
+
 test("css uses shell variables, a max-width, and no indigo or fixed width", () => {
   const css = readFileSync(cssPath, "utf8");
   assert.match(css, /var\(--color-ink\)/);

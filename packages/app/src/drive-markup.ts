@@ -215,7 +215,7 @@ export function queueBodyHtml(
     run == null
       ? `<p class="hh-small">Model, effort, and duration are not on the queue.</p>`
       : runPanel(run);
-  return `${banner}<div class="hh-table-wrap">
+  return `${banner}${tail}<div class="hh-table-wrap">
             <table class="hh-table" aria-labelledby="queue-title">
               <thead>
                 <tr>
@@ -228,8 +228,7 @@ export function queueBodyHtml(
                 ${rows}
               </tbody>
             </table>
-          </div>
-          ${tail}`;
+          </div>`;
 }
 
 export function escalationsHtml(items: readonly DriveItem[], run?: DriveRun | null): string {
@@ -558,10 +557,11 @@ function runPanel(run: DriveRun): string {
   const status = escapeHtml(run.status);
   const elapsedMs = Number.isFinite(run.elapsedMs) ? Math.max(0, Math.round(run.elapsedMs)) : 0;
   const visible = shownLines(run.lastLines);
+  const written = run.filesWritten.filter((file) => !isTransientTempFile(file));
   const files =
-    run.filesWritten.length === 0
+    written.length === 0
       ? `<p data-files-written>No project files yet.</p>`
-      : `<ul data-files-written>${run.filesWritten.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul>`;
+      : `<ul data-files-written>${written.map((file) => `<li>${escapeHtml(file)}</li>`).join("")}</ul>`;
   const recovery = plainSentence(run.recovery ?? "");
   const why = plainSentence(run.reason);
   const recoveryLine =
@@ -587,12 +587,17 @@ function runPanel(run: DriveRun): string {
           </section>`;
 }
 
+function isTransientTempFile(relPath: string): boolean {
+  return /(^|\/)\.grok-write-[^/]*$/i.test(relPath.replace(/\\/g, "/"));
+}
+
 function shownLines(lines: readonly string[]): string[] {
   const kept: string[] = [];
   for (const line of lines) {
     if (braceLine(line)) continue;
+    if (/^[A-Za-z0-9+/=]{40,}$/.test(line.trim())) continue;
     const clean = line.replace(/[{}]/g, "").replace(/\s+/g, " ").trim();
-    if (clean === "") continue;
+    if (clean === "" || /^[A-Za-z0-9+/=]{40,}$/.test(clean)) continue;
     kept.push(clean);
   }
   return kept;

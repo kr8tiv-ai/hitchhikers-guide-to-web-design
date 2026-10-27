@@ -17,5 +17,5 @@ export const SITE_RULES = [
   "Anti-slop: no purple-to-blue gradients, no magnetic buttons, no default Tailwind indigo look, no invented testimonials, no lorem, and no exclamation marks in copy.",
   "No invented facts, numbers, names, quotes, prices or testimonials. A missing fact is still a TODO in copy.",
   "A real person, place, product or listing is never generated.",
-  "The workspace is this folder only: use relative paths, do not read or list the parent folder, sibling projects, or other drives, and if something is missing, say so in the report and keep going.",
+  "The workspace is this folder only: use relative paths, do not read or list the parent folder, sibling projects, or other drives, keep any temporary or commit-message files inside .hitchhiker/tmp or pass git commit -m directly, never write to OS temp folders such as AppData/Local/Temp or /tmp, and if something is missing, say so in the report and keep going.",
 ].join("\n");

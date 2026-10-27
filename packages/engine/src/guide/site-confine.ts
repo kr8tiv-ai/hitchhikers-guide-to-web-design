@@ -237,24 +237,40 @@ function denyRulesFor(
 }
 
 /**
- * Deny the home directory. When the project lives under home, the rule is the
- * home path itself: home/** would also deny the project. Otherwise home and
- * home/** are both denied.
+ * Deny the home directory and the OS temp directory.
+ * When the project lives under a root, the rule is that path itself:
+ * root/** would also deny the project. Otherwise the root and root/** are both denied.
+ * The temp root is skipped when it is the same path as home.
  */
 function homeDenyRules(projects: readonly string[]): string[] {
-  const home = os.homedir().trim();
-  if (home === "") return [];
-  const homePlatform = platformForPath(home);
-  const homes = pathSpellings(home, pathApi(homePlatform), true);
   const rules: string[] = [];
-  for (const root of homes) {
-    if (projects.some((project) => samePath(root, project, homePlatform))) continue;
-    if (projects.some((project) => isInsideProject([project], root, homePlatform))) continue;
+  const home = os.homedir().trim();
+  if (home !== "") rules.push(...denyRootTree(home, projects));
+  const temp = os.tmpdir().trim();
+  if (temp === "") return rules;
+  const homeSlash = home === "" ? "" : normalizedSlash(home);
+  const tempSlash = normalizedSlash(temp);
+  if (homeSlash !== "" && samePath(homeSlash, tempSlash, platformForPath(temp))) return rules;
+  rules.push(...denyRootTree(temp, projects));
+  return rules;
+}
+
+function normalizedSlash(value: string): string {
+  return toSlash(pathApi(platformForPath(value)).resolve(value));
+}
+
+function denyRootTree(rootPath: string, projects: readonly string[]): string[] {
+  const rootPlatform = platformForPath(rootPath);
+  const roots = pathSpellings(rootPath, pathApi(rootPlatform), true);
+  const rules: string[] = [];
+  for (const root of roots) {
+    if (projects.some((project) => samePath(root, project, rootPlatform))) continue;
+    if (projects.some((project) => isInsideProject([project], root, rootPlatform))) continue;
     const slash = toSlash(root);
-    const coversProject = projects.some((project) => isInsideProject([root], project, homePlatform));
+    const coversProject = projects.some((project) => isInsideProject([root], project, rootPlatform));
     const patterns = coversProject ? [slash] : [slash, `${slash}/**`];
     for (const pattern of patterns) {
-      if (patternHitsProject(pattern, projects, homePlatform)) continue;
+      if (patternHitsProject(pattern, projects, rootPlatform)) continue;
       for (const tool of DENY_TOOLS) rules.push(`${tool}(${pattern})`);
     }
   }

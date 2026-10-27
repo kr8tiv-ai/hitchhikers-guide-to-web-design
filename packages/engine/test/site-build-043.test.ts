@@ -3,10 +3,16 @@
  * Deny rules are best effort. The audit is what the desk records.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { test } from "node:test";
+import { spawnLiveBuild, type BuildSpawnRequest } from "../src/guide/site-build.ts";
+import { designLanguageFor, sectionIdOf, type DesignLibrary } from "../src/spec/design-language.ts";
+import type { SitePromptSkeleton } from "../src/spec/site-prompts.ts";
 import {
   auditOutsideAccess,
   buildConfinementArgs,
@@ -82,7 +88,13 @@ test("SITE_RULES tells the build to stay in this folder", () => {
   assert.match(SITE_RULES, /The workspace is this folder only/);
   assert.match(SITE_RULES, /use relative paths/);
   assert.match(SITE_RULES, /do not read or list the parent folder, sibling projects, or other drives/);
+  assert.match(SITE_RULES, /\.hitchhiker\/tmp/);
+  assert.match(SITE_RULES, /git commit -m/);
   assert.equal(SITE_RULES.includes("!"), false);
+  assert.equal(SITE_RULES.includes("\u2014"), false);
+  assert.equal(SITE_RULES.includes("/Users/"), false);
+  assert.equal(SITE_RULES.includes("/home/"), false);
+  assert.equal(/[A-Za-z]:[\\/]/.test(SITE_RULES), false);
 });
 
 test("spawn args sandbox the project and still omit --max-turns", () => {
@@ -281,6 +293,171 @@ test("a read outside warns on the run record and the queue continues", async () 
     assert.ok(hits.some((hit) => hit.tool === "list_dir"));
     assert.ok(hits.length <= 10);
     assert.equal(hits.some((hit) => /payment required|file contents/i.test(hit.path)), false);
+  } finally {
+    clearProjectBuildRunner(project);
+    resetSiteBuildWatch(project);
+    removeTempDir(root);
+  }
+});
+
+function hostPlatform(): "win32" | "posix" {
+  return process.platform === "win32" ? "win32" : "posix";
+}
+
+function tempTreeDenied(project: string): boolean {
+  const rules = denyRules(buildConfinementArgs(project));
+  const sample = path.join(tmpdir(), "site-c-commit-003.txt");
+  return rules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, sample, hostPlatform()));
+}
+
+test("os temp is denied for a desktop project and open when the project is inside it", () => {
+  const desktop = "C:/Users/lucid/Desktop/site-c";
+  assert.equal(tempTreeDenied(desktop), true);
+  const root = tempDir();
+  const project = path.join(root, "site-c");
+  mkdirSync(project, { recursive: true });
+  try {
+    assert.equal(tempTreeDenied(project), false);
+    const own = path.join(project, "src", "styles", "tokens.css");
+    const rules = denyRules(buildConfinementArgs(project));
+    assert.equal(rules.some((rule) => confinementRuleMatches(rule, own, hostPlatform())), false);
+  } finally {
+    removeTempDir(root);
+  }
+});
+
+function fakeChild(): ChildProcess {
+  const child = new EventEmitter() as ChildProcess;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.pid = 4242;
+  child.kill = () => true;
+  return child;
+}
+
+test("spawnLiveBuild keeps child temp dirs inside .hitchhiker/tmp", () => {
+  const root = tempDir();
+  const project = path.join(root, "site-c");
+  mkdirSync(project, { recursive: true });
+  const calls: SpawnOptions[] = [];
+  const spawnImpl = ((command: string, args?: readonly string[], options?: SpawnOptions): ChildProcess => {
+    void command;
+    void args;
+    calls.push(options ?? {});
+    return fakeChild();
+  }) as typeof import("node:child_process").spawn;
+  const request: BuildSpawnRequest = {
+    command: "grok",
+    args: ["--sandbox", "workspace"],
+    cwd: project,
+    promptId: "003",
+    model: "grok-4.7-build-fast",
+    effort: "xhigh",
+  };
+  try {
+    spawnLiveBuild("grok", request, { PATH: "C:\\Tools", KEEP: "yes" }, { spawnImpl });
+    const tmpDir = path.join(project, ".hitchhiker", "tmp");
+    assert.equal(existsSync(tmpDir), true);
+    const env = calls[0]?.env ?? {};
+    assert.equal(env.TMP, tmpDir);
+    assert.equal(env.TEMP, tmpDir);
+    assert.equal(env.TMPDIR, tmpDir);
+    assert.equal(env.PATH, "C:\\Tools");
+    assert.equal(env.KEEP, "yes");
+  } finally {
+    removeTempDir(root);
+  }
+});
+
+function slotPrompt(title: string, requirements: string[]): SitePromptSkeleton {
+  return {
+    id: "003",
+    phase: "babel-fish",
+    slice: "tokens",
+    title,
+    tier: "Heart of Gold",
+    effort: "xhigh",
+    model: "grok-4.7-build-fast",
+    dependsOn: [],
+    filesModified: ["src/styles/tokens.css"],
+    requirements,
+    protected: [],
+    reviewAfter: false,
+    maxTurns: 100_000,
+    kind: "build",
+  };
+}
+
+test("a prompt with no section id commits the title and still calls the element the section", () => {
+  const root = tempDir();
+  const goldenDir = path.join(root, "golden");
+  mkdirSync(goldenDir, { recursive: true });
+  writeFileSync(path.join(goldenDir, "tokens.md"), "Onto {{element}}. Commit feat(site): {{section}}\n", "utf8");
+  writeFileSync(path.join(goldenDir, "hero.md"), "Onto {{element}}. Commit feat(site): {{section}}\n", "utf8");
+  const library: DesignLibrary = {
+    goldenDir,
+    recipes: "",
+    gallery: [],
+    assetsMarkdown: "",
+    facts: "The valley is named.",
+    styleText: "Calm editorial.",
+  };
+  try {
+    const tokens = slotPrompt("Set color and type tokens from the approved brand.", ["REQ-TOKENS"]);
+    assert.equal(sectionIdOf(tokens), "");
+    const text = designLanguageFor(tokens, "Calm editorial.", library);
+    assert.match(text, /feat\(site\): set color and type tokens from the approved brand/);
+    assert.equal(text.includes("feat(site): the section"), false);
+    assert.match(text, /Onto the section\./);
+    const dotted = slotPrompt("Ship v1.2.", ["REQ-TOKENS"]);
+    assert.match(designLanguageFor(dotted, "Calm editorial.", library), /feat\(site\): ship v1\.2/);
+    const blank = slotPrompt("...", ["REQ-TOKENS"]);
+    assert.match(designLanguageFor(blank, "Calm editorial.", library), /feat\(site\): the section/);
+    const hero = slotPrompt("Build the hero layout on Home.", ["REQ-STRUCT-hero"]);
+    assert.equal(sectionIdOf(hero), "hero");
+    const heroText = designLanguageFor(hero, "Calm editorial.", library);
+    assert.match(heroText, /feat\(site\): hero/);
+    assert.match(heroText, /Onto hero\./);
+  } finally {
+    removeTempDir(root);
+  }
+});
+
+test("transient grok write files and raw base64 lines stay out of build-run.json", async () => {
+  const root = tempDir();
+  const project = path.join(root, "site-c");
+  const blob = "QUJD".repeat(12);
+  const short = "QUJD".repeat(9);
+  assert.ok(blob.length >= 40);
+  assert.ok(short.length < 40);
+  const spawn: BuildSpawn = (request) => {
+    mkdirSync(path.join(project, ".hitchhiker", "tmp"), { recursive: true });
+    writeFileSync(path.join(project, ".hitchhiker", "tmp", "site-c-commit-003.txt"), "commit\n", "utf8");
+    if (request.promptId === "001") {
+      mkdirSync(path.join(project, "src", "styles"), { recursive: true });
+      writeFileSync(path.join(project, "src", "styles", "tokens.css"), ":root{}\n", "utf8");
+      writeFileSync(path.join(project, ".grok-write-abc.tmp"), "temp\n", "utf8");
+    } else {
+      writeFileSync(path.join(project, "index.html"), "<html></html>\n", "utf8");
+      writeFileSync(path.join(project, "src", ".grok-write-xyz.tmp"), "temp\n", "utf8");
+    }
+    request.onOutput?.(`Wrote project files.\n${blob}\n${short}\n{"type":"end","stopReason":"end_turn"}\n`);
+    return { pid: 424242, done: Promise.resolve(result(0)) };
+  };
+  setProjectBuildRunner(project, spawn);
+  try {
+    await twoPromptProject(root, project);
+    await ensureSiteBuild(project);
+    const run = readBuildRun(project);
+    const files = run?.filesWritten ?? [];
+    assert.ok(files.includes("src/styles/tokens.css"));
+    assert.ok(files.includes("index.html"));
+    assert.equal(files.some((file) => /\.grok-write-/i.test(file)), false);
+    assert.equal(files.some((file) => file.includes("site-c-commit-003")), false);
+    const lines = run?.lastLines ?? [];
+    assert.ok(lines.some((line) => line.includes("Wrote project files")));
+    assert.equal(lines.some((line) => line.includes(blob)), false);
+    assert.ok(lines.some((line) => line.includes(short)));
   } finally {
     clearProjectBuildRunner(project);
     resetSiteBuildWatch(project);

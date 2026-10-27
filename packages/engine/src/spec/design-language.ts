@@ -180,15 +180,20 @@ function fillSlots(template: string, prompt: SitePromptSkeleton, section: string
   const library = prompt.library ?? "the library that serves the art direction";
   const page = prompt.route ?? "the page";
   const element = section === "" ? "the section" : section;
+  const sectionSlot = section !== "" ? section : fallbackSectionSlot(prompt);
   let next = template
     .replaceAll("{{files}}", files)
     .replaceAll("{{library}}", library)
     .replaceAll("{{element}}", element)
     .replaceAll("{{page}}", page)
-    .replaceAll("{{section}}", element)
+    .replaceAll("{{section}}", sectionSlot)
     .replaceAll("{{anchor}}", "section-plan");
   next = next.replace(/\{\{[^{}]+\}\}/g, "the reference");
   return next;
+}
+
+function fallbackSectionSlot(prompt: SitePromptSkeleton): string {
+  return prompt.title.trim().replace(/\.+$/, "").toLowerCase() || "the section";
 }
 
 function techniqueNotes(prompt: SitePromptSkeleton, library: DesignLibrary, golden: string): string {

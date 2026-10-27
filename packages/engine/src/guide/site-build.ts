@@ -509,12 +509,18 @@ export function spawnLiveBuild(
   env: NodeJS.ProcessEnv,
   launch: LiveBuildLaunch = {},
 ): BuildSpawnHandle {
+  const tmpDir = path.join(request.cwd, ".hitchhiker", "tmp");
+  try {
+    mkdirSync(tmpDir, { recursive: true });
+  } catch {
+    /* ignore */
+  }
   const child = launchProcess(
     command,
     request.args,
     {
       cwd: request.cwd,
-      env,
+      env: { ...env, TMP: tmpDir, TEMP: tmpDir, TMPDIR: tmpDir },
       stdio: ["ignore", "pipe", "pipe"],
     },
     launch.platform ?? process.platform,
@@ -2398,7 +2404,7 @@ function keptFlag(
 
 function writeRun(projectDir: string, run: RunFile): void {
   const previous = readRunFile(projectDir);
-  const files = new Set([...(previous?.filesWritten ?? []), ...run.filesWritten]);
+  const files = new Set(mergeFiles(previous?.filesWritten ?? [], run.filesWritten));
   const same = previous?.promptId === run.promptId;
   const recovery = run.recovery !== "" ? run.recovery : (previous?.recovery ?? "");
   const recoveryRerun = run.recoveryRerun || (same && previous?.recoveryRerun === true);
@@ -2501,12 +2507,30 @@ function pushLines(lines: string[], chunk: string): void {
   if (lines.length > LINE_CAP) lines.splice(0, lines.length - LINE_CAP);
 }
 
+function isTransientTempFile(relPath: string): boolean {
+  return /(^|\/)\.grok-write-[^/]*$/i.test(relPath.replace(/\\/g, "/"));
+}
+
+function isRawBase64Line(line: string): boolean {
+  return /^[A-Za-z0-9+/=]{40,}$/.test(line.trim());
+}
+
+/** Cross-prompt file list. Transient Grok atomic-write temps never accumulate. */
+function mergeFiles(previous: readonly string[], current: readonly string[]): string[] {
+  const files = new Set<string>();
+  for (const file of [...previous, ...current]) {
+    if (isTransientTempFile(file)) continue;
+    files.add(file);
+  }
+  return [...files];
+}
+
 function visibleLines(lines: readonly string[]): string[] {
   const next: string[] = [];
   for (const line of lines) {
-    if (isRawJsonLine(line)) continue;
+    if (isRawJsonLine(line) || isRawBase64Line(line)) continue;
     const clean = publicText(line).replace(/[{}]/g, "").trim();
-    if (clean === "") continue;
+    if (clean === "" || isRawBase64Line(clean)) continue;
     next.push(clean.slice(0, LINE_CHARS));
   }
   return next.slice(-LINE_CAP);
@@ -2549,9 +2573,11 @@ function snapshot(root: string): Map<string, string> {
         continue;
       }
       if (!entry.file) continue;
+      const relPath = rel.split("\\").join("/");
+      if (isTransientTempFile(relPath)) continue;
       try {
         const stat = statSync(abs);
-        found.set(rel.split("\\").join("/"), `${stat.size}:${stat.mtimeMs}`);
+        found.set(relPath, `${stat.size}:${stat.mtimeMs}`);
       } catch {
         continue;
       }
@@ -2565,6 +2591,7 @@ function diffSnapshots(before: ReadonlyMap<string, string>, after: ReadonlyMap<s
   const files: string[] = [];
   for (const [file, signature] of after) {
     if (before.get(file) === signature) continue;
+    if (isTransientTempFile(file)) continue;
     files.push(file);
     if (files.length >= FILE_CAP) break;
   }
