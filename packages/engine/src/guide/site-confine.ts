@@ -241,6 +241,7 @@ function denyRulesFor(
  * When the project lives under a root, the rule is that path itself:
  * root/** would also deny the project. Otherwise the root and root/** are both denied.
  * The temp root is skipped when it is the same path as home.
+ * A project from the other OS is not inside this root.
  */
 function homeDenyRules(projects: readonly string[]): string[] {
   const rules: string[] = [];
@@ -263,11 +264,14 @@ function denyRootTree(rootPath: string, projects: readonly string[]): string[] {
   const rootPlatform = platformForPath(rootPath);
   const roots = pathSpellings(rootPath, pathApi(rootPlatform), true);
   const rules: string[] = [];
+  // path.posix.isAbsolute("C:\\...") is false, so resolve("/tmp", "C:\\...") would
+  // treat a Windows project as a relative path under the POSIX temp root.
+  const aligned = projects.filter((project) => platformForPath(project) === rootPlatform);
   for (const root of roots) {
-    if (projects.some((project) => samePath(root, project, rootPlatform))) continue;
-    if (projects.some((project) => isInsideProject([project], root, rootPlatform))) continue;
+    if (aligned.some((project) => samePath(root, project, rootPlatform))) continue;
+    if (aligned.some((project) => isInsideProject([project], root, rootPlatform))) continue;
     const slash = toSlash(root);
-    const coversProject = projects.some((project) => isInsideProject([root], project, rootPlatform));
+    const coversProject = aligned.some((project) => isInsideProject([root], project, rootPlatform));
     const patterns = coversProject ? [slash] : [slash, `${slash}/**`];
     for (const pattern of patterns) {
       if (patternHitsProject(pattern, projects, rootPlatform)) continue;
@@ -314,9 +318,11 @@ function isInsideProject(projects: readonly string[], candidate: string, platfor
   if (trimmed === "" || trimmed === ".") return true;
   if (/^https?:\/\//i.test(trimmed)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return true;
+  if (platform === "posix" && /^[A-Za-z]:[\\/]/.test(trimmed)) return false;
   const api = platform === "win32" ? path.win32 : path.posix;
   const fold = platform === "win32" ? (value: string) => value.toLowerCase() : (value: string) => value;
   for (const project of projects) {
+    if (platformForPath(project) !== platform) continue;
     const absolute = api.isAbsolute(trimmed) ? api.resolve(trimmed) : api.resolve(project, trimmed);
     const left = fold(toSlash(project));
     const right = fold(toSlash(absolute));

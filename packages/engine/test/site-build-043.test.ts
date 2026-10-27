@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import os, { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
@@ -324,6 +324,31 @@ test("os temp is denied for a desktop project and open when the project is insid
   } finally {
     removeTempDir(root);
   }
+});
+
+test("a windows project is not treated as living under a posix temp root", (t) => {
+  t.mock.method(os, "tmpdir", () => "/tmp");
+  const desktop = "C:/Users/lucid/Desktop/site-c";
+  const sample = "/tmp/site-c-commit-003.txt";
+  const rules = denyRules(buildConfinementArgs(desktop));
+  assert.equal(
+    rules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, sample, "posix")),
+    true,
+  );
+  assert.equal(
+    rules.some((rule) => confinementRuleMatches(rule, `${desktop}/src/styles/tokens.css`, "win32")),
+    false,
+  );
+  const insideProject = "/tmp/hh-site-043/site-c";
+  const insideRules = denyRules(buildConfinementArgs(insideProject));
+  assert.equal(
+    insideRules.some((rule) => rule.includes("/**") && confinementRuleMatches(rule, sample, "posix")),
+    false,
+  );
+  assert.equal(
+    insideRules.some((rule) => confinementRuleMatches(rule, `${insideProject}/src/index.ts`, "posix")),
+    false,
+  );
 });
 
 function fakeChild(): ChildProcess {
