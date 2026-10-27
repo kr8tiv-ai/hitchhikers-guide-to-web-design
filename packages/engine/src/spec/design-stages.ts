@@ -224,7 +224,7 @@ function renderSitemapPages(pages: readonly SitemapPage[]): string {
 
 function pushPage(lines: string[], page: SitemapPage): void {
   lines.push(`- ${page.title} at ${page.route}`);
-  for (const section of page.sections) lines.push(`  - ${section}`);
+  for (const section of shownSections(page.sections)) lines.push(`  - ${section}`);
 }
 
 function renderWireframe(projectDir: string, sitemap: string, brief: string, answers: readonly BrandAnswer[]): string {
@@ -233,8 +233,7 @@ function renderWireframe(projectDir: string, sitemap: string, brief: string, ans
   const lines = ["# Wireframe", ""];
   for (const page of pages) {
     lines.push(`## ${page.title}`, "");
-    const sections = page.sections.length > 0 ? page.sections : ["hero"];
-    for (const section of sections) lines.push(box(section), "");
+    for (const section of shownSections(page.sections)) lines.push(box(section), "");
   }
   return lines.join("\n");
 }
@@ -242,10 +241,11 @@ function renderWireframe(projectDir: string, sitemap: string, brief: string, ans
 function pagesFromBrief(projectDir: string, brief: string, answers: readonly BrandAnswer[]): SitemapPage[] {
   const planned = planFromBrief(brief, briefAnswers(answers));
   const direction = pickedHomeSections(projectDir);
+  const corpus = briefCorpus(brief, answers);
   return planned.pages.map((page) => ({
     title: page.title,
     route: page.route,
-    sections: sectionsForPage(page, planned.features, direction),
+    sections: sectionsForPage(page, planned.features, direction, corpus),
     group: FOOTER_TITLES.has(page.title.toLowerCase()) ? "footer" : "primary",
   }));
 }
@@ -259,6 +259,7 @@ const SECTION_KEYWORDS: readonly { id: string; pattern: RegExp }[] = [
   { id: "inquiry", pattern: /\binquir(?:y|ies)\b/i },
   { id: "steps", pattern: /\bsteps?\b/i },
   { id: "glossary", pattern: /\bglossary\b/i },
+  { id: "caretaker-program", pattern: /\bcaretaker program\b/i },
   { id: "sign-up", pattern: /\bsign-up\b/i },
   { id: "hero", pattern: /\bhero\b/i },
   { id: "story", pattern: /\bstory\b/i },
@@ -315,15 +316,29 @@ function featureSections(pageId: string, features: readonly string[]): string[] 
     if ((pageId === "farms" || pageId === "farm-detail") && /\bmap\b/.test(name)) ids.push("map");
     if (pageId === "farm-detail" && /\bgallery\b/.test(name)) ids.push("gallery");
     if (pageId === "farm-detail" && /inquir/.test(name)) ids.push("inquiry");
-    if (pageId === "live-on-the-land" && /sign-up|caretaker/.test(name)) ids.push("sign-up");
+    if (pageId === "live-on-the-land" && /caretaker/.test(name)) ids.push("caretaker-program");
+    if (pageId === "live-on-the-land" && /sign-up/.test(name)) ids.push("sign-up");
+    if (pageId === "contact" && /contact form/.test(name)) ids.push("contact-form");
+    if (pageId === "blog" && /\bguide\b/.test(name)) ids.push("guide-list");
+    if (pageId === "blog" && /\bblog\b/.test(name) && !/\bguide\b/.test(name)) ids.push("posts");
   }
   return ids;
 }
 
-function sectionsForPage(page: PlannedPage, features: readonly string[], homeDirection: readonly string[]): string[] {
+/**
+ * Sections the owner reads. A `${slug}-main` placeholder from the plan
+ * never becomes a sitemap or wireframe id. A page with no brief detail
+ * gets a name from its purpose, then from its title.
+ */
+function sectionsForPage(
+  page: PlannedPage,
+  features: readonly string[],
+  homeDirection: readonly string[],
+  corpus: string,
+): string[] {
   const merged: string[] = [];
   const add = (id: string): void => {
-    const next = id.trim();
+    const next = id.trim().replace(/-main$/i, "");
     if (next !== "" && !merged.includes(next)) merged.push(next);
   };
   if (page.id === "home") {
@@ -331,8 +346,47 @@ function sectionsForPage(page: PlannedPage, features: readonly string[], homeDir
   }
   for (const section of keywordsIn(noteSlice(page.id, pageNote(page)))) add(section);
   for (const section of featureSections(page.id, features)) add(section);
-  if (merged.length > 0) return merged;
-  return [...page.sections];
+  for (const section of purposeSections(page, corpus)) add(section);
+  for (const section of page.sections) {
+    if (/-main$/i.test(section.trim())) continue;
+    add(section);
+  }
+  if (merged.length === 0) add(sectionFromPurpose(page.title));
+  return merged.length > 0 ? merged : ["overview"];
+}
+
+function purposeSections(page: PlannedPage, corpus: string): string[] {
+  const ids: string[] = [];
+  const note = `${page.title}\n${pageNote(page)}`;
+  if (page.id === "contact" || /\bcontact\b/i.test(page.title)) ids.push("contact-form");
+  if (page.id === "blog" || /^blog$/i.test(page.title.trim())) {
+    ids.push(/\bguides?\b/i.test(corpus) ? "guide-list" : "posts");
+  }
+  if (page.id === "privacy" || page.id === "terms") ids.push("policy");
+  if (page.id === "about") ids.push("story");
+  if (/\bcaretaker program\b/i.test(note)) ids.push("caretaker-program");
+  return ids;
+}
+
+function sectionFromPurpose(title: string): string {
+  const slug = pageSlug(title);
+  if (slug === "" || slug === "home") return "hero";
+  if (slug === "contact") return "contact-form";
+  if (slug === "about") return "story";
+  if (slug === "privacy" || slug === "terms") return "policy";
+  if (slug === "blog") return "posts";
+  return slug;
+}
+
+/** Drop a placeholder suffix so an old sitemap cannot show `about-main`. */
+function shownSections(sections: readonly string[]): string[] {
+  const ids: string[] = [];
+  for (const section of sections) {
+    const next = section.trim().replace(/-main$/i, "");
+    if (next === "" || ids.includes(next)) continue;
+    ids.push(next);
+  }
+  return ids.length > 0 ? ids : ["overview"];
 }
 
 function parseSitemap(text: string): SitemapPage[] {
@@ -446,11 +500,10 @@ function movePage(pages: SitemapPage[], rawTitle: string, rawParent: string): Si
 }
 
 function makePage(title: string, group: SitemapPage["group"]): SitemapPage {
-  const slug = pageSlug(title);
   return {
     title,
     route: routeFor(title),
-    sections: slug === "" || slug === "home" ? ["hero"] : [`${slug}-main`],
+    sections: [sectionFromPurpose(title)],
     group: FOOTER_TITLES.has(title.toLowerCase()) ? "footer" : group,
   };
 }
@@ -486,6 +539,16 @@ function box(label: string): string {
   const width = Math.max(8, text.length);
   const bar = `+${"-".repeat(width + 2)}+`;
   return `${bar}\n| ${text.padEnd(width, " ")} |\n${bar}`;
+}
+
+function briefCorpus(brief: string, answers: readonly BrandAnswer[]): string {
+  const parts = [brief];
+  for (const answer of answers) {
+    if (answer.status === "SKIPPED" || answer.status === "NOT_APPLICABLE" || answer.status === "UNANSWERED") continue;
+    const value = answer.value.trim();
+    if (value !== "") parts.push(value);
+  }
+  return parts.join("\n");
 }
 
 function briefAnswers(answers: readonly BrandAnswer[]): BriefAnswer[] {

@@ -10,6 +10,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { translateBrief } from "../src/spec/art-direction.ts";
 import { DESIGN_MD_PATH, renderDesignMd, writeDesignMd } from "../src/spec/design-outputs.ts";
+import { designSectionBody } from "../src/spec/design-md-lint.ts";
 import {
   TYPE_SCALE,
   displayClearsMinimum,
@@ -111,7 +112,9 @@ test("a named face wins, and a markdown brief does not treat headings as familie
 
 test("DESIGN.md names the dealt families and the world ratio, with fluid clamps", () => {
   const brutal = renderDesignMd(BRUTALIST);
-  assert.match(brutal, /## Type scale/);
+  assert.ok(designSectionBody(brutal, "Type scale"));
+  assert.equal(brutal.includes("## Type scale"), false);
+  assert.equal(brutal.includes("See Typography."), false);
   assert.match(brutal, /Families: Tanker and Cabinet Grotesk\./);
   assert.match(brutal, /Ratio: 1\.5/);
   assert.match(brutal, /World: brutalist/);

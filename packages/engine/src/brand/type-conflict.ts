@@ -99,6 +99,46 @@ export function resolveTypeRoles(
   return { display: current, body: rest };
 }
 
+export interface DisplayRhythm {
+  lineHeight: string;
+  letterSpacing: string;
+  fontWeight: string | null;
+  headingLineHeight: string;
+  headingLetterSpacing: string;
+  /** The type-wish words that set the display. Empty keeps the tight default. */
+  words: string[];
+}
+
+/**
+ * Width and air in the type wish open the display. The rest of the brief,
+ * including a wide-caps logo, does not. Light uses a weight only when the
+ * family has a weight axis.
+ */
+export function displayRhythm(typeText: string, family: string): DisplayRhythm {
+  const words = wishAdjectives(typeText);
+  if (words.length === 0) {
+    return {
+      lineHeight: "0.95",
+      letterSpacing: "-0.03em",
+      fontWeight: null,
+      headingLineHeight: "1.05",
+      headingLetterSpacing: "-0.02em",
+      words: [],
+    };
+  }
+  const wide = words.includes("wide");
+  const airy = words.includes("airy");
+  const light = words.includes("light");
+  return {
+    lineHeight: airy ? "1.15" : wide ? "1.1" : "1.05",
+    letterSpacing: wide ? "0.06em" : "0em",
+    fontWeight: light && familyHasWeightAxis(family) ? "300" : null,
+    headingLineHeight: airy ? "1.2" : wide ? "1.15" : "1.1",
+    headingLetterSpacing: wide ? "0.02em" : "0em",
+    words,
+  };
+}
+
 /** Empty when the display already agrees with the owner, or the class is unknown. */
 export function winsSentence(display: string, body: string, typeText: string): string {
   const wish = headingWish(typeText);
@@ -121,6 +161,15 @@ function classifyFace(text: string): FaceClass | null {
 function wishAdjectives(typeText: string): string[] {
   const text = typeText.toLowerCase();
   return ["light", "wide", "airy"].filter((word) => new RegExp(`\\b${word}\\b`).test(text));
+}
+
+function familyHasWeightAxis(family: string): boolean {
+  const name = family.trim();
+  if (name === "") return false;
+  return TYPE_LIBRARY.some((pair) => {
+    if (pair.display === name && pair.axes.includes("wght")) return true;
+    return pair.body === name && pair.bodyAxes.includes("wght");
+  });
 }
 
 function scoreClause(clause: string, tone: readonly string[], adjectives: readonly string[]): number {

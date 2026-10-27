@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { existsSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { hiddenChildOptions, NORMAL_PUSH_ARGS, WORKTREE_PUSH_ARGS, assertSupervisorGit, decidePushVerify } from "@hitchhiker/engine";
 import { detectHook } from "./hooks.ts";
 
@@ -14,26 +17,63 @@ const HEX_COMMIT = /^[0-9a-f]{40}$/;
 const GIT_LOCK_ATTEMPTS = 10;
 const AUTH_PUSH_REASON = "Push was refused: SSH key or credentials. Check your git login.";
 
-/**
- * SSH or HTTPS rejected the remote. A loose-object "Permission denied" is not this.
- * Checked before the file-lock test so a publickey refusal is not retried.
- */
-export function gitTextIsAuthFailure(text: string): boolean {
-  return /permission denied \(publickey\)|could not read from remote repository|authentication failed|\b403\b/i.test(
-    text,
-  );
-}
-
+const SPECIFIC_AUTH = /permission denied \(publickey\)|authentication failed|\b403\b/i;
+const TRANSPORT_AUTH = /could not read from remote repository/i;
 const FILE_LOCK =
   /unable to write file|unable to write new index file|unable to index file|failed to insert into database|index\.lock|resource busy|resource temporarily unavailable/i;
 const DENIED = /permission denied/i;
 const DENIED_CONTEXT = /(?:\bfile\b|\bobjects?\b|\bindex\b|\.git[\\/])/i;
 
-/** A Windows lock on a loose object or the index. An auth refusal is not this. */
-export function gitTextIsFileLock(text: string): boolean {
-  if (gitTextIsAuthFailure(text)) return false;
+function lockEvidence(text: string): boolean {
   if (FILE_LOCK.test(text)) return true;
   return DENIED.test(text) && DENIED_CONTEXT.test(text);
+}
+
+/**
+ * SSH or HTTPS rejected the remote. A loose-object "Permission denied" is not this.
+ * Git's transport trailer is auth only when the same text has no file-lock evidence,
+ * so a lock plus "Could not read from remote repository." stays a lock and is retried.
+ */
+export function gitTextIsAuthFailure(text: string): boolean {
+  if (SPECIFIC_AUTH.test(text)) return true;
+  return TRANSPORT_AUTH.test(text) && !lockEvidence(text);
+}
+
+/** A Windows lock on a loose object or the index. A specific auth refusal is not this. */
+export function gitTextIsFileLock(text: string): boolean {
+  if (SPECIFIC_AUTH.test(text)) return false;
+  return lockEvidence(text);
+}
+
+let supervisorConfig: string | null = null;
+
+function supervisorConfigFile(): string {
+  if (supervisorConfig !== null) return supervisorConfig;
+  const file = path.join(os.tmpdir(), "hh-supervise-empty.gitconfig");
+  if (!existsSync(file)) writeFileSync(file, "");
+  supervisorConfig = file;
+  return file;
+}
+
+/**
+ * Git children must not inherit GIT_DIR, a credential helper, or a global
+ * config. Those can print an auth trailer into an unrelated ancestor check.
+ */
+export function supervisorGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("GIT_")) continue;
+    env[key] = value;
+  }
+  const blank = supervisorConfigFile();
+  env.GIT_TERMINAL_PROMPT = "0";
+  env.GIT_CONFIG_GLOBAL = blank;
+  env.GIT_CONFIG_SYSTEM = blank;
+  env.GIT_CONFIG_NOSYSTEM = "1";
+  env.GIT_CONFIG_COUNT = "1";
+  env.GIT_CONFIG_KEY_0 = "safe.directory";
+  env.GIT_CONFIG_VALUE_0 = "*";
+  return env;
 }
 
 export function gitLockDelayMs(attempt: number): number {
@@ -64,7 +104,7 @@ export function retryGitText(run: () => GitText, wait: (ms: number) => void = wa
 function spawnGit(cwd: string, args: readonly string[]): GitText {
   const result = spawnSync("git", [...args], hiddenChildOptions({
     cwd,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: supervisorGitEnv(),
     encoding: "utf8" as const,
     stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
     timeout: 60_000,
@@ -119,11 +159,13 @@ export function verifyKeptCommit(
   }
   const chunks: string[] = [];
   let pushExit = 1;
+  let pushText = "";
   let ancestorExit = 1;
   let forceRefused = false;
   try {
     const push = run(cwd, isolated ? [...WORKTREE_PUSH_ARGS] : [...NORMAL_PUSH_ARGS]);
     chunks.push(push.stdout, push.stderr);
+    pushText = `${push.stdout}\n${push.stderr}`;
     pushExit = push.status ?? 1;
     if (pushExit === 0) {
       const fetched = run(cwd, ["fetch", "origin", "main"]);
@@ -142,11 +184,10 @@ export function verifyKeptCommit(
   }
   const decision = decidePushVerify({ pushExit, ancestorExit, forceRefused });
   const output = clip(chunks);
-  const authRefused = gitTextIsAuthFailure(chunks.join("\n"));
   let reason = "";
   if (decision !== "pushed") {
     if (forceRefused) reason = "force push refused";
-    else if (authRefused) reason = AUTH_PUSH_REASON;
+    else if (pushExit !== 0 && gitTextIsAuthFailure(pushText)) reason = AUTH_PUSH_REASON;
     else if (pushExit !== 0) reason = "push was rejected";
     else reason = "origin/main does not contain the commit";
   }

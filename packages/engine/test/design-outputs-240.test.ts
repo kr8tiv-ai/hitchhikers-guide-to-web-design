@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { generateBriefPlan } from "../src/spec/brief-plan.ts";
+import { designSectionBody } from "../src/spec/design-md-lint.ts";
 import { phonePerformanceBudget } from "../src/spec/phone-budget.ts";
 import {
   DESIGN_MD_PATH,
@@ -79,8 +80,8 @@ test("a fixture brief writes a typed DESIGN.md and motion.ts, and every build pr
     const design = readFileSync(designPath, "utf8");
     for (const heading of [
       "## Tokens",
-      "## Type scale",
-      "## Color",
+      "## Colors",
+      "## Typography",
       "## Spacing",
       "## Components",
       "## Motion principles",
@@ -88,6 +89,12 @@ test("a fixture brief writes a typed DESIGN.md and motion.ts, and every build pr
     ]) {
       assert.match(design, new RegExp(heading));
     }
+    assert.equal(design.includes("## Type scale"), false);
+    assert.equal(/\n## Color\n/.test(design), false);
+    assert.equal(design.includes("See Colors."), false);
+    assert.equal(design.includes("See Typography."), false);
+    assert.ok(designSectionBody(design, "Color"));
+    assert.ok(designSectionBody(design, "Type scale"));
     assert.match(design, /Reveal duration: 1\.2s/);
     assert.match(design, /expo\.out/);
     assert.match(design, /Line stagger: 0\.08/);

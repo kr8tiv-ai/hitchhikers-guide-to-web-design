@@ -17,7 +17,7 @@ import {
   type AgentRunResult,
 } from "../src/improve/agents.ts";
 import { openBugCountFromDisk } from "../src/improve/evaluate.ts";
-import { gitLockDelayMs, gitTextIsFileLock, runSupervisorGit, verifyKeptCommit, type GitText } from "../src/improve/pushcheck.ts";
+import { gitLockDelayMs, gitTextIsFileLock, runSupervisorGit, supervisorGitEnv, verifyKeptCommit, type GitText } from "../src/improve/pushcheck.ts";
 import { runSupervise } from "../src/improve/supervisor.ts";
 import { baselineProblem } from "../src/improve/baseline.ts";
 import { exitNote, failureHint } from "../src/improve/session.ts";
@@ -80,7 +80,7 @@ function git(cwd: string, args: readonly string[]): string {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 60_000,
       killSignal: "SIGKILL",
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      env: supervisorGitEnv(),
     });
     if (result.status === 0) return (result.stdout ?? "").replace(/\r\n/g, "\n");
     detail = `${result.stderr ?? ""}${result.stdout ?? ""}`.trim();
@@ -111,6 +111,7 @@ function initPair(): { work: string; origin: string } {
     encoding: "utf8",
     shell: false,
     windowsHide: true,
+    env: supervisorGitEnv(),
   });
   if (bare.status !== 0) {
     spawnSync("git", ["init", "--bare"], {
@@ -118,6 +119,7 @@ function initPair(): { work: string; origin: string } {
       encoding: "utf8",
       shell: false,
       windowsHide: true,
+      env: supervisorGitEnv(),
     });
   }
   spawnSync("git", ["symbolic-ref", "HEAD", "refs/heads/main"], {
@@ -125,12 +127,14 @@ function initPair(): { work: string; origin: string } {
     encoding: "utf8",
     shell: false,
     windowsHide: true,
+    env: supervisorGitEnv(),
   });
   spawnSync("git", ["config", "gc.auto", "0"], {
     cwd: origin,
     encoding: "utf8",
     shell: false,
     windowsHide: true,
+    env: supervisorGitEnv(),
   });
   const work = initRepo("main");
   git(work, ["remote", "add", "origin", origin]);
@@ -356,6 +360,7 @@ test("an ancestor check failure is a failed push", async () => {
       encoding: "utf8",
       shell: false,
       windowsHide: true,
+      env: supervisorGitEnv(),
     });
     assert.notEqual(ancestor.status, 0);
   } finally {
@@ -409,6 +414,7 @@ test("a kept commit is pushed with git push origin main and verified", async () 
       encoding: "utf8",
       shell: false,
       windowsHide: true,
+      env: supervisorGitEnv(),
     });
     assert.equal(ancestor.status, 0);
   } finally {
@@ -891,7 +897,7 @@ test("an isolated run scores and pushes from its own worktree and leaves the mai
     assert.equal(git(work, ["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "main");
   } finally {
     if (treeDir.length > 0) {
-      spawnSync("git", ["worktree", "remove", "--force", treeDir], { cwd: work, windowsHide: true });
+      spawnSync("git", ["worktree", "remove", "--force", treeDir], { cwd: work, windowsHide: true, env: supervisorGitEnv() });
     }
     remove(root);
     remove(work);

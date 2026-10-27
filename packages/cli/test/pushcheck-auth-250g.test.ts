@@ -75,3 +75,39 @@ test("the push path reports an auth error instead of a lock message", () => {
     assert.equal(/lock/i.test(check.reason), false, text);
   }
 });
+
+test("a file lock plus the transport trailer is a lock and is retried", () => {
+  const text = "fatal: Unable to create '/repo/.git/index.lock': File exists.\nfatal: Could not read from remote repository.";
+  assert.equal(gitTextIsAuthFailure(text), false, text);
+  assert.equal(gitTextIsFileLock(text), true, text);
+  let calls = 0;
+  const result = retryGitText((): GitText => {
+    calls += 1;
+    if (calls === 1) return { status: 1, stdout: "", stderr: text };
+    return { status: 0, stdout: "", stderr: "" };
+  }, () => {});
+  assert.equal(calls, 2);
+  assert.equal(result.status, 0);
+});
+
+test("a successful push keeps the ancestor reason when a later fetch looks like auth", () => {
+  const ancestor = "origin/main does not contain the commit";
+  let step = 0;
+  const fetched = verifyKeptCommit("C:\\unused", COMMIT, () => {
+    step += 1;
+    if (step === 1) return { status: 0, stdout: "", stderr: "" };
+    return { status: 1, stdout: "", stderr: "fatal: Could not read from remote repository." };
+  });
+  assert.equal(fetched.reason, ancestor);
+  assert.equal(step, 2);
+
+  step = 0;
+  const checked = verifyKeptCommit("C:\\unused", COMMIT, () => {
+    step += 1;
+    if (step === 1) return { status: 0, stdout: "", stderr: "" };
+    if (step === 2) return { status: 0, stdout: "", stderr: "fatal: Could not read from remote repository." };
+    return { status: 1, stdout: "", stderr: "" };
+  });
+  assert.equal(checked.reason, ancestor);
+  assert.equal(step, 3);
+});

@@ -17,10 +17,14 @@ export const DESIGN_SECTION_ORDER = [
   "Do's and Don'ts",
 ] as const;
 
+/**
+ * Alias headings count as the canonical section. The style guide emits each
+ * section once. Readers that still say "Color" or "Type scale" resolve here.
+ */
 const ALIASES: readonly (readonly string[])[] = [
   ["overview", "brand & style"],
-  ["colors"],
-  ["typography"],
+  ["colors", "color"],
+  ["typography", "type scale"],
   ["layout", "layout & spacing"],
   ["elevation & depth", "elevation"],
   ["shapes"],
@@ -89,6 +93,15 @@ export function lintDesignMd(markdown: string): DesignLintReport {
 /** The YAML token tree lintDesignMd already parsed. Export reads this tree. */
 export function designTokenTree(markdown: string): { [key: string]: DesignTokenNode } {
   return parseYamlMap(splitFrontMatter(markdown).yaml).root;
+}
+
+/** The body of a section, following an alias heading to the one that was written. */
+export function designSectionBody(markdown: string, heading: string): string | null {
+  const index = canonIndex(heading);
+  if (index < 0) return null;
+  const body = sectionBody(splitFrontMatter(markdown).body, index);
+  if (body === null) return null;
+  return body.trim();
 }
 
 function splitFrontMatter(markdown: string): { yaml: string; body: string } {

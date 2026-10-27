@@ -235,7 +235,7 @@ export {
   writeDesignMd,
   writeMotionModule,
 } from "./spec/design-outputs.ts";
-export { DESIGN_SECTION_ORDER, designTokenTree, lintDesignMd } from "./spec/design-md-lint.ts";
+export { DESIGN_SECTION_ORDER, designSectionBody, designTokenTree, lintDesignMd } from "./spec/design-md-lint.ts";
 export type { DesignLintError, DesignLintReport, DesignTokenNode } from "./spec/design-md-lint.ts";
 export { DESIGN_THEME_CSS, DESIGN_TOKENS_JSON, exportDesignMd, writeDesignExports } from "./spec/design-export.ts";
 export type { DesignExport } from "./spec/design-export.ts";

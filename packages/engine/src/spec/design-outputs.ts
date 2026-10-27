@@ -7,12 +7,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
-import { syncResolvedFamilies } from "../brand/directions.ts";
-import { brandKitFromAnswers, contrastRatio, type BrandAnswer } from "../brand/kit-from-interview.ts";
+import { dealDirections, syncResolvedFamilies } from "../brand/directions.ts";
+import { brandKitFromAnswers, contrastRatio, type BrandAnswer, type BrandPalette } from "../brand/kit-from-interview.ts";
 import { pickType } from "../brand/tokens.ts";
-import { resolveTypeRoles, winsSentence } from "../brand/type-conflict.ts";
+import { displayRhythm, resolveTypeRoles, winsSentence, type DisplayRhythm } from "../brand/type-conflict.ts";
 import { familiesSentence, typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
+import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
 import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
@@ -90,21 +91,23 @@ export function renderDesignMd(
   brief: string,
   answers: readonly BrandAnswer[] = [],
   fonts?: DesignFontChoice | null,
+  projectName?: string | null,
 ): string {
   const art = translateBrief(brief, answers as readonly ArtAnswer[]);
   const band = bandFor(art.motion.score);
-  const palette = brandKitFromAnswers(answers).palette;
+  const palette = brandKitFromAnswers(answers, dealDirections(), brief).palette;
   const chosen = fontChoice(brief, answers, fonts);
   const scale = { ...typeScaleFor(documentText(brief, answers)), familiesLine: chosen.line };
+  const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
   const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
   const families = [chosen.display, chosen.body];
-  const paletteSource = colourFromKit(answers) ? "brand kit" : "default tokens";
+  const paletteSource = colourFromKit(answers, brief) ? "brand kit" : "default tokens";
   const no3d = refuses3d(documentText(brief, answers));
   const button = buttonPair(palette);
-  const inkOnPaper = contrastRatio(palette.ink, palette.paper);
-  const mutedOnPaper = contrastRatio(palette.muted, palette.paper);
+  const name = styleGuideName(brief, answers, projectName);
+  const weightNote = rhythm.fontWeight === null ? "" : `, weight ${rhythm.fontWeight}`;
   const markdown = [
-    frontMatter(palette, scale, families, button),
+    frontMatter(palette, scale, families, button, rhythm, name),
     "# Design",
     "",
     "The style guide records the tokens the build starts from.",
@@ -115,17 +118,8 @@ export function renderDesignMd(
     "",
     "## Colors",
     "",
-    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
-    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
-    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
-    `Body text ${palette.ink} on ${palette.paper} at ${ratioText(inkOnPaper)} to 1.`,
-    `Secondary text ${palette.muted} on ${palette.paper} at ${ratioText(mutedOnPaper)} to 1.`,
-    `Button text ${button.text} on ${button.background} at ${ratioText(button.ratio)} to 1.`,
+    ...colourProse(palette, paletteSource, button),
     `Grade: ${art.colorGrade} Light: ${art.light}`,
-    "",
-    "## Color",
-    "",
-    "See Colors.",
     "",
     "## Typography",
     "",
@@ -135,16 +129,13 @@ export function renderDesignMd(
     `World: ${scale.world}.`,
     `Display over body minimum: ${scale.minimum}.`,
     "Body floor: 16px. Preferred body: 18px.",
+    ...(rhythm.words.length === 0 ? [] : ["", rhythmSentence(rhythm)]),
     "",
-    `- display: ${scale.display}, line-height 0.95, tracking -0.03em`,
-    `- heading: ${scale.heading}, line-height 1.05, tracking -0.02em`,
+    `- display: ${scale.display}, line-height ${rhythm.lineHeight}, tracking ${rhythm.letterSpacing}${weightNote}`,
+    `- heading: ${scale.heading}, line-height ${rhythm.headingLineHeight}, tracking ${rhythm.headingLetterSpacing}`,
     `- title: ${scale.title}, line-height 1.2`,
     `- body: ${scale.body}, line-height ${scale.bodyLineHeight}`,
     `- caption: ${scale.caption}, line-height 1.4`,
-    "",
-    "## Type scale",
-    "",
-    "See Typography.",
     "",
     "## Layout",
     "",
@@ -186,7 +177,7 @@ export function renderDesignMd(
     "",
     "## Tokens",
     "",
-    `Color tokens: paper ${palette.paper}, ink ${palette.ink}, accent ${palette.accent}, muted ${palette.muted}. Source: ${paletteSource}.`,
+    `Color tokens: ${colourTokenList(palette)}. Source: ${paletteSource}.`,
     "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
     "Motion tokens live in src/scripts/motion.ts.",
     "",
@@ -209,31 +200,29 @@ export function renderDesignMd(
 }
 
 function frontMatter(
-  palette: { paper: string; ink: string; accent: string; muted: string },
+  palette: BrandPalette,
   scale: { display: string; body: string; bodyLineHeight: number },
   families: readonly string[],
   button: { text: string; background: string },
+  rhythm: DisplayRhythm,
+  name: string,
 ): string {
   const display = families[0] ?? "Switzer";
   const body = families[1] ?? display;
+  const weight = rhythm.fontWeight === null ? [] : [`    fontWeight: ${yamlScalar(rhythm.fontWeight)}`];
   return [
     "---",
     "version: alpha",
-    "name: Site",
+    "name: " + yamlScalar(name),
     "colors:",
-    `  paper: ${yamlScalar(palette.paper)}`,
-    `  ink: ${yamlScalar(palette.ink)}`,
-    `  accent: ${yamlScalar(palette.accent)}`,
-    `  muted: ${yamlScalar(palette.muted)}`,
-    `  primary: ${yamlScalar(palette.ink)}`,
-    `  button: ${yamlScalar(button.background)}`,
-    `  onButton: ${yamlScalar(button.text)}`,
+    ...colourYaml(palette, button),
     "typography:",
     "  display:",
     `    fontFamily: ${yamlScalar(display)}`,
     `    fontSize: ${yamlScalar(scale.display)}`,
-    "    lineHeight: \"0.95\"",
-    "    letterSpacing: \"-0.03em\"",
+    `    lineHeight: ${yamlScalar(rhythm.lineHeight)}`,
+    `    letterSpacing: ${yamlScalar(rhythm.letterSpacing)}`,
+    ...weight,
     "  body:",
     `    fontFamily: ${yamlScalar(body)}`,
     `    fontSize: ${yamlScalar(scale.body)}`,
@@ -263,6 +252,152 @@ function frontMatter(
 
 function yamlScalar(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+}
+
+const RESERVED_COLOUR_KEYS = new Set(["paper", "ink", "accent", "muted", "primary", "button", "onbutton"]);
+
+function colourTokenKey(name: string): string {
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (key === "" || RESERVED_COLOUR_KEYS.has(key)) return "";
+  return key;
+}
+
+function colourYaml(palette: BrandPalette, button: { text: string; background: string }): string[] {
+  const lines = [
+    `  paper: ${yamlScalar(palette.paper)}`,
+    `  ink: ${yamlScalar(palette.ink)}`,
+    `  accent: ${yamlScalar(palette.accent)}`,
+    `  muted: ${yamlScalar(palette.muted)}`,
+  ];
+  const seen = new Set(["paper", "ink", "accent", "muted"]);
+  for (const swatch of palette.swatches) {
+    const key = colourTokenKey(swatch.name);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    lines.push(`  ${key}: ${yamlScalar(swatch.hex)}`);
+  }
+  lines.push(`  primary: ${yamlScalar(palette.ink)}`);
+  lines.push(`  button: ${yamlScalar(button.background)}`);
+  lines.push(`  onButton: ${yamlScalar(button.text)}`);
+  return lines;
+}
+
+function colourTokenList(palette: BrandPalette): string {
+  const parts = [
+    `paper ${palette.paper}`,
+    `ink ${palette.ink}`,
+    `accent ${palette.accent}`,
+    `muted ${palette.muted}`,
+  ];
+  for (const swatch of palette.swatches) {
+    const key = colourTokenKey(swatch.name);
+    if (key === "") continue;
+    parts.push(`${key} ${swatch.hex}`);
+  }
+  return parts.join(", ");
+}
+
+function colourProse(
+  palette: BrandPalette,
+  paletteSource: string,
+  button: { text: string; background: string; ratio: number },
+): string[] {
+  const lines = [
+    `Paper ${palette.paper} carries ink ${palette.ink}. Source: ${paletteSource}.`,
+    `Accent ${palette.accent} is for large text and marks. Source: ${paletteSource}.`,
+    `Muted ${palette.muted} is for secondary text. Source: ${paletteSource}.`,
+    `Body text ${palette.ink} on ${palette.paper} at ${ratioText(contrastRatio(palette.ink, palette.paper))} to 1.`,
+    `Secondary text ${palette.muted} on ${palette.paper} at ${ratioText(contrastRatio(palette.muted, palette.paper))} to 1.`,
+    `Button text ${button.text} on ${button.background} at ${ratioText(button.ratio)} to 1.`,
+  ];
+  if (palette.swatches.length === 0) return lines;
+  for (const swatch of palette.swatches) lines.push(swatchSentence(swatch, palette));
+  lines.push(
+    `Muted ${palette.muted} is not a colour the owner named. It is darkened until secondary text on the page clears 4.5 to 1.`,
+  );
+  return lines;
+}
+
+function swatchSentence(swatch: { name: string; hex: string }, palette: BrandPalette): string {
+  const label = swatch.name.charAt(0).toUpperCase() + swatch.name.slice(1);
+  const hex = swatch.hex;
+  const paper = palette.paper;
+  const ratio = contrastRatio(hex, paper);
+  const stated = ratioText(ratio);
+  if (hex.toLowerCase() === paper.toLowerCase()) {
+    return `${label} ${hex} is the page colour, mapped to paper.`;
+  }
+  if (hex.toLowerCase() === palette.ink.toLowerCase()) {
+    return `${label} text ${hex} on ${paper} at ${stated} to 1. ${label} is the ink.`;
+  }
+  const body = ratio >= 4.5;
+  const large = ratio >= 3;
+  if (hex.toLowerCase() === palette.accent.toLowerCase() && !body) {
+    const aa = large
+      ? "That passes AA for large text and does not pass AA for body text, so it is not a body colour."
+      : "That does not pass AA for text, so it is not used for type.";
+    return `${label} ${hex} is the accent. Contrast with the page ${paper} is ${stated} to 1. ${aa}`;
+  }
+  if (body) {
+    const role = hex.toLowerCase() === palette.accent.toLowerCase() ? ` ${label} is the accent.` : "";
+    return `${label} text ${hex} on ${paper} at ${stated} to 1.${role}`;
+  }
+  if (large) {
+    return `${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That passes AA for large text and does not pass AA for body text, so it is not a body colour.`;
+  }
+  return `${label} ${hex} contrasts with the page ${paper} at ${stated} to 1. That does not pass AA for text, so it is not used for type.`;
+}
+
+function rhythmSentence(rhythm: DisplayRhythm): string {
+  const words = rhythm.words.join(", ");
+  const lead = `Display rhythm follows the owner's words: ${words}. Tracking is ${rhythm.letterSpacing} and line height is ${rhythm.lineHeight}.`;
+  if (!rhythm.words.includes("light")) return lead;
+  if (rhythm.fontWeight === null) return `${lead} The family has no weight axis, so the weight stays regular.`;
+  return `${lead} The weight is ${rhythm.fontWeight} because the family has a weight axis.`;
+}
+
+/**
+ * The business name in the brief wins over the desk project title.
+ * A wordmark, then a disclaimer subject, then a quoted tagline name.
+ */
+function styleGuideName(brief: string, answers: readonly BrandAnswer[], projectName?: string | null): string {
+  const corpus = documentText(brief, answers);
+  return wordmarkName(corpus) ?? disclaimerName(corpus) ?? taglineName(corpus) ?? usableProjectName(projectName) ?? "Site";
+}
+
+function wordmarkName(corpus: string): string | null {
+  const pattern = /\b([A-Z]{2,}(?:[ \t]+[A-Z]{2,}){1,3})\b/g;
+  for (const match of corpus.matchAll(pattern)) {
+    const phrase = match[1] ?? "";
+    const start = match.index ?? 0;
+    const window = corpus.slice(Math.max(0, start - 32), start + phrase.length + 64);
+    if (!/\b(?:wide caps|wordmark|logo)\b/i.test(window)) continue;
+    return phrase
+      .split(/\s+/)
+      .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+      .join(" ");
+  }
+  return null;
+}
+
+function disclaimerName(corpus: string): string | null {
+  const match = /\b([A-Z][A-Za-z0-9'’&-]*(?:\s+[A-Z][A-Za-z0-9'’&-]*){0,4})\s+does not\b/.exec(corpus);
+  const name = match?.[1]?.trim() ?? "";
+  if (name === "" || name.length > 60) return null;
+  return name;
+}
+
+function taglineName(corpus: string): string | null {
+  const match = /["“]([A-Z][A-Za-z0-9'’&-]*(?:\s+[A-Z][A-Za-z0-9'’&-]*){0,3})\./.exec(corpus);
+  const name = match?.[1]?.trim() ?? "";
+  if (name === "" || name.length > 60) return null;
+  return name;
+}
+
+function usableProjectName(name: string | null | undefined): string | null {
+  const trimmed = name?.trim() ?? "";
+  if (trimmed === "" || trimmed.toLowerCase() === "site") return null;
+  return trimmed;
 }
 
 export function renderMotionModule(
@@ -381,7 +516,7 @@ export function writeDesignMd(
 ): string {
   const file = path.join(projectDir, DESIGN_MD_PATH);
   mkdirSync(projectDir, { recursive: true });
-  const markdown = renderDesignMd(brief, answers, fonts);
+  const markdown = renderDesignMd(brief, answers, fonts, readProjectDisplayName(projectDir));
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
   if (fonts !== undefined && fonts !== null && fonts.display.trim() !== "" && fonts.body.trim() !== "") {
@@ -518,8 +653,14 @@ function answeredValue(answers: readonly BrandAnswer[], id: string): string {
   return found.value.trim();
 }
 
-function colourFromKit(answers: readonly BrandAnswer[]): boolean {
-  return answeredValue(answers, "DP-1.2") !== "";
+function colourFromKit(answers: readonly BrandAnswer[], brief: string): boolean {
+  if (answeredValue(answers, "DP-1.2") !== "") return true;
+  return (
+    briefSection(brief, "Colours") !== "" ||
+    briefSection(brief, "Colour") !== "" ||
+    briefSection(brief, "Colors") !== "" ||
+    briefSection(brief, "Color") !== ""
+  );
 }
 
 function refuses3d(text: string): boolean {

@@ -16,6 +16,7 @@ import { typeScaleFor } from "../src/brand/type-scale.ts";
 import { planFromBrief } from "../src/spec/brief-plan.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import { renderDesignMd } from "../src/spec/design-outputs.ts";
+import { designSectionBody } from "../src/spec/design-md-lint.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 const TYPE_ANSWER =
@@ -259,10 +260,14 @@ test("a direction reference names the site, and an unknown url uses the host", (
 test("DESIGN.md writes each section once and does not repeat the intro", () => {
   const design = renderDesignMd(run11Brief(), RUN11_ANSWERS, PICKED_FONTS);
   const bodies = sectionBodies(design);
-  assert.ok(bodies.has("Color"));
-  assert.ok(bodies.has("Type scale"));
+  assert.equal(bodies.has("Color"), false);
+  assert.equal(bodies.has("Type scale"), false);
+  assert.equal(design.includes("See Colors."), false);
+  assert.equal(design.includes("See Typography."), false);
   assert.ok(bodies.has("Colors"));
   assert.ok(bodies.has("Typography"));
+  assert.equal(designSectionBody(design, "Color"), bodies.get("Colors"));
+  assert.equal(designSectionBody(design, "Type scale"), bodies.get("Typography"));
   const intro = (design.split(/^# Design\s*\n/m)[1] ?? "").split(/^## /m)[0]?.trim() ?? "";
   assert.notEqual(intro, "");
   assert.notEqual(bodies.get("Overview"), intro);
