@@ -62,7 +62,7 @@ export function findNamedFile(dir: string, fileName: string): string | null {
   const needle = fileName.toLowerCase();
   let found = names.find((entry) => entry.toLowerCase() === needle);
   // A file can land after the listing was cached and before the directory stamp moves.
-  if (found === undefined && win) {
+  if (found === undefined && (win || existsSync(path.join(dir, fileName)) || existsSync(path.join(dir, needle)))) {
     listed.delete(dir);
     names = listDirCached(dir);
     found = names?.find((entry) => entry.toLowerCase() === needle);

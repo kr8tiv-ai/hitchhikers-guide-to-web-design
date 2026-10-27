@@ -6,6 +6,9 @@
  */
 import { open, rename as renameFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import { evictUtf8Cache, primeUtf8Cache } from "./text-cache.ts";
+
+const stagedTemps = new Map<string, string>();
 
 /** Five tries. The gaps below sum to 600ms, under a one second budget. */
 export const RENAME_ATTEMPTS = 5;
@@ -79,6 +82,7 @@ export async function writeClosedTemp(tempPath: string, body: string): Promise<v
     throw error;
   }
   await handle.close();
+  stagedTemps.set(fileKey(tempPath), body);
 }
 
 /**
@@ -95,6 +99,12 @@ export async function renameReplacing(
   for (let attempt = 0; attempt < RENAME_ATTEMPTS; attempt += 1) {
     try {
       await rename(from, to);
+      const staged = stagedTemps.get(fileKey(from));
+      stagedTemps.delete(fileKey(from));
+      if (!options?.rename) {
+        if (staged !== undefined) primeUtf8Cache(to, staged);
+        else evictUtf8Cache(to);
+      }
       return;
     } catch (error: unknown) {
       const code = errnoCode(error);

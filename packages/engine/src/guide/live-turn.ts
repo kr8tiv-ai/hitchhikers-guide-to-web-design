@@ -19,7 +19,7 @@ import { PersonaError, buildSystemPrompt } from "../persona.ts";
 import { awaitPendingSummary, bindPacket, refreshSummary, syncAnswer, syncInterviewFacts } from "../context/index.ts";
 import { interviewTreeFile, packagedPackage } from "../packaged-dir.ts";
 import { loadTree, type Question } from "../tree.ts";
-import { readUtf8Cached } from "../text-cache.ts";
+import { primeUtf8Cache, readUtf8Cached } from "../text-cache.ts";
 import type { AnswerRecord } from "../required.ts";
 import { mirrorCue, requestMirror } from "./mirror.ts";
 import {
@@ -667,11 +667,10 @@ async function replaceAnswerValue(projectDir: string, questionId: string, text: 
     const answers = saved.answers.map((answer, cursor) =>
       cursor === index ? { id: answer.id, status: answer.status, value: text } : answer,
     );
-    await writeFile(
-      path.join(projectDir, ".hitchhiker", "interview.json"),
-      `${JSON.stringify({ version: 1, answers, cursor: saved.cursor, pushedIds: saved.pushedIds }, null, 2)}\n`,
-      "utf8",
-    );
+    const interviewPath = path.join(projectDir, ".hitchhiker", "interview.json");
+    const interviewBody = `${JSON.stringify({ version: 1, answers, cursor: saved.cursor, pushedIds: saved.pushedIds }, null, 2)}\n`;
+    await writeFile(interviewPath, interviewBody, "utf8");
+    primeUtf8Cache(interviewPath, interviewBody);
   });
 }
 
@@ -1047,11 +1046,10 @@ async function persistSession(s: GuideSession): Promise<void> {
     ...(s.pendingClose === undefined ? {} : { pendingClose: s.pendingClose }),
   };
   await withStateLock(s.projectDir, async () => {
-    await writeFile(
-      path.join(s.projectDir, ".hitchhiker", SESSION_FILE),
-      `${JSON.stringify(body, null, 2)}\n`,
-      "utf8",
-    );
+    const sessionPath = path.join(s.projectDir, ".hitchhiker", SESSION_FILE);
+    const sessionBody = `${JSON.stringify(body, null, 2)}\n`;
+    await writeFile(sessionPath, sessionBody, "utf8");
+    primeUtf8Cache(sessionPath, sessionBody);
   });
 }
 

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readUtf8Cached } from "./text-cache.ts";
 import type { Question } from "./tree.ts";
 
 /**
@@ -87,7 +87,9 @@ function safePromptLine(value: string): string {
 export function buildSystemPrompt(skillPath: string, ctx: PersonaContext): string {
   let skill: string;
   try {
-    skill = readFileSync(skillPath, "utf8");
+    const cached = readUtf8Cached(skillPath);
+    if (cached === null) throw new Error(`ENOENT: no such file or directory, open '${skillPath}'`);
+    skill = cached;
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unreadable";
     throw new PersonaError(`cannot read persona skill: ${detail}`);

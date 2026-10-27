@@ -167,7 +167,7 @@ test("the design stages keep the Run 8 pages, the kit, the pick, and the checks"
     await page.locator("[data-pick-direction]").first().click();
     await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible({ timeout: 30_000 });
     const picked = page.locator("[data-design-stage='style-guide'] pre");
-    await expect(picked).toContainText("Boska");
+    await expect(picked).not.toContainText("Boska");
     await expect(picked).toContainText("General Sans");
     await expect(picked).toContainText("#f3e6d0");
     await expect(picked).toContainText("#8a6a12");
@@ -190,7 +190,7 @@ test("the design stages keep the Run 8 pages, the kit, the pick, and the checks"
     await expect(checks).toContainText("tablet");
     await expect(checks).toContainText("desktop");
     await expect(checks).toContainText("skipped: no 3D");
-    await expect(checks).toContainText("Boska");
+    await expect(checks).not.toContainText("Boska");
     await expect(checks).toContainText("General Sans");
     await expect(page.locator("[data-start-build]")).toHaveCount(0);
     const ack = page.locator("input[name='ack']");

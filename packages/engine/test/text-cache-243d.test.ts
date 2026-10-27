@@ -3,7 +3,7 @@ import { mkdtempSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { readUtf8Cached } from "../src/text-cache.ts";
+import { primeUtf8Cache, readUtf8Cached } from "../src/text-cache.ts";
 import { removeTempDir } from "./remove-temp.ts";
 
 test("a same-size rewrite is visible on the next cached read", () => {
@@ -59,6 +59,21 @@ test("a file older than the racy window stays cached when size and mtime match",
     assert.equal(restored.mtimeNs, original.mtimeNs);
     assert.equal(restored.size, original.size);
     assert.equal(readUtf8Cached(file), "alpha-one");
+  } finally {
+    removeTempDir(dir);
+  }
+});
+
+test("an atomically primed file inside the racy window stays cached when size and mtime match", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "hh-text-cache-primed-"));
+  const file = path.join(dir, "note.txt");
+  try {
+    writeFileSync(file, "alpha-one");
+    primeUtf8Cache(file, "alpha-one");
+    assert.equal(readUtf8Cached(file), "alpha-one");
+    writeFileSync(file, "bravo-two");
+    primeUtf8Cache(file, "bravo-two");
+    assert.equal(readUtf8Cached(file), "bravo-two");
   } finally {
     removeTempDir(dir);
   }

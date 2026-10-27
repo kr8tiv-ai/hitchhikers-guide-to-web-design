@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "../config.ts";
+import { readUtf8Cached } from "../text-cache.ts";
 import { interviewTreeFile } from "../packaged-dir.ts";
 import { loadState } from "../state.ts";
 import { questionsToAsk, loadTree, type DepthName } from "../tree.ts";
@@ -76,17 +77,13 @@ function isStatus(value: string): value is AnswerStatus {
 }
 
 async function readText(filePath: string): Promise<string | null> {
-  if (!existsSync(filePath)) return null;
-  let info;
   try {
-    info = await stat(filePath);
+    const text = readUtf8Cached(filePath, TEXT_LIMIT);
+    if (text === null || text.includes("\u0000")) return null;
+    return text;
   } catch {
     return null;
   }
-  if (!info.isFile() || info.size > TEXT_LIMIT) return null;
-  const text = await readFile(filePath, "utf8");
-  if (text.includes("\u0000")) return null;
-  return text;
 }
 
 function projectIdFor(projectDir: string): string {
