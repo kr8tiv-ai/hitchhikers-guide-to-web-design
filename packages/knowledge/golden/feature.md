@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Feature
 
-Add the named feature on {{page}} in {{section}}. Edit only {{files}}. Say what the visitor sees, where it lives, and the calm phone version. If a fact is missing, mark it TODO. Keys come from the environment.
+Add the named feature on {{page}} in {{section}}. Edit only {{files}}. Say what the visitor sees, where it lives, and the calm phone version. If a fact is missing, hide the element or show Ask us. Do not show TODO. Keys come from the environment.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -22,7 +22,7 @@ No em dashes, no exclamation points.
 
 truths:
 
-- The feature does one job and leaves missing facts as TODO.
+- The feature does one job and does not show a missing fact as TODO.
 
 artifacts:
 
@@ -53,12 +53,12 @@ Add one feature component and no second job.
 <task>
 TASK: Feature
 
-Add the named feature on {{page}} in {{section}}. Edit only {{files}}. Say what the visitor sees, where it lives, and the calm phone version. If a fact is missing, mark it TODO. Keys come from the environment.
+Add the named feature on {{page}} in {{section}}. Edit only {{files}}. Say what the visitor sees, where it lives, and the calm phone version. If a fact is missing, hide the element or show Ask us. Do not show TODO. Keys come from the environment.
 </task>
 
 <must_haves>
 truths:
-- The feature does one job and leaves missing facts as TODO.
+- The feature does one job and does not show a missing fact as TODO.
 artifacts:
 - {{files}}
 key_links:

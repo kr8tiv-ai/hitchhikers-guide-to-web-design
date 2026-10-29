@@ -69,7 +69,9 @@ test("SITE_RULES stays the one shared string and keeps honesty, motion, and perf
   assert.match(SITE_RULES, /at least 90/);
   assert.match(SITE_RULES, /Anti-slop/);
   assert.match(SITE_RULES, /no invented facts, numbers, names, quotes, prices or testimonials/i);
-  assert.match(SITE_RULES, /A missing fact is still a TODO in copy/);
+  assert.match(SITE_RULES, /A missing fact is never invented and never shown as TODO/);
+  assert.doesNotMatch(SITE_RULES, /still a TODO in copy/);
+  assert.doesNotMatch(SITE_RULES, /stays a TODO in copy/);
   assert.match(SITE_RULES, /A real person, place, product or listing is never generated/);
   assert.equal(SITE_RULES.includes("!"), false);
   assert.equal(libraryBanHits(SITE_RULES).length, 0);

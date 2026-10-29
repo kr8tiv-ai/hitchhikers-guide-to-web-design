@@ -18,6 +18,8 @@ Install Playwright as a dev dependency. Write tests/qa.spec.ts that, for every p
 
 Run Lighthouse on real mobile. Lighthouse mobile 90 in all four categories: performance, accessibility, best practices, and SEO. Zero console errors at 375 and at 1440. Run axe. Any serious or critical axe issue is a failure.
 
+Fail the pass when visible copy contains TODO, TBD, lorem, a PUBLIC_ name, or notes about scripts, controls, or the build. Production HTML must not contain data-job, data-launch-check, or a data-component value with a source path.
+
 No em dashes, no exclamation points.
 
 # must_haves
@@ -28,6 +30,7 @@ truths:
 - Lighthouse mobile 90 holds in all four categories on real mobile runs.
 - axe reports nothing serious or critical.
 - The menu opens and closes from the keyboard, including with reduced motion on.
+- Visible copy has no TODO, TBD, lorem, PUBLIC_ name, or build narration. Production HTML has no data-job or data-launch-check.
 
 artifacts:
 

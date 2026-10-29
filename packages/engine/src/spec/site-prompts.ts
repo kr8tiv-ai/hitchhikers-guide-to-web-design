@@ -22,6 +22,7 @@
 
 import { ART_GUIDANCE } from "./art-direction.ts";
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
+import { MISSING_FACT_RULE, VISITOR_COPY_RULE } from "./site-rules.ts";
 
 export { SITE_RULES } from "./site-rules.ts";
 
@@ -148,6 +149,8 @@ export interface SiteSkeletonInput {
   seoItems: string[];
   stack: SiteStack;
   protectedPaths: string[];
+  /** Interview text. Used to require a second language when the brief names one. */
+  brief?: string;
 }
 
 interface CleanPage {
@@ -188,6 +191,7 @@ interface CleanInput {
   seoItems: string[];
   stack: SiteStack;
   protectedPaths: string[];
+  brief: string;
 }
 
 function assertNever(value: never): never {
@@ -494,7 +498,61 @@ function cleanInput(input: SiteSkeletonInput): CleanInput {
     seoItems: cleanNamedList(input.seoItems, "SEO item"),
     stack: cleanStack(input.stack),
     protectedPaths: cleanProtected(input.protectedPaths),
+    brief: cleanBrief(input.brief),
   };
+}
+
+function cleanBrief(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") {
+    throw new SitePromptError("Brief must be a string.");
+  }
+  return value.replace(/\0/g, "").trim();
+}
+
+function namesSecondLanguage(brief: string, features: readonly string[]): boolean {
+  const featureBlob = features.join("\n");
+  if (/en-es|spanish|bilingual|second language/i.test(featureBlob)) return true;
+  if (/en[-/]es/i.test(brief)) return true;
+  if (/english/i.test(brief) && /spanish/i.test(brief)) return true;
+  if (/whole site is in both/i.test(brief)) return true;
+  if (/second language/i.test(brief)) return true;
+  if (/\bbilingual\b/i.test(brief)) return true;
+  return false;
+}
+
+function secondLanguageLines(brief: string, features: readonly string[]): string[] {
+  if (!namesSecondLanguage(brief, features)) return [];
+  const corpus = `${brief}\n${features.join("\n")}`;
+  const spanish = /spanish|en[-/ ]?es/i.test(corpus);
+  if (spanish) {
+    const lines = [
+      "Write the full Spanish copy. Complete, natural Spanish for every visible string, nav label, button, form label, error, alt text, and meta description.",
+      "The EN/ES toggle must never output TODO or empty text.",
+      "Honor default-language rules from the brief.",
+    ];
+    if (/caretaker/i.test(brief) && /spanish/i.test(brief)) {
+      lines.push("When the brief says the caretaker sign-up opens in Spanish, that form opens in Spanish.");
+    }
+    return lines;
+  }
+  return [
+    "Write the full second-language copy. Complete, natural translation for every visible string, nav label, button, form label, error, alt text, and meta description.",
+    "The language toggle must never output TODO or empty text.",
+    "Honor default-language rules from the brief.",
+  ];
+}
+
+function copyAcceptance(input: CleanInput): string[] {
+  return [MISSING_FACT_RULE, ...secondLanguageLines(input.brief, input.features)];
+}
+
+function featureAcceptance(feature: string, input: CleanInput): string[] {
+  const lines = [`Build ${feature}.`, `The requirement ${featureRequirementId(feature)} is satisfied.`];
+  if (/en[-/ ]?es|spanish|bilingual|language/i.test(feature) && namesSecondLanguage(input.brief, input.features)) {
+    lines.push(...secondLanguageLines(input.brief, input.features));
+  }
+  return lines;
 }
 
 function componentFile(stack: SiteStack, name: string): string {
@@ -926,6 +984,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [file],
           requirement: `REQ-COPY-${slugId(sectionId)}`,
+          acceptance: copyAcceptance(input),
         }),
       );
     });
@@ -984,7 +1043,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         effort: tier.effort,
         files: [componentFile(stack, `Feature${pascal(slug)}`)],
         requirement: featureReq,
-        acceptance: [`Build ${feature}.`, `The requirement ${featureReq} is satisfied.`],
+        acceptance: featureAcceptance(feature, input),
       }),
     );
   }
@@ -1069,6 +1128,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       tier: "Gargle Blaster",
       effort: "high",
       file: "tests/antislop.spec.ts",
+      acceptance: [VISITOR_COPY_RULE],
     },
     {
       requirement: "REQ-GATE-PLAYWRIGHT",
@@ -1077,6 +1137,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       tier: "Gargle Blaster",
       effort: "high",
       file: "tests/qa.spec.ts",
+      acceptance: [VISITOR_COPY_RULE],
     },
     {
       requirement: "REQ-GATE-LIGHTHOUSE",
@@ -1217,11 +1278,13 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     job(claim, {
       phase: "mostly-harmless",
       slice: "Slartibartfast's Fjords",
-      title: "Elevate pass for copy. Leave a TODO where a fact is missing.",
+      title:
+        "Elevate pass for copy. Never show a missing fact as TODO, a placeholder, or brackets. Hide it or use an owner-neutral state, and record the gap.",
       tier: "Forty-Two",
       effort: "xhigh",
       files: ["src/data/copy.ts", "tests/elevate-copy.spec.ts"],
       requirement: "REQ-ELEVATE-COPY",
+      acceptance: copyAcceptance(input),
     }),
     job(claim, {
       phase: "so-long",
@@ -1231,6 +1294,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: ["src/data/prelaunch.ts"],
       requirement: "REQ-PRELAUNCH",
+      acceptance: [VISITOR_COPY_RULE],
     }),
     job(claim, {
       phase: "so-long",
@@ -1267,6 +1331,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: ["src/data/launch.ts"],
       requirement: "REQ-LAUNCH",
+      acceptance: [VISITOR_COPY_RULE],
     }),
   );
 

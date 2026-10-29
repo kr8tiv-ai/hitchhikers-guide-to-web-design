@@ -505,6 +505,7 @@ export function generateBriefPlan(
     seoItems: [],
     stack,
     protectedPaths: [],
+    brief: corpus,
   };
   const generated = generateSkeleton(input);
   const bySection = new Map(art.sections.map((section) => [section.sectionId, section]));

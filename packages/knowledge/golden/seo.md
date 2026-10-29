@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: SEO item
 
-Add {{section}} in {{files}} for {{page}}. One title, one meta description, one h1, and a canonical URL that points at that page. Do not invent a search volume or a rank. If a fact is missing, mark it TODO. Do not import {{library}} onto {{element}}.
+Add {{section}} in {{files}} for {{page}}. One title, one meta description, one h1, and a canonical URL that points at that page. Do not invent a search volume or a rank. If a fact is missing, hide it or show an owner-neutral state. Do not show TODO. Do not import {{library}} onto {{element}}.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -53,7 +53,7 @@ Add one SEO item with a real title, description, and canonical.
 <task>
 TASK: SEO item
 
-Add {{section}} in {{files}} for {{page}}. One title, one meta description, one h1, and a canonical URL that points at that page. Do not invent a search volume or a rank. If a fact is missing, mark it TODO. Do not import {{library}} onto {{element}}.
+Add {{section}} in {{files}} for {{page}}. One title, one meta description, one h1, and a canonical URL that points at that page. Do not invent a search volume or a rank. If a fact is missing, hide it or show an owner-neutral state. Do not show TODO. Do not import {{library}} onto {{element}}.
 </task>
 
 <must_haves>

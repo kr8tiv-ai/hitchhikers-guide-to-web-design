@@ -8,7 +8,7 @@ paths:
 
 # Brand frameworks
 
-Read `BRAND.md` and `VOICE.md`. This pack holds no client's brand. If a field is missing, mark it TODO. Do not fill the gap with a guess.
+Read `BRAND.md` and `VOICE.md`. This pack holds no client's brand. If a field is missing, record the gap for the owner. Do not fill the gap with a guess, and do not show TODO to a visitor.
 
 ## Purpose
 

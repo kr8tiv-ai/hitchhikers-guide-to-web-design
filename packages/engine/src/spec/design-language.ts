@@ -14,6 +14,7 @@ import { FIT_REQUEST_CAPS, goldenName, pickGolden } from "./author.ts";
 import { estimateTokens } from "./context-doc.ts";
 import { languageBlockFor, languageQueryFrom } from "./language-pack.ts";
 import type { SitePromptSkeleton } from "./site-prompts.ts";
+import { MISSING_FACT_FALLBACK } from "./site-rules.ts";
 import { expandIngredientIncludes } from "./section-refs.ts";
 import { expandSkillIncludes, loadSkillPacks, planSkillLines, siteTypeForWorld } from "./skills.ts";
 
@@ -264,7 +265,7 @@ function relativeAsset(value: string): string | null {
 }
 
 function gateCard(facts: string, assets: readonly string[]): string {
-  const fallback = "Only facts written in the interview. A missing fact stays a TODO in copy.";
+  const fallback = MISSING_FACT_FALLBACK;
   const build = (factLine: string, paths: readonly string[]): string => {
     const assetLine = paths.length === 0 ? "none for this section yet" : paths.join(", ");
     return [

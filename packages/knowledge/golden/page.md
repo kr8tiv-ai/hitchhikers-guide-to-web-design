@@ -18,7 +18,7 @@ TASK: [Section name] section
 
 Build src/components/[SectionName].astro and add it to [page] after [previous section]. Purpose: [one job of this section]. Content: headline "[headline]", copy "[copy]", [cards / image grid / testimonial / FAQ list]. Layout: [describe it, or "steal the structure of [reference site]'s [section], not the look"]. Use only brand fonts and colors. Mobile first, then desktop. No effects yet; motion comes in a later prompt.
 
-The headline slot and the copy slot are real copy. If a fact, a name, or a number is missing, mark it TODO. Do not invent it.
+The headline slot and the copy slot are real copy. If a fact, a name, or a number is missing, hide that element or show Ask us linking to the inquiry form. Do not invent it, and do not show TODO, a placeholder, or brackets. Record the gap in .hitchhiker/MISSING-FACTS.md with the fact, the page, and the element.
 
 Never say: delve, unlock, elevate, seamless, game-changer, empower, journey. No em dashes, no exclamation points.
 

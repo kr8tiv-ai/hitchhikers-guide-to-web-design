@@ -24,7 +24,7 @@ The 404 page is calm. Read the 404 sample in `VOICE.md` when it exists. If it do
 
 ## Facts
 
-A headline is short and specific. A caption names what is in the picture. A page ends on one action. If a number, a name, or a quote is missing, mark it TODO. Do not invent it to make the line sound finished.
+A headline is short and specific. A caption names what is in the picture. A page ends on one action. If a number, a name, or a quote is missing, hide that line or point the visitor to the inquiry form. Do not invent it to make the line sound finished, and do not show TODO.
 
 ## Punctuation
 

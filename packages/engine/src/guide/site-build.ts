@@ -63,6 +63,9 @@ import {
   type CoverageTask,
 } from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/site-prompts.ts";
+import { commitGeneratedFiles } from "../spec/commit-generated.ts";
+import { MISSING_FACT_FALLBACK } from "../spec/site-rules.ts";
+import { formatVisibleCopyFailure, scanVisibleCopy, shouldScanVisibleCopy } from "../spec/visible-copy.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
 
@@ -1267,6 +1270,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         try {
           const gate = buildGates.get(key);
           if (gate !== undefined) await gate({ projectDir, promptId: next.id, files: attempt.files });
+          enforcePromptClose(projectDir, next.id, attempt.files);
           const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
           await settleItem(projectDir, next.id, "passed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits);
           await maybeRunSectionStills(projectDir, next.id);
@@ -1445,6 +1449,7 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     try {
       const gate = buildGates.get(path.resolve(projectDir));
       if (gate !== undefined) await gate({ projectDir, promptId: run.promptId, files });
+      enforcePromptClose(projectDir, run.promptId, files);
       const recovered = recoveredReason(run.promptId);
       const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : recovered;
       await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt, outside.hits);
@@ -2348,7 +2353,7 @@ function factsAllowed(projectDir: string, brief: string): string {
     .map((answer) => answer.value.trim())
     .filter((value) => value !== "");
   const parts = [fromBrief, ...answers].filter((part) => part.trim() !== "");
-  if (parts.length === 0) return "Only facts written in the interview. A missing fact stays a TODO in copy.";
+  if (parts.length === 0) return MISSING_FACT_FALLBACK;
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
@@ -2384,6 +2389,15 @@ function readGallery(file: string): GalleryNote[] {
     });
   }
   return notes;
+}
+
+/** Save leftover project files, then fail the prompt when visitor HTML still shows a placeholder. */
+function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
+  commitGeneratedFiles(projectDir, promptId);
+  const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
+  if (!shouldScanVisibleCopy(promptText, files)) return;
+  const reason = formatVisibleCopyFailure(scanVisibleCopy(path.join(projectDir, "dist")), "dist");
+  if (reason !== "") throw new Error(reason);
 }
 
 function readOptional(file: string): string {

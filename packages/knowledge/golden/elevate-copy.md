@@ -1,6 +1,6 @@
 # Goal
 
-Rewrite copy in the brand voice and mark missing facts TODO.
+Rewrite copy in the brand voice. Hide a missing fact or show an owner-neutral state, and never show TODO.
 
 # Files
 
@@ -13,7 +13,7 @@ Apply the shared RULES in packages/engine/src/spec/site-rules.ts by path. Do not
 
 TASK: Copy pass
 
-Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Keep a ranked list. There is no fixed count. Rank the changes.
+Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). If a number, a name, or a quote is missing, hide that line or show Ask us linking to the inquiry form. Price on request only when the brief allows it. Do not invent it, and do not show TODO. Record the gap in .hitchhiker/MISSING-FACTS.md with the fact, the page, and the element. Report a before and after table. Edit {{files}} for {{page}}. Keep a ranked list. There is no fixed count. Rank the changes.
 
 Never write "as before", "see above", or "same as previous".
 No em dashes, no exclamation points.
@@ -22,7 +22,7 @@ No em dashes, no exclamation points.
 
 truths:
 
-- Missing facts are TODO, and buttons say what happens.
+- Missing facts stay hidden or show as Ask us, and buttons say what happens.
 
 artifacts:
 
@@ -43,7 +43,7 @@ prohibitions:
 Search {{files}} for a banned word and for a number that the brand notes do not contain.
 
 <objective>
-Rewrite copy in the brand voice and mark missing facts TODO.
+Rewrite copy in the brand voice. Hide a missing fact or show an owner-neutral state, and never show TODO.
 </objective>
 
 <read_first>
@@ -53,12 +53,12 @@ Rewrite copy in the brand voice and mark missing facts TODO.
 <task>
 TASK: Copy pass
 
-Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). Mark anything that needs a real fact (a number, a name, a quote) as TODO instead of inventing it. Report a before and after table. Edit {{files}} for {{page}}. Keep a ranked list. There is no fixed count. Rank the changes.
+Rewrite every headline, subline, button and caption on {{section}} in the brand voice. Remove every banned word and every generic line (Welcome to our website, We are passionate about, Learn more). Headlines: short, specific, a little surprising. Buttons: say exactly what happens (Book a call, not Submit). If a number, a name, or a quote is missing, hide that line or show Ask us linking to the inquiry form. Price on request only when the brief allows it. Do not invent it, and do not show TODO. Record the gap in .hitchhiker/MISSING-FACTS.md with the fact, the page, and the element. Report a before and after table. Edit {{files}} for {{page}}. Keep a ranked list. There is no fixed count. Rank the changes.
 </task>
 
 <must_haves>
 truths:
-- Missing facts are TODO, and buttons say what happens.
+- Missing facts stay hidden or show as Ask us, and buttons say what happens.
 artifacts:
 - {{files}}
 key_links:

@@ -28,7 +28,7 @@ The word elevate is banned in generated site body copy, including the hero, head
 
 ## Reach
 
-One signature moment. A type scale with real contrast. Asymmetric space. One idea in a section. Facts only this brand has, taken from `BRAND.md`. If a detail is not real yet, mark it TODO and track it. Do not invent the proof.
+One signature moment. A type scale with real contrast. Asymmetric space. One idea in a section. Facts only this brand has, taken from `BRAND.md`. If a detail is not real yet, hide it from the visitor and record the gap for the owner. Do not invent the proof, and do not show TODO.
 
 ## Nutrimatic
 
