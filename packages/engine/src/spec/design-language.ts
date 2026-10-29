@@ -23,14 +23,14 @@ export { styleWorldFrom };
 export const DESIGN_PATTERN_TOKEN_CAP = 4_000;
 export const DESIGN_GATE_TOKEN_CAP = 800;
 
-const FRAMING =
+export const DESIGN_FRAMING =
   "This is direction and vocabulary, not a limit. Use your own judgement to make this section more beautiful than the references. Keep the honesty, accessibility and performance rules. Remix, improve and add your own ideas; never copy a reference wholesale.";
 
-const EXAMPLE_LINE =
+export const DESIGN_EXAMPLE_LINE =
   "The golden template below is an example inside this packet, not the only legal output.";
 
-const REMIX_LINE = "Take the thinking, not the skin.";
-const REMIX_DETAIL =
+export const DESIGN_REMIX_LINE = "Take the thinking, not the skin.";
+export const DESIGN_REMIX_DETAIL =
   "These are inspiration for the language of what is possible. Remix, improve and add your own idea; do not reproduce an entry.";
 
 export interface GalleryNote {
@@ -90,10 +90,10 @@ export function designLanguageFor(
   const missing = library.artDirection === "none" ? [NO_ART_DIRECTION_NOTE, ""] : [];
   return [
     ...missing,
-    FRAMING,
+    DESIGN_FRAMING,
     "",
-    REMIX_LINE,
-    REMIX_DETAIL,
+    DESIGN_REMIX_LINE,
+    DESIGN_REMIX_DETAIL,
     ...(libraryBlock === "" ? [] : ["", libraryBlock]),
     "",
     "### Art direction",
@@ -105,7 +105,7 @@ export function designLanguageFor(
     "",
     "### Example",
     "",
-    EXAMPLE_LINE,
+    DESIGN_EXAMPLE_LINE,
     "",
     fitted.golden,
     "",

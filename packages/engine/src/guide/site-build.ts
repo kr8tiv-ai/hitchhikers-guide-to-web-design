@@ -64,8 +64,21 @@ import {
 } from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/site-prompts.ts";
 import { commitGeneratedFiles } from "../spec/commit-generated.ts";
+import { refreshEnginePromptText } from "../spec/prompt-refresh.ts";
 import { MISSING_FACT_FALLBACK } from "../spec/site-rules.ts";
-import { formatVisibleCopyFailure, scanVisibleCopy, shouldScanVisibleCopy } from "../spec/visible-copy.ts";
+import {
+  collectVisibleCopyHits,
+  countVisibleCopy,
+  distHtmlForOwnedSource,
+  isVisitorSource,
+  judgeVisibleCopy,
+  parseVisibleCopyBaseline,
+  promptRequiresFullVisibleCopy,
+  scanVisibleCopyText,
+  shouldScanVisibleCopy,
+  type VisibleCopyBaseline,
+  type VisibleCopyHit,
+} from "../spec/visible-copy.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
 
@@ -224,6 +237,8 @@ interface RunFile {
   /** The next spawn continues this session. Human Retry sets it. */
   resumeNext?: boolean;
   turnLimited?: boolean;
+  /** Visible-copy counts taken before this prompt's session. A retry replaces it. */
+  copyBaseline?: VisibleCopyBaseline;
 }
 
 interface TurnStamp {
@@ -969,6 +984,7 @@ export async function retrySiteBuild(projectDir: string, promptId: string): Prom
   if (billing) await unpausePrompts(projectDir);
   if (billing) clearBillingPause(projectDir);
   await releaseQueuePause(projectDir);
+  await refreshUnpassedPrompts(projectDir, promptId);
   if (resume && current !== null) writeRun(projectDir, { ...current, resumeNext: true });
   launchSiteBuild(projectDir);
 }
@@ -1041,6 +1057,7 @@ async function runJob(projectDir: string, spawnFn: BuildSpawn): Promise<void> {
   const current = readRunFile(projectDir);
   if (current?.status === "running" && pidAlive(current.pid)) return;
   try {
+    await refreshUnpassedPrompts(projectDir);
     await runQueue(projectDir, spawnFn);
   } catch (error: unknown) {
     const run = readRunFile(projectDir);
@@ -1076,8 +1093,10 @@ async function spawnPrompt(
   const key = path.resolve(projectDir);
   const startedAt = new Date().toISOString();
   const lines: string[] = [];
+  recordVisibleCopyBaseline(projectDir, promptId, startedAt);
   const before = snapshot(projectDir);
   resetBuildLog(projectDir, promptId);
+  replayPromptRefreshLog(projectDir, promptId);
   const pidBox = { pid: null as number | null };
   const buffered: string[] = [];
   let rawTail = "";
@@ -2391,13 +2410,136 @@ function readGallery(file: string): GalleryNote[] {
   return notes;
 }
 
-/** Save leftover project files, then fail the prompt when visitor HTML still shows a placeholder. */
+/** Save leftover project files, then fail the prompt when visitor copy it owns is still a placeholder. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   if (!shouldScanVisibleCopy(promptText, files)) return;
-  const reason = formatVisibleCopyFailure(scanVisibleCopy(path.join(projectDir, "dist")), "dist");
-  if (reason !== "") throw new Error(reason);
+  const dist = path.join(projectDir, "dist");
+  const hits = collectVisibleCopyHits(dist);
+  const counts = countVisibleCopy(dist);
+  const owned = ownedSourcePaths(promptText, files);
+  const ownedDist = new Set<string>();
+  const ownedSourceHits: VisibleCopyHit[] = [];
+  for (const rel of owned) {
+    for (const html of distHtmlForOwnedSource(rel)) ownedDist.add(html);
+    if (!isVisitorSource(rel)) continue;
+    const text = readOwnedSource(projectDir, rel);
+    if (text === null) continue;
+    ownedSourceHits.push(...scanVisibleCopyText(rel, text));
+  }
+  const run = readRunFile(projectDir);
+  const baseline = run?.promptId === promptId ? (run.copyBaseline ?? null) : null;
+  const judgement = judgeVisibleCopy({
+    fullSite: promptRequiresFullVisibleCopy(promptText, files),
+    baseline,
+    counts,
+    hits,
+    ownedSourceHits,
+    ownedDistFiles: [...ownedDist],
+  });
+  if (judgement.note !== "") appendBuildLog(projectDir, promptId, `${judgement.note}\n`);
+  if (judgement.reason !== "") throw new Error(judgement.reason);
+}
+
+function ownedSourcePaths(promptText: string, changed: readonly string[]): string[] {
+  const found = new Set<string>(parseExpectedFiles(promptText));
+  for (const rel of changed) {
+    const norm = rel.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (norm.startsWith("src/")) found.add(norm);
+  }
+  return [...found];
+}
+
+function readOwnedSource(projectDir: string, rel: string): string | null {
+  const abs = path.join(projectDir, rel);
+  try {
+    if (statSync(abs).size > 2_000_000) return null;
+    return readFileSync(abs, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function recordVisibleCopyBaseline(projectDir: string, promptId: string, startedAt: string): void {
+  const dist = path.join(projectDir, "dist");
+  let distExisted = false;
+  try {
+    distExisted = statSync(dist).isDirectory();
+  } catch {
+    distExisted = false;
+  }
+  const counts = distExisted ? countVisibleCopy(dist) : [];
+  const previous = readRunFile(projectDir);
+  const base: RunFile =
+    previous?.promptId === promptId
+      ? { ...previous, status: "running", pid: null, startedAt }
+      : {
+          promptId,
+          status: "running",
+          model: BUILD_MODEL,
+          effort: BUILD_EFFORT,
+          startedAt,
+          elapsedMs: 0,
+          lastLines: [],
+          filesWritten: [],
+          reason: "",
+          pid: null,
+          recovery: "",
+          recoveryRerun: false,
+        };
+  writeRun(projectDir, { ...base, copyBaseline: { distExisted, counts } });
+}
+
+async function refreshUnpassedPrompts(projectDir: string, onlyId?: string): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue === null) return;
+  for (const item of queue.items) {
+    if (onlyId !== undefined && item.id !== onlyId) continue;
+    if (item.status === "passed") continue;
+    if (!PROMPT_ID.test(item.id)) continue;
+    applyPromptRefresh(projectDir, item.id);
+  }
+}
+
+function applyPromptRefresh(projectDir: string, promptId: string): void {
+  const file = path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`);
+  const original = readOptional(file);
+  if (original === "") return;
+  if (!/^## Rules[ \t]*\r?$/m.test(original)) return;
+  const result = refreshEnginePromptText(original);
+  if (!result.ok) {
+    logPromptRefresh(projectDir, `${promptId}.md left unchanged: ${result.reason}`);
+    return;
+  }
+  if (!result.changed) return;
+  const prevDir = path.join(projectDir, ".hitchhiker", "prompts", ".prev");
+  mkdirSync(prevDir, { recursive: true });
+  writeFileSync(path.join(prevDir, `${promptId}.md`), original, "utf8");
+  writeFileSync(file, result.text, "utf8");
+  logPromptRefresh(projectDir, `Refreshed ${promptId}.md engine-owned blocks.`);
+}
+
+function promptRefreshLogPath(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "prompt-refresh.log");
+}
+
+function logPromptRefresh(projectDir: string, line: string): void {
+  try {
+    const file = promptRefreshLogPath(projectDir);
+    mkdirSync(path.dirname(file), { recursive: true });
+    appendFileSync(file, `${line}\n`, "utf8");
+  } catch {
+    // A refresh log must not stop the build.
+  }
+}
+
+function replayPromptRefreshLog(projectDir: string, promptId: string): void {
+  const text = readOptional(promptRefreshLogPath(projectDir));
+  const lines = text.split(/\r?\n/).filter((line) => line.startsWith(`Refreshed ${promptId}.md`) || line.startsWith(`${promptId}.md left unchanged`));
+  const last = lines[lines.length - 1];
+  if (last === undefined || last === "") return;
+  appendBuildLog(projectDir, promptId, `${last}\n`);
 }
 
 function readOptional(file: string): string {
@@ -2552,6 +2694,9 @@ function readRunFile(projectDir: string): RunFile | null {
     loaded.autoRetried = record.autoRetried === true;
     loaded.resumeNext = record.resumeNext === true;
     loaded.turnLimited = record.turnLimited === true;
+    const copyBaseline = parseVisibleCopyBaseline(record.copyBaseline);
+    delete loaded.copyBaseline;
+    if (copyBaseline !== undefined) loaded.copyBaseline = copyBaseline;
     return loaded;
   } catch {
     return null;
@@ -2604,6 +2749,12 @@ function keptFlag(
   return previous[key] === true;
 }
 
+function keptBaseline(run: RunFile, previous: RunFile | null, same: boolean): VisibleCopyBaseline | undefined {
+  if (Object.hasOwn(run, "copyBaseline")) return run.copyBaseline;
+  if (!same || previous === null) return undefined;
+  return previous.copyBaseline;
+}
+
 function writeRun(projectDir: string, run: RunFile): void {
   const previous = readRunFile(projectDir);
   const files = new Set(mergeFiles(previous?.filesWritten ?? [], run.filesWritten));
@@ -2631,6 +2782,7 @@ function writeRun(projectDir: string, run: RunFile): void {
   const autoRetried = keptFlag(run, previous, same, "autoRetried");
   const resumeNext = keptFlag(run, previous, same, "resumeNext");
   const turnLimited = keptFlag(run, previous, same, "turnLimited");
+  const copyBaseline = keptBaseline(run, previous, same);
   delete next.turns;
   delete next.turnCap;
   delete next.stopReason;
@@ -2655,6 +2807,8 @@ function writeRun(projectDir: string, run: RunFile): void {
     next.resumeNext = resumeNext;
     next.turnLimited = turnLimited;
   }
+  delete next.copyBaseline;
+  if (copyBaseline !== undefined) next.copyBaseline = copyBaseline;
   const dir = path.join(projectDir, ".hitchhiker");
   mkdirSync(dir, { recursive: true });
   writeFileSync(runPath(projectDir), `${JSON.stringify(next)}\n`, "utf8");

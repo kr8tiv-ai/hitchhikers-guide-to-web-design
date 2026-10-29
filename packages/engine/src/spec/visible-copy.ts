@@ -35,6 +35,19 @@ export interface VisibleCopyHit {
   patternId: string;
 }
 
+export interface VisibleCopyCount {
+  file: string;
+  patternId: string;
+  count: number;
+}
+
+/** Counts taken over `dist` before a prompt's session starts. */
+export interface VisibleCopyBaseline {
+  /** False when `dist` was not a directory before the prompt. */
+  distExisted: boolean;
+  counts: VisibleCopyCount[];
+}
+
 const COPY_ATTR = /(?:^|[\s<])((?:data-copy-[\w:-]+|alt|title|content))\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
 const PAGE_EDIT =
   /(?:^|[\s`'"(])(?:src\/pages\/|src\/app\/|src\/routes\/|src\/components\/|src\/layouts\/|src\/world\/)|\.astro\b|\+page\.svelte\b/i;
@@ -51,27 +64,41 @@ export function shouldScanVisibleCopy(promptText: string, files: readonly string
 }
 
 export function scanVisibleCopy(root: string): VisibleCopyHit[] {
-  if (!isDirectory(root)) return [];
   const hits: VisibleCopyHit[] = [];
   const seen = new Set<string>();
-  for (const file of htmlFiles(root)) {
-    let html = "";
-    try {
-      if (statSync(file).size > FILE_CAP) continue;
-      html = readFileSync(file, "utf8");
-    } catch {
-      continue;
-    }
-    const rel = path.relative(root, file).split("\\").join("/");
-    for (const hit of hitsInHtml(rel, html)) {
-      const key = `${hit.file}\0${hit.patternId}\0${hit.snippet}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      hits.push(hit);
-      if (hits.length >= HIT_CAP) return sortHits(hits);
-    }
-  }
+  eachVisibleHit(root, (hit) => {
+    const key = `${hit.file}\0${hit.patternId}\0${hit.snippet}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+    hits.push(hit);
+    return hits.length < HIT_CAP;
+  });
   return sortHits(hits);
+}
+
+/** Hit counts per HTML file and pattern. Does not stop at the scan cap. */
+export function countVisibleCopy(root: string): VisibleCopyCount[] {
+  const totals = new Map<string, VisibleCopyCount>();
+  eachVisibleHit(root, (hit) => {
+    const key = `${hit.file}\0${hit.patternId}`;
+    const row = totals.get(key);
+    if (row !== undefined) row.count += 1;
+    else totals.set(key, { file: hit.file, patternId: hit.patternId, count: 1 });
+    return true;
+  });
+  return [...totals.values()].sort(
+    (left, right) => left.file.localeCompare(right.file) || left.patternId.localeCompare(right.patternId),
+  );
+}
+
+/** Every hit, in walk order. The scan cap does not apply. */
+export function collectVisibleCopyHits(root: string): VisibleCopyHit[] {
+  const hits: VisibleCopyHit[] = [];
+  eachVisibleHit(root, (hit) => {
+    hits.push(hit);
+    return true;
+  });
+  return hits;
 }
 
 export function formatVisibleCopyFailure(hits: readonly VisibleCopyHit[], rootLabel = ""): string {
@@ -82,6 +109,174 @@ export function formatVisibleCopyFailure(hits: readonly VisibleCopyHit[], rootLa
     return `${file}: ${hit.snippet}`;
   });
   return `Visible copy failed.\n${lines.join("\n")}`;
+}
+
+const NO_BASELINE_NOTE =
+  "No visible-copy baseline: dist did not exist before this prompt. Checked owned files only and did not fail pages outside them.";
+
+export interface VisibleCopyJudgement {
+  /** Empty when the prompt may pass. */
+  reason: string;
+  /** Run-log note. Empty when there is nothing to add. */
+  note: string;
+}
+
+export interface VisibleCopyJudgeInput {
+  /** QA and launch prompts fail on any hit in dist. */
+  fullSite: boolean;
+  baseline: VisibleCopyBaseline | null;
+  counts: readonly VisibleCopyCount[];
+  hits: readonly VisibleCopyHit[];
+  ownedSourceHits: readonly VisibleCopyHit[];
+  /** Dist-relative HTML paths for pages this prompt owns. */
+  ownedDistFiles: readonly string[];
+}
+
+/**
+ * QA and launch keep a full-site scan. Every other prompt fails only for
+ * new hits, for a pattern in an owned source file, or for a hit on a page
+ * it owns (that page is compared to an empty baseline, so a scaffold
+ * placeholder on the prompt's own page still fails).
+ */
+export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudgement {
+  if (input.fullSite) {
+    const shown = sortHits(dedupeHits(input.hits)).slice(0, HIT_CAP);
+    return { reason: formatVisibleCopyFailure(shown, "dist"), note: "" };
+  }
+  const distExisted = input.baseline?.distExisted === true;
+  const note = distExisted ? "" : NO_BASELINE_NOTE;
+  const owned = new Set(input.ownedDistFiles);
+  const baseline = new Map<string, number>();
+  for (const row of input.baseline?.counts ?? []) baseline.set(countKey(row.file, row.patternId), row.count);
+  const increased = new Set<string>();
+  if (distExisted) {
+    for (const row of input.counts) {
+      const key = countKey(row.file, row.patternId);
+      if (row.count > (baseline.get(key) ?? 0)) increased.add(key);
+    }
+  }
+  const newHits = input.hits.filter((hit) => increased.has(countKey(hit.file, hit.patternId)) && !owned.has(hit.file));
+  const ownedPageHits = input.hits.filter((hit) => owned.has(hit.file));
+  const sections: string[] = [];
+  if (newHits.length > 0) sections.push("New hits:", ...hitLines(newHits, "dist"));
+  if (ownedPageHits.length > 0) sections.push("Owned page:", ...hitLines(ownedPageHits, "dist"));
+  if (input.ownedSourceHits.length > 0) sections.push("Owned source:", ...hitLines(input.ownedSourceHits, ""));
+  if (sections.length === 0) return { reason: "", note };
+  return { reason: `Visible copy failed.\n${sections.join("\n")}`, note };
+}
+
+export function promptRequiresFullVisibleCopy(promptText: string, files: readonly string[] = []): boolean {
+  const task = taskText(promptText);
+  return QA_OR_LAUNCH.test(`${task}\n${files.join("\n")}`);
+}
+
+/** Dist HTML that a page source owns. A component path owns none. */
+export function distHtmlForOwnedSource(rel: string): string[] {
+  const norm = rel.replace(/\\/g, "/").replace(/^\.\//, "");
+  const astro = /^src\/pages\/(.+)\.astro$/i.exec(norm);
+  if (astro?.[1] !== undefined) return pageHtml(astro[1]);
+  const app = /^src\/app\/(.*)$/i.exec(norm);
+  if (app?.[1] !== undefined) {
+    if (app[1] === "page.tsx" || app[1] === "page.jsx") return ["index.html"];
+    const nested = /^(.*)\/page\.tsx$/i.exec(app[1]) ?? /^(.*)\/page\.jsx$/i.exec(app[1]);
+    if (nested?.[1] !== undefined) return pageHtml(nested[1]);
+  }
+  const svelte = /^src\/routes\/(.*)$/i.exec(norm);
+  if (svelte?.[1] !== undefined) {
+    if (svelte[1] === "+page.svelte") return ["index.html"];
+    const nested = /^(.*)\/\+page\.svelte$/i.exec(svelte[1]);
+    if (nested?.[1] !== undefined) return pageHtml(nested[1]);
+  }
+  return [];
+}
+
+export function isVisitorSource(rel: string): boolean {
+  return /\.(?:astro|html?|svelte|vue|jsx|tsx|mdx?)$/i.test(rel.replace(/\\/g, "/"));
+}
+
+/** Visitor text and copy attributes in a source file. Comments, frontmatter, scripts, and styles are ignored. */
+export function scanVisibleCopyText(file: string, text: string): VisibleCopyHit[] {
+  const rel = file.replace(/\\/g, "/");
+  const stripped = stripCodeComments(stripFrontmatter(text));
+  return hitsInHtml(rel, stripped);
+}
+
+export function parseVisibleCopyBaseline(value: unknown): VisibleCopyBaseline | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const row = value as { distExisted?: unknown; counts?: unknown };
+  if (typeof row.distExisted !== "boolean" || !Array.isArray(row.counts)) return undefined;
+  const counts: VisibleCopyCount[] = [];
+  for (const item of row.counts) {
+    if (typeof item !== "object" || item === null) continue;
+    const hit = item as { file?: unknown; patternId?: unknown; count?: unknown };
+    if (typeof hit.file !== "string" || typeof hit.patternId !== "string") continue;
+    if (typeof hit.count !== "number" || !Number.isFinite(hit.count) || hit.count < 0) continue;
+    counts.push({ file: hit.file.replace(/\\/g, "/"), patternId: hit.patternId, count: hit.count });
+  }
+  return { distExisted: row.distExisted, counts };
+}
+
+function countKey(file: string, patternId: string): string {
+  return `${file}\0${patternId}`;
+}
+
+function pageHtml(route: string): string[] {
+  const cleaned = route.replace(/\\/g, "/").replace(/\/index$/i, "").replace(/^\/+|\/+$/g, "");
+  if (cleaned === "" || cleaned.toLowerCase() === "index") return ["index.html"];
+  return [`${cleaned}/index.html`, `${cleaned}.html`];
+}
+
+function hitLines(hits: readonly VisibleCopyHit[], rootLabel: string): string[] {
+  const unique = sortHits(dedupeHits(hits));
+  const shown = unique.slice(0, HIT_CAP);
+  const lines = shown.map((hit) => {
+    const file = rootLabel === "" ? hit.file : `${rootLabel}/${hit.file}`;
+    return `${file}: ${hit.snippet}`;
+  });
+  if (unique.length > shown.length) lines.push(`... and ${unique.length - shown.length} more`);
+  return lines;
+}
+
+function dedupeHits(hits: readonly VisibleCopyHit[]): VisibleCopyHit[] {
+  const seen = new Set<string>();
+  const found: VisibleCopyHit[] = [];
+  for (const hit of hits) {
+    const key = `${hit.file}\0${hit.patternId}\0${hit.snippet}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push(hit);
+  }
+  return found;
+}
+
+function eachVisibleHit(root: string, onHit: (hit: VisibleCopyHit) => boolean): void {
+  if (!isDirectory(root)) return;
+  for (const file of htmlFiles(root)) {
+    let html = "";
+    try {
+      if (statSync(file).size > FILE_CAP) continue;
+      html = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const rel = path.relative(root, file).split("\\").join("/");
+    for (const hit of hitsInHtml(rel, html)) {
+      if (!onHit(hit)) return;
+    }
+  }
+}
+
+function stripFrontmatter(text: string): string {
+  const match = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(text);
+  if (match === null || match.index !== 0) return text;
+  return text.slice(match[0].length);
+}
+
+function stripCodeComments(text: string): string {
+  return text
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\n]*/gm, "$1");
 }
 
 function taskText(promptText: string): string {
