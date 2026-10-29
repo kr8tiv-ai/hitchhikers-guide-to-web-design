@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Site build runner. Approve writes the prompt files and this module
  * consumes the queue one prompt at a time. Tests inject a spawn function.
  * The live spawn is installed only when a desk or CLI command asks for it.
@@ -536,8 +536,8 @@ function pruneProjectTmpDir(projectDir: string): void {
   }
   try {
     mkdirSync(tmpDir, { recursive: true });
-  } catch (error: unknown) {
-    if (!lockedRemoveError(error)) throw error;
+  } catch {
+    /* ignore */
   }
 }
 
