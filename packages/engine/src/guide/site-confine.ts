@@ -132,8 +132,14 @@ export function auditOutsideAccess(stream: string, projectDir: string): OutsideA
     if (event === null) continue;
     const tool = event.tool;
     for (const filePath of event.paths) {
-      if (isInsideProject(projects, filePath, platform)) continue;
       const kind = WRITE_TOOLS.has(tool) || (SHELL_TOOLS.has(tool) && shellWrites(event.command, filePath)) ? "write" : "read";
+      // Reads and launches of Playwright's browser cache are allowed.
+      // A write into that cache is still outside the project.
+      if (kind === "write" && isPlaywrightBrowserCache(filePath)) {
+        add(tool, filePath, "write");
+        continue;
+      }
+      if (isInsideProject(projects, filePath, platform)) continue;
       add(tool, filePath, kind);
     }
   }
@@ -324,10 +330,16 @@ function isInsideProject(projects: readonly string[], candidate: string, platfor
   return insideAllowedRoots(candidate, projects, platform);
 }
 
+/** Playwright browser binaries live outside the project and are launched, not written. */
+function isPlaywrightBrowserCache(candidate: string): boolean {
+  return /[\\/]ms-playwright(?:[\\/]|$)/i.test(candidate.trim());
+}
+
 /**
- * Project roots, plus Grok CLI's own session logs.
+ * Project roots, plus Grok CLI's own session logs and the Playwright browser cache.
  * A background shell tells the model to read ~/.grok/sessions/.../terminal/call-*.log.
- * That read or write is not a project escape.
+ * That read or write is not a project escape. Reading or executing chrome under
+ * ms-playwright is not one either. auditOutsideAccess still records writes there.
  */
 function insideAllowedRoots(
   candidate: string,
@@ -337,6 +349,7 @@ function insideAllowedRoots(
   const trimmed = candidate.trim();
   if (trimmed === "" || trimmed === ".") return true;
   if (/[\\/]\.grok[\\/]sessions(?:[\\/]|$)/i.test(trimmed)) return true;
+  if (isPlaywrightBrowserCache(trimmed)) return true;
   if (/^https?:\/\//i.test(trimmed)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return true;
   if (platform === "posix" && /^[A-Za-z]:[\\/]/.test(trimmed)) return false;
@@ -426,16 +439,39 @@ function keepShellPath(candidate: string): boolean {
   return true;
 }
 
+const WRITE_VERB = /\b(?:set-content|out-file|add-content|new-item|tee-object|remove-item|move-item|copy-item|rm|del|erase|mv|move|cp|copy)\b/i;
+
+/**
+ * True when this path is the destination of a redirect or write utility.
+ * Launching chrome.exe, with flags or with stdout redirected at a project file,
+ * does not write to chrome.exe.
+ */
 function shellWrites(command: string, filePath: string): boolean {
   const noArrows = command.replace(/=>|->|>=|[0-9]*>&[0-9]*/g, "  ");
-  if (!/\b(set-content|out-file|add-content|new-item|tee-object|remove-item|move-item|copy-item)\b/i.test(noArrows) &&
-      !/(?:^|[\s;|&])(?:rm|del|erase|mv|move|cp|copy)\b/i.test(noArrows) &&
-      !/[>]{1,2}/.test(noArrows)) {
-    return false;
-  }
-  const folded = command.replace(/\\/g, "/").toLowerCase();
+  const folded = noArrows.replace(/\\/g, "/");
   const needle = filePath.replace(/\\/g, "/").toLowerCase();
-  return folded.includes(needle);
+  if (needle === "") return false;
+  if (redirectWrites(folded, needle)) return true;
+  return verbWrites(folded, needle);
+}
+
+function redirectWrites(folded: string, needle: string): boolean {
+  const re = />>?\s*(?:"([^"]+)"|'([^']+)'|(\S+))/g;
+  for (const match of folded.matchAll(re)) {
+    const target = (match[1] ?? match[2] ?? match[3] ?? "").replace(/\\/g, "/").toLowerCase();
+    if (target === needle) return true;
+  }
+  return false;
+}
+
+function verbWrites(folded: string, needle: string): boolean {
+  for (const segment of folded.split(/[|;&\n]/)) {
+    const verb = segment.match(WRITE_VERB);
+    if (verb === null || verb.index === undefined) continue;
+    const after = segment.slice(verb.index + verb[0].length).toLowerCase();
+    if (after.includes(needle)) return true;
+  }
+  return false;
 }
 
 function clipPath(filePath: string): string {

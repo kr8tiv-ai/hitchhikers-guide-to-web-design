@@ -4,7 +4,7 @@
  * The live spawn is installed only when a desk or CLI command asks for it.
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { hiddenChildOptions } from "../hidden-child.ts";
@@ -78,8 +78,11 @@ export const BUILD_EXIT_GRACE_MS = 5_000;
  * Silence after a finished turn (`available_commands` then `usage`) before
  * stopping a child that never emits `end`. A background dev server can hold
  * grok open after the turn is done. The wait is at least this long.
+ * Orphan `tool_call_update` lines from that server must not restart it.
  */
 const TURN_TAIL_FLOOR_MS = 5_000;
+/** Tail kept for `available_commands`, a signed `usage` line, and trailing updates. */
+const TURN_TAIL_BUFFER_CHARS = 128_000;
 
 const GUIDE_ENTRY_ID = "guide-entry";
 const PROMPT_ID = /^\d{3}$/;
@@ -517,6 +520,33 @@ export interface LiveBuildLaunch {
   spawnImpl?: typeof spawn;
 }
 
+/** Drop leftover children of `<projectDir>/.hitchhiker/tmp` and keep the directory. */
+function pruneProjectTmpDir(projectDir: string): void {
+  const tmpDir = path.join(projectDir, ".hitchhiker", "tmp");
+  try {
+    for (const entry of readdirSync(tmpDir)) {
+      try {
+        rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+      } catch (error: unknown) {
+        if (!lockedRemoveError(error)) throw error;
+      }
+    }
+  } catch (error: unknown) {
+    if (!lockedRemoveError(error)) throw error;
+  }
+  try {
+    mkdirSync(tmpDir, { recursive: true });
+  } catch (error: unknown) {
+    if (!lockedRemoveError(error)) throw error;
+  }
+}
+
+function lockedRemoveError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  const code = error.code;
+  return code === "EBUSY" || code === "EPERM" || code === "ENOENT";
+}
+
 /**
  * The live build spawn. Tests pass platform and spawnImpl.
  * The desk calls this with neither, so it uses this process and node spawn.
@@ -528,11 +558,7 @@ export function spawnLiveBuild(
   launch: LiveBuildLaunch = {},
 ): BuildSpawnHandle {
   const tmpDir = path.join(request.cwd, ".hitchhiker", "tmp");
-  try {
-    mkdirSync(tmpDir, { recursive: true });
-  } catch {
-    /* ignore */
-  }
+  pruneProjectTmpDir(request.cwd);
   const child = launchProcess(
     command,
     request.args,
@@ -1055,6 +1081,7 @@ async function spawnPrompt(
   let feed: ((chunk: string) => void) | null = null;
   let sealed = false;
   let handle: BuildSpawnHandle;
+  pruneProjectTmpDir(projectDir);
   try {
     handle = spawnFn({
       command: "grok",
@@ -1079,6 +1106,7 @@ async function spawnPrompt(
     });
     pidBox.pid = handle.pid > 0 ? handle.pid : null;
   } catch (error: unknown) {
+    pruneProjectTmpDir(projectDir);
     const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
     await settleItem(projectDir, promptId, "failed", reason === "" ? "The build did not start." : reason, lines, []);
     return { halt: true };
@@ -1125,15 +1153,18 @@ async function spawnPrompt(
       if (liveBuilds.get(key)?.promptId === promptId) unregisterLive(key);
       const reason = error instanceof Error ? publicText(error.message) : "The build did not start.";
       await settleItem(projectDir, promptId, "failed", reason === "" ? "The build did not start." : reason, lines, []);
+      pruneProjectTmpDir(projectDir);
       return { halt: true };
     }
   }
   let result: BuildSpawnResult;
   try {
+    // turnTimer and endTimer call handle.stop before this promise resolves.
     result = await control.done;
   } finally {
     sealed = true;
     if (liveBuilds.get(key)?.promptId === promptId) unregisterLive(key);
+    pruneProjectTmpDir(projectDir);
   }
   return {
     halt: false,
@@ -1654,9 +1685,10 @@ interface Settlement {
  * or silence after a finished turn. An `end` event waits a bounded grace
  * for the exit code. A turn that already printed `available_commands` and
  * then `usage`, with no later tool call, text, or thinking, waits at least
- * TURN_TAIL_FLOOR_MS and then stops the child. An orphan `pnpm dev` or
- * `astro preview` otherwise holds grok open and the `end` line never arrives.
- * The promise resolves exactly once.
+ * TURN_TAIL_FLOOR_MS and then stops the child. Trailing `tool_call_update`
+ * lines from an orphan dev server keep that wait running. An orphan
+ * `pnpm dev` or `astro preview` otherwise holds grok open and the `end`
+ * line never arrives. The promise resolves exactly once.
  */
 function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement {
   let resolveOut: (result: BuildSpawnResult) => void = () => undefined;
@@ -1667,15 +1699,15 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
   let endReason: string | null = null;
   let buffer = "";
   let sawAvailableCommands = false;
-  let grace: ReturnType<typeof setTimeout> | null = null;
+  let endTimer: ReturnType<typeof setTimeout> | null = null;
   let turnTimer: ReturnType<typeof setTimeout> | null = null;
 
   const finish = (result: BuildSpawnResult): void => {
     if (finished) return;
     finished = true;
-    if (grace !== null) {
-      clearTimeout(grace);
-      grace = null;
+    if (endTimer !== null) {
+      clearTimeout(endTimer);
+      endTimer = null;
     }
     if (turnTimer !== null) {
       clearTimeout(turnTimer);
@@ -1691,16 +1723,20 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
     errorCode: extra?.errorCode ?? null,
   });
 
-  const armGrace = (): void => {
-    if (finished || grace !== null) return;
-    grace = setTimeout(() => {
-      grace = null;
+  const stopChild = (): void => {
+    try {
+      handle.stop?.();
+    } catch {
+      // Stopping a dead child is fine.
+    }
+  };
+
+  const armEndTimer = (): void => {
+    if (finished || endTimer !== null) return;
+    endTimer = setTimeout(() => {
+      endTimer = null;
       if (finished) return;
-      try {
-        handle.stop?.();
-      } catch {
-        // Stopping a dead child is fine.
-      }
+      stopChild();
       if (endReason === "end_turn") finish(snapshotResult(0));
       else finish({ code: null, stdout: "", stderr: "", errorCode: "ENDED" });
     }, graceMs);
@@ -1713,17 +1749,12 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
   };
 
   const armTurnTimer = (): void => {
-    if (finished || endReason !== null) return;
-    clearTurnTimer();
+    if (finished || endReason !== null || turnTimer !== null) return;
     turnTimer = setTimeout(() => {
       turnTimer = null;
       if (finished || endReason !== null) return;
       endReason = "end_turn";
-      try {
-        handle.stop?.();
-      } catch {
-        // Stopping a dead child is fine.
-      }
+      stopChild();
       finish(snapshotResult(0));
     }, Math.max(graceMs, TURN_TAIL_FLOOR_MS));
   };
@@ -1757,17 +1788,18 @@ function trackSettlement(handle: BuildSpawnHandle, graceMs: number): Settlement 
     force: finish,
     feed: (chunk) => {
       if (finished || endReason !== null) return;
-      clearTurnTimer();
       if (containsNdjsonType(chunk, "available_commands")) sawAvailableCommands = true;
-      buffer = (buffer + chunk).slice(-32_000);
+      buffer = (buffer + chunk).slice(-TURN_TAIL_BUFFER_CHARS);
       if (containsNdjsonType(buffer, "available_commands")) sawAvailableCommands = true;
       const reason = readEndReason(buffer);
       if (reason !== null) {
         endReason = reason;
-        if (!finished) armGrace();
+        clearTurnTimer();
+        if (!finished) armEndTimer();
         return;
       }
       if (hasCompletedTurnTail(buffer, sawAvailableCommands)) armTurnTimer();
+      else clearTurnTimer();
     },
   };
 }
@@ -1811,21 +1843,30 @@ function containsNdjsonType(text: string, type: string): boolean {
 }
 
 /**
- * True when the buffer ends on a `usage` line and an `available_commands`
- * line was already seen. A later `tool_call`, `text`, or `thinking` line
- * means the turn is still going, so the last line is no longer `usage`.
+ * True when the buffer ends on `usage` after `available_commands`, ignoring
+ * trailing orphan `tool_call_update` lines. A later `tool_call`, `text`,
+ * `thought`, or `thinking` line means the turn is still going.
+ * A partial trailing line is ignored until it ends with a newline.
+ * `sawAvailableCommands` covers a `usage` line that starts the buffer,
+ * after an earlier `available_commands` line slid out of the tail.
  */
 function hasCompletedTurnTail(buffer: string, sawAvailableCommands: boolean): boolean {
   const lines = buffer.split(/\r?\n/);
+  if (!buffer.endsWith("\n")) lines.pop();
   let end = lines.length;
   while (end > 0 && (lines[end - 1] ?? "").trim() === "") end -= 1;
-  if (end === 0) return false;
-  if (ndjsonType(lines[end - 1] ?? "") !== "usage") return false;
-  if (sawAvailableCommands) return true;
-  for (let index = 0; index < end - 1; index += 1) {
-    if (ndjsonType(lines[index] ?? "") === "available_commands") return true;
+  while (end > 0 && ndjsonType(lines[end - 1] ?? "") === "tool_call_update") {
+    end -= 1;
+    while (end > 0 && (lines[end - 1] ?? "").trim() === "") end -= 1;
   }
-  return false;
+  if (end === 0) return false;
+  const usageIndex = end - 1;
+  if (ndjsonType(lines[usageIndex] ?? "") !== "usage") return false;
+  if (usageIndex === 0) return sawAvailableCommands;
+  let previous = usageIndex - 1;
+  while (previous >= 0 && (lines[previous] ?? "").trim() === "") previous -= 1;
+  if (previous < 0) return false;
+  return ndjsonType(lines[previous] ?? "") === "available_commands";
 }
 
 async function settleItem(
