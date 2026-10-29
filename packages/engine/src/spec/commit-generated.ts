@@ -4,7 +4,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { hiddenChildOptions } from "../hidden-child.ts";
 
@@ -75,9 +75,19 @@ function ownRepo(projectDir: string): boolean {
     return false;
   }
   if (top === "") return false;
-  const left = path.resolve(top);
-  const right = path.resolve(projectDir);
+  const left = canonical(top);
+  const right = canonical(projectDir);
   return process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right;
+}
+
+/** Resolve symlinks and Windows short names so /var and /private/var, or RUNNER~1 and runneradmin, compare equal. */
+function canonical(dir: string): string {
+  const resolved = path.resolve(dir);
+  try {
+    return realpathSync.native(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 function parseStatus(text: string): string[] {
