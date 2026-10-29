@@ -238,9 +238,10 @@ test("theatre playback follows the shared ticker and skips reduced motion", asyn
 
 test("optimize-media plans image sizes and skips video when ffmpeg is missing", async () => {
   const images = planImages(path.join("shots", "hero.png"), path.join("out"));
-  assert.equal(images.outputs.length, 8);
+  assert.equal(images.outputs.length, 6);
   assert.ok(images.outputs.some((item) => item.format === "avif" && item.width === 640));
   assert.ok(images.outputs.some((item) => item.format === "webp" && item.width === 1920));
+  assert.equal(images.outputs.some((item) => item.width === 2560 || item.width === 960), false);
   const video = planVideo(path.join("shots", "reel.mov"), path.join("out"));
   assert.equal(video.keyframeInterval, 2);
   const report = await optimizeMedia({
@@ -538,6 +539,9 @@ test("shared modules are copied into each starter and the blank page does not im
   const engineCredits = await readFile(path.join(packageRoot, "..", "engine", "src", "credits-file.ts"), "utf8");
   const sharedCredits = await readFile(path.join(packageRoot, "shared", "credits-file.ts"), "utf8");
   assert.equal(sharedCredits, engineCredits, "shared credits parser matches the engine source");
+  const assetsBudget = await readFile(path.join(packageRoot, "..", "assets", "src", "media-budget.ts"), "utf8");
+  const sharedBudget = await readFile(path.join(packageRoot, "shared", "media-budget.ts"), "utf8");
+  assert.equal(sharedBudget, assetsBudget, "shared media budget matches the assets source");
   const copies = [
     ["motion.ts", path.join("src", "hh", "motion.ts")],
     ["webgl.ts", path.join("src", "hh", "webgl.ts")],
@@ -547,6 +551,7 @@ test("shared modules are copied into each starter and the blank page does not im
     ["anime.ts", path.join("src", "hh", "anime.ts")],
     ["vanilla.ts", path.join("src", "hh", "vanilla.ts")],
     ["optimize-media.ts", path.join("scripts", "optimize-media.ts")],
+    ["media-budget.ts", path.join("scripts", "media-budget.ts")],
     ["fetch-assets.ts", path.join("scripts", "fetch-assets.ts")],
     ["credits-file.ts", path.join("scripts", "credits-file.ts")],
     ["qa.spec.ts", path.join("tests", "qa.spec.ts")],

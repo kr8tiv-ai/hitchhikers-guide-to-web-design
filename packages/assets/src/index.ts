@@ -64,6 +64,29 @@ export {
   resolveDeskProvider,
 } from "./section-generate.ts";
 export type { GenerateSectionResult, ImaginePageDriver, MediaProvider, MediaSettings } from "./section-generate.ts";
+export {
+  AVIF_QUALITY,
+  DEFAULT_VARIANT_WIDTHS,
+  MAX_RUN_BYTES,
+  MAX_VARIANT_BYTES,
+  MAX_VARIANT_WIDTH,
+  MAX_VARIANTS_PER_IMAGE,
+  MEDIA_DISK_SPACE_FALLBACK,
+  MIN_FREE_BYTES,
+  WEBP_QUALITY,
+  MediaBudgetExceededError,
+  MediaDiskSpaceError,
+  assertFreeForMedia,
+  formatByteCount,
+  formatMediaDiskSpaceReason,
+  readMediaBudget,
+  requiredFreeBytes,
+  runMediaEncode,
+  selectVariantWidths,
+  variantWidthsForProject,
+  volumeLabel,
+} from "./media-budget.ts";
+export type { MediaBudget, MediaEncodeReport, StatFsFn, VariantManifest } from "./media-budget.ts";
 export type { RunBatchDeps, SpendEntry, SpendLedger } from "./imagine-run.ts";
 export { DIY_SUFFIX, writeDiyPack } from "./diy-pack.ts";
 export { importDiyFiles } from "./diy-import.ts";

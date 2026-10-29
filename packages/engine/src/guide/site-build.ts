@@ -1291,7 +1291,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         projectDir,
         next.id,
         "failed",
-        failureReason(attempt.result, attempt.rawTail),
+        failureReason(projectDir, attempt.result, attempt.rawTail),
         attempt.lines,
         attempt.files,
         attempt.startedAt,
@@ -1375,6 +1375,12 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     await settleItem(projectDir, run.promptId, "failed", BILLING_TOP_UP, run.lastLines, run.filesWritten, run.startedAt, outside.hits);
     await pauseQueuedPrompts(projectDir);
     stampBilling(projectDir);
+    return "halt";
+  }
+  const disk = mediaDiskSpaceReasonFromLog(log);
+  if (disk !== null) {
+    pruneProjectTmpDir(projectDir);
+    await settleItem(projectDir, run.promptId, "failed", disk, run.lastLines, run.filesWritten, run.startedAt, outside.hits);
     return "halt";
   }
   const cap = judgeTurnCap({ stdout: "", stderr: "", log, code: null, turnCap: null });
@@ -2388,7 +2394,28 @@ function readOptional(file: string): string {
   }
 }
 
-function failureReason(result: BuildSpawnResult, stream = ""): string {
+/**
+ * Same sentence as MEDIA_DISK_SPACE_FALLBACK in packages/assets/src/media-budget.ts.
+ * A prompt log that already contains the measured sentence keeps that sentence.
+ */
+const MEDIA_DISK_SPACE_FALLBACK =
+  "Not enough free disk space to write media variants: unknown free on the output volume, need 2 GB. Free space and retry.";
+
+const MEDIA_DISK_SPACE_LINE =
+  /Not enough free disk space to write media variants: .+? free on .+?, need .+?\. Free space and retry\./;
+
+function mediaDiskSpaceReasonFromLog(text: string, errorCode: string | null = null): string | null {
+  const hit =
+    errorCode === "ENOSPC" ||
+    /ENOSPC|No space left on device/i.test(text) ||
+    MEDIA_DISK_SPACE_LINE.test(text);
+  if (!hit) return null;
+  const found = text.match(MEDIA_DISK_SPACE_LINE);
+  if (found?.[0] !== undefined) return found[0].replace(/\s+/g, " ").trim();
+  return MEDIA_DISK_SPACE_FALLBACK;
+}
+
+function failureReason(projectDir: string, result: BuildSpawnResult, stream = ""): string {
   const classified = classifyGrokFailure({
     stdout: result.stdout,
     stderr: result.stderr,
@@ -2396,6 +2423,12 @@ function failureReason(result: BuildSpawnResult, stream = ""): string {
     code: result.code,
   });
   if (classified.kind === "billing") return BILLING_TOP_UP;
+  const blob = `${result.stderr}\n${result.stdout}\n${stream}`;
+  const disk = mediaDiskSpaceReasonFromLog(blob, result.errorCode);
+  if (disk !== null) {
+    pruneProjectTmpDir(projectDir);
+    return disk;
+  }
   if (result.errorCode === "WATCH" || result.errorCode === "ENDED") {
     return "The build process ended without reporting.";
   }
@@ -2403,7 +2436,6 @@ function failureReason(result: BuildSpawnResult, stream = ""): string {
     const text = presentReason(result.stderr);
     return text === "" ? "The build did not finish." : text;
   }
-  const blob = `${result.stderr}\n${result.stdout}\n${stream}`;
   if (result.errorCode === "ENOENT" || /grok is not on PATH/i.test(blob)) {
     return "grok is not on PATH. Run hh doctor.";
   }

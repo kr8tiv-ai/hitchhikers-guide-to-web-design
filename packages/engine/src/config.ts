@@ -44,6 +44,16 @@ export interface IntegrationsConfig {
   pinterestCapture: boolean;
 }
 
+/**
+ * Encode caps. maxWidth never rises above 1920, so a 2560 variant is not written.
+ * Keep the defaults in step with packages/assets/src/media-budget.ts.
+ */
+export interface MediaConfig {
+  maxVariantsPerImage: number;
+  maxRunBytes: number;
+  maxWidth: number;
+}
+
 export interface GuideConfig {
   model: string;
   effort: Effort;
@@ -66,6 +76,7 @@ export interface GuideConfig {
   toolInstalls: ToolInstallRecord[];
   /** True after the first-five-minutes tour is skipped or finished. */
   tourSeen: boolean;
+  media: MediaConfig;
 }
 
 /**
@@ -80,6 +91,13 @@ export const IMAGINE_BUDGET_USD_MAX = 1000;
  * This is a cap, not a price.
  */
 export const TOKEN_BUDGET_MAX = 200_000;
+
+/** Per-image variant cap. The encode step also keeps at most three widths. */
+export const MEDIA_MAX_VARIANTS_PER_IMAGE = 8;
+/** Bytes one optimize-media run may write. */
+export const MEDIA_MAX_RUN_BYTES = 400 * 1024 * 1024;
+/** Longest variant edge. Values above this are stored as this cap. */
+export const MEDIA_MAX_WIDTH = 1920;
 
 /** think() wall clock. One hundred twenty seconds, then the child tree is killed. */
 export const AI_TIMEOUT_MS = 120_000;
@@ -113,7 +131,10 @@ const TOP_KEYS = [
   "integrations",
   "toolInstalls",
   "tourSeen",
+  "media",
 ] as const;
+
+const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
 
@@ -378,6 +399,24 @@ function readAi(value: unknown, modelFallback: string, effortFallback: Effort): 
   return { model, effort, timeoutMs };
 }
 
+function readMedia(value: unknown): MediaConfig {
+  if (!isRecord(value)) fail("media", "expected an object.");
+  rejectUnknown(value, MEDIA_KEYS, "media");
+  const defaults = defaultConfig().media;
+  const maxWidth = Object.hasOwn(value, "maxWidth")
+    ? readIntInRange("media.maxWidth", value.maxWidth, 1, 8192)
+    : defaults.maxWidth;
+  return {
+    maxVariantsPerImage: Object.hasOwn(value, "maxVariantsPerImage")
+      ? readIntInRange("media.maxVariantsPerImage", value.maxVariantsPerImage, 1, 64)
+      : defaults.maxVariantsPerImage,
+    maxRunBytes: Object.hasOwn(value, "maxRunBytes")
+      ? readIntInRange("media.maxRunBytes", value.maxRunBytes, 1, 50 * 1024 * 1024 * 1024)
+      : defaults.maxRunBytes,
+    maxWidth: Math.min(MEDIA_MAX_WIDTH, maxWidth),
+  };
+}
+
 function readInstalls(value: unknown): ToolInstallRecord[] {
   try {
     return readToolInstalls(value);
@@ -415,6 +454,11 @@ export function defaultConfig(): GuideConfig {
     },
     toolInstalls: [],
     tourSeen: false,
+    media: {
+      maxVariantsPerImage: MEDIA_MAX_VARIANTS_PER_IMAGE,
+      maxRunBytes: MEDIA_MAX_RUN_BYTES,
+      maxWidth: MEDIA_MAX_WIDTH,
+    },
   };
 }
 
@@ -476,6 +520,7 @@ export function parseConfig(raw: unknown): GuideConfig {
     integrations: readOptional(raw, "integrations", defaults.integrations, readIntegrations),
     toolInstalls: readOptional(raw, "toolInstalls", defaults.toolInstalls, readInstalls),
     tourSeen: readOptional(raw, "tourSeen", defaults.tourSeen, (value) => readBoolean("tourSeen", value)),
+    media: readOptional(raw, "media", defaults.media, readMedia),
   };
 }
 

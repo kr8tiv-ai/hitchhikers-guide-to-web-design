@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BUILD_EFFORT, BUILD_MODEL, type SpawnLike } from "@hitchhiker/engine";
 import { RealSubjectError } from "./imagine-run.ts";
+import { DEFAULT_VARIANT_WIDTHS, variantWidthsForProject } from "./media-budget.ts";
 import { createImagineClient, type GeneratedImage, type ImagineClient } from "./imagine-http.ts";
 import {
   assetsFile,
@@ -25,7 +26,7 @@ import {
   type AssetSlot,
 } from "./slots.ts";
 
-export const RESPONSIVE_WIDTHS = [640, 1280, 1920, 2560] as const;
+export const RESPONSIVE_WIDTHS = DEFAULT_VARIANT_WIDTHS;
 export const SECTION_ATTEMPTS = 3;
 
 const CONCEPT_LABEL = "Concept image, generated with Grok Imagine";
@@ -297,7 +298,7 @@ export async function generateSectionStills(
   const slots = await readStillSlots(projectDir);
   const assetsMarkdown = await readOptional(assetsFile(projectDir));
   const credits: CreditRow[] = ownerCredits(assetsMarkdown);
-  const pictures: PictureRow[] = ownerPictures(assetsMarkdown);
+  const pictures: PictureRow[] = ownerPictures(projectDir, assetsMarkdown);
   let count = 0;
   const fallbacks: string[] = [];
   const usedStock = new Set<string>();
@@ -332,7 +333,7 @@ export async function generateSectionStills(
     const saved = await writeArrival(projectDir, slot, attempt.images, options.fetchImpl);
     count += 1;
     credits.push(generatedCredit(slot, saved.rel));
-    pictures.push(pictureFor(slot.id, slot.aspect, saved.rel));
+    pictures.push(pictureFor(projectDir, slot.id, slot.aspect, saved.rel));
     await updateAssetRows(projectDir, [assetRow(slot.id, "imagine", saved.rel, "generated", "done")]);
     await persist(projectDir, credits, pictures, count);
   }
@@ -542,7 +543,7 @@ async function writeFallback(
         caption: captionFor(slot.id),
         digitalSourceType: "",
       },
-      picture: pictureFor(slot.id, slot.aspect, stock.file),
+      picture: pictureFor(projectDir, slot.id, slot.aspect, stock.file),
     };
   }
   const rel = `src/assets/generated/${slot.id}.svg`;
@@ -556,7 +557,7 @@ async function writeFallback(
   const note = `Generation was unavailable for ${slot.id}. ${why}Used an art-directed composition.`;
   await appendNote(projectDir, note);
   await updateAssetRows(projectDir, [assetRow(slot.id, "diy", rel, "generated", "ready")]);
-  return { note, credit: generatedCredit(slot, rel), picture: pictureFor(slot.id, slot.aspect, rel) };
+  return { note, credit: generatedCredit(slot, rel), picture: pictureFor(projectDir, slot.id, slot.aspect, rel) };
 }
 
 async function findStock(projectDir: string, used: Set<string>): Promise<{ file: string; license: string } | null> {
@@ -621,14 +622,14 @@ function ownerCredits(markdown: string): CreditRow[] {
   return rows;
 }
 
-function pictureFor(id: string, aspect: string, src: string): PictureRow {
+function pictureFor(projectDir: string, id: string, aspect: string, src: string): PictureRow {
   const hero = id === "hero" || id.endsWith("-hero");
   const width = 1920;
   const height = aspect === "21:9" ? 823 : aspect === "16:9" || hero ? 1080 : 1280;
   return {
     id,
     src,
-    widths: RESPONSIVE_WIDTHS,
+    widths: variantWidthsForProject(projectDir),
     formats: ["avif", "webp"],
     sizes: "(min-width: 80rem) 80rem, 100vw",
     width,
@@ -638,12 +639,12 @@ function pictureFor(id: string, aspect: string, src: string): PictureRow {
   };
 }
 
-function ownerPictures(markdown: string): PictureRow[] {
+function ownerPictures(projectDir: string, markdown: string): PictureRow[] {
   const pictures: PictureRow[] = [];
   for (const row of readAssetTable(markdown)) {
     if (row.license !== "owner" || row.file.trim() === "") continue;
     const aspect = row.slot === "hero" || row.slot.endsWith("-hero") ? "16:9" : "3:2";
-    pictures.push(pictureFor(row.slot, aspect, row.file));
+    pictures.push(pictureFor(projectDir, row.slot, aspect, row.file));
   }
   return pictures;
 }

@@ -66,7 +66,8 @@ test("generation writes each still as it arrives, with pictures and credits, and
     assert.deepEqual(result.fallbacks, []);
     const pictures = readFileSync(path.join(dir, "src", "data", "pictures.ts"), "utf8");
     const credits = readFileSync(path.join(dir, "src", "data", "credits.ts"), "utf8");
-    for (const width of [640, 1280, 1920, 2560]) assert.match(pictures, new RegExp(String(width)));
+    for (const width of [640, 1280, 1920]) assert.match(pictures, new RegExp(String(width)));
+    assert.equal(pictures.includes("2560"), false);
     assert.match(pictures, /avif/);
     assert.match(pictures, /webp/);
     assert.match(pictures, /"id": "hero"/);

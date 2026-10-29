@@ -12,7 +12,8 @@ import { artCallsForFilm, filmVideoSlot } from "./film-media.ts";
 
 export const SECTION_STILL_MODEL = "grok-imagine-image-2.0";
 
-export const RESPONSIVE_WIDTHS = [640, 1280, 1920, 2560] as const;
+/** Variant long edges. 2560 is not emitted. Encoding stops at 1920. */
+export const RESPONSIVE_WIDTHS = [640, 1280, 1920] as const;
 
 export interface SuppliedStill {
   sectionId: string;

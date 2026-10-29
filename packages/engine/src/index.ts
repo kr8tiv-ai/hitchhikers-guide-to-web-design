@@ -31,6 +31,7 @@ export type {
   Effort,
   GuideConfig,
   InterviewDepth,
+  MediaConfig,
   SessionIdMode,
   VoiceEngine,
 } from "./config.ts";
