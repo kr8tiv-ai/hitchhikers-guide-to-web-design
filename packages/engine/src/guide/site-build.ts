@@ -2428,8 +2428,7 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
     if (text === null) continue;
     ownedSourceHits.push(...scanVisibleCopyText(rel, text));
   }
-  const run = readRunFile(projectDir);
-  const baseline = run?.promptId === promptId ? (run.copyBaseline ?? null) : null;
+  const baseline = baselineForPrompt(projectDir, promptId);
   const judgement = judgeVisibleCopy({
     fullSite: promptRequiresFullVisibleCopy(promptText, files),
     baseline,
@@ -2461,6 +2460,40 @@ function readOwnedSource(projectDir: string, rel: string): string | null {
   }
 }
 
+function copyBaselinePath(projectDir: string): string {
+  return path.join(projectDir, ".hitchhiker", "copy-baseline.json");
+}
+
+function writeCopyBaselineFile(
+  projectDir: string,
+  promptId: string,
+  startedAt: string,
+  baseline: VisibleCopyBaseline,
+): void {
+  const dir = path.join(projectDir, ".hitchhiker");
+  mkdirSync(dir, { recursive: true });
+  const body = { promptId, startedAt, distExisted: baseline.distExisted, counts: baseline.counts };
+  writeFileSync(copyBaselinePath(projectDir), `${JSON.stringify(body)}\n`, "utf8");
+}
+
+function readCopyBaselineFile(projectDir: string, promptId: string): VisibleCopyBaseline | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(copyBaselinePath(projectDir), "utf8"));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    if ((parsed as { promptId?: unknown }).promptId !== promptId) return null;
+    return parseVisibleCopyBaseline(parsed) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The run file wins once this prompt owns it. Until then the side file is the baseline taken at spawn. */
+function baselineForPrompt(projectDir: string, promptId: string): VisibleCopyBaseline | null {
+  const run = readRunFile(projectDir);
+  if (run?.promptId === promptId && run.copyBaseline !== undefined) return run.copyBaseline;
+  return readCopyBaselineFile(projectDir, promptId);
+}
+
 function recordVisibleCopyBaseline(projectDir: string, promptId: string, startedAt: string): void {
   const dist = path.join(projectDir, "dist");
   let distExisted = false;
@@ -2470,25 +2503,27 @@ function recordVisibleCopyBaseline(projectDir: string, promptId: string, started
     distExisted = false;
   }
   const counts = distExisted ? countVisibleCopy(dist) : [];
+  const baseline: VisibleCopyBaseline = { distExisted, counts };
+  writeCopyBaselineFile(projectDir, promptId, startedAt, baseline);
   const previous = readRunFile(projectDir);
-  const base: RunFile =
-    previous?.promptId === promptId
-      ? { ...previous, status: "running", pid: null, startedAt }
-      : {
-          promptId,
-          status: "running",
-          model: BUILD_MODEL,
-          effort: BUILD_EFFORT,
-          startedAt,
-          elapsedMs: 0,
-          lastLines: [],
-          filesWritten: [],
-          reason: "",
-          pid: null,
-          recovery: "",
-          recoveryRerun: false,
-        };
-  writeRun(projectDir, { ...base, copyBaseline: { distExisted, counts } });
+  // The previous prompt still owns the run file. Leave its reason and outsideAccess
+  // in place until this prompt's own record is written.
+  if (previous !== null && previous.promptId !== promptId) return;
+  const base: RunFile = previous ?? {
+    promptId,
+    status: "running",
+    model: BUILD_MODEL,
+    effort: BUILD_EFFORT,
+    startedAt,
+    elapsedMs: 0,
+    lastLines: [],
+    filesWritten: [],
+    reason: "",
+    pid: null,
+    recovery: "",
+    recoveryRerun: false,
+  };
+  writeRun(projectDir, { ...base, status: "running", pid: null, startedAt, copyBaseline: baseline });
 }
 
 async function refreshUnpassedPrompts(projectDir: string, onlyId?: string): Promise<void> {
@@ -2749,10 +2784,15 @@ function keptFlag(
   return previous[key] === true;
 }
 
-function keptBaseline(run: RunFile, previous: RunFile | null, same: boolean): VisibleCopyBaseline | undefined {
+function keptBaseline(
+  projectDir: string,
+  run: RunFile,
+  previous: RunFile | null,
+  same: boolean,
+): VisibleCopyBaseline | undefined {
   if (Object.hasOwn(run, "copyBaseline")) return run.copyBaseline;
-  if (!same || previous === null) return undefined;
-  return previous.copyBaseline;
+  if (same && previous !== null && previous.copyBaseline !== undefined) return previous.copyBaseline;
+  return readCopyBaselineFile(projectDir, run.promptId) ?? undefined;
 }
 
 function writeRun(projectDir: string, run: RunFile): void {
@@ -2782,7 +2822,7 @@ function writeRun(projectDir: string, run: RunFile): void {
   const autoRetried = keptFlag(run, previous, same, "autoRetried");
   const resumeNext = keptFlag(run, previous, same, "resumeNext");
   const turnLimited = keptFlag(run, previous, same, "turnLimited");
-  const copyBaseline = keptBaseline(run, previous, same);
+  const copyBaseline = keptBaseline(projectDir, run, previous, same);
   delete next.turns;
   delete next.turnCap;
   delete next.stopReason;
