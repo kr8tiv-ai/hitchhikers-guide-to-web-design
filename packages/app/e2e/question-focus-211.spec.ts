@@ -23,6 +23,7 @@ test("load and resume keep the question in view", async ({ page }) => {
     await page.locator('[data-region="question"][data-live="true"]').waitFor();
     await enterDesk(page);
     await expectQuestionInView(page, 640);
+    await expectQuestionStaysInView(page, 640);
     await openAndCheck(page, url, { width: 390, height: 640 });
   } finally {
     await stopChild(child);
@@ -45,6 +46,16 @@ async function openAndCheck(page: Page, url: string, viewport: { width: number; 
   await page.locator('[data-region="question"][data-live="true"]').waitFor();
   await enterDesk(page);
   await expectQuestionInView(page, viewport.height);
+  await expectQuestionStaysInView(page, viewport.height);
+}
+
+/** The splash tour reveal fires at 180ms and again at 420ms. The heading must still be in view after both. */
+async function expectQuestionStaysInView(page: Page, height: number): Promise<void> {
+  await page.waitForTimeout(700);
+  const box = await page.locator("#hh-card-ask").boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeLessThan(height);
 }
 
 async function expectQuestionInView(page: Page, height: number): Promise<void> {

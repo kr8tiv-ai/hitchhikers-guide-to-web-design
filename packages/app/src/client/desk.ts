@@ -1512,18 +1512,51 @@ export function mountDesk(env: DeskEnv): () => void {
   env.document.addEventListener("visibilitychange", onVisibility);
   env.document.addEventListener("focusin", onFocusIn);
   let splashDismissed = false;
+  let splashFromSkip = false;
+  /** Cover was already gone at mount. Reload can restore a scroll that dismissed the cue. */
+  let cueAlreadyGone = false;
   let tourRevealTimer: ReturnType<typeof setTimeout> | null = null;
+  // Create project and Replay tour land on /?tour=1. That request owns the viewport.
+  const tourRequested = wantsTour(env.document);
+  const liveQuestion = (): boolean =>
+    env.document.querySelector('[data-region="question"][data-live="true"]') !== null;
+  // Skip to the app focuses this link before the cue moves focus to the desk heading.
+  const skipLinkFocused = (): boolean => {
+    const active = env.document.activeElement;
+    if (active === null || active === undefined || typeof active.getAttribute !== "function") return false;
+    return active.getAttribute("href") === "#desk-heading";
+  };
+  const questionHeadingInView = (): boolean => {
+    const heading = env.document.querySelector("#hh-card-ask");
+    if (heading === null || typeof heading.getBoundingClientRect !== "function") return false;
+    const height = env.document.defaultView?.innerHeight;
+    if (typeof height !== "number") return false;
+    const top = heading.getBoundingClientRect().top;
+    return top >= 0 && top < height;
+  };
   const revealTourSoon = (): void => {
     // The cue pins the heading for 120ms. Reveal after that so the two scrolls
     // do not fight. The landing is instant: a smooth scroll can stall before
     // the plate is on screen. A second pass covers a late pin. Reduced motion
     // uses the same instant call.
+    // Skip to the app, and a reload that already left the question on screen,
+    // must not pull #hh-card-ask above the fold. Enter the Guide still brings the plate up.
+    // Checked when the timer fires: the session can mark the question live during the wait.
     if (tourRevealTimer !== null) clearTimeout(tourRevealTimer);
-    tourRevealTimer = setTimeout(() => {
+    const reveal = (): void => {
+      if (tourRequested) {
+        revealTour(env.document, "auto");
+        return;
+      }
+      if (splashFromSkip && liveQuestion()) return;
+      if (cueAlreadyGone && (liveQuestion() || questionHeadingInView())) return;
       revealTour(env.document, "auto");
+    };
+    tourRevealTimer = setTimeout(() => {
+      reveal();
       tourRevealTimer = setTimeout(() => {
         tourRevealTimer = null;
-        revealTour(env.document, "auto");
+        reveal();
       }, 240);
     }, 180);
   };
@@ -1531,23 +1564,26 @@ export function mountDesk(env: DeskEnv): () => void {
     // The cue scrolls #desk-heading into view and focuses it. Replaying the
     // card placement pulls that heading back down the page.
     splashDismissed = true;
+    splashFromSkip = skipLinkFocused();
     revealTourSoon();
   };
   env.document.addEventListener("hh-splash-dismissed", onSplashDismissed);
   // Create project and Replay tour land on /?tour=1. Drop the splash cover so
   // Escape can close the tour, then bring the plate into view and focus it.
-  const tourRequested = wantsTour(env.document);
   if (tourRequested) {
     clearSplashCover(env.document);
     splashDismissed = true;
     revealTour(env.document, undefined, true);
   }
   // Enter can dismiss the cue before this module mounts. The event is already gone.
+  // Reload can also drop the cover without that event, after scroll restoration
+  // has already put the question on screen. The plate must not win that race.
   if (
     env.document.querySelector("[data-splash]") !== null &&
     env.document.querySelector("[data-splash-cover]") === null
   ) {
     splashDismissed = true;
+    cueAlreadyGone = true;
     revealTourSoon();
   }
   const deskWindow = env.document.defaultView ?? null;
