@@ -135,10 +135,12 @@ export interface VisibleCopyJudgeInput {
 }
 
 /**
- * QA and launch keep a full-site scan. Every other prompt fails only for
- * new hits, for a pattern in an owned source file, or for a hit on a page
- * it owns (that page is compared to an empty baseline, so a scaffold
- * placeholder on the prompt's own page still fails).
+ * QA and launch keep a full-site scan. Every other prompt fails for a
+ * pattern in an owned source file, for a hit that appears only on a page
+ * it owns, or when a file and pattern count went up versus the baseline.
+ * A hit on an owned page whose pattern and snippet also appear on a dist
+ * page the prompt does not own is shared chrome. That hit uses the
+ * increased-count rule. With no baseline, shared chrome does not fail.
  */
 export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudgement {
   if (input.fullSite) {
@@ -146,7 +148,6 @@ export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudge
     return { reason: formatVisibleCopyFailure(shown, "dist"), note: "" };
   }
   const distExisted = input.baseline?.distExisted === true;
-  const note = distExisted ? "" : NO_BASELINE_NOTE;
   const owned = new Set(input.ownedDistFiles);
   const baseline = new Map<string, number>();
   for (const row of input.baseline?.counts ?? []) baseline.set(countKey(row.file, row.patternId), row.count);
@@ -157,11 +158,23 @@ export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudge
       if (row.count > (baseline.get(key) ?? 0)) increased.add(key);
     }
   }
-  const newHits = input.hits.filter((hit) => increased.has(countKey(hit.file, hit.patternId)) && !owned.has(hit.file));
-  const ownedPageHits = input.hits.filter((hit) => owned.has(hit.file));
+  const shared = sharedChromeKeys(input.hits, owned);
+  const onOwned = (hit: VisibleCopyHit): boolean => owned.has(hit.file);
+  const isShared = (hit: VisibleCopyHit): boolean => shared.has(chromeKey(hit));
+  const newHits = input.hits.filter((hit) => increased.has(countKey(hit.file, hit.patternId)) && !onOwned(hit));
+  const ownedPageHits = input.hits.filter((hit) => onOwned(hit) && !isShared(hit));
+  const sharedOnOwned = input.hits.filter((hit) => onOwned(hit) && isShared(hit));
+  const sharedHits = distExisted
+    ? sharedOnOwned.filter((hit) => increased.has(countKey(hit.file, hit.patternId)))
+    : [];
+  let note = distExisted ? "" : NO_BASELINE_NOTE;
+  if (!distExisted && sharedOnOwned.length > 0) {
+    note = `${NO_BASELINE_NOTE} Shared chrome on an owned page was not failed.`;
+  }
   const sections: string[] = [];
   if (newHits.length > 0) sections.push("New hits:", ...hitLines(newHits, "dist"));
   if (ownedPageHits.length > 0) sections.push("Owned page:", ...hitLines(ownedPageHits, "dist"));
+  if (sharedHits.length > 0) sections.push("Shared chrome:", ...hitLines(sharedHits, "dist"));
   if (input.ownedSourceHits.length > 0) sections.push("Owned source:", ...hitLines(input.ownedSourceHits, ""));
   if (sections.length === 0) return { reason: "", note };
   return { reason: `Visible copy failed.\n${sections.join("\n")}`, note };
@@ -220,6 +233,20 @@ export function parseVisibleCopyBaseline(value: unknown): VisibleCopyBaseline | 
 
 function countKey(file: string, patternId: string): string {
   return `${file}\0${patternId}`;
+}
+
+function chromeKey(hit: VisibleCopyHit): string {
+  return `${hit.patternId}\0${hit.snippet}`;
+}
+
+/** Pattern and snippet pairs that already show on a page this prompt does not own. */
+function sharedChromeKeys(hits: readonly VisibleCopyHit[], owned: ReadonlySet<string>): Set<string> {
+  const keys = new Set<string>();
+  for (const hit of hits) {
+    if (owned.has(hit.file)) continue;
+    keys.add(chromeKey(hit));
+  }
+  return keys;
 }
 
 function pageHtml(route: string): string[] {
