@@ -70,6 +70,7 @@ import {
   collectVisibleCopyHits,
   countVisibleCopy,
   distHtmlForOwnedSource,
+  formatFixBeforeFinish,
   isVisitorSource,
   judgeVisibleCopy,
   parseVisibleCopyBaseline,
@@ -539,12 +540,15 @@ export interface LiveBuildLaunch {
 }
 
 /** Drop leftover children of `<projectDir>/.hitchhiker/tmp` and keep the directory. */
-function pruneProjectTmpDir(projectDir: string): void {
+function pruneProjectTmpDir(projectDir: string, keepAbs: string | null = null): void {
   const tmpDir = path.join(projectDir, ".hitchhiker", "tmp");
+  const keep = keepAbs === null ? null : path.resolve(keepAbs);
   try {
     for (const entry of readdirSync(tmpDir)) {
+      const abs = path.join(tmpDir, entry);
+      if (keep !== null && path.resolve(abs) === keep) continue;
       try {
-        rmSync(path.join(tmpDir, entry), { recursive: true, force: true });
+        rmSync(abs, { recursive: true, force: true });
       } catch (error: unknown) {
         if (!lockedRemoveError(error)) throw error;
       }
@@ -565,6 +569,18 @@ function lockedRemoveError(error: unknown): boolean {
   return code === "EBUSY" || code === "EPERM" || code === "ENOENT";
 }
 
+/** A session prompt written under tmp must survive the live spawn's prune. */
+function sessionFileInTmp(projectDir: string, args: readonly string[]): string | null {
+  const index = args.indexOf("--prompt-file");
+  const file = index === -1 ? undefined : args[index + 1];
+  if (file === undefined || file === "") return null;
+  const tmpDir = path.resolve(projectDir, ".hitchhiker", "tmp");
+  const abs = path.resolve(file);
+  const rel = path.relative(tmpDir, abs);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  return abs;
+}
+
 /**
  * The live build spawn. Tests pass platform and spawnImpl.
  * The desk calls this with neither, so it uses this process and node spawn.
@@ -576,7 +592,7 @@ export function spawnLiveBuild(
   launch: LiveBuildLaunch = {},
 ): BuildSpawnHandle {
   const tmpDir = path.join(request.cwd, ".hitchhiker", "tmp");
-  pruneProjectTmpDir(request.cwd);
+  pruneProjectTmpDir(request.cwd, sessionFileInTmp(request.cwd, request.args));
   const child = launchProcess(
     command,
     request.args,
@@ -1081,6 +1097,8 @@ interface PromptAttempt {
   files: string[];
   rawTail: string;
   result: BuildSpawnResult;
+  /** True when this spawn started while another prompt still owned the run record. */
+  startedOverPrevious: boolean;
 }
 
 async function spawnPrompt(
@@ -1091,6 +1109,9 @@ async function spawnPrompt(
   resumeSession: string,
 ): Promise<{ halt: true } | { halt: false; attempt: PromptAttempt }> {
   const key = path.resolve(projectDir);
+  const prior = readRunFile(projectDir);
+  const priorRecovery = prior?.promptId === promptId ? prior.recovery : "";
+  const startedOverPrevious = prior !== null && prior.promptId !== promptId;
   const startedAt = new Date().toISOString();
   const lines: string[] = [];
   recordVisibleCopyBaseline(projectDir, promptId, startedAt);
@@ -1104,10 +1125,11 @@ async function spawnPrompt(
   let sealed = false;
   let handle: BuildSpawnHandle;
   pruneProjectTmpDir(projectDir);
+  const sessionPath = writeSessionPrompt(projectDir, promptId, promptPath, priorRecovery);
   try {
     handle = spawnFn({
       command: "grok",
-      args: buildSpawnArgs(projectDir, promptPath, resumeSession === "" ? undefined : resumeSession),
+      args: buildSpawnArgs(projectDir, sessionPath, resumeSession === "" ? undefined : resumeSession),
       cwd: projectDir,
       promptId,
       model: BUILD_MODEL,
@@ -1196,6 +1218,7 @@ async function spawnPrompt(
       files: diffSnapshots(before, snapshot(projectDir)),
       rawTail,
       result,
+      startedOverPrevious,
     },
   };
 }
@@ -1296,16 +1319,18 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
           await maybeRunBeauty(projectDir, next.id);
         } catch (error: unknown) {
           const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
-          await settleItem(
+          const text = reason === "" ? "The build did not finish." : reason;
+          const outcome = await failOrRerunVisibleCopy(
             projectDir,
             next.id,
-            "failed",
-            reason === "" ? "The build did not finish." : reason,
+            text,
             attempt.lines,
             attempt.files,
             attempt.startedAt,
             outside.hits,
+            attempt.startedOverPrevious,
           );
+          if (outcome === "rerun") break;
           return;
         }
         break;
@@ -1479,8 +1504,16 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     } catch (error: unknown) {
       const text = error instanceof Error ? publicText(error.message) : "";
       const reason = text === "" ? "The build did not finish." : text;
-      await settleItem(projectDir, run.promptId, "failed", reason, run.lastLines, files, run.startedAt, outside.hits);
-      return "halt";
+      const outcome = await failOrRerunVisibleCopy(
+        projectDir,
+        run.promptId,
+        reason,
+        run.lastLines,
+        files,
+        run.startedAt,
+        outside.hits,
+      );
+      return outcome === "rerun" ? "continue" : "halt";
     }
   }
   if (decision.action === "interrupt") {
@@ -2420,14 +2453,10 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   const counts = countVisibleCopy(dist);
   const owned = ownedSourcePaths(promptText, files);
   const ownedDist = new Set<string>();
-  const ownedSourceHits: VisibleCopyHit[] = [];
   for (const rel of owned) {
     for (const html of distHtmlForOwnedSource(rel)) ownedDist.add(html);
-    if (!isVisitorSource(rel)) continue;
-    const text = readOwnedSource(projectDir, rel);
-    if (text === null) continue;
-    ownedSourceHits.push(...scanVisibleCopyText(rel, text));
   }
+  const ownedSourceHits = ownedVisitorHits(projectDir, promptText, files);
   const baseline = baselineForPrompt(projectDir, promptId);
   const judgement = judgeVisibleCopy({
     fullSite: promptRequiresFullVisibleCopy(promptText, files),
@@ -2439,6 +2468,84 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   });
   if (judgement.note !== "") appendBuildLog(projectDir, promptId, `${judgement.note}\n`);
   if (judgement.reason !== "") throw new Error(judgement.reason);
+}
+
+function ownedVisitorHits(projectDir: string, promptText: string, changed: readonly string[] = []): VisibleCopyHit[] {
+  const hits: VisibleCopyHit[] = [];
+  for (const rel of ownedSourcePaths(promptText, changed)) {
+    if (!isVisitorSource(rel)) continue;
+    const text = readOwnedSource(projectDir, rel);
+    if (text === null) continue;
+    hits.push(...scanVisibleCopyText(rel, text));
+  }
+  return hits;
+}
+
+/** Session text only. The prompt file's task stays as it was written. */
+function writeSessionPrompt(projectDir: string, promptId: string, promptPath: string, priorRecovery: string): string {
+  const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
+  const ownedFiles = parseExpectedFiles(promptText);
+  if (!shouldScanVisibleCopy(promptText, ownedFiles)) return promptPath;
+  const block = formatFixBeforeFinish(ownedVisitorHits(projectDir, promptText), priorRecovery);
+  if (block === "") return promptPath;
+  const base = readOptional(promptPath);
+  const file = path.join(projectDir, ".hitchhiker", "tmp", `session-${promptId}.md`);
+  mkdirSync(path.dirname(file), { recursive: true });
+  const body = base.trim() === "" ? block : `${base.replace(/\s+$/, "")}\n\n${block}`;
+  writeFileSync(file, body.endsWith("\n") ? body : `${body}\n`, "utf8");
+  return file;
+}
+
+/**
+ * Visible-copy close failures rerun once. A dist-only or full-site failure
+ * on a later prompt does not: that prompt's spawn still has to read the
+ * previous prompt's run record, and a second spawn would replace it.
+ * An owned-source miss is in a file this prompt can fix, so it still reruns.
+ */
+function canRerunVisibleCopy(reason: string, startedOverPrevious: boolean): boolean {
+  if (!reason.startsWith("Visible copy failed.")) return false;
+  if (startedOverPrevious && !reason.includes("Owned source:")) return false;
+  return true;
+}
+
+/** One recovery rerun hands the visible-copy reason back. A second failure halts. */
+async function failOrRerunVisibleCopy(
+  projectDir: string,
+  promptId: string,
+  reason: string,
+  lines: readonly string[],
+  files: readonly string[],
+  startedAt: string,
+  outside?: OutsideAccess[],
+  startedOverPrevious = false,
+): Promise<"rerun" | "failed"> {
+  const run = readRunFile(projectDir);
+  const already = run?.promptId === promptId && run.recoveryRerun === true;
+  if (!canRerunVisibleCopy(reason, startedOverPrevious) || already) {
+    await settleItem(projectDir, promptId, "failed", reason, lines, files, startedAt, outside);
+    return "failed";
+  }
+  await setStatus(projectDir, promptId, "queued");
+  const current = readRunFile(projectDir) ?? run;
+  const same = current?.promptId === promptId;
+  const record: RunFile = {
+    promptId,
+    status: "interrupted",
+    model: current?.model && current.model !== "" ? current.model : BUILD_MODEL,
+    effort: current?.effort && current.effort !== "" ? current.effort : BUILD_EFFORT,
+    startedAt: same && current !== null ? current.startedAt : startedAt,
+    elapsedMs: same && current !== null ? elapsed(current) : 0,
+    lastLines: [...lines],
+    filesWritten: [...files],
+    reason,
+    pid: null,
+    recovery: reason,
+    recoveryRerun: true,
+  };
+  if (same && current?.copyBaseline !== undefined) record.copyBaseline = current.copyBaseline;
+  if (outside !== undefined) record.outsideAccess = outside;
+  writeRun(projectDir, record);
+  return "rerun";
 }
 
 function ownedSourcePaths(promptText: string, changed: readonly string[]): string[] {
@@ -2495,6 +2602,16 @@ function baselineForPrompt(projectDir: string, promptId: string): VisibleCopyBas
 }
 
 function recordVisibleCopyBaseline(projectDir: string, promptId: string, startedAt: string): void {
+  const previous = readRunFile(projectDir);
+  // The recovery rerun is still this prompt. Keep the baseline from before the first attempt.
+  if (
+    previous !== null &&
+    previous.promptId === promptId &&
+    previous.recoveryRerun &&
+    previous.copyBaseline !== undefined
+  ) {
+    return;
+  }
   const dist = path.join(projectDir, "dist");
   let distExisted = false;
   try {
@@ -2505,7 +2622,6 @@ function recordVisibleCopyBaseline(projectDir: string, promptId: string, started
   const counts = distExisted ? countVisibleCopy(dist) : [];
   const baseline: VisibleCopyBaseline = { distExisted, counts };
   writeCopyBaselineFile(projectDir, promptId, startedAt, baseline);
-  const previous = readRunFile(projectDir);
   // The previous prompt still owns the run file. Leave its reason and outsideAccess
   // in place until this prompt's own record is written.
   if (previous !== null && previous.promptId !== promptId) return;
@@ -2938,6 +3054,8 @@ function visibleLines(lines: readonly string[]): string[] {
 function presentReason(reason: string): string {
   const plain = publicText(reason);
   if (plain === "" || !/[{}]/.test(plain)) return plain;
+  // Owned-source snippets quote the attribute, including `{job}`. That is not model JSON.
+  if (plain.startsWith("Visible copy failed.")) return plain;
   return sanitizeFailureReason(plain, "The build did not finish.");
 }
 
