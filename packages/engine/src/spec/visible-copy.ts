@@ -53,7 +53,13 @@ export interface VisibleCopyBaseline {
 const COPY_ATTR = /(?:^|[\s<])((?:data-copy-[\w:-]+|alt|title|content))\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
 const PAGE_EDIT =
   /(?:^|[\s`'"(])(?:src\/pages\/|src\/app\/|src\/routes\/|src\/components\/|src\/layouts\/|src\/world\/)|\.astro\b|\+page\.svelte\b/i;
-const QA_OR_LAUNCH = /REQ-GATE-|REQ-JURY|REQ-PRELAUNCH|REQ-LAUNCH|REQ-POST-DEPLOY|REQ-DEPLOY|REQ-ONCE-OVER/;
+/**
+ * Final QA and launch. Anti-slop is REQ-GATE-ANTISLOP, a site-wide copy pass,
+ * so the gate prefix does not pull it into this scan.
+ */
+const QA_OR_LAUNCH = /REQ-GATE-(?!ANTISLOP\b)|REQ-JURY|REQ-PRELAUNCH|REQ-LAUNCH|REQ-POST-DEPLOY|REQ-DEPLOY|REQ-ONCE-OVER/;
+/** Copy passes that edit the whole site and are judged against the baseline. */
+const SITE_WIDE_COPY = /REQ-GATE-ANTISLOP|REQ-ELEVATE-COPY/;
 const COPY_PROMPT = /REQ-COPY-|REQ-ELEVATE-COPY/;
 const HIT_CAP = 40;
 const FILE_CAP = 2_000_000;
@@ -61,7 +67,7 @@ const FILE_CAP = 2_000_000;
 export function shouldScanVisibleCopy(promptText: string, files: readonly string[] = []): boolean {
   const task = taskText(promptText);
   const blob = `${task}\n${files.join("\n")}`;
-  if (QA_OR_LAUNCH.test(blob) || COPY_PROMPT.test(blob)) return true;
+  if (QA_OR_LAUNCH.test(blob) || SITE_WIDE_COPY.test(blob) || COPY_PROMPT.test(blob)) return true;
   return PAGE_EDIT.test(blob);
 }
 
@@ -116,6 +122,9 @@ export function formatVisibleCopyFailure(hits: readonly VisibleCopyHit[], rootLa
 const NO_BASELINE_NOTE =
   "No visible-copy baseline: dist did not exist before this prompt. Checked owned files only and did not fail pages outside them.";
 
+const SITE_WIDE_NO_BASELINE_NOTE =
+  "No visible-copy baseline: dist did not exist before this prompt. Checked files this prompt wrote only and did not fail hits in files it did not write.";
+
 export interface VisibleCopyJudgement {
   /** Empty when the prompt may pass. */
   reason: string;
@@ -126,27 +135,39 @@ export interface VisibleCopyJudgement {
 export interface VisibleCopyJudgeInput {
   /** QA and launch prompts fail on any hit in dist. */
   fullSite: boolean;
+  /**
+   * Site-wide copy pass that is not QA or launch.
+   * Fails only when a file and pattern count went up.
+   * With no baseline, fails only on hits in files it wrote.
+   */
+  siteWide?: boolean;
   baseline: VisibleCopyBaseline | null;
   counts: readonly VisibleCopyCount[];
   hits: readonly VisibleCopyHit[];
   ownedSourceHits: readonly VisibleCopyHit[];
   /** Dist-relative HTML paths for pages this prompt owns. */
   ownedDistFiles: readonly string[];
+  /** Project-relative paths this prompt wrote. Used when a site-wide pass has no baseline. */
+  writtenFiles?: readonly string[];
 }
 
 /**
- * QA and launch keep a full-site scan. Every other prompt fails for a
- * pattern in an owned source file, for a hit that appears only on a page
- * it owns, or when a file and pattern count went up versus the baseline.
- * A hit on an owned page whose pattern and snippet also appear on a dist
- * page the prompt does not own is shared chrome. That hit uses the
- * increased-count rule. With no baseline, shared chrome does not fail.
+ * QA and launch keep a full-site scan. A site-wide copy pass that is not
+ * QA or launch fails only when a file and pattern count went up versus the
+ * baseline. With no baseline, that pass fails only on hits in files it wrote.
+ * Every other prompt fails for a pattern in an owned source file, for a
+ * hit that appears only on a page it owns, or when a file and pattern
+ * count went up versus the baseline. A hit on an owned page whose pattern
+ * and snippet also appear on a dist page the prompt does not own is shared
+ * chrome. That hit uses the increased-count rule. With no baseline, shared
+ * chrome does not fail.
  */
 export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudgement {
   if (input.fullSite) {
     const shown = sortHits(dedupeHits(input.hits)).slice(0, HIT_CAP);
     return { reason: formatVisibleCopyFailure(shown, "dist"), note: "" };
   }
+  if (input.siteWide === true) return judgeSiteWideCopy(input);
   const distExisted = input.baseline?.distExisted === true;
   const owned = new Set(input.ownedDistFiles);
   const baseline = new Map<string, number>();
@@ -183,6 +204,13 @@ export function judgeVisibleCopy(input: VisibleCopyJudgeInput): VisibleCopyJudge
 export function promptRequiresFullVisibleCopy(promptText: string, files: readonly string[] = []): boolean {
   const task = taskText(promptText);
   return QA_OR_LAUNCH.test(`${task}\n${files.join("\n")}`);
+}
+
+/** Anti-slop and elevate-copy. A prompt that is also QA or launch stays on the strict scan. */
+export function promptIsSiteWideCopy(promptText: string, files: readonly string[] = []): boolean {
+  if (promptRequiresFullVisibleCopy(promptText, files)) return false;
+  const task = taskText(promptText);
+  return SITE_WIDE_COPY.test(`${task}\n${files.join("\n")}`);
 }
 
 /** Dist HTML that a page source owns. A component path owns none. */
@@ -229,6 +257,73 @@ export function parseVisibleCopyBaseline(value: unknown): VisibleCopyBaseline | 
     counts.push({ file: hit.file.replace(/\\/g, "/"), patternId: hit.patternId, count: hit.count });
   }
   return { distExisted: row.distExisted, counts };
+}
+
+function judgeSiteWideCopy(input: VisibleCopyJudgeInput): VisibleCopyJudgement {
+  const distExisted = input.baseline?.distExisted === true;
+  if (!distExisted) {
+    const written = writtenSiteWideHits(input);
+    if (written.dist.length === 0 && written.source.length === 0) return { reason: "", note: SITE_WIDE_NO_BASELINE_NOTE };
+    const lines = boundedHitLines([
+      { hits: written.dist, root: "dist" },
+      { hits: written.source, root: "" },
+    ]);
+    return { reason: `Visible copy failed.\nFiles written:\n${lines.join("\n")}`, note: SITE_WIDE_NO_BASELINE_NOTE };
+  }
+  const baseline = new Map<string, number>();
+  for (const row of input.baseline?.counts ?? []) baseline.set(countKey(row.file, row.patternId), row.count);
+  const increased = new Set<string>();
+  for (const row of input.counts) {
+    const key = countKey(row.file, row.patternId);
+    if (row.count > (baseline.get(key) ?? 0)) increased.add(key);
+  }
+  const increasedHits = input.hits.filter((hit) => increased.has(countKey(hit.file, hit.patternId)));
+  if (increasedHits.length === 0) return { reason: "", note: "" };
+  const lines = boundedHitLines([{ hits: increasedHits, root: "dist" }]);
+  return { reason: `Visible copy failed.\nIncreased counts:\n${lines.join("\n")}`, note: "" };
+}
+
+/** Dist hits for HTML this prompt wrote, plus source hits in visitor files it wrote. */
+function writtenSiteWideHits(input: VisibleCopyJudgeInput): { dist: VisibleCopyHit[]; source: VisibleCopyHit[] } {
+  const written = new Set((input.writtenFiles ?? []).map((rel) => rel.replace(/\\/g, "/").replace(/^\.\//, "")));
+  const distFiles = new Set<string>();
+  for (const rel of written) {
+    if (rel.startsWith("dist/")) distFiles.add(rel.slice("dist/".length));
+    for (const html of distHtmlForOwnedSource(rel)) distFiles.add(html);
+  }
+  return {
+    dist: input.hits.filter((hit) => distFiles.has(hit.file)),
+    source: input.ownedSourceHits.filter((hit) => written.has(hit.file.replace(/\\/g, "/"))),
+  };
+}
+
+function boundedHitLines(groups: readonly { hits: readonly VisibleCopyHit[]; root: string }[]): string[] {
+  const rows: Array<{ line: string; file: string; lineNo: number; patternId: string; snippet: string }> = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const hit of dedupeHits(group.hits)) {
+      const key = `${group.root}\0${hit.file}\0${hit.line ?? ""}\0${hit.patternId}\0${hit.snippet}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        line: formatHitLine(hit, group.root),
+        file: hit.file,
+        lineNo: hit.line ?? 0,
+        patternId: hit.patternId,
+        snippet: hit.snippet,
+      });
+    }
+  }
+  rows.sort(
+    (left, right) =>
+      left.file.localeCompare(right.file) ||
+      left.lineNo - right.lineNo ||
+      left.patternId.localeCompare(right.patternId) ||
+      left.snippet.localeCompare(right.snippet),
+  );
+  const shown = rows.slice(0, HIT_CAP).map((row) => row.line);
+  if (rows.length > HIT_CAP) shown.push(`... and ${rows.length - HIT_CAP} more`);
+  return shown;
 }
 
 function countKey(file: string, patternId: string): string {

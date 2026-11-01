@@ -74,6 +74,7 @@ import {
   isVisitorSource,
   judgeVisibleCopy,
   parseVisibleCopyBaseline,
+  promptIsSiteWideCopy,
   promptRequiresFullVisibleCopy,
   scanVisibleCopyText,
   shouldScanVisibleCopy,
@@ -2460,11 +2461,13 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   const baseline = baselineForPrompt(projectDir, promptId);
   const judgement = judgeVisibleCopy({
     fullSite: promptRequiresFullVisibleCopy(promptText, files),
+    siteWide: promptIsSiteWideCopy(promptText, files),
     baseline,
     counts,
     hits,
     ownedSourceHits,
     ownedDistFiles: [...ownedDist],
+    writtenFiles: files,
   });
   if (judgement.note !== "") appendBuildLog(projectDir, promptId, `${judgement.note}\n`);
   if (judgement.reason !== "") throw new Error(judgement.reason);
@@ -2501,10 +2504,19 @@ function writeSessionPrompt(projectDir: string, promptId: string, promptPath: st
  * on a later prompt does not: that prompt's spawn still has to read the
  * previous prompt's run record, and a second spawn would replace it.
  * An owned-source miss is in a file this prompt can fix, so it still reruns.
+ * A site-wide copy pass owns every page. Its increased-count failure reruns
+ * once too. The baseline write still leaves the previous run record in place
+ * until this prompt writes its own, so the first spawn can read it.
  */
 function canRerunVisibleCopy(reason: string, startedOverPrevious: boolean): boolean {
   if (!reason.startsWith("Visible copy failed.")) return false;
-  if (startedOverPrevious && !reason.includes("Owned source:")) return false;
+  if (
+    startedOverPrevious &&
+    !reason.includes("Owned source:") &&
+    !reason.includes("Increased counts:")
+  ) {
+    return false;
+  }
   return true;
 }
 
