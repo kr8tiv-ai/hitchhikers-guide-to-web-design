@@ -104,7 +104,7 @@ export function renderDesignMd(
   const families = [chosen.display, chosen.body];
   const no3d = refuses3d(documentText(brief, answers));
   const button = buttonPair(palette);
-  const name = styleGuideName(brief, answers, projectName);
+  const name = derivedSiteName(brief, answers, projectName);
   const weightNote = rhythm.fontWeight === null ? "" : `, weight ${rhythm.fontWeight}`;
   const heading = chosen.replaced ? ownerHeadingSentence(chosen.display, wish, rhythm) : "";
   const markdown = [
@@ -372,9 +372,18 @@ function rhythmSentence(rhythm: DisplayRhythm): string {
 }
 
 /**
+ * The site name DESIGN.md already derives.
  * The business name in the brief wins over the desk project title.
  * A wordmark, then a disclaimer subject, then a quoted tagline name.
  */
+export function derivedSiteName(
+  brief: string,
+  answers: readonly BrandAnswer[] = [],
+  projectName?: string | null,
+): string {
+  return styleGuideName(brief, answers, projectName);
+}
+
 function styleGuideName(brief: string, answers: readonly BrandAnswer[], projectName?: string | null): string {
   const corpus = documentText(brief, answers);
   return wordmarkName(corpus) ?? disclaimerName(corpus) ?? taglineName(corpus) ?? usableProjectName(projectName) ?? "Site";

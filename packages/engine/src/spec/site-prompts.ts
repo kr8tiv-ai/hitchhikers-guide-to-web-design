@@ -21,6 +21,7 @@
  */
 
 import { ART_GUIDANCE } from "./art-direction.ts";
+import { derivedSiteName } from "./design-outputs.ts";
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
 import { MISSING_FACT_RULE, VISITOR_COPY_RULE } from "./site-rules.ts";
 
@@ -789,6 +790,22 @@ function assertUniquePageFiles(stack: SiteStack, pages: readonly CleanPage[]): v
   });
 }
 
+/** Bar-sized mark and wordmark, inline routes from 1024px, no clipped actions. */
+export const HEADER_BAR_RULE =
+  "The header bar shows the logo mark and the wordmark, sized for the bar and not the full lockup section, at every width. From 1024px up every nav route shows inline and nothing is hidden behind a Menu button. Below 1024px the bar keeps the logo and a Menu button. No link or action may be clipped or overflow the bar at 1280, 1024, 820 and 390px.";
+
+/** Branded unique titles and a real meta description. `siteName` is derivedSiteName. */
+export function documentHeadRule(siteName: string): string {
+  return `Each <title> is "<page title> | ${siteName}" (the home page may be "${siteName} | <short promise>"), unique per path. Each meta description is a real, calm sentence for that page written for the visitor, never narration about the page ("is written here", "this page", "is not here yet"), never a missing-fact line ("not written yet", TODO), never empty.`;
+}
+
+/**
+ * Header visibility belongs on the brand gate. That gate already scores the
+ * mark and the wordmark. The visual gate compares screenshots.
+ */
+export const BRAND_HEADER_TEST =
+  "Add a test that, at 1280px, the logo mark and the wordmark are visible inside the header and every nav link is visible and not clipped, and at 390px the Menu button is visible.";
+
 const BEAUTY_ACCEPTANCE = [
   "This is the beauty gate.",
   "Screenshot every page at 375, 768, 1440, and 1920.",
@@ -801,6 +818,7 @@ const BEAUTY_ACCEPTANCE = [
 
 function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] {
   const { stack, pages, effects } = input;
+  const headRule = documentHeadRule(derivedSiteName(input.brief));
   assertUniquePageFiles(stack, pages);
   const drafts: Draft[] = [];
 
@@ -917,6 +935,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: layoutFiles(stack),
       requirement: "REQ-LAYOUT",
+      acceptance: [HEADER_BAR_RULE, headRule],
     }),
     job(claim, {
       phase: "improbability-drive",
@@ -935,6 +954,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       effort: "medium",
       files: [componentFile(stack, "Nav"), firstLayout(stack)],
       requirement: "REQ-NAV",
+      acceptance: [HEADER_BAR_RULE],
     }),
   );
 
@@ -1086,6 +1106,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         effort: "medium",
         files: [`src/data/seo/${slug}.ts`],
         requirement: `REQ-SEO-${slug}`,
+        acceptance: [headRule],
       }),
     );
   }
@@ -1170,6 +1191,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       tier: "Cup of Tea",
       effort: "medium",
       file: "tests/seo-gate.spec.ts",
+      acceptance: [headRule],
     },
     {
       requirement: "REQ-GATE-VISUAL",
@@ -1202,7 +1224,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
       tier: "Heart of Gold",
       effort: "xhigh",
       file: "tests/brand-signoff.spec.ts",
-      acceptance: BEAUTY_ACCEPTANCE,
+      acceptance: [...BEAUTY_ACCEPTANCE, BRAND_HEADER_TEST],
     },
   ];
 

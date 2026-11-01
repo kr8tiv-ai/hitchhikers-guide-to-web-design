@@ -22,6 +22,7 @@ export const VISIBLE_COPY_PATTERNS: readonly VisibleCopyPattern[] = [
   { id: "public-env", source: "PUBLIC_[A-Z_]+", flags: "", scope: "copy" },
   { id: "scripts-are-off", source: "Scripts are off", flags: "i", scope: "copy" },
   { id: "not-written-yet", source: "not written yet", flags: "i", scope: "copy" },
+  { id: "written-here", source: "\\bwritten here\\b", flags: "i", scope: "copy" },
   { id: "does-not-mark-it", source: "does not mark it", flags: "i", scope: "copy" },
   { id: "this-control", source: "this control", flags: "i", scope: "copy" },
   { id: "data-job", source: "data-job\\s*=", flags: "i", scope: "markup" },

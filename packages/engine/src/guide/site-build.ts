@@ -38,7 +38,7 @@ import {
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
-import { writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
+import { derivedSiteName, writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
 import { REFERENCE_PHASES, recordPhasePrompt } from "../spec/skills.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
 import { decideStack, writeStackDecision } from "../spec/stack-from-brief.ts";
@@ -65,6 +65,7 @@ import {
 import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/site-prompts.ts";
 import { commitGeneratedFiles } from "../spec/commit-generated.ts";
 import { refreshEnginePromptText } from "../spec/prompt-refresh.ts";
+import { formatDocumentHeadFailure, promptChecksDocumentHead, scanDocumentHead } from "../spec/site-head.ts";
 import { MISSING_FACT_FALLBACK } from "../spec/site-rules.ts";
 import {
   collectVisibleCopyHits,
@@ -81,6 +82,7 @@ import {
   type VisibleCopyBaseline,
   type VisibleCopyHit,
 } from "../spec/visible-copy.ts";
+import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
 
@@ -2444,11 +2446,23 @@ function readGallery(file: string): GalleryNote[] {
   return notes;
 }
 
-/** Save leftover project files, then fail the prompt when visitor copy it owns is still a placeholder. */
+/** Save leftover project files, then fail the prompt when visitor copy or the document head it owns is still wrong. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
-  if (!shouldScanVisibleCopy(promptText, files)) return;
+  const copyReason = visibleCopyCloseReason(projectDir, promptId, promptText, files);
+  const headReason = documentHeadCloseReason(projectDir, promptText, files);
+  const reason = copyReason === "" ? headReason : headReason === "" ? copyReason : `${copyReason}\n${headReason}`;
+  if (reason !== "") throw new Error(reason);
+}
+
+function visibleCopyCloseReason(
+  projectDir: string,
+  promptId: string,
+  promptText: string,
+  files: readonly string[],
+): string {
+  if (!shouldScanVisibleCopy(promptText, files)) return "";
   const dist = path.join(projectDir, "dist");
   const hits = collectVisibleCopyHits(dist);
   const counts = countVisibleCopy(dist);
@@ -2470,7 +2484,24 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
     writtenFiles: files,
   });
   if (judgement.note !== "") appendBuildLog(projectDir, promptId, `${judgement.note}\n`);
-  if (judgement.reason !== "") throw new Error(judgement.reason);
+  return judgement.reason;
+}
+
+/**
+ * Layout and SEO prompts own every page head, as do QA and launch.
+ * A prompt that does not is left alone, the same owned-file rule as visible copy.
+ * There is no count baseline: a bare title is not a hit that can be shared chrome.
+ */
+function documentHeadCloseReason(projectDir: string, promptText: string, files: readonly string[]): string {
+  const owned = ownedSourcePaths(promptText, files);
+  if (!promptChecksDocumentHead(promptText, owned)) return "";
+  const issues = scanDocumentHead(path.join(projectDir, "dist"), documentSiteName(projectDir));
+  return formatDocumentHeadFailure(issues);
+}
+
+function documentSiteName(projectDir: string): string {
+  const brief = readOptional(path.join(projectDir, ".hitchhiker", "SITE-BRIEF.md"));
+  return derivedSiteName(brief, briefAnswers(projectDir), readProjectDisplayName(projectDir));
 }
 
 function ownedVisitorHits(projectDir: string, promptText: string, changed: readonly string[] = []): VisibleCopyHit[] {
@@ -3067,7 +3098,7 @@ function presentReason(reason: string): string {
   const plain = publicText(reason);
   if (plain === "" || !/[{}]/.test(plain)) return plain;
   // Owned-source snippets quote the attribute, including `{job}`. That is not model JSON.
-  if (plain.startsWith("Visible copy failed.")) return plain;
+  if (plain.startsWith("Visible copy failed.") || plain.startsWith("Head check failed.")) return plain;
   return sanitizeFailureReason(plain, "The build did not finish.");
 }
 
