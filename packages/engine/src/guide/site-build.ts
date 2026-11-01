@@ -66,6 +66,13 @@ import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/sit
 import { commitGeneratedFiles } from "../spec/commit-generated.ts";
 import { refreshEnginePromptText } from "../spec/prompt-refresh.ts";
 import { formatDocumentHeadFailure, promptChecksDocumentHead, scanDocumentHead } from "../spec/site-head.ts";
+import {
+  formatPlaceholderContactFailure,
+  formatRepeatedSentenceFailure,
+  scanPlaceholderContacts,
+  scanRepeatedSentences,
+  type SurfaceHit,
+} from "../spec/site-surface.ts";
 import { MISSING_FACT_FALLBACK } from "../spec/site-rules.ts";
 import {
   collectVisibleCopyHits,
@@ -2446,14 +2453,36 @@ function readGallery(file: string): GalleryNote[] {
   return notes;
 }
 
-/** Save leftover project files, then fail the prompt when visitor copy or the document head it owns is still wrong. */
+/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, or a bad document head. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const copyReason = visibleCopyCloseReason(projectDir, promptId, promptText, files);
+  const surfaceReason = surfaceCloseReason(projectDir, promptText, files);
   const headReason = documentHeadCloseReason(projectDir, promptText, files);
-  const reason = copyReason === "" ? headReason : headReason === "" ? copyReason : `${copyReason}\n${headReason}`;
+  const reason = [copyReason, surfaceReason, headReason].filter((part) => part !== "").join("\n");
   if (reason !== "") throw new Error(reason);
+}
+
+/**
+ * QA and launch read every built page. Any other prompt fails only for a dist
+ * page its source files own. A component path owns no dist page, so a prompt
+ * is not failed for a file it does not own. Narration stays on the visible-copy
+ * baseline. A fake address and a repeated sentence are not pattern counts.
+ */
+function surfaceCloseReason(projectDir: string, promptText: string, files: readonly string[]): string {
+  const fullSite = promptRequiresFullVisibleCopy(promptText, files);
+  const ownedDist = new Set<string>();
+  for (const rel of ownedSourcePaths(promptText, files)) {
+    for (const html of distHtmlForOwnedSource(rel)) ownedDist.add(html);
+  }
+  if (!fullSite && ownedDist.size === 0) return "";
+  const dist = path.join(projectDir, "dist");
+  const keep = (hits: readonly SurfaceHit[]): SurfaceHit[] =>
+    fullSite ? [...hits] : hits.filter((hit) => ownedDist.has(hit.file));
+  const placeholder = formatPlaceholderContactFailure(keep(scanPlaceholderContacts(dist)));
+  const repeated = formatRepeatedSentenceFailure(keep(scanRepeatedSentences(dist)));
+  return [placeholder, repeated].filter((part) => part !== "").join("\n");
 }
 
 function visibleCopyCloseReason(
@@ -3098,7 +3127,14 @@ function presentReason(reason: string): string {
   const plain = publicText(reason);
   if (plain === "" || !/[{}]/.test(plain)) return plain;
   // Owned-source snippets quote the attribute, including `{job}`. That is not model JSON.
-  if (plain.startsWith("Visible copy failed.") || plain.startsWith("Head check failed.")) return plain;
+  if (
+    plain.startsWith("Visible copy failed.") ||
+    plain.startsWith("Head check failed.") ||
+    plain.startsWith("Placeholder contact failed.") ||
+    plain.startsWith("Repeated sentence failed.")
+  ) {
+    return plain;
+  }
   return sanitizeFailureReason(plain, "The build did not finish.");
 }
 

@@ -15,6 +15,21 @@ export const MISSING_FACT_FALLBACK = `Only facts written in the interview. ${MIS
 export const VISITOR_COPY_RULE =
   "Visible copy speaks to the visitor only. No text about scripts, controls, implementation, build steps, prompts, TODO, environment variable names (PUBLIC_ or import.meta.env), file paths, or planning instructions. Plan metadata attributes (data-job, data-launch-check, data-component with source paths, and similar) are not rendered in production builds. They stay dev-only or are stripped.";
 
+/**
+ * An unset owner contact stays a missing fact.
+ * Reserved placeholder domains and 555- numbers are never invented.
+ */
+export const NO_INVENTED_CONTACT_RULE =
+  "An unset owner fact is never replaced by an invented address, phone number, domain, or URL. Reserved forms are .example, .test, .invalid, example.com, example.org, and 555- numbers. Use the existing missing-fact state instead. A contact or inquiry form with no transport is shown, says sending is not connected yet, and offers the next real step.";
+
+/** Component chrome speaks to the visitor about what they can do. */
+export const CHROME_COPY_RULE =
+  'Speak to the visitor in calm, warm, plain sentences about what they can do. Never describe the page, its layout, its colours, its position on screen, or what is "written here", "on this page", "held here", "not listed on this page", or "is not a pin". Never restate a requirement as copy.';
+
+/** The legal disclaimer and the offer line are said once. */
+export const OFFER_ONCE_RULE =
+  "The legal disclaimer appears once in the footer and at most once next to the inquiry form. The offer line appears once per page. Other sections do not repeat them.";
+
 export const SITE_RULES = [
   "TypeScript strict. Do not use any.",
   "No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.",

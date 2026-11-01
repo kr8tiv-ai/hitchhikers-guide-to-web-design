@@ -23,7 +23,13 @@
 import { ART_GUIDANCE } from "./art-direction.ts";
 import { derivedSiteName } from "./design-outputs.ts";
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
-import { MISSING_FACT_RULE, VISITOR_COPY_RULE } from "./site-rules.ts";
+import {
+  CHROME_COPY_RULE,
+  MISSING_FACT_RULE,
+  NO_INVENTED_CONTACT_RULE,
+  OFFER_ONCE_RULE,
+  VISITOR_COPY_RULE,
+} from "./site-rules.ts";
 
 export { SITE_RULES } from "./site-rules.ts";
 
@@ -741,6 +747,42 @@ function sectionSlice(pageIndex: number, sectionIndex: number): string {
   return "Milliways Menu";
 }
 
+function isFarmOrDetailPage(page: CleanPage): boolean {
+  return /farm|detail/i.test(`${page.id} ${page.title} ${page.route}`);
+}
+
+function pushRule(lines: string[], rule: string): void {
+  if (!lines.includes(rule)) lines.push(rule);
+}
+
+/** Component files, data modules, and form jobs. A page shell alone is not one of these. */
+function needsContactRule(files: readonly string[], title: string): boolean {
+  if (/\bform\b|inquir|newsletter|sign-up|signup/i.test(title)) return true;
+  return files.some((file) => {
+    const norm = file.replace(/\\/g, "/");
+    if (norm.startsWith("src/data/")) return true;
+    if (norm.includes("/components/")) return true;
+    return /^src\/world\/(?:Feature|Section|Nav|Logo)/.test(norm);
+  });
+}
+
+/** Copy jobs and the chrome that speaks on the page: footer, language, forms, map, and the rest. */
+function needsChromeRule(title: string, requirement: string): boolean {
+  if (requirement.startsWith("REQ-COPY-") || requirement === "REQ-ELEVATE-COPY") return true;
+  if (requirement === "REQ-LAYOUT" || requirement === "REQ-NAV") return true;
+  if (!title.startsWith("Add the feature:")) return false;
+  return /footer|language|en-es|toggle|newsletter|whatsapp|favorite|shortlist|\bmap\b|gallery|filter|\bform\b|inquir/i.test(
+    title,
+  );
+}
+
+function needsOfferRule(requirement: string, route: string | undefined, detailPage: boolean, title: string): boolean {
+  if (detailPage || requirement === "REQ-LAYOUT") return true;
+  if (route !== undefined && /farm|detail/i.test(route)) return true;
+  if (!title.startsWith("Add the feature:")) return false;
+  return /disclaimer|inquir|favorite|gallery|\bmap\b/i.test(title);
+}
+
 function job(
   claim: (id: string) => string,
   init: {
@@ -756,6 +798,8 @@ function job(
     route?: string;
     contentSources?: string[];
     acceptance?: string[];
+    /** Farm and detail pages say the offer and the disclaimer once. */
+    detailPage?: boolean;
   },
 ): Draft {
   const allowed = SLICES_BY_PHASE[init.phase];
@@ -775,7 +819,13 @@ function job(
   if (init.library !== undefined) row.library = init.library;
   if (init.route !== undefined) row.route = init.route;
   if (init.contentSources !== undefined) row.contentSources = [...init.contentSources];
-  if (init.acceptance !== undefined) row.acceptance = [...init.acceptance];
+  const acceptance = [...(init.acceptance ?? [])];
+  if (needsContactRule(init.files, init.title)) pushRule(acceptance, NO_INVENTED_CONTACT_RULE);
+  if (needsChromeRule(init.title, init.requirement)) pushRule(acceptance, CHROME_COPY_RULE);
+  if (needsOfferRule(init.requirement, init.route, init.detailPage === true, init.title)) {
+    pushRule(acceptance, OFFER_ONCE_RULE);
+  }
+  if (acceptance.length > 0) row.acceptance = acceptance;
   return row;
 }
 
@@ -820,6 +870,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
   const { stack, pages, effects } = input;
   const headRule = documentHeadRule(derivedSiteName(input.brief));
   assertUniquePageFiles(stack, pages);
+  const detailPages = new Set(pages.filter(isFarmOrDetailPage).map((page) => page.id));
   const drafts: Draft[] = [];
 
   drafts.push(
@@ -973,6 +1024,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         requirement: pageReq,
         route: page.route,
         contentSources: page.contentSources,
+        detailPage: detailPages.has(page.id),
         acceptance: [
           `Route ${page.route} renders and the nav links to it.`,
           `Content comes from ${sources}.`,
@@ -992,6 +1044,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [file, pagePath],
           requirement: `REQ-STRUCT-${slugId(sectionId)}`,
+          detailPage: detailPages.has(page.id),
           acceptance: [
             "Use an asymmetric grid, overlapping media where the story needs it, and a real type scale.",
           ],
@@ -1004,6 +1057,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [file],
           requirement: `REQ-COPY-${slugId(sectionId)}`,
+          detailPage: detailPages.has(page.id),
           acceptance: copyAcceptance(input),
         }),
       );
@@ -1021,6 +1075,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           effort: "medium",
           files: [componentFile(stack, `Section${pascal(slugId(sectionId))}`)],
           requirement: `REQ-IMAGE-${slugId(sectionId)}`,
+          detailPage: detailPages.has(page.id),
           acceptance: [
             `The generated still for this section is src/assets/generated/${slugId(sectionId)}.webp.`,
             "Use the supplied image when it fits.",
@@ -1045,6 +1100,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         ],
         requirement: `REQ-FX-${slugId(effect.id)}`,
         library: effect.library,
+        detailPage: detailPages.has(effect.page),
         acceptance: effectAcceptance(effect),
       }),
     );

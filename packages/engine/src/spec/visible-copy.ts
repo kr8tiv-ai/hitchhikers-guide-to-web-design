@@ -1,6 +1,6 @@
 /**
  * Visitor-copy gate for built HTML.
- * One pattern list covers placeholders, build narration, and plan metadata.
+ * One pattern list covers placeholders, build narration, page narration, and plan metadata.
  * Comments, scripts, styles, and non-HTML files are not visitor copy.
  */
 
@@ -25,6 +25,16 @@ export const VISIBLE_COPY_PATTERNS: readonly VisibleCopyPattern[] = [
   { id: "written-here", source: "\\bwritten here\\b", flags: "i", scope: "copy" },
   { id: "does-not-mark-it", source: "does not mark it", flags: "i", scope: "copy" },
   { id: "this-control", source: "this control", flags: "i", scope: "copy" },
+  { id: "on-this-page", source: "\\bon this page\\b", flags: "i", scope: "copy" },
+  { id: "held-here", source: "\\bheld here\\b", flags: "i", scope: "copy" },
+  { id: "you-stay-on-this-page", source: "you stay on this page", flags: "i", scope: "copy" },
+  { id: "still-on-this-page", source: "you are still on this page", flags: "i", scope: "copy" },
+  { id: "not-listed-on-this-page", source: "not listed on this page", flags: "i", scope: "copy" },
+  { id: "comes-first-second", source: "comes first\\b[\\s\\S]{0,80}?comes second\\b", flags: "i", scope: "copy" },
+  { id: "is-not-a-pin", source: "\\bis not a pin\\b", flags: "i", scope: "copy" },
+  { id: "top-edge", source: "\\bthe top edge is\\b", flags: "i", scope: "copy" },
+  { id: "read-this-line", source: "\\bread this line\\b", flags: "i", scope: "copy" },
+  { id: "choose-the-mark", source: "\\bchoose the mark to read\\b", flags: "i", scope: "copy" },
   { id: "data-job", source: "data-job\\s*=", flags: "i", scope: "markup" },
   { id: "data-launch-check", source: "data-launch-check\\s*=", flags: "i", scope: "markup" },
   { id: "data-component-path", source: "data-component\\s*=\\s*[\"'][^\"']*src/", flags: "i", scope: "markup" },
