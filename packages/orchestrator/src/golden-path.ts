@@ -248,12 +248,17 @@ function writeStack(projectDir: string): void {
 }
 
 async function cassetteBuild(projectDir: string): Promise<void> {
+  // The head check uses the derived site name. The fixture brief has no name,
+  // so a missing project.json falls back to "Site" and rejects a Mostly Towels title.
+  const nameFile = path.join(projectDir, ".hitchhiker", "project.json");
+  mkdirSync(path.dirname(nameFile), { recursive: true });
+  writeFileSync(nameFile, `${JSON.stringify({ name: "Mostly Towels" }, null, 2)}\n`, "utf8");
   const spawn: BuildSpawn = (request) => {
     const page = path.join(request.cwd, "dist", "index.html");
     mkdirSync(path.dirname(page), { recursive: true });
     writeFileSync(
       page,
-      "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels</title></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n",
+      "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n",
       "utf8",
     );
     // A tracked src file makes later picks show up as their own untracked paths.

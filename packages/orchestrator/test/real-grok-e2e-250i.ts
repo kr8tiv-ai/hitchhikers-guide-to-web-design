@@ -48,7 +48,7 @@ export const REAL_GROK_E2E_SKIP = "set HH_REAL_GROK_E2E=1 to run a real Grok bui
 
 /** The golden-path cassette writes this page. A real build must not match it. */
 export const GOLDEN_PATH_FIXTURE_HTML =
-  "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels</title></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n";
+  "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n";
 
 const DEFAULT_PROMPTS = 3;
 const DEFAULT_MINUTES = 60;
