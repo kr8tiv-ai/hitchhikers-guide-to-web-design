@@ -25,6 +25,9 @@ import { derivedSiteName } from "./design-outputs.ts";
 import { MOTION_LIBS, type MotionLib } from "./motion.ts";
 import {
   CHROME_COPY_RULE,
+  HOME_STRUCTURE_RULE,
+  LISTING_PAGE_RULE,
+  LISTING_PHOTO_RULE,
   MISSING_FACT_RULE,
   NO_INVENTED_CONTACT_RULE,
   OFFER_ONCE_RULE,
@@ -751,6 +754,31 @@ function isFarmOrDetailPage(page: CleanPage): boolean {
   return /farm|detail/i.test(`${page.id} ${page.title} ${page.route}`);
 }
 
+/** One listing, not the collection index. "Farms" stays a collection. */
+function isListingDetailPage(page: CleanPage): boolean {
+  const blob = `${page.id} ${page.title} ${page.route}`;
+  if (/\[(?:id|slug)\]|\bdetail\b/i.test(blob)) return true;
+  if (/\bfarm\b/i.test(blob) && !/\bfarms\b/i.test(blob)) return true;
+  return false;
+}
+
+function isHomePage(page: CleanPage): boolean {
+  return page.route === "/" || page.id === "home";
+}
+
+function structureFlags(
+  page: CleanPage,
+  listings: boolean,
+  sectionId?: string,
+): { homePage: boolean; listingDetail: boolean; listingCards: boolean } {
+  const homePage = isHomePage(page);
+  const listingDetail = isListingDetailPage(page);
+  const sectionCards = sectionId !== undefined && /farm|listing|gallery|\bcards?\b|grid/i.test(sectionId);
+  const listingCards =
+    listingDetail || isFarmOrDetailPage(page) || sectionCards || (homePage && listings && sectionId === undefined);
+  return { homePage, listingDetail, listingCards };
+}
+
 function pushRule(lines: string[], rule: string): void {
   if (!lines.includes(rule)) lines.push(rule);
 }
@@ -783,6 +811,37 @@ function needsOfferRule(requirement: string, route: string | undefined, detailPa
   return /disclaimer|inquir|favorite|gallery|\bmap\b/i.test(title);
 }
 
+/** Listing cards, listing pages, galleries, and image jobs. */
+function needsListingPhotoRule(init: {
+  requirement: string;
+  title: string;
+  detailPage?: boolean;
+  listingDetail?: boolean;
+  listingCards?: boolean;
+}): boolean {
+  if (init.requirement.startsWith("REQ-IMAGE-") || init.requirement === "REQ-ELEVATE-IMAGERY") return true;
+  if (init.listingCards === true || init.listingDetail === true || init.detailPage === true) return true;
+  if (/\bgallery\b|\bcarousel\b/i.test(init.title)) return true;
+  if (
+    /\b(?:farms?|listings?|products?)\b/i.test(init.title) &&
+    /\b(?:cards?|layout|route|grid|copy|image|section)\b/i.test(init.title)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function needsHomeStructureRule(init: { homePage?: boolean }): boolean {
+  return init.homePage === true;
+}
+
+/** Listing detail pages, and the inquiry or spec feature those pages use. */
+function needsListingPageRule(init: { title: string; listingDetail?: boolean }): boolean {
+  if (init.listingDetail === true) return true;
+  if (!init.title.startsWith("Add the feature:")) return false;
+  return /\binquir|\bspecs?\b/i.test(init.title);
+}
+
 function job(
   claim: (id: string) => string,
   init: {
@@ -800,6 +859,12 @@ function job(
     acceptance?: string[];
     /** Farm and detail pages say the offer and the disclaimer once. */
     detailPage?: boolean;
+    /** Home route, layout, and copy. Image and motion jobs stay unset. */
+    homePage?: boolean;
+    /** A single listing page, not the collection index. */
+    listingDetail?: boolean;
+    /** Listing cards, the collection, or a gallery on this job. */
+    listingCards?: boolean;
   },
 ): Draft {
   const allowed = SLICES_BY_PHASE[init.phase];
@@ -825,6 +890,9 @@ function job(
   if (needsOfferRule(init.requirement, init.route, init.detailPage === true, init.title)) {
     pushRule(acceptance, OFFER_ONCE_RULE);
   }
+  if (needsListingPhotoRule(init)) pushRule(acceptance, LISTING_PHOTO_RULE);
+  if (needsHomeStructureRule(init)) pushRule(acceptance, HOME_STRUCTURE_RULE);
+  if (needsListingPageRule(init)) pushRule(acceptance, LISTING_PAGE_RULE);
   if (acceptance.length > 0) row.acceptance = acceptance;
   return row;
 }
@@ -871,6 +939,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
   const headRule = documentHeadRule(derivedSiteName(input.brief));
   assertUniquePageFiles(stack, pages);
   const detailPages = new Set(pages.filter(isFarmOrDetailPage).map((page) => page.id));
+  const listings = pages.some((page) => isFarmOrDetailPage(page) || isListingDetailPage(page));
   const drafts: Draft[] = [];
 
   drafts.push(
@@ -1013,6 +1082,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     const pageReq = pageRequirementId(page.id);
     const pagePath = pageFile(stack, page);
     const sources = page.contentSources.join(", ");
+    const routeFlags = structureFlags(page, listings);
     drafts.push(
       job(claim, {
         phase: "improbability-drive",
@@ -1025,6 +1095,9 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
         route: page.route,
         contentSources: page.contentSources,
         detailPage: detailPages.has(page.id),
+        homePage: routeFlags.homePage,
+        listingDetail: routeFlags.listingDetail,
+        listingCards: routeFlags.listingCards,
         acceptance: [
           `Route ${page.route} renders and the nav links to it.`,
           `Content comes from ${sources}.`,
@@ -1035,6 +1108,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
     page.sections.forEach((sectionId, sectionIndex) => {
       const slice = sectionSlice(pageIndex, sectionIndex);
       const file = componentFile(stack, `Section${pascal(slugId(sectionId))}`);
+      const sectionFlags = structureFlags(page, listings, sectionId);
       drafts.push(
         job(claim, {
           phase: "improbability-drive",
@@ -1045,6 +1119,9 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           files: [file, pagePath],
           requirement: `REQ-STRUCT-${slugId(sectionId)}`,
           detailPage: detailPages.has(page.id),
+          homePage: sectionFlags.homePage,
+          listingDetail: sectionFlags.listingDetail,
+          listingCards: sectionFlags.listingCards,
           acceptance: [
             "Use an asymmetric grid, overlapping media where the story needs it, and a real type scale.",
           ],
@@ -1058,6 +1135,9 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           files: [file],
           requirement: `REQ-COPY-${slugId(sectionId)}`,
           detailPage: detailPages.has(page.id),
+          homePage: sectionFlags.homePage,
+          listingDetail: sectionFlags.listingDetail,
+          listingCards: sectionFlags.listingCards,
           acceptance: copyAcceptance(input),
         }),
       );
@@ -1066,6 +1146,7 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
 
   pages.forEach((page, pageIndex) => {
     page.sections.forEach((sectionId, sectionIndex) => {
+      const imageFlags = structureFlags(page, listings, sectionId);
       drafts.push(
         job(claim, {
           phase: "improbability-drive",
@@ -1076,6 +1157,8 @@ function buildDrafts(input: CleanInput, claim: (id: string) => string): Draft[] 
           files: [componentFile(stack, `Section${pascal(slugId(sectionId))}`)],
           requirement: `REQ-IMAGE-${slugId(sectionId)}`,
           detailPage: detailPages.has(page.id),
+          listingDetail: imageFlags.listingDetail,
+          listingCards: imageFlags.listingCards,
           acceptance: [
             `The generated still for this section is src/assets/generated/${slugId(sectionId)}.webp.`,
             "Use the supplied image when it fits.",

@@ -30,6 +30,24 @@ export const CHROME_COPY_RULE =
 export const OFFER_ONCE_RULE =
   "The legal disclaimer appears once in the footer and at most once next to the inquiry form. The offer line appears once per page. Other sections do not repeat them.";
 
+/**
+ * A listing with no real photos shows the owner's hero crop.
+ * A concept still is not a listing photo, and a thin gallery is not rendered.
+ */
+export const LISTING_PHOTO_RULE =
+  "When a listing has no real photos, use the owner's supplied hero image, cropped to fit, with a small Photos coming soon label. Never use a stock, generated, or concept image as a listing photo and never caption one concept. Do not render a gallery, carousel, or its controls when there are fewer than two real photos.";
+
+/**
+ * The home page shows listing cards and path cards.
+ * Direction labels in the brief are instructions, not headings.
+ */
+export const HOME_STRUCTURE_RULE =
+  "Show the listing cards using the shared card component, with the brief's fade-in, honouring prefers-reduced-motion. Present the site's main paths as calm cards with a short line and a link each, not a bare link list. Brief direction lines (Motion, Layout, Tone, Voice and similar labels) are instructions, never visible headings or copy.";
+
+/** A listing page has one spec card and one inquiry form. */
+export const LISTING_PAGE_RULE =
+  "Exactly one spec card and exactly one inquiry form on the page. Known values are shown as values. A missing value reads Ask us in its own row once, not as a link repeated for every row. Sections do not re-render a block another section already shows.";
+
 export const SITE_RULES = [
   "TypeScript strict. Do not use any.",
   "No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.",
