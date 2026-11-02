@@ -3,7 +3,12 @@
  * A concept caption, an empty gallery, a repeated spec or inquiry block, and a
  * home page that names listings without a card each fail on their own.
  * Comments, scripts, and styles are ignored. Header, footer, and nav may
- * repeat a heading. A prompt that does not own the file is filtered later.
+ * repeat a heading.
+ * Page-content hits (a concept caption, a repeated block) are filtered later
+ * to dist pages the prompt owns. Empty gallery and home listings are feature
+ * checks. They fail a prompt only when its requirement ids own that feature
+ * and the hit is on a dist page it owns, or the prompt is QA or launch.
+ * A section or art requirement does not own those two checks.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";

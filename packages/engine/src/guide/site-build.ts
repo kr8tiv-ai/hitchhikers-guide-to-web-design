@@ -2463,7 +2463,7 @@ function readGallery(file: string): GalleryNote[] {
   return notes;
 }
 
-/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, or a wrong listing structure. */
+/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, or a listing structure its requirements own. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
@@ -2478,9 +2478,14 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
  * QA and launch read every built page. Any other prompt fails only for a dist
  * page its source files own. A component path owns no dist page, so a prompt
  * is not failed for a file it does not own. Narration stays on the visible-copy
- * baseline. A fake address, a repeated sentence, a concept caption, an empty
- * gallery, a repeated spec or inquiry block, and a home page without listing
- * cards are not pattern counts.
+ * baseline. Placeholder contact, a repeated sentence, a concept caption, and a
+ * repeated spec or inquiry block use that owned-page rule. They are not pattern
+ * counts.
+ * Empty gallery and home listings are feature checks. They fail a prompt only
+ * when it owns that feature on an owned dist page. A page job and an image set
+ * own both. A gallery or carousel feature owns the gallery. A listing or card
+ * requirement owns the home listings. A section or art prompt owns neither,
+ * even when it lists the page file, unless the id itself is a listing or card.
  */
 function surfaceCloseReason(projectDir: string, promptText: string, files: readonly string[]): string {
   const fullSite = promptRequiresFullVisibleCopy(promptText, files);
@@ -2492,13 +2497,43 @@ function surfaceCloseReason(projectDir: string, promptText: string, files: reado
   const dist = path.join(projectDir, "dist");
   const keep = (hits: readonly SurfaceHit[]): SurfaceHit[] =>
     fullSite ? [...hits] : hits.filter((hit) => ownedDist.has(hit.file));
+  const feature = (kind: "gallery" | "listings", hits: readonly SurfaceHit[]): SurfaceHit[] => {
+    if (fullSite) return [...hits];
+    if (!promptOwnsStructureFeature(promptText, kind)) return [];
+    return hits.filter((hit) => ownedDist.has(hit.file));
+  };
   const placeholder = formatPlaceholderContactFailure(keep(scanPlaceholderContacts(dist)));
   const repeated = formatRepeatedSentenceFailure(keep(scanRepeatedSentences(dist)));
   const concept = formatConceptImageFailure(keep(scanConceptImages(dist)));
-  const gallery = formatEmptyGalleryFailure(keep(scanEmptyGalleries(dist)));
+  const gallery = formatEmptyGalleryFailure(feature("gallery", scanEmptyGalleries(dist)));
   const duplicate = formatDuplicateBlockFailure(keep(scanDuplicateBlocks(dist)));
-  const home = formatHomeListingsFailure(keep(scanHomeListings(dist)));
+  const home = formatHomeListingsFailure(feature("listings", scanHomeListings(dist)));
   return [placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
+}
+
+/**
+ * Requirement ids come from the Requirements line.
+ * Page jobs and image sets own both feature checks. A gallery or carousel
+ * feature owns the gallery. A listing or card id owns the home listings.
+ */
+function promptOwnsStructureFeature(promptText: string, feature: "gallery" | "listings"): boolean {
+  const galleryToken = (token: string): boolean =>
+    token === "gallery" || token === "galleries" || token === "carousel" || token === "carousels";
+  const listingToken = (token: string): boolean =>
+    token === "card" || token === "cards" || token === "listing" || token === "listings";
+  for (const raw of promptText.split("\n")) {
+    const match = /^Requirements:\s*(.+)$/.exec(raw.trim());
+    if (match?.[1] === undefined) continue;
+    for (const part of match[1].split(",")) {
+      const id = part.trim();
+      if (!/^REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*$/i.test(id)) continue;
+      if (/^REQ-PAGE-[A-Z0-9]/i.test(id) || /^REQ-IMAGE-[A-Z0-9]/i.test(id)) return true;
+      const tokens = id.toLowerCase().split("-");
+      if (feature === "gallery" && /^REQ-FEAT-/i.test(id) && tokens.some(galleryToken)) return true;
+      if (feature === "listings" && tokens.some(listingToken)) return true;
+    }
+  }
+  return false;
 }
 
 function visibleCopyCloseReason(
