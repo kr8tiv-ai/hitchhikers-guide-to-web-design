@@ -2595,12 +2595,34 @@ function ownedVisitorHits(projectDir: string, promptText: string, changed: reado
   return hits;
 }
 
+/**
+ * Hits already in dist on a page this prompt owns, before its session starts.
+ * The close check fails them as Owned page even when a component another
+ * prompt wrote put them there, so the session hears about them up front.
+ * A hit that also shows on a page this prompt does not own is shared chrome
+ * and is left out: it fails only when its count goes up.
+ */
+function ownedPageDistHits(projectDir: string, promptText: string, files: readonly string[]): VisibleCopyHit[] {
+  const owned = new Set<string>();
+  for (const rel of ownedSourcePaths(promptText, files)) {
+    for (const html of distHtmlForOwnedSource(rel)) owned.add(html);
+  }
+  if (owned.size === 0) return [];
+  const all = collectVisibleCopyHits(path.join(projectDir, "dist"));
+  const shared = new Set<string>();
+  for (const hit of all) if (!owned.has(hit.file)) shared.add(`${hit.patternId}\0${hit.snippet}`);
+  return all
+    .filter((hit) => owned.has(hit.file) && !shared.has(`${hit.patternId}\0${hit.snippet}`))
+    .map((hit) => ({ ...hit, file: `dist/${hit.file}` }));
+}
+
 /** Session text only. The prompt file's task stays as it was written. */
 function writeSessionPrompt(projectDir: string, promptId: string, promptPath: string, priorRecovery: string): string {
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const ownedFiles = parseExpectedFiles(promptText);
   if (!shouldScanVisibleCopy(promptText, ownedFiles)) return promptPath;
-  const block = formatFixBeforeFinish(ownedVisitorHits(projectDir, promptText), priorRecovery);
+  const hits = [...ownedVisitorHits(projectDir, promptText), ...ownedPageDistHits(projectDir, promptText, ownedFiles)];
+  const block = formatFixBeforeFinish(hits, priorRecovery);
   if (block === "") return promptPath;
   const base = readOptional(promptPath);
   const file = path.join(projectDir, ".hitchhiker", "tmp", `session-${promptId}.md`);

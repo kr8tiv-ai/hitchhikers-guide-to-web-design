@@ -48,6 +48,17 @@ export const HOME_STRUCTURE_RULE =
 export const LISTING_PAGE_RULE =
   "Exactly one spec card and exactly one inquiry form on the page. Known values are shown as values. A missing value reads Ask us in its own row once, not as a link repeated for every row. Sections do not re-render a block another section already shows.";
 
+/**
+ * A second language the brief asks for is written, not left as a gap.
+ * A translation of approved copy is not an invented fact.
+ */
+export const SECOND_LANGUAGE_RULE =
+  "When the brief asks for a second language, write that language's copy yourself from the approved copy, in the same calm voice. A translation is not a missing fact: never mark it TODO, never leave a data-copy-* attribute or language slot as TODO or empty, and never show the first language in its place.";
+
+/** A page shows each block once, even when several features attach to it. */
+export const ONE_BLOCK_PER_PAGE_RULE =
+  "Each block renders once per page. A feature added to a page (filters, sort, favorites, a map) attaches to the block that already shows the listings or content. It does not render a second copy of the cards, their headings, or their ids.";
+
 export const SITE_RULES = [
   "TypeScript strict. Do not use any.",
   "No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.",
@@ -61,5 +72,8 @@ export const SITE_RULES = [
   `No invented facts, numbers, names, quotes, prices or testimonials. ${MISSING_FACT_RULE}`,
   "A real person, place, product or listing is never generated.",
   VISITOR_COPY_RULE,
+  CHROME_COPY_RULE,
+  SECOND_LANGUAGE_RULE,
+  ONE_BLOCK_PER_PAGE_RULE,
   "The workspace is this folder only: use relative paths, do not read or list the parent folder, sibling projects, dot-folders such as .agents or .claude, or other drives, keep any temporary or commit-message files inside .hitchhiker/tmp or pass git commit -m directly, never write to OS temp folders such as AppData/Local/Temp or /tmp, and if something is missing, say so in the report and keep going.",
 ].join("\n");
