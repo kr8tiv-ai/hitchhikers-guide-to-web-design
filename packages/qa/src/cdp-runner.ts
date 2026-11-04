@@ -9,10 +9,16 @@
  * Port 4175 is the desk. It is refused before a browser starts. Every
  * navigation uses CDP_NAV_TIMEOUT_MS. The CLI has no qa command group,
  * so there is no `hh qa cdp` entry.
+ *
+ * checks defaults to base and optical for hero and page. Optical facts
+ * use a canvas ink measure, CSS.forcePseudoState, and
+ * Emulation.setEmulatedMedia. design.optical.enabled false drops the
+ * optical pass. A collection error leaves the base report intact.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { defaultConfig, loadConfig, type OpticalConfig } from "@hitchhiker/engine";
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Browser, Page } from "playwright";
 import type { A11yImpact } from "./a11y-gate.ts";
@@ -27,6 +33,7 @@ import {
   toHex,
   type AxeSample,
   type CdpAssertionReport,
+  type CdpCheck,
   type CdpScope,
   type CollectedBoxes,
   type CollectedFacts,
@@ -37,6 +44,16 @@ import {
   type StyleSample,
   type TextBoxSample,
 } from "./cdp-assertions.ts";
+import {
+  OPTICAL_STATE_PROPS,
+  motionSamplesFromReadings,
+  opticalCollectExpression,
+  opticalMotionExpression,
+  opticalStateFromStyles,
+  readOpticalPayload,
+  type OpticalFacts,
+  type OpticalStateSample,
+} from "./optical-checks.ts";
 import { withChromium } from "./playwright-opener.ts";
 
 export const CDP_WIDTHS = [375, 768, 1440] as const;
@@ -60,6 +77,8 @@ export interface CdpCollectRequest {
   scope: CdpScope;
   sections: readonly SectionSpec[];
   timeoutMs: number;
+  /** Omitted by older callers. The browser then runs base and optical. */
+  checks?: readonly CdpCheck[];
 }
 
 export type CdpCollector = (request: CdpCollectRequest) => Promise<CollectedFacts>;
@@ -77,6 +96,10 @@ export interface RunCdpAssertionsInput {
   /** Tests pass a fake. Production leaves this unset and uses Playwright. */
   collect?: CdpCollector;
   timeoutMs?: number;
+  /** Defaults to base and optical for hero and page. */
+  checks?: readonly CdpCheck[];
+  /** Overrides design.optical from projectDir. Missing fields keep the loaded values. */
+  optical?: Partial<OpticalConfig>;
 }
 
 export interface CdpAssertionRun {
@@ -106,23 +129,34 @@ interface PlannedPage {
 export async function runCdpAssertions(input: RunCdpAssertionsInput): Promise<CdpAssertionRun> {
   refuseDeskPort(input.baseUrl);
   const designMd = resolveDesign(input);
+  const optical = resolveOptical(input);
+  const checks = resolveChecks(input, optical);
   const sitemap = resolveOptional(input.sitemap, input.projectDir, SITEMAP_REL);
   const wireframe = resolveOptional(input.wireframe, input.projectDir, WIREFRAME_REL);
   const timeoutMs = input.timeoutMs ?? CDP_NAV_TIMEOUT_MS;
   const widths = input.widths === undefined ? [...CDP_WIDTHS] : [...input.widths];
   const pages = normalizePages(input.pages, sitemap, wireframe);
-  const requests = buildRequests(pages, input.baseUrl, widths, input.scope, timeoutMs);
+  const requests = buildRequests(pages, input.baseUrl, widths, input.scope, timeoutMs, checks);
   const reports: CdpAssertionReport[] = [];
   if (input.collect !== undefined) {
     for (const request of requests) {
-      reports.push(await evaluateRequest(designMd, input.scope, request, input.collect));
+      reports.push(await evaluateRequest(designMd, input.scope, request, input.collect, optical));
     }
   } else {
     await withChromium(async (browser) => {
       for (const request of requests) {
         try {
           const facts = await collectInBrowser(browser, request);
-          reports.push(evaluateCollectedFacts({ designMd, sections: request.sections, scope: input.scope, facts }));
+          reports.push(
+            evaluateCollectedFacts({
+              designMd,
+              sections: request.sections,
+              scope: input.scope,
+              facts,
+              checks: request.checks ?? checks,
+              optical,
+            }),
+          );
         } catch (error) {
           reports.push(navigationReport(request, error));
         }
@@ -147,9 +181,12 @@ export async function collectInBrowser(browser: Browser, request: CdpCollectRequ
       try {
         const snapshot = await readSnapshot(session, request.sections.map((section) => section.id));
         await overlayComputedStyle(session, snapshot.styles);
+        const optical = (request.checks ?? ["base", "optical"]).includes("optical")
+          ? await collectOptical(session, request.sections.map((section) => section.id))
+          : undefined;
         const axe = await readAxe(page, request);
         const interactions = await readInteractions(page, request.sections);
-        return {
+        const facts: CollectedFacts = {
           url: request.url,
           width: request.width,
           styles: snapshot.styles,
@@ -157,6 +194,8 @@ export async function collectInBrowser(browser: Browser, request: CdpCollectRequ
           interactions,
           axe,
         };
+        if (optical !== undefined) facts.optical = optical;
+        return facts;
       } finally {
         await session.detach();
       }
@@ -220,13 +259,14 @@ function buildRequests(
   widths: readonly number[],
   scope: CdpScope,
   timeoutMs: number,
+  checks: readonly CdpCheck[],
 ): CdpCollectRequest[] {
   const requests: CdpCollectRequest[] = [];
   for (const page of pages) {
     const sections = sectionsInScope(page.sections, scope);
     const url = joinUrl(baseUrl, page.path);
     for (const width of widths) {
-      requests.push({ url, width, scope, sections, timeoutMs });
+      requests.push({ url, width, scope, sections, timeoutMs, checks });
     }
   }
   return requests;
@@ -243,13 +283,43 @@ async function evaluateRequest(
   scope: CdpScope,
   request: CdpCollectRequest,
   collect: CdpCollector,
+  optical: OpticalConfig,
 ): Promise<CdpAssertionReport> {
   try {
     const facts = await collect(request);
-    return evaluateCollectedFacts({ designMd, sections: request.sections, scope, facts });
+    return evaluateCollectedFacts({
+      designMd,
+      sections: request.sections,
+      scope,
+      facts,
+      checks: request.checks ?? ["base", "optical"],
+      optical,
+    });
   } catch (error) {
     return navigationReport(request, error);
   }
+}
+
+function resolveOptical(input: RunCdpAssertionsInput): OpticalConfig {
+  const loaded =
+    typeof input.projectDir === "string" ? loadConfig(input.projectDir).design.optical : defaultConfig().design.optical;
+  if (input.optical === undefined) return loaded;
+  return {
+    enabled: input.optical.enabled ?? loaded.enabled,
+    baselineUnit: input.optical.baselineUnit ?? loaded.baselineUnit,
+    centringTolerance: input.optical.centringTolerance ?? loaded.centringTolerance,
+  };
+}
+
+function resolveChecks(input: RunCdpAssertionsInput, optical: OpticalConfig): CdpCheck[] {
+  const requested = input.checks === undefined ? (["base", "optical"] as const) : input.checks;
+  const checks: CdpCheck[] = [];
+  for (const check of requested) {
+    if (check !== "base" && check !== "optical") continue;
+    if (check === "optical" && !optical.enabled) continue;
+    if (!checks.includes(check)) checks.push(check);
+  }
+  return checks;
 }
 
 function navigationReport(request: CdpCollectRequest, error: unknown): CdpAssertionReport {
@@ -701,4 +771,111 @@ function numberOr(value: unknown, fallback: number): number {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+async function collectOptical(session: CdpSessionLike, sectionIds: readonly string[]): Promise<OpticalFacts> {
+  let payload = readOpticalPayload(null);
+  try {
+    await session.send("DOM.enable");
+    await session.send("CSS.enable");
+    payload = readOpticalPayload(await evaluateJson(session, opticalCollectExpression(sectionIds)));
+  } catch {
+    return {};
+  }
+  const states: OpticalStateSample[] = [];
+  for (const selector of payload.stateTargets) {
+    const sample = await readStateSample(session, selector);
+    if (sample !== null) states.push(sample);
+  }
+  let motion: OpticalFacts["motion"];
+  if (payload.motionTargets.length > 0) {
+    try {
+      motion = await readReducedMotion(session, payload.motionTargets);
+    } catch {
+      motion = [];
+    }
+  }
+  return {
+    centring: payload.centring,
+    baselines: payload.baselines,
+    tracking: payload.tracking,
+    symmetry: payload.symmetry,
+    states,
+    ...(motion !== undefined ? { motion } : {}),
+  };
+}
+
+async function readStateSample(session: CdpSessionLike, selector: string): Promise<OpticalStateSample | null> {
+  const nodeId = await nodeIdFor(session, selector);
+  if (nodeId === 0) return null;
+  try {
+    const rest = await computedProps(session, nodeId);
+    await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["hover"] });
+    const hover = await computedProps(session, nodeId);
+    await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["focus", "focus-visible"] });
+    const focus = await computedProps(session, nodeId);
+    return opticalStateFromStyles({ selector, visible: true, rest, hover, focus });
+  } catch {
+    return null;
+  } finally {
+    await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] }).catch(() => undefined);
+  }
+}
+
+async function readReducedMotion(session: CdpSessionLike, selectors: readonly string[]) {
+  await session.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  try {
+    return motionSamplesFromReadings(await evaluateJson(session, opticalMotionExpression(selectors)));
+  } finally {
+    await session.send("Emulation.setEmulatedMedia", { features: [] }).catch(() => undefined);
+  }
+}
+
+async function nodeIdFor(session: CdpSessionLike, selector: string): Promise<number> {
+  try {
+    const doc = asRecord(await session.send("DOM.getDocument", { depth: 0 }));
+    const root = asRecord(doc?.root);
+    const rootId = typeof root?.nodeId === "number" ? root.nodeId : 0;
+    if (rootId === 0) return 0;
+    const found = asRecord(await session.send("DOM.querySelector", { nodeId: rootId, selector }));
+    return typeof found?.nodeId === "number" ? found.nodeId : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function computedProps(session: CdpSessionLike, nodeId: number): Promise<Record<string, string>> {
+  const styled = asRecord(await session.send("CSS.getComputedStyleForNode", { nodeId }));
+  const entries = Array.isArray(styled?.computedStyle) ? styled.computedStyle : [];
+  const map = new Map<string, string>();
+  for (const entry of entries) {
+    const row = asRecord(entry);
+    if (row === null || typeof row.name !== "string" || typeof row.value !== "string") continue;
+    map.set(row.name, row.value);
+  }
+  const props: Record<string, string> = {};
+  for (const name of OPTICAL_STATE_PROPS) {
+    const value = map.get(name);
+    if (value !== undefined) props[name] = value;
+  }
+  return props;
+}
+
+async function evaluateJson(session: CdpSessionLike, expression: string): Promise<unknown> {
+  const evaluated = asRecord(
+    await session.send("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+    }),
+  );
+  if (evaluated?.exceptionDetails !== undefined) return null;
+  const result = asRecord(evaluated?.result);
+  if (typeof result?.value !== "string") return result?.value ?? null;
+  try {
+    return JSON.parse(result.value);
+  } catch {
+    return null;
+  }
 }

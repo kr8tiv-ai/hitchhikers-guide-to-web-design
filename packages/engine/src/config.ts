@@ -80,9 +80,22 @@ export interface GuideConfig {
   design: DesignGateConfig;
 }
 
+/**
+ * Optical micro-detail checks (245x). Defaults stay on. A project file that
+ * only sets minReferenceImages still receives this block.
+ */
+export interface OpticalConfig {
+  enabled: boolean;
+  /** Body line boxes step on this grid unless DESIGN.md names another unit. */
+  baselineUnit: number;
+  /** Ink may sit this fraction of the line width off the box centre. */
+  centringTolerance: number;
+}
+
 /** How many reference images a design must have before the build. */
 export interface DesignGateConfig {
   minReferenceImages: number;
+  optical: OpticalConfig;
 }
 
 /**
@@ -143,10 +156,16 @@ const TOP_KEYS = [
 
 const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
 
-const DESIGN_KEYS = ["minReferenceImages"] as const;
+const DESIGN_KEYS = ["minReferenceImages", "optical"] as const;
+
+const OPTICAL_KEYS = ["enabled", "baselineUnit", "centringTolerance"] as const;
 
 /** A project with no design block still asks for six reference images. */
 const MIN_REFERENCE_IMAGES = 6;
+
+/** Keep these in step with the optical evaluators. DESIGN.md can override the unit. */
+const OPTICAL_BASELINE_UNIT = 4;
+const OPTICAL_CENTRING_TOLERANCE = 0.015;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
 
@@ -419,7 +438,39 @@ function readDesign(value: unknown): DesignGateConfig {
     minReferenceImages: Object.hasOwn(value, "minReferenceImages")
       ? readIntInRange("design.minReferenceImages", value.minReferenceImages, 0, 100)
       : defaults.minReferenceImages,
+    optical: Object.hasOwn(value, "optical") ? readOptical(value.optical) : defaults.optical,
   };
+}
+
+function readOptical(value: unknown): OpticalConfig {
+  const checked = rejectNull("design.optical", value);
+  if (!isRecord(checked)) fail("design.optical", "expected an object.");
+  rejectUnknown(checked, OPTICAL_KEYS, "design.optical");
+  const defaults = defaultConfig().design.optical;
+  return {
+    enabled: Object.hasOwn(checked, "enabled")
+      ? readBoolean("design.optical.enabled", rejectNull("design.optical.enabled", checked.enabled))
+      : defaults.enabled,
+    baselineUnit: Object.hasOwn(checked, "baselineUnit")
+      ? readIntInRange(
+          "design.optical.baselineUnit",
+          rejectNull("design.optical.baselineUnit", checked.baselineUnit),
+          1,
+          64,
+        )
+      : defaults.baselineUnit,
+    centringTolerance: Object.hasOwn(checked, "centringTolerance")
+      ? readCentringTolerance(rejectNull("design.optical.centringTolerance", checked.centringTolerance))
+      : defaults.centringTolerance,
+  };
+}
+
+function readCentringTolerance(value: unknown): number {
+  const amount = readFiniteNumber("design.optical.centringTolerance", value);
+  if (amount < 0 || amount > 1) {
+    fail("design.optical.centringTolerance", `${amount} is outside 0 to 1.`);
+  }
+  return amount;
 }
 
 function readMedia(value: unknown): MediaConfig {
@@ -484,6 +535,11 @@ export function defaultConfig(): GuideConfig {
     },
     design: {
       minReferenceImages: MIN_REFERENCE_IMAGES,
+      optical: {
+        enabled: true,
+        baselineUnit: OPTICAL_BASELINE_UNIT,
+        centringTolerance: OPTICAL_CENTRING_TOLERANCE,
+      },
     },
   };
 }

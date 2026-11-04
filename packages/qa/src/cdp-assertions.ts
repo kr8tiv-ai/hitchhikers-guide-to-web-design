@@ -15,9 +15,10 @@
  * roles is a blocker, as is a wrong font.
  */
 
-import { designSectionBody, designTokenTree, type DesignTokenNode } from "@hitchhiker/engine";
+import { designSectionBody, designTokenTree, type DesignTokenNode, type OpticalConfig } from "@hitchhiker/engine";
 import type { A11yImpact } from "./a11y-gate.ts";
 import { PRIMARY_TARGET_MIN } from "./mobile-checks.ts";
+import { evaluateOptical, type OpticalFacts } from "./optical-checks.ts";
 import { SPACING_SNAP_PX } from "./spacing-gate.ts";
 
 /** One computed font size may sit this far from a type step. */
@@ -33,6 +34,8 @@ export const SUMMARY_MAX_BYTES = 2_048;
 const OVERFLOW_SLOP_PX = 1;
 
 export type CdpScope = "hero" | "page";
+
+export type CdpCheck = "base" | "optical";
 
 export type InteractionProbe = "nav-toggle" | "accordion" | "tab" | "form" | "hover" | "scroll-reveal";
 
@@ -129,6 +132,8 @@ export interface CollectedFacts {
   boxes: CollectedBoxes;
   interactions: readonly InteractionSample[];
   axe: readonly AxeSample[];
+  /** Present when the optical pass collected ink, rhythm, state, and motion facts. */
+  optical?: OpticalFacts;
 }
 
 export interface DesignChecks {
@@ -342,16 +347,35 @@ export function evaluateCollectedFacts(input: {
   sections?: readonly SectionSpec[];
   scope?: CdpScope;
   facts: CollectedFacts;
+  checks?: readonly CdpCheck[];
+  optical?: OpticalConfig;
 }): CdpAssertionReport {
   const scope = input.scope ?? "page";
   const sections = sectionsInScope(input.sections ?? [], scope);
-  const checks = designChecksFrom(input.designMd);
+  const checks = input.checks ?? ["base", "optical"];
   const blockers: Finding[] = [];
   const fixes: Finding[] = [];
-  judgeStyles(input.facts, checks, blockers, fixes);
-  judgeBoxes(input.facts, blockers);
-  judgeInteractions(input.facts.interactions, sections, blockers);
-  judgeAxe(input.facts.axe, blockers, fixes);
+  if (checks.includes("base")) {
+    const design = designChecksFrom(input.designMd);
+    judgeStyles(input.facts, design, blockers, fixes);
+    judgeBoxes(input.facts, blockers);
+    judgeInteractions(input.facts.interactions, sections, blockers);
+    judgeAxe(input.facts.axe, blockers, fixes);
+  }
+  if (checks.includes("optical") && input.optical?.enabled !== false) {
+    const judged = evaluateOptical(input.facts.optical, {
+      width: input.facts.width,
+      designMd: input.designMd,
+      ...(input.optical === undefined
+        ? {}
+        : {
+            baselineUnit: input.optical.baselineUnit,
+            centringTolerance: input.optical.centringTolerance,
+          }),
+    });
+    blockers.push(...judged.blockers);
+    fixes.push(...judged.fixes);
+  }
   return {
     url: input.facts.url,
     width: input.facts.width,
@@ -362,13 +386,20 @@ export function evaluateCollectedFacts(input: {
   };
 }
 
-/** BLOCKERS, then FIXES. One line each. The text stays under SUMMARY_MAX_BYTES. */
+/**
+ * BLOCKERS, then FIXES, then OPTICAL. Severity lines keep selector, actual,
+ * and expected. OPTICAL lines are the finding instructions. The text stays
+ * under SUMMARY_MAX_BYTES.
+ */
 export function summaryForModel(blockers: readonly Finding[], fixes: readonly Finding[]): string {
+  const optical = [...blockers, ...fixes].filter((item) => item.kind.startsWith("optical."));
   const lines = [
     "BLOCKERS",
     ...(blockers.length === 0 ? ["None"] : blockers.map(formatFinding)),
     "FIXES",
     ...(fixes.length === 0 ? ["None"] : fixes.map(formatFinding)),
+    "OPTICAL",
+    ...(optical.length === 0 ? ["None"] : optical.map(opticalLine)),
   ];
   const full = lines.join("\n");
   if (byteLength(full) <= SUMMARY_MAX_BYTES) return full;
@@ -611,6 +642,11 @@ function finding(kind: string, selector: string, actual: string, expected: strin
 function formatFinding(item: Finding): string {
   const label = item.kind.includes(".") ? item.kind.slice(item.kind.indexOf(".") + 1) : item.kind;
   return `${item.selector} ${label}: actual ${item.actual}, expected ${item.expected}`;
+}
+
+function opticalLine(item: Finding): string {
+  const instruction = item.detail.trim();
+  return instruction !== "" ? instruction : formatFinding(item);
 }
 
 function copySection(section: SectionSpec): SectionSpec {

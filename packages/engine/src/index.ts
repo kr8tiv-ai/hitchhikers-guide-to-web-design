@@ -28,10 +28,12 @@ export type {
   AiConfig,
   AiEffort,
   DeployTarget,
+  DesignGateConfig,
   Effort,
   GuideConfig,
   InterviewDepth,
   MediaConfig,
+  OpticalConfig,
   SessionIdMode,
   VoiceEngine,
 } from "./config.ts";

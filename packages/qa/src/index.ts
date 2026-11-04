@@ -227,6 +227,7 @@ export type {
   AxeSample,
   CdpAssertion,
   CdpAssertionReport,
+  CdpCheck,
   CdpScope,
   CollectedBoxes,
   CollectedFacts,
@@ -241,6 +242,20 @@ export type {
   TapSample,
   TextBoxSample,
 } from "./cdp-assertions.ts";
+export {
+  evaluateOptical,
+  opticalFixInstructions,
+  opticalMarksFromDesign,
+} from "./optical-checks.ts";
+export type {
+  OpticalBaselineSample,
+  OpticalCentringSample,
+  OpticalFacts,
+  OpticalMotionSample,
+  OpticalStateSample,
+  OpticalSymmetrySample,
+  OpticalTrackingSample,
+} from "./optical-checks.ts";
 export {
   CDP_NAV_TIMEOUT_MS,
   CDP_WIDTHS,
