@@ -209,3 +209,48 @@ export type {
   MotionRunInput,
 } from "./gates/registry.ts";
 export { decideReview } from "./verdict.ts";
+export {
+  INTERACTION_LIMIT_MS,
+  SUMMARY_MAX_BYTES,
+  TYPE_SIZE_TOLERANCE_PX,
+  assertionsFromDesign,
+  designChecksFrom,
+  evaluateCollectedFacts,
+  probesForSection,
+  sectionSelectors,
+  sectionSpecsForPage,
+  sectionsInScope,
+  summaryForModel,
+  toHex,
+} from "./cdp-assertions.ts";
+export type {
+  AxeSample,
+  CdpAssertion,
+  CdpAssertionReport,
+  CdpScope,
+  CollectedBoxes,
+  CollectedFacts,
+  DesignChecks,
+  Finding,
+  InteractionProbe,
+  InteractionSample,
+  RectSample,
+  SectionSpec,
+  StyleRole,
+  StyleSample,
+  TapSample,
+  TextBoxSample,
+} from "./cdp-assertions.ts";
+export {
+  CDP_NAV_TIMEOUT_MS,
+  CDP_WIDTHS,
+  collectInBrowser,
+  runCdpAssertions,
+} from "./cdp-runner.ts";
+export type {
+  CdpAssertionRun,
+  CdpCollectRequest,
+  CdpCollector,
+  CdpPageInput,
+  RunCdpAssertionsInput,
+} from "./cdp-runner.ts";
