@@ -2,7 +2,7 @@
  * BUG-031: `hh brief --approve` and `hh next --run` share the site build runner.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -14,10 +14,12 @@ import {
   loadQueue,
   readBriefDesk,
   readBuildRun,
+  readDirectionDeal,
   saveDirectionDeal,
   setProjectBuildRunner,
   siteBuildSettled,
   startSiteBuild,
+  writeDesignLock,
   type BuildSpawn,
   type ThinkRequest,
   type ThinkResult,
@@ -96,13 +98,30 @@ test("Start build and hh next --run spawn through the injected runner once", asy
     const brief = readBriefDesk(dir).markdown;
     advanceDesignStages(dir, { brief, approval: { stage: "sitemap", text: "Approved." } });
     advanceDesignStages(dir, { brief, approval: { stage: "wireframe", text: "Approved." } });
+    let deal = readDirectionDeal(dir);
+    if (deal === null || deal.pickedId === null) {
+      if (deal === null) {
+        deal = dealDirections();
+        saveDirectionDeal(dir, deal);
+      }
+      const first = deal.directions[0];
+      assert.ok(first);
+      chooseDirection(dir, first.id, "It fits the visit.");
+      deal = readDirectionDeal(dir) ?? deal;
+    }
+    assert.ok(deal.pickedId);
+    const refs = path.join(dir, "reference", "refs");
+    mkdirSync(refs, { recursive: true });
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    for (let index = 0; index < 6; index += 1) {
+      const file = path.join(refs, `shot-${index}.png`);
+      if (!existsSync(file)) writeFileSync(file, png);
+    }
     advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
-    const deal = dealDirections();
-    saveDirectionDeal(dir, deal);
-    const first = deal.directions[0];
-    assert.ok(first);
-    chooseDirection(dir, first.id, "It fits the visit.");
-    advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
+    writeDesignLock(dir, deal.pickedId);
     advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
     advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
     assert.equal(calls, 0);

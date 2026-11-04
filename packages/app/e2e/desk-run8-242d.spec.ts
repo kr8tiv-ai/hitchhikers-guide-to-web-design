@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { createSiteProject, dealDirections, deterministicBrief, draftBriefPlan, projectPlanCoverage, renderSiteBrief, saveDirectionDeal, saveProjectFile } from "@hitchhiker/engine";
+import { writeGateShots } from "./design-then-build.ts";
 import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -162,7 +163,7 @@ test("the design stages keep the Run 8 pages, the kit, the pick, and the checks"
     await expect(guide).not.toContainText("Gambarino");
     await expect(guide).not.toContainText("Author");
     await expect(guide).not.toContainText("FOV");
-    await page.getByRole("button", { name: "Approve style guide" }).click();
+    writeGateShots(dir);
     await page.locator("[data-direction-reason]").fill("Boska fits the calm page.");
     await page.locator("[data-pick-direction]").first().click();
     await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible({ timeout: 30_000 });

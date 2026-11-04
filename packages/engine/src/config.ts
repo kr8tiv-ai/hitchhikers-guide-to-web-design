@@ -77,6 +77,12 @@ export interface GuideConfig {
   /** True after the first-five-minutes tour is skipped or finished. */
   tourSeen: boolean;
   media: MediaConfig;
+  design: DesignGateConfig;
+}
+
+/** How many reference images a design must have before the build. */
+export interface DesignGateConfig {
+  minReferenceImages: number;
 }
 
 /**
@@ -132,9 +138,15 @@ const TOP_KEYS = [
   "toolInstalls",
   "tourSeen",
   "media",
+  "design",
 ] as const;
 
 const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
+
+const DESIGN_KEYS = ["minReferenceImages"] as const;
+
+/** A project with no design block still asks for six reference images. */
+const MIN_REFERENCE_IMAGES = 6;
 
 const AI_KEYS = ["model", "effort", "timeoutMs"] as const;
 
@@ -399,6 +411,17 @@ function readAi(value: unknown, modelFallback: string, effortFallback: Effort): 
   return { model, effort, timeoutMs };
 }
 
+function readDesign(value: unknown): DesignGateConfig {
+  if (!isRecord(value)) fail("design", "expected an object.");
+  rejectUnknown(value, DESIGN_KEYS, "design");
+  const defaults = defaultConfig().design;
+  return {
+    minReferenceImages: Object.hasOwn(value, "minReferenceImages")
+      ? readIntInRange("design.minReferenceImages", value.minReferenceImages, 0, 100)
+      : defaults.minReferenceImages,
+  };
+}
+
 function readMedia(value: unknown): MediaConfig {
   if (!isRecord(value)) fail("media", "expected an object.");
   rejectUnknown(value, MEDIA_KEYS, "media");
@@ -458,6 +481,9 @@ export function defaultConfig(): GuideConfig {
       maxVariantsPerImage: MEDIA_MAX_VARIANTS_PER_IMAGE,
       maxRunBytes: MEDIA_MAX_RUN_BYTES,
       maxWidth: MEDIA_MAX_WIDTH,
+    },
+    design: {
+      minReferenceImages: MIN_REFERENCE_IMAGES,
     },
   };
 }
@@ -521,6 +547,7 @@ export function parseConfig(raw: unknown): GuideConfig {
     toolInstalls: readOptional(raw, "toolInstalls", defaults.toolInstalls, readInstalls),
     tourSeen: readOptional(raw, "tourSeen", defaults.tourSeen, (value) => readBoolean("tourSeen", value)),
     media: readOptional(raw, "media", defaults.media, readMedia),
+    design: readOptional(raw, "design", defaults.design, readDesign),
   };
 }
 

@@ -33,9 +33,19 @@ function sample(): Record<string, string> {
   };
 }
 
+const GATE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 function seed(dir: string): void {
   mkdirSync(path.join(dir, "interview"), { recursive: true });
   mkdirSync(path.join(dir, ".hitchhiker"), { recursive: true });
+  const refs = path.join(dir, "reference", "refs");
+  mkdirSync(refs, { recursive: true });
+  for (let index = 0; index < 6; index += 1) {
+    writeFileSync(path.join(refs, `shot-${index}.png`), GATE_PNG);
+  }
   writeFileSync(
     path.join(dir, "interview", "tree.yaml"),
     `questions:

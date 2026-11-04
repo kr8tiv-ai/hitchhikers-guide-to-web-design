@@ -3,18 +3,19 @@
  * or when the live runner cannot resolve grok.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { ThinkRequest, ThinkResult } from "../src/ai/think.ts";
-import { dealDirections, saveDirectionDeal, chooseDirection } from "../src/brand/directions.ts";
+import { dealDirections, saveDirectionDeal, chooseDirection, readDirectionDeal } from "../src/brand/directions.ts";
 import {
   approveSiteBrief,
   approveSitePlan,
   readBriefDesk,
   startSiteBuild,
 } from "../src/guide/brief-desk.ts";
+import { writeDesignLock } from "../src/spec/design-lock.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import type { SiteBrief } from "../src/guide/schemas.ts";
 import {
@@ -72,13 +73,30 @@ function think(req: ThinkRequest<unknown>): Promise<ThinkResult<unknown>> {
 function passStages(dir: string, brief: string): void {
   advanceDesignStages(dir, { brief, approval: { stage: "sitemap", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "wireframe", text: "Approved." } });
+  let deal = readDirectionDeal(dir);
+  if (deal === null || deal.pickedId === null) {
+    if (deal === null) {
+      deal = dealDirections();
+      saveDirectionDeal(dir, deal);
+    }
+    const first = deal.directions[0];
+    if (first === undefined) throw new Error("No direction was dealt.");
+    chooseDirection(dir, first.id, "It fits the visit.");
+    deal = readDirectionDeal(dir) ?? deal;
+  }
+  if (deal.pickedId === null) throw new Error("No direction was dealt.");
+  const refs = path.join(dir, "reference", "refs");
+  mkdirSync(refs, { recursive: true });
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  for (let index = 0; index < 6; index += 1) {
+    const file = path.join(refs, `shot-${index}.png`);
+    if (!existsSync(file)) writeFileSync(file, png);
+  }
   advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
-  const deal = dealDirections();
-  saveDirectionDeal(dir, deal);
-  const first = deal.directions[0];
-  if (first === undefined) throw new Error("No direction was dealt.");
-  chooseDirection(dir, first.id, "It fits the visit.");
-  advanceDesignStages(dir, { brief, approval: { stage: "style-guide", text: "Approved." } });
+  writeDesignLock(dir, deal.pickedId);
   advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
 }

@@ -4,7 +4,7 @@
  * The numbers are a starting point. Any appropriate library may carry the work.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { translateBrief, type ArtAnswer } from "./art-direction.ts";
 import { dealDirections, readDirectionDeal, syncResolvedFamilies } from "../brand/directions.ts";
@@ -13,6 +13,8 @@ import { pickType } from "../brand/tokens.ts";
 import { displayRhythm, ownerHeadingSentence, resolveTypeRoles, type DisplayRhythm } from "../brand/type-conflict.ts";
 import { familiesSentence, typeChoiceFor, typeScaleFor } from "../brand/type-scale.ts";
 import { lintDesignMd } from "./design-md-lint.ts";
+import { removeDesignLock } from "./design-lock.ts";
+import { ownerPhotoFiles } from "./reference-shots.ts";
 import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
@@ -87,11 +89,17 @@ export interface DesignFontChoice {
   source: string;
 }
 
+export interface DesignNarrative {
+  directionName?: string;
+  ownerPhotos?: readonly string[];
+}
+
 export function renderDesignMd(
   brief: string,
   answers: readonly BrandAnswer[] = [],
   fonts?: DesignFontChoice | null,
   projectName?: string | null,
+  narrative?: DesignNarrative,
 ): string {
   const art = translateBrief(brief, answers as readonly ArtAnswer[]);
   const band = bandFor(art.motion.score);
@@ -100,7 +108,6 @@ export function renderDesignMd(
   const scale = { ...typeScaleFor(documentText(brief, answers)), familiesLine: chosen.line };
   const wish = typeWishFrom(brief, answers);
   const rhythm = displayRhythm(wish, chosen.display);
-  const techniques = art.motion.techniques.map((technique) => `- ${technique}`);
   const families = [chosen.display, chosen.body];
   const no3d = refuses3d(documentText(brief, answers));
   const button = buttonPair(palette);
@@ -116,6 +123,10 @@ export function renderDesignMd(
     "## Overview",
     "",
     "These tokens are a starting point. Remix them. Any appropriate library may carry a technique.",
+    "",
+    "## Brand idea",
+    "",
+    brandIdeaCopy(brief, narrative?.directionName ?? ""),
     "",
     "## Colors",
     "",
@@ -176,6 +187,10 @@ export function renderDesignMd(
     "",
     "Remix the tokens. Any appropriate library may carry a technique.",
     "",
+    "## Image direction",
+    "",
+    imageDirectionCopy(art.colorGrade, art.light, narrative?.ownerPhotos ?? []),
+    "",
     "## Tokens",
     "",
     `Color tokens: ${colourTokenList(palette)}.`,
@@ -188,8 +203,7 @@ export function renderDesignMd(
     "",
     "## Signature techniques",
     "",
-    art.signatureHero,
-    ...techniques,
+    art.signatureHero.trim() === "" ? "A designed hero with a clear first frame." : art.signatureHero.trim(),
     "Any appropriate library may carry a technique. GSAP, Lenis, Three.js, Motion, anime.js, and CSS are all open.",
     "",
   ].join("\n");
@@ -532,6 +546,13 @@ export function renderMotionModule(
   return source;
 }
 
+let afterDesignMdWritten: ((projectDir: string) => void) | null = null;
+
+/** Registered by the design stages so a changed guide drops the style-guide approval. */
+export function onDesignMdWritten(listener: (projectDir: string) => void): void {
+  afterDesignMdWritten = listener;
+}
+
 export function writeDesignMd(
   projectDir: string,
   brief: string,
@@ -540,14 +561,67 @@ export function writeDesignMd(
 ): string {
   const file = path.join(projectDir, DESIGN_MD_PATH);
   mkdirSync(projectDir, { recursive: true });
-  const effectiveFonts = fonts === undefined ? pickedFontsFromDeal(projectDir) : fonts;
-  const markdown = renderDesignMd(brief, answers, effectiveFonts, readProjectDisplayName(projectDir));
+  const picked = pickedFontsFromDeal(projectDir);
+  const effectiveFonts = picked !== null ? picked : fonts === undefined ? null : fonts;
+  const markdown = renderDesignMd(
+    brief,
+    answers,
+    effectiveFonts,
+    readProjectDisplayName(projectDir),
+    narrativeFor(projectDir),
+  );
+  const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
+  const changed = previous !== null && previous !== markdown;
+  if (changed) removeDesignLock(projectDir);
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
   const chosen = fontChoice(brief, answers, effectiveFonts);
   const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
   syncResolvedFamilies(projectDir, chosen.display, chosen.body, rhythm.fontWeight);
+  if (changed) afterDesignMdWritten?.(projectDir);
   return file;
+}
+
+function narrativeFor(projectDir: string): DesignNarrative {
+  let directionName = "";
+  try {
+    const deal = readDirectionDeal(projectDir);
+    const picked = deal?.directions.find((direction) => direction.id === deal.pickedId);
+    directionName = picked?.name.trim() ?? "";
+  } catch {
+    directionName = "";
+  }
+  let ownerPhotos: string[] = [];
+  try {
+    ownerPhotos = ownerPhotoFiles(projectDir);
+  } catch {
+    ownerPhotos = [];
+  }
+  return { directionName, ownerPhotos };
+}
+
+function brandIdeaCopy(brief: string, directionName: string): string {
+  const flat = calm(brief.replace(/^#+\s+.*$/gm, " "));
+  const sentence = flat.split(/(?<=[.])\s+/).map((part) => part.trim()).find((part) => part !== "") ?? "";
+  const idea = sentence === "" ? "The page holds one visit in a clear first frame." : sentence;
+  const first = idea.endsWith(".") ? idea : `${idea}.`;
+  const named = directionName.trim() === "" ? "The direction" : calm(directionName);
+  return `${first} ${named} carries that idea through the type, the colour, and the stills.`;
+}
+
+function imageDirectionCopy(grade: string, light: string, photos: readonly string[]): string {
+  const names = photos.map((photo) => calm(photo)).filter((photo) => photo !== "");
+  const first =
+    names.length === 0
+      ? "Owner photos come first, and none are on file yet."
+      : `Owner photos come first: ${names.join(", ")}.`;
+  const gradeText = calm(grade).replace(/\.$/, "") || "the palette";
+  const lightText = calm(light).replace(/\.$/, "") || "the light the brief names";
+  return `${first} Generated stills may show the place, the light, and the work the brief names. They may not show unrelated people, stock scenes, or a grade that fights the palette. Crop to the subject and grade toward ${gradeText}, ${lightText}.`;
+}
+
+function calm(value: string): string {
+  return value.replaceAll("!", ".").replaceAll("\u2014", ", ").replace(/\s+/g, " ").trim();
 }
 
 function pickedFontsFromDeal(projectDir: string): DesignFontChoice | null {

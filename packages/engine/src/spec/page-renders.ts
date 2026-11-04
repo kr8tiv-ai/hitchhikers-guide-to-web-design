@@ -9,9 +9,10 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packagedModule } from "../packaged-dir.ts";
+import { DESIGN_LOCK_REL, designLockMatches } from "./design-lock.ts";
 import { ownerPhotoFiles, refreshReferenceReadme, sha256File } from "./reference-shots.ts";
 
-export const DESIGN_LOCK_REL = ".hitchhiker/design-lock.json";
+export { DESIGN_LOCK_REL, designLockMatches };
 export const RENDERS_REL = ".hitchhiker/renders.json";
 
 const RENDER_MODEL = "grok-imagine-image";
@@ -154,21 +155,6 @@ async function runRender(key: string): Promise<void> {
 export function onDesignLocked(projectDir: string): void {
   if (!designLockMatches(projectDir)) return;
   schedulePageRenders(projectDir);
-}
-
-export function designLockMatches(projectDir: string): boolean {
-  const designPath = path.join(projectDir, "DESIGN.md");
-  const lockPath = path.join(projectDir, DESIGN_LOCK_REL);
-  if (!existsSync(designPath) || !existsSync(lockPath)) return false;
-  try {
-    const raw: unknown = JSON.parse(readFileSync(lockPath, "utf8"));
-    if (typeof raw !== "object" || raw === null) return false;
-    const sha = (raw as { sha256?: unknown }).sha256;
-    if (typeof sha !== "string" || sha.trim() === "") return false;
-    return sha === sha256File(designPath);
-  } catch {
-    return false;
-  }
 }
 
 export function listPrimaryPages(projectDir: string): PrimaryPage[] {

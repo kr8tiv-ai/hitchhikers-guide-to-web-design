@@ -2,7 +2,8 @@
  * Capture screenshots for every named reference and every owner URL.
  * A name with no URL is listed for the owner. No search and no guessed host.
  * The desk schedules this off the request path. Tests pass capture.
- * 245a counts reference/refs and reference/renders together via countDesignReferenceImages.
+ * 245a counts every image under reference/ via countGateReferenceImages.
+ * countDesignReferenceImages still walks only reference/refs and reference/renders.
  */
 
 import { createHash } from "node:crypto";
@@ -214,9 +215,16 @@ export function readReferenceAsks(projectDir: string): ReferenceNeed[] {
   }
 }
 
-/** png, jpg, jpeg, and webp under reference/refs and reference/renders. 245a calls this. */
+/** png, jpg, jpeg, and webp under reference/refs and reference/renders. */
 export function countDesignReferenceImages(projectDir: string): number {
   return listReferenceImages(projectDir).length;
+}
+
+/** Every png, jpg, jpeg, and webp under reference/, including captured shots. */
+export function countGateReferenceImages(projectDir: string): number {
+  const found: string[] = [];
+  walkImages(path.join(projectDir, "reference"), "reference", found);
+  return found.length;
 }
 
 export function listReferenceImages(projectDir: string): string[] {

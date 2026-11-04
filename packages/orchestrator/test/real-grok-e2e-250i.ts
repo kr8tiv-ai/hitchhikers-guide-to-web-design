@@ -30,6 +30,7 @@ import {
   prepareSiteBuild,
   readBriefDesk,
   readBuildRun,
+  readDirectionDeal,
   redact,
   resetSiteBuildWatch,
   restoreProject,
@@ -37,6 +38,7 @@ import {
   setBuildRunner,
   setProjectBuildRunner,
   siteBuildSettled,
+  writeDesignLock,
   startSiteBuild,
   think,
   type BuildSpawn,
@@ -363,16 +365,39 @@ async function approveBrief(projectDir: string): Promise<void> {
   }
 }
 
+const GATE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+function writeGateShots(projectDir: string): void {
+  const refs = path.join(projectDir, "reference", "refs");
+  mkdirSync(refs, { recursive: true });
+  for (let index = 0; index < 6; index += 1) {
+    const file = path.join(refs, `shot-${index}.png`);
+    if (!existsSync(file)) writeFileSync(file, GATE_PNG);
+  }
+}
+
 function passDesignStages(projectDir: string, brief: string): void {
   advanceDesignStages(projectDir, { brief, approval: { stage: "sitemap", text: "Approved." } });
   advanceDesignStages(projectDir, { brief, approval: { stage: "wireframe", text: "Approved." } });
+  let deal = readDirectionDeal(projectDir);
+  if (deal === null || deal.pickedId === null) {
+    if (deal === null) {
+      deal = dealDirections();
+      saveDirectionDeal(projectDir, deal);
+    }
+    const first = deal.directions[0];
+    if (first === undefined) throw new Error("The design did not offer a direction.");
+    chooseDirection(projectDir, first.id, "It fits the visit.");
+    deal = readDirectionDeal(projectDir) ?? deal;
+  }
+  if (deal.pickedId === null) throw new Error("The design did not offer a direction.");
+  writeGateShots(projectDir);
   advanceDesignStages(projectDir, { brief, approval: { stage: "style-guide", text: "Approved." } });
-  const deal = dealDirections();
-  saveDirectionDeal(projectDir, deal);
-  const first = deal.directions[0];
-  if (first === undefined) throw new Error("The design did not offer a direction.");
-  chooseDirection(projectDir, first.id, "It fits the visit.");
-  advanceDesignStages(projectDir, { brief, approval: { stage: "style-guide", text: "Approved." } });
+  // The desk writes this lock on style-guide approval. This harness is the owner stand-in.
+  writeDesignLock(projectDir, deal.pickedId);
   advanceDesignStages(projectDir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(projectDir, {
     brief,

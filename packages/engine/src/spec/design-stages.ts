@@ -17,12 +17,17 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { chooseDirection, onDirectionPicked, readDirectionDeal } from "../brand/directions.ts";
+import { notePhaseFinished } from "../brand/decision-canvas.ts";
+import { chooseDirection, onDirectionDealSaved, onDirectionPicked, readDirectionDeal } from "../brand/directions.ts";
 import type { BrandAnswer } from "../brand/kit-from-interview.ts";
+import { loadConfig } from "../config.ts";
 import { planFromBrief, type BriefAnswer, type PlannedPage } from "./brief-plan.ts";
-import { writeDesignMd, type DesignFontChoice } from "./design-outputs.ts";
+import { lintDesignMd } from "./design-md-lint.ts";
+import { designLockMatches } from "./design-lock.ts";
+import { onDesignMdWritten, writeDesignMd, type DesignFontChoice } from "./design-outputs.ts";
 import { onDesignLocked } from "./page-renders.ts";
 import { runPrebuildChecks, type PrebuildReport } from "./prebuild-checks.ts";
+import { countGateReferenceImages } from "./reference-shots.ts";
 
 export const SITEMAP_REL = ".hitchhiker/sitemap.md";
 export const WIREFRAME_REL = ".hitchhiker/wireframe.md";
@@ -72,12 +77,15 @@ export interface DesignBuildGate {
 }
 
 const FOOTER_TITLES = new Set(["privacy", "terms"]);
+const PICK_REASON = "Pick a design direction before the build.";
+type GateStage = "style-guide" | "direction" | "prebuild" | "build";
 
 export function advanceDesignStages(projectDir: string, input: DesignStageRequest): DesignStageResult {
   const brief = input.brief;
   const answers = resolveAnswers(projectDir, input.answers);
   mkdirSync(path.join(projectDir, ".hitchhiker"), { recursive: true });
   recordChosenDirection(projectDir, input.direction);
+  if (!hasValidPick(projectDir)) clearLostPick(projectDir);
   if (input.change !== undefined) return applyChange(projectDir, brief, answers, input.change.text);
 
   const sitemapPath = path.join(projectDir, SITEMAP_REL);
@@ -108,20 +116,41 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
     return result("style-guide", projectDir);
   }
 
-  if (input.approval?.stage === "style-guide") recordText(state, "styleGuide", input.approval.text);
+  const styleAccepted =
+    input.approval?.stage === "style-guide" && designGateReason(projectDir, "style-guide") === "";
+  if (styleAccepted && input.approval?.stage === "style-guide") recordText(state, "styleGuide", input.approval.text);
   if (state.styleGuide !== undefined) writeApprovals(projectDir, state);
-  if (input.approval?.stage === "style-guide" && state.styleGuide !== undefined) onDesignLocked(projectDir);
+  if (styleAccepted && state.styleGuide !== undefined) onDesignLocked(projectDir);
   if (state.styleGuide === undefined) return result("none", projectDir);
 
-  if (input.approval?.stage === "direction" && directionPicked(projectDir)) {
+  if (input.approval?.stage === "direction" && designGateReason(projectDir, "direction") === "") {
     recordText(state, "direction", input.approval.text);
   }
   if (state.direction !== undefined) writeApprovals(projectDir, state);
   if (state.direction === undefined) return result("none", projectDir);
 
-  if (input.approval?.stage === "prebuild") recordPrebuild(projectDir, state, brief, input);
+  if (input.approval?.stage === "prebuild" && designGateReason(projectDir, "prebuild") === "") {
+    recordPrebuild(projectDir, state, brief, input);
+  }
   if (state.prebuild !== undefined) writeApprovals(projectDir, state);
   return result("none", projectDir);
+}
+
+/**
+ * Owner-facing reason the style guide, direction, prebuild, or build must wait.
+ * Style-guide approval creates the lock, so a missing lock does not block that step.
+ * This read does not clear approvals.
+ */
+export function designGateReason(projectDir: string, stage: GateStage): string {
+  if (!hasValidPick(projectDir)) return PICK_REASON;
+  const minimum = minReferenceImages(projectDir);
+  if (countGateReferenceImages(projectDir) < minimum) {
+    return `Add at least ${minimum} reference images before the build.`;
+  }
+  const designReason = designFileReason(projectDir);
+  if (designReason !== "") return designReason;
+  if (stage !== "style-guide" && !designLockMatches(projectDir)) return "DESIGN.md is not locked.";
+  return "";
 }
 
 /** True only when every design stage is approved and no pre-build check fails. */
@@ -134,10 +163,19 @@ export function designReadyForBuild(projectDir: string, brief: string): DesignBu
       critique !== undefined && /missing/i.test(critique.detail) ? critique.detail : "The brief is missing.";
     return { ok: false, reason, checks };
   }
+  if (!hasValidPick(projectDir)) {
+    clearLostPick(projectDir);
+    return { ok: false, reason: PICK_REASON, checks };
+  }
+  const references = designGateReason(projectDir, "build");
+  if (references.startsWith("Add at least")) return { ok: false, reason: references, checks };
   if (state.sitemap === undefined) return { ok: false, reason: "Approve the sitemap before the build.", checks };
   if (state.wireframe === undefined) return { ok: false, reason: "Approve the wireframe before the build.", checks };
   if (state.styleGuide === undefined) return { ok: false, reason: "Approve the style guide before the build.", checks };
   if (state.direction === undefined) return { ok: false, reason: "Approve the direction before the build.", checks };
+  const designReason = designFileReason(projectDir);
+  if (designReason !== "") return { ok: false, reason: designReason, checks };
+  if (!designLockMatches(projectDir)) return { ok: false, reason: "DESIGN.md is not locked.", checks };
   const failed = checks.checks.find((check) => check.status === "fail");
   if (failed !== undefined) return { ok: false, reason: failed.detail, checks };
   const warned = checks.checks.some((check) => check.status === "warn");
@@ -164,13 +202,50 @@ function recordText(state: StageApprovals, key: keyof StageApprovals, text: stri
   state[key] = trimmed;
 }
 
-function directionPicked(projectDir: string): boolean {
+function hasValidPick(projectDir: string): boolean {
   try {
-    const picked = readDirectionDeal(projectDir)?.pickedId;
-    return picked !== null && picked !== undefined;
+    const deal = readDirectionDeal(projectDir);
+    if (deal === null || deal.pickedId === null) return false;
+    return deal.directions.some((direction) => direction.id === deal.pickedId);
   } catch {
     return false;
   }
+}
+
+function clearLostPick(projectDir: string): void {
+  const state = readApprovals(projectDir);
+  if (state.direction === undefined && state.styleGuide === undefined && state.prebuild === undefined) return;
+  delete state.direction;
+  delete state.styleGuide;
+  delete state.prebuild;
+  delete state.warningsAck;
+  writeApprovals(projectDir, state);
+  notePhaseFinished(
+    projectDir,
+    "Design direction",
+    "The direction, style guide, and pre-build approvals were cleared because no direction is picked.",
+    new Date().toISOString(),
+  );
+}
+
+function minReferenceImages(projectDir: string): number {
+  return loadConfig(projectDir).design.minReferenceImages;
+}
+
+function designFileReason(projectDir: string): string {
+  const designPath = path.join(projectDir, "DESIGN.md");
+  if (!existsSync(designPath)) return "DESIGN.md is missing.";
+  let markdown = "";
+  try {
+    markdown = readFileSync(designPath, "utf8");
+  } catch {
+    return "DESIGN.md is missing.";
+  }
+  const lint = lintDesignMd(markdown);
+  if (!lint.ok) {
+    return `DESIGN.md failed the style-guide check. ${lint.errors.map((error) => error.message).join(" ")}`;
+  }
+  return "";
 }
 
 function recordChosenDirection(projectDir: string, direction: DesignStageRequest["direction"]): void {
@@ -676,3 +751,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 onDirectionPicked(refreshStyleGuideAfterDirection);
+
+onDirectionDealSaved((projectDir, deal) => {
+  if (deal.pickedId !== null && deal.directions.some((direction) => direction.id === deal.pickedId)) return;
+  clearLostPick(projectDir);
+});
+
+onDesignMdWritten((projectDir) => {
+  const state = readApprovals(projectDir);
+  if (state.styleGuide === undefined) return;
+  delete state.styleGuide;
+  writeApprovals(projectDir, state);
+});

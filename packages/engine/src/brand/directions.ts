@@ -225,11 +225,40 @@ export function directionDealPath(projectDir: string): string {
   return path.join(projectDir, ".hitchhiker", "directions.json");
 }
 
-/** Persist the dealt set. This is not a decision-log row. */
+/** Registered by the design stages so a saved null pick can clear a stale approval. */
+let afterDirectionDealSaved: ((projectDir: string, deal: DirectionDeal) => void) | null = null;
+
+export function onDirectionDealSaved(listener: (projectDir: string, deal: DirectionDeal) => void): void {
+  afterDirectionDealSaved = listener;
+}
+
+/**
+ * Persist the dealt set. This is not a decision-log row.
+ * A null pick does not replace a saved pick that is still in the new set.
+ * A new set that drops that id leaves the file on disk unchanged.
+ */
 export function saveDirectionDeal(projectDir: string, deal: DirectionDeal): void {
+  const next = dealKeepingPick(projectDir, deal);
+  if (next === null) return;
   const file = directionDealPath(projectDir);
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(deal, null, 2)}\n`, "utf8");
+  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  afterDirectionDealSaved?.(projectDir, next);
+}
+
+function dealKeepingPick(projectDir: string, deal: DirectionDeal): DirectionDeal | null {
+  if (deal.pickedId !== null) return deal;
+  let existing: DirectionDeal | null = null;
+  try {
+    existing = readDirectionDeal(projectDir);
+  } catch {
+    return deal;
+  }
+  if (existing === null || existing.pickedId === null) return deal;
+  if (deal.directions.some((direction) => direction.id === existing.pickedId)) {
+    return { directions: deal.directions, pickedId: existing.pickedId };
+  }
+  return null;
 }
 
 /** Null when no deal has been saved. A damaged file throws instead of looking like a new deal. */

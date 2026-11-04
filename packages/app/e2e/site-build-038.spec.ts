@@ -23,7 +23,7 @@ test("a 402 at prompt 003 pauses the drive and Retry resumes", async ({ page }) 
     const root = url.replace(/\/$/, "");
     await finishInterview(page, url);
     await page.goto(`${root}/approve`);
-    await approveBriefThenPlan(page);
+    await approveBriefThenPlan(page, projectDir);
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator('[data-id="003"]')).toHaveAttribute("data-status", "failed", { timeout: 30_000 });
     await expect(page.locator('[data-id="004"]')).toHaveAttribute("data-status", "paused");
@@ -63,7 +63,7 @@ async function finishInterview(page: Page, url: string): Promise<void> {
   await expect(page.getByRole("link", { name: "Review the Site Brief" })).toBeVisible();
 }
 
-async function approveBriefThenPlan(page: Page): Promise<void> {
+async function approveBriefThenPlan(page: Page, projectDir: string): Promise<void> {
   const box = page.locator('input[name="confirmFallback"]');
   if (await box.count()) await box.check();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -71,7 +71,7 @@ async function approveBriefThenPlan(page: Page): Promise<void> {
   await expect(plan).toBeEnabled();
   if (await box.count()) await box.check();
   await plan.click();
-  await approveDesignAndStart(page);
+  await approveDesignAndStart(page, projectDir);
 }
 
 async function spawnIds(projectDir: string): Promise<string[]> {

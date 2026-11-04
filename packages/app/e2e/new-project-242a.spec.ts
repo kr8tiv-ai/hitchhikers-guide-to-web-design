@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { isInsideDeskRepo } from "@hitchhiker/engine";
+import { writeGateShots } from "./design-then-build.ts";
 import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -130,7 +131,7 @@ test("a new project approves the brief, the plan, and each design stage", async 
     await expect(page.locator("[data-design-stage='style-guide']")).toContainText("The style guide is in.", {
       timeout: 30_000,
     });
-    await page.getByRole("button", { name: "Approve style guide" }).click();
+    writeGateShots(dest);
     await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
     await page.locator("[data-pick-direction]").first().click();
     await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible({ timeout: 30_000 });

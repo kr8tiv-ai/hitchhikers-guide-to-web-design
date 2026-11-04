@@ -1,16 +1,32 @@
 /**
  * Plan approval opens the design stages. Start build is the billed step.
+ * The style guide stays on screen until a direction is picked, so the pick
+ * happens there. Six reference shots let that approval lock DESIGN.md.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { expect, type Page } from "@playwright/test";
 
-export async function approveDesignAndStart(page: Page): Promise<void> {
+const GATE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+export function writeGateShots(projectDir: string): void {
+  const refs = path.join(projectDir, "reference", "refs");
+  mkdirSync(refs, { recursive: true });
+  for (let index = 0; index < 6; index += 1) {
+    writeFileSync(path.join(refs, `shot-${index}.png`), GATE_PNG);
+  }
+}
+
+export async function approveDesignAndStart(page: Page, projectDir: string): Promise<void> {
+  writeGateShots(projectDir);
   await expect(page.locator("[data-design-stage='sitemap']")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Approve sitemap" }).click();
   await expect(page.locator("[data-design-stage='wireframe']")).toBeVisible();
   await page.getByRole("button", { name: "Approve wireframe" }).click();
   await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();
-  await page.getByRole("button", { name: "Approve style guide" }).click();
-  await expect(page.locator("[data-design-stage='direction']")).toBeVisible();
   await page.locator("[data-direction-reason]").fill("This direction matches the visit.");
   await page.locator("[data-pick-direction]").first().click();
   await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();

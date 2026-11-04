@@ -8,11 +8,14 @@ import path from "node:path";
 import {
   advanceDesignStages,
   dealDirections,
+  designGateReason,
   designReadyForBuild,
   emitDesignStages,
+  onDesignLocked,
   readDirectionDeal,
   runPrebuildChecks,
   saveDirectionDeal,
+  writeDesignLock,
   type DesignStageName,
 } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
@@ -42,6 +45,18 @@ export async function approveDesignStage(
     approval: { stage, text },
     ...(acknowledge ? { acknowledge: true } : {}),
   });
+  if (stage !== "style-guide" || text.trim() === "") return;
+  if (designGateReason(projectDir, "style-guide") !== "") return;
+  if (!stageApprovals(projectDir).styleGuide) return;
+  let picked = "";
+  try {
+    picked = readDirectionDeal(projectDir)?.pickedId ?? "";
+  } catch {
+    picked = "";
+  }
+  if (picked === "") return;
+  writeDesignLock(projectDir, picked);
+  onDesignLocked(projectDir);
 }
 
 /** Applies an edit and leaves the stage waiting. It does not record an approval. */
@@ -138,6 +153,8 @@ export function renderDesignStagePanel(projectDir: string, token: string, briefM
 }
 
 function renderDesignStageBody(projectDir: string, token: string, briefMarkdown = ""): string {
+  const briefForGate = briefMarkdown.trim() !== "" ? briefMarkdown : briefFor(projectDir);
+  designReadyForBuild(projectDir, briefForGate);
   const state = stageApprovals(projectDir);
   const sitemap = readText(path.join(projectDir, ".hitchhiker", "sitemap.md"));
   const wireframe = readText(path.join(projectDir, ".hitchhiker", "wireframe.md"));
@@ -157,19 +174,26 @@ function renderDesignStageBody(projectDir: string, token: string, briefMarkdown 
     </section>`;
   }
   if (!state.styleGuide) {
+    const reason = designGateReason(projectDir, "style-guide");
+    const note = reason === "" ? "" : `<p data-design-gate>${escapeHtml(reason)}</p>`;
     return `<section data-design-stage="style-guide">
       <h2>Style guide</h2>
       <p>The style guide is in.</p>
       <pre>${escapeHtml(design)}</pre>
-      ${stageForm(token, "style-guide", "style guide")}
+      ${renderDirectionPicker(projectDir)}
+      ${note}
+      ${stageForm(token, "style-guide", "style guide", reason === "")}
     </section>`;
   }
   if (!state.direction) {
+    const reason = designGateReason(projectDir, "direction");
+    const note = reason === "" ? "" : `<p data-design-gate>${escapeHtml(reason)}</p>`;
     return `<section data-design-stage="direction">
       <h2>Direction</h2>
       <p>Pick a direction, then approve it.</p>
       ${renderDirectionPicker(projectDir)}
-      ${stageForm(token, "direction", "direction")}
+      ${note}
+      ${stageForm(token, "direction", "direction", reason === "")}
     </section>`;
   }
   const brief = briefMarkdown.trim() !== "" ? briefMarkdown : briefFor(projectDir);
@@ -185,10 +209,13 @@ function renderDesignStageBody(projectDir: string, token: string, briefMarkdown 
     const ack = warned
       ? `<label>I acknowledge the warnings <input type="checkbox" name="ack" value="yes" /></label>`
       : "";
+    const reason = designGateReason(projectDir, "prebuild");
+    const note = reason === "" ? "" : `<p data-design-gate>${escapeHtml(reason)}</p>`;
     return `<section data-design-stage="prebuild">
       <h2>Pre-build checks</h2>
+      ${note}
       <ul>${rows}</ul>
-      ${stageForm(token, "prebuild", "pre-build checks", report.pass, ack)}
+      ${stageForm(token, "prebuild", "pre-build checks", report.pass && reason === "", ack)}
     </section>`;
   }
   const gate = designReadyForBuild(projectDir, brief);

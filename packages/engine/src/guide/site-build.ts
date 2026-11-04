@@ -40,6 +40,7 @@ import { writeBrandKit } from "../brand/kit-from-interview.ts";
 import { RenderApprovalError, pagesWaitingForRender, clearPageRenderRunner } from "../spec/page-renders.ts";
 import { clearReferenceCaptureRunner } from "../spec/reference-shots.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
+import { designDriftFindings } from "../spec/design-drift.ts";
 import { derivedSiteName, writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
 import { REFERENCE_PHASES, recordPhasePrompt } from "../spec/skills.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
@@ -97,6 +98,7 @@ import {
   countVisibleCopy,
   distHtmlForOwnedSource,
   formatFixBeforeFinish,
+  isDesignDriftCloseReason,
   isSurfaceCloseReason,
   isVisitorSource,
   judgeVisibleCopy,
@@ -2511,6 +2513,7 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
  */
 function surfaceCloseReason(projectDir: string, promptId: string, promptText: string, files: readonly string[]): string {
   const fullSite = promptRequiresFullVisibleCopy(promptText, files);
+  const drift = designDriftClose(projectDir, promptText, files);
   const owned = new Set(ownedSourcePaths(promptText, files));
   const ownedDist = new Set<string>();
   for (const rel of owned) {
@@ -2520,7 +2523,7 @@ function surfaceCloseReason(projectDir: string, promptId: string, promptText: st
   for (const rel of owned) {
     if (isVisitorSource(rel)) markup = true;
   }
-  if (!fullSite && ownedDist.size === 0 && !markup) return "";
+  if (!fullSite && ownedDist.size === 0 && !markup) return drift;
   const dist = path.join(projectDir, "dist");
   const later = filesOwnedByLaterPrompts(projectDir, promptId, promptText);
   const keep = (hits: readonly SurfaceHit[]): SurfaceHit[] =>
@@ -2545,7 +2548,27 @@ function surfaceCloseReason(projectDir: string, promptId: string, promptText: st
     fullSite ? duplicateHits : duplicateHits.filter((hit) => ownsDuplicate(projectDir, hit, owned, ownedDist, later, scan)),
   );
   const home = formatHomeListingsFailure(feature("listings", scanHomeListings(dist)));
-  return [placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
+  return [drift, placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
+}
+
+function designDriftClose(projectDir: string, promptText: string, files: readonly string[]): string {
+  if (!promptRequiresFullVisibleCopy(promptText, files) && !promptTouchesDesignTokens(files)) return "";
+  const findings = designDriftFindings(projectDir);
+  if (findings.length === 0) return "";
+  return `Design drift failed. ${findings.join(" ")}`;
+}
+
+function promptTouchesDesignTokens(files: readonly string[]): boolean {
+  return files.some((file) => {
+    const rel = file.replaceAll("\\", "/");
+    return (
+      rel.endsWith("DESIGN.md") ||
+      rel.endsWith(".hitchhiker/design/tokens.json") ||
+      rel.endsWith(".hitchhiker/design/tailwind-theme.css") ||
+      rel.endsWith(".hitchhiker/brand/BRAND.md") ||
+      /(^|\/)src\/styles(\/|$)/.test(rel)
+    );
+  });
 }
 
 function nameRepeatedSources(hits: readonly SurfaceHit[], projectDir: string, scan: SourceScan): SurfaceHit[] {
@@ -2786,6 +2809,7 @@ function canRerunCloseFailure(
   const visible = reason.startsWith("Visible copy failed.");
   const surface = isSurfaceCloseReason(reason);
   if (!visible && !surface) return false;
+  if (isDesignDriftCloseReason(reason)) return true;
   const fullSite = promptRequiresFullVisibleCopy(promptText, files);
   if (!fullSite && surface) return true;
   if (!visible) return false;

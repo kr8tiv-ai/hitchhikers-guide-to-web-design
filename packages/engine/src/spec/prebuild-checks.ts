@@ -15,12 +15,13 @@ import { familyAxes } from "../brand/type-conflict.ts";
 import { TYPE_LIBRARY } from "../brand/type-library.ts";
 import { critiquePlan, draftPlan } from "./plan-critique.ts";
 import { assertPhoneBudgetBefore3d, briefAsksForWebglHero, briefHasPhoneBudget, PhoneBudgetError } from "./phone-budget.ts";
+import { designDriftFindings } from "./design-drift.ts";
 import { resolveDesignType, type DesignFontChoice } from "./design-outputs.ts";
 
 export type PrebuildStatus = "pass" | "warn" | "fail";
 
 export interface PrebuildCheck {
-  id: "critique" | "devices" | "phone" | "webgl" | "elevate" | "ai-look" | "type" | "awwwards";
+  id: "critique" | "devices" | "phone" | "webgl" | "elevate" | "ai-look" | "type" | "awwwards" | "design-drift";
   label: string;
   pass: boolean;
   status: PrebuildStatus;
@@ -54,6 +55,7 @@ export function runPrebuildChecks(brief: string, projectDir?: string): PrebuildR
     aiLookCheck(styleGuide, type),
     typeCheck(type),
     awwwardsCheck(text, styleGuide, sitemap, wireframe),
+    designDriftCheck(projectDir),
   ];
   return { pass: checks.every((check) => check.status !== "fail"), checks };
 }
@@ -67,6 +69,23 @@ function check(
 ): PrebuildCheck {
   const detail = findings.length > 0 ? findings.join(" ") : status;
   return { id, label, pass: status !== "fail", status, detail, findings, fix: status === "pass" ? "" : fix };
+}
+
+function designDriftCheck(projectDir?: string): PrebuildCheck {
+  if (projectDir === undefined || projectDir.trim() === "") {
+    return check("design-drift", "Design drift", "pass", ["No project is open, so font and colour drift is not checked."], "");
+  }
+  const findings = designDriftFindings(projectDir);
+  if (findings.length === 0) {
+    return check("design-drift", "Design drift", "pass", ["Fonts and colours match DESIGN.md."], "");
+  }
+  return check(
+    "design-drift",
+    "Design drift",
+    "fail",
+    findings,
+    "Put the font families and colour hex values back to DESIGN.md.",
+  );
 }
 
 function critiqueCheck(brief: string): PrebuildCheck {

@@ -20,7 +20,7 @@ test("approve shows a running build, then the stub file, then passed", async ({ 
     const root = url.replace(/\/$/, "");
     await finishInterview(page, url);
     await page.goto(`${root}/approve`);
-    await approveBriefThenPlan(page);
+    await approveBriefThenPlan(page, projectDir);
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator("[data-build-model]")).toHaveAttribute("data-build-model", "grok-4.7-build-fast");
     await expect(page.locator("[data-build-effort]")).toHaveAttribute("data-build-effort", "xhigh");
@@ -43,7 +43,7 @@ test("a failing stub shows the failure and a Retry control", async ({ page }) =>
     const root = url.replace(/\/$/, "");
     await finishInterview(page, url);
     await page.goto(`${root}/approve`);
-    await approveBriefThenPlan(page);
+    await approveBriefThenPlan(page, projectDir);
     await page.goto(`${root}/hh-dashboard`);
     await expect(page.locator('[data-id="001"]')).toHaveAttribute("data-status", "failed", { timeout: 20_000 });
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
@@ -54,7 +54,7 @@ test("a failing stub shows the failure and a Retry control", async ({ page }) =>
   }
 });
 
-async function approveBriefThenPlan(page: import("@playwright/test").Page): Promise<void> {
+async function approveBriefThenPlan(page: import("@playwright/test").Page, projectDir: string): Promise<void> {
   const box = page.locator('input[name="confirmFallback"]');
   if (await box.count()) await box.check();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
@@ -62,7 +62,7 @@ async function approveBriefThenPlan(page: import("@playwright/test").Page): Prom
   await expect(plan).toBeEnabled();
   if (await box.count()) await box.check();
   await plan.click();
-  await approveDesignAndStart(page);
+  await approveDesignAndStart(page, projectDir);
 }
 
 async function finishInterview(page: import("@playwright/test").Page, url: string): Promise<void> {

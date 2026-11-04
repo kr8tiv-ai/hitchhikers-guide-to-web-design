@@ -390,7 +390,12 @@ const SURFACE_FIX_INSTRUCTION =
  * The label still counts when it follows visible copy on that one line.
  */
 const SURFACE_CLOSE_REASON =
-  /(?:^|[^\w])(?:Placeholder contact failed|Repeated sentence failed|Concept image failed|Empty gallery failed|Duplicate block failed|Home listings failed)\./;
+  /(?:^|[^\w])(?:Placeholder contact failed|Repeated sentence failed|Concept image failed|Empty gallery failed|Duplicate block failed|Home listings failed|Design drift failed)\./;
+
+/** A token or font edit that left DESIGN.md. Close checks rerun this once. */
+export function isDesignDriftCloseReason(reason: string): boolean {
+  return /(?:^|[^\w])Design drift failed\./.test(reason);
+}
 
 /** True when a close reason includes a surface check. QA and launch use the same labels. */
 export function isSurfaceCloseReason(reason: string): boolean {

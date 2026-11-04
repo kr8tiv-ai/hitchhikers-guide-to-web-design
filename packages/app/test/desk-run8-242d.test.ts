@@ -142,6 +142,26 @@ test("a failing pre-build check keeps Start build disabled and does not start a 
     writeFileSync(path.join(hitch, "wireframe.md"), "# Wireframe\n\n## Home\n", "utf8");
     writeFileSync(path.join(dir, "DESIGN.md"), "Paper #ffffff carries ink #ffffff.\n", "utf8");
     writeFileSync(
+      path.join(hitch, "directions.json"),
+      `${JSON.stringify({
+        pickedId: "dir-sample",
+        directions: [
+          {
+            id: "dir-sample",
+            name: "Sample",
+            description: "A quiet direction.",
+            citationId: "sample",
+            title: "Sample",
+            url: "https://example.com/sample",
+            display: "General Sans",
+            body: "General Sans",
+            sectionOrder: ["hero"],
+            hue: "#1f6b4a",
+          },
+        ],
+      })}\n`,
+    );
+    writeFileSync(
       path.join(hitch, "design-stages.json"),
       `${JSON.stringify({
         sitemap: "Approved.",

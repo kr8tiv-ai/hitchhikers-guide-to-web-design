@@ -1,13 +1,14 @@
 /**
  * Lint DESIGN.md against the Google design.md section order and token rules.
- * Required sections, in order: Overview, Colors, Typography, Layout,
- * Elevation, Shapes, Components, Do's and Don'ts.
+ * Required sections, in order: Overview, Brand idea, Colors, Typography,
+ * Layout, Elevation, Shapes, Components, Do's and Don'ts, Image direction.
  * `{token.ref}` must resolve. A duplicate key is an error.
  * This is our own check. It does not install @google/design.md.
  */
 
 export const DESIGN_SECTION_ORDER = [
   "Overview",
+  "Brand idea",
   "Colors",
   "Typography",
   "Layout",
@@ -15,6 +16,7 @@ export const DESIGN_SECTION_ORDER = [
   "Shapes",
   "Components",
   "Do's and Don'ts",
+  "Image direction",
 ] as const;
 
 /**
@@ -23,6 +25,7 @@ export const DESIGN_SECTION_ORDER = [
  */
 const ALIASES: readonly (readonly string[])[] = [
   ["overview", "brand & style"],
+  ["brand idea"],
   ["colors", "color"],
   ["typography", "type scale"],
   ["layout", "layout & spacing"],
@@ -30,10 +33,19 @@ const ALIASES: readonly (readonly string[])[] = [
   ["shapes"],
   ["components"],
   ["do's and don'ts", "dos and don'ts"],
+  ["image direction"],
 ];
 
 export interface DesignLintError {
-  rule: "duplicate-key" | "broken-ref" | "section-order" | "typography" | "duplicate-section";
+  rule:
+    | "duplicate-key"
+    | "broken-ref"
+    | "section-order"
+    | "typography"
+    | "duplicate-section"
+    | "brand-idea"
+    | "image-direction"
+    | "signature";
   message: string;
 }
 
@@ -80,14 +92,87 @@ export function lintDesignMd(markdown: string): DesignLintReport {
       message: `Sections must appear in this order: ${DESIGN_SECTION_ORDER.join(", ")}.`,
     });
   }
-  const typography = sectionBody(split.body, 2);
+  const typography = sectionBody(split.body, canonIndex("Typography"));
   if (typography === null || !/Families:/.test(typography) || !/Ratio:/.test(typography)) {
     errors.push({
       rule: "typography",
       message: "Typography must name the families and the type scale ratio.",
     });
+  } else if (uniqueNames(familyNames(typography)).length > 2) {
+    errors.push({
+      rule: "typography",
+      message: "Typography names more than one display family and one body family.",
+    });
+  }
+  if (proseEmpty(sectionBody(split.body, canonIndex("Brand idea")))) {
+    errors.push({ rule: "brand-idea", message: "Brand idea must name one central idea." });
+  }
+  if (proseEmpty(sectionBody(split.body, canonIndex("Image direction")))) {
+    errors.push({ rule: "image-direction", message: "Image direction must say what the pictures may show." });
+  }
+  const effects = signatureEffects(split.body);
+  if (effects.length > 1) {
+    errors.push({ rule: "signature", message: "Signature techniques must list one signature effect." });
   }
   return { ok: errors.length === 0, errors };
+}
+
+function proseEmpty(body: string | null): boolean {
+  return body === null || body.trim() === "";
+}
+
+function familyNames(typography: string): string[] {
+  const names: string[] = [];
+  for (const match of typography.matchAll(/Families:\s*([^\n]+)/g)) {
+    let line = match[1] ?? "";
+    line = line.replace(/\s*Source:.*$/i, "").replace(/\.\s*$/, "");
+    for (const part of line.split(/,|\band\b/i)) {
+      const name = part.trim().replace(/\.$/, "");
+      if (name !== "") names.push(name);
+    }
+  }
+  return names;
+}
+
+function uniqueNames(names: readonly string[]): string[] {
+  const unique: string[] = [];
+  for (const name of names) {
+    if (!unique.includes(name)) unique.push(name);
+  }
+  return unique;
+}
+
+function signatureEffects(body: string): string[] {
+  const section = looseSection(body, "Signature techniques");
+  if (section === null) return [];
+  const effects: string[] = [];
+  for (const line of section.split("\n")) {
+    const text = line.trim();
+    if (text === "") continue;
+    if (/^any appropriate library may carry a technique/i.test(text)) continue;
+    effects.push(text);
+  }
+  return effects;
+}
+
+function looseSection(body: string, heading: string): string | null {
+  const lines = body.split("\n");
+  const target = heading.toLowerCase();
+  let start = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^##\s+(.+?)\s*$/.exec(lines[index] ?? "");
+    if (match?.[1]?.toLowerCase() === target) {
+      start = index + 1;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  const rest: string[] = [];
+  for (let index = start; index < lines.length; index += 1) {
+    if (/^##\s+/.test(lines[index] ?? "")) break;
+    rest.push(lines[index] ?? "");
+  }
+  return rest.join("\n");
 }
 
 /** The YAML token tree lintDesignMd already parsed. Export reads this tree. */

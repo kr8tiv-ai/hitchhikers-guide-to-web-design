@@ -21,7 +21,7 @@ test("restart after prompt 003 ends passes it and starts 004", async ({ page }) 
   try {
     const first = await readUrl(child);
     await finishInterview(page, first);
-    await approve(page, first);
+    await approve(page, first, projectDir);
     await waitForRunningEnd(projectDir);
     await stopDesk(child);
     child = startDesk(projectDir, "end");
@@ -50,7 +50,7 @@ test("restart before prompt 003 ends reruns it and 004 passes", async ({ page })
   try {
     const first = await readUrl(child);
     await finishInterview(page, first);
-    await approve(page, first);
+    await approve(page, first, projectDir);
     await waitForRunningCut(projectDir);
     await stopDesk(child);
     child = startDesk(projectDir, "cut");
@@ -144,7 +144,7 @@ function pauseAfter(queue: unknown): string {
   return typeof pause === "object" && pause !== null && "after" in pause && typeof pause.after === "string" ? pause.after : "";
 }
 
-async function approve(page: Page, url: string): Promise<void> {
+async function approve(page: Page, url: string, projectDir: string): Promise<void> {
   const root = rootOf(url);
   await page.goto(`${root}/approve`);
   const box = page.locator('input[name="confirmFallback"]');
@@ -154,7 +154,7 @@ async function approve(page: Page, url: string): Promise<void> {
   await expect(plan).toBeEnabled();
   if (await box.count()) await box.check();
   await plan.click();
-  await approveDesignAndStart(page);
+  await approveDesignAndStart(page, projectDir);
 }
 
 async function spawnIds(projectDir: string): Promise<string[]> {

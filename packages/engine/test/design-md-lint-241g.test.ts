@@ -25,6 +25,10 @@ const PASSING = [
   "",
   "A quiet system.",
   "",
+  "## Brand idea",
+  "",
+  "A quiet system for the visit.",
+  "",
   "## Colors",
   "",
   "Ink on paper.",
@@ -54,6 +58,10 @@ const PASSING = [
   "",
   "Remix the tokens.",
   "",
+  "## Image direction",
+  "",
+  "Owner photos come first. Generated stills may show the work and may not show a stock scene.",
+  "",
 ].join("\n");
 
 test("a duplicated color key fails and the required section order passes", () => {
@@ -68,7 +76,10 @@ test("a duplicated color key fails and the required section order passes", () =>
   const passed = lintDesignMd(PASSING);
   assert.equal(passed.ok, true, passed.errors.map((error) => error.message).join(" "));
 
-  const swapped = PASSING.replace("## Overview\n\nA quiet system.\n\n## Colors", "## Colors\n\nInk on paper.\n\n## Overview");
+  const swapped = PASSING.replace(
+    "## Overview\n\nA quiet system.\n\n## Brand idea\n\nA quiet system for the visit.\n\n## Colors",
+    "## Colors\n\nInk on paper.\n\n## Overview\n\nA quiet system.\n\n## Brand idea\n\nA quiet system for the visit.",
+  );
   const disorder = lintDesignMd(swapped);
   assert.equal(disorder.ok, false);
   assert.equal(disorder.errors.some((error) => error.rule === "section-order"), true);
