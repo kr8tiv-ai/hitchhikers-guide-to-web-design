@@ -4,7 +4,7 @@ title: References and renders - collect reference screenshots into reference/ an
 kind: build
 effort: xhigh
 model: grok-4.7-build-fast
-depends_on: 245h
+depends_on: 244k
 ---
 
 # 245i - References and renders: screenshots for every named reference, and one approved render per main page before site prompts (BUG-145)
@@ -18,6 +18,10 @@ Tooling the desk already has (read it and use it; no new paid APIs):
 - Named references: `loadDesignReferences`, `namedReferencePages`, `customerReferencePages` in `packages/engine/src/brand/directions.ts` (StudiedPage carries a url and studied shots).
 - Image generation: `resolveDeskProvider` in `packages/assets/src/section-generate.ts`. Its default order is `grok-cli` (the `grokCliProvider`, which asks the logged-in `grok` CLI to use features.image_gen, "No API key is attached"), then the opt-in browser Imagine. The `api` provider (paid xAI API) is off by default and must stay unused here.
 - Section stills hook: `packages/app/src/server/section-stills-hook.ts`.
+
+## Run order (Matt, 2026-11-04)
+
+This prompt now runs FIRST in the 245 chain (before 245a), because 245a's design-approval gate needs `design.minReferenceImages` (6) images in `reference/`. Deliverable 1 (reference capture) must work on a project with no DESIGN.md yet and must run automatically when the brief's References are saved, so the folder fills before the direction/style-guide approvals. Deliverable 2 (renders) needs the locked DESIGN.md: build it here, but trigger render drafting only once the 245a lock exists; the `prepareSiteBuild` gate in deliverable 3 is unaffected. 245a, 245b and later prompts do not exist yet when this runs: do not depend on their code; leave clear hooks they can call.
 
 ## Deliverables
 

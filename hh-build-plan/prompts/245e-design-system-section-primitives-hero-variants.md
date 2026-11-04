@@ -4,7 +4,7 @@ title: Design-system part 2 - Astro section primitives with variants and slots, 
 kind: build
 effort: xhigh
 model: grok-4.7-build-fast
-depends_on: 245d
+depends_on: 245w
 ---
 
 # 245e - packages/design-system part 2: section primitives, hero variants and variant ranking (BUG-141)

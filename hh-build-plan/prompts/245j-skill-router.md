@@ -4,7 +4,7 @@ title: Skill router - each site prompt gets only the knowledge-pack rules, motio
 kind: build
 effort: xhigh
 model: grok-4.7-build-fast
-depends_on: 245i
+depends_on: 245h
 ---
 
 # 245j - Skill router: inject only the relevant rules per section (BUG-146)

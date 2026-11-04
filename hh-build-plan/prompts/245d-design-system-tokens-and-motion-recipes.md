@@ -4,7 +4,7 @@ title: Design-system package part 1 - token sets per style world and pre-built G
 kind: build
 effort: xhigh
 model: grok-4.7-build-fast
-depends_on: 245c
+depends_on: 245x
 ---
 
 # 245d - packages/design-system part 1: token sets per style world and motion recipes (BUG-140)

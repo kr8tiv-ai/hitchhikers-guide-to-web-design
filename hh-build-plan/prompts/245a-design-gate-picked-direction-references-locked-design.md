@@ -4,7 +4,7 @@ title: Design gate - no approval without a picked direction, a reference folder 
 kind: build
 effort: xhigh
 model: grok-4.7-build-fast
-depends_on: 244k
+depends_on: 245i
 ---
 
 # 245a - Design gate: no approval without a picked direction, a reference folder and a locked DESIGN.md; fonts and tokens cannot drift (BUG-137)
@@ -28,7 +28,7 @@ Find out exactly how site-c reached "direction approved, pickedId null" (which c
 
 1. `designReadyForBuild` and the approval path in `advanceDesignStages` refuse the direction, style-guide and prebuild approvals, and refuse the build, while any of these is true. Each gives a plain owner-facing reason:
    - `directions.json` `pickedId` is null or names a direction that is not in the deal ("Pick a design direction before the build.");
-   - the project `reference/` folder holds fewer than `design.minReferenceImages` images (.png/.jpg/.jpeg/.webp, recursive; default 6, read from `.hitchhiker/config.json` through the existing config loader);
+   - the project `reference/` folder holds fewer than `design.minReferenceImages` images (.png/.jpg/.jpeg/.webp, recursive; default 6, read from `.hitchhiker/config.json` through the existing config loader); auto-captured references from 245i (`reference/refs/*.png`, listed in `reference/refs/README.md`) count toward the minimum exactly like owner uploads, so a project whose references were all captured automatically can pass;
    - `DESIGN.md` is missing, fails `lintDesignMd`, or is not locked.
    An approval that was recorded while a condition held is not trusted: re-check at build time, and if the pick was lost, clear the direction, styleGuide and prebuild approvals (keep sitemap and wireframe) and log one line to `.hitchhiker/decisions.jsonl`.
 2. DESIGN.md is the single source of truth. Extend the generated DESIGN.md and `DESIGN_SECTION_ORDER` with two sections the interview already feeds: `## Brand idea` (one central idea or metaphor, one or two sentences, from the interview answers and the picked direction) and `## Image direction` (owner photos first, what generated stills may and may not show, crop and grade). Keep the existing sections (one font pair under Typography, colour tokens, spacing scale, `## Motion principles`, one entry under `## Signature techniques`). Lint fails when Brand idea or Image direction is empty, when Typography names more than one display and one body family, or when Signature techniques lists more than one signature effect.
@@ -42,7 +42,7 @@ Find out exactly how site-c reached "direction approved, pickedId null" (which c
 Add `packages/engine/test/desk-run11-245a.test.ts` (failing first, then green; short vitest timeouts):
 - direction approval with `pickedId: null` is not recorded, and `designReadyForBuild` returns ok false with the pick reason;
 - a project whose design-stages.json says everything is approved but whose directions.json has `pickedId: null` (the site-c shape) is not ready, and the direction/styleGuide/prebuild approvals are cleared while sitemap/wireframe stay;
-- five images in `reference/` fail, six pass; the config value overrides the default;
+- five images in `reference/` fail, six pass; the config value overrides the default; six auto-captured `reference/refs/*.png` shots (245i) pass with no owner uploads;
 - missing DESIGN.md, DESIGN.md without Brand idea, and an edited DESIGN.md whose hash no longer matches the lock each block the build;
 - with a picked direction "General Sans / X", DESIGN.md, tokens.json and BRAND.md all name the pair; changing tokens.json to Syne makes `design-drift` fail and name the file and the token;
 - `writeDesignMd` never writes a default family when a pick exists;

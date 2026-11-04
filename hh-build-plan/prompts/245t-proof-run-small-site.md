@@ -13,6 +13,8 @@ depends_on: 245s
 
 245a-245s changed the design gate, references and renders, prompt generation, the visual constitution, the design-system package and section primitives with the hero-variant gate, typography checks, the screenshot loop with reference stills, the jury and blockers, the motion rules, the rhythm detector, the coherence reviewer, elevate as a design partner and the owner look. This prompt proves them together on a fresh, small site. Do not touch C:\Users\lucid\Desktop\desk-e2e-run11 (site-c and its desk on port 4175 may still be running), its queue, its driver or any running grok process. Do not modify C:\Users\lucid\Desktop\primetime-site.
 
+Also covered since the plan was written: 245x optical/micro-detail checks, 245u motion recipe library and style-world map, 245v signature moments, 245w motion constitution, choreography score and motion lint. REPORT.md must also list, per page: the locked signature moments and whether `checkSignature` passed, the choreography score and motion-lint findings, the optical findings, and the signature-critique answers. Defaults for this run: K=3, `design.screenshotRounds` 3, `design.keySectionRounds` 2, jury Design >= 7 and Creativity >= 6 with target 8, `design.ownerLook` on, `design.elevate.freeRounds` 1.
+
 ## Deliverables
 
 1. Create a scratch project at `C:\Users\lucid\Desktop\desk-proof-245\site` (outside the repo): a two-page brief (home plus one inner page, for example a small bakery), two owner photos from the repo's test fixtures, two named references whose URLs are in the design library.

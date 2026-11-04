@@ -17,7 +17,7 @@ Confirm by reading the code; if the real code differs from this description, ada
 
 ## Deliverables
 
-1. For a `sampling: k` prompt, run K candidates (config `design.sampling.k`, default 3, max 4; 0 or 1 disables) each in a fresh session on its own git worktree or temporary branch from the same base commit (use `git worktree`; never touch the main working tree until the winner is chosen; clean up worktrees after).
+1. For a `sampling: k` prompt, run K candidates (config `design.sampling.k`, default 3, max 4; 0 or 1 disables) each in a fresh session. Sampling covers the hero, every prompt that implements a 245v signature moment (front matter `signature: <id>`), and every section DESIGN.md marks `primary`; the generator marks all of them `sampling: k`. For signature prompts, scoring also includes `checkSignature` (245v), the 245w choreography score and the 245x optical findings. Each runs on its own git worktree or temporary branch from the same base commit (use `git worktree`; never touch the main working tree until the winner is chosen; clean up worktrees after).
 2. Score each: CDP blockers (any blocker ranks below every clean candidate), structure gate, then jury Design and Creativity. Write `qa/sampling/<promptId>.json` with every score and the session count.
 3. Merge only the winner's commit into the build branch with a normal commit; discard the rest. Write a 5-line lessons note (what made the winner better) to `qa/sampling/<promptId>-lessons.md`, and 245k's generator appends it to the next prompt's must_haves.
 4. Visible cost: before sampling, the desk shows "This section will run K sessions" with the configured K; the build log and REPORT lines record sessions used. Sampling is never applied to non-critical prompts.

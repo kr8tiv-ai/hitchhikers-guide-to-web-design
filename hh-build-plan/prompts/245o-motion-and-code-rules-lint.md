@@ -24,7 +24,8 @@ Run 11's prompts carried long lists of motion constants (scrub, fov, bloom, Leni
 3. Run the lint in the per-prompt close checks for files the prompt owns (fails with one feedback rerun, 244k mechanism). Add tap-target size (all `a, button, [role=button], input` visible at 375 at least 44x44) and CLS (< 0.05 measured with a PerformanceObserver over load + scroll) to the 245l shot step for the page, reported as faults.
 4. Update the lenis/motion goldens to the one set setup. Generic; no site-c names.
 
-5. Wire, do not duplicate: `checkRecipes` in `packages/qa/src/recipe-check.ts` already covers two scroll owners, the Lenis ticker, layout-property tweens, reduced motion and more. Add only the rules it lacks (`transition: all`, Lenis `smoothTouch`) there, and have `lintMotionSource` call it rather than reimplementing. The pre-built recipes in `@hitchhiker/design-system` (245d) must pass this lint with zero findings.
+5. 245w already owns the motion constitution, choreography score and the hard motion lint rules (scroll owner, Lenis ticker, refresh after fonts/images, scrubbed layout/filter tweens, nested triggers, duplicate tweens, batch, matchMedia/reduced motion, cleanup, free-form GSAP). This prompt only injects the short rule (including 245u `MOTION_COMPOSE_RULE` and 245v `SIGNATURE_RULE`) into page prompts and adds the non-motion code rules; call `lintMotion` from 245w, never reimplement it. Note: 245w allows transform and opacity only in scrubbed timelines; keep clip-path/filter allowed only in non-scrubbed tweens.
+6. Wire, do not duplicate: `checkRecipes` in `packages/qa/src/recipe-check.ts` already covers two scroll owners, the Lenis ticker, layout-property tweens, reduced motion and more. Add only the rules it lacks (`transition: all`, Lenis `smoothTouch`) there, and have `lintMotionSource` call it rather than reimplementing. The pre-built recipes in `@hitchhiker/design-system` (245d) must pass this lint with zero findings.
 
 ## Tests
 
