@@ -14,6 +14,9 @@
  * template markup only: a leading Astro or MDX frontmatter fence is removed,
  * then scripts and styles, before the walk. Each src file is parsed once per
  * close check and reused for every hit.
+ * A repeated sentence names the src files whose template markup or data
+ * strings contain it. Frontmatter logic is not a source. Data files are read
+ * as strings and are not walked as HTML.
  * Page-content hits (a concept caption, a repeated block) fail a prompt when
  * a file it owns or wrote contains the markup. A copy that comes from a
  * component a later prompt owns does not fail an earlier prompt. When the
@@ -43,6 +46,8 @@ const HIDDEN_CLASS =
   /^(?:sr-only(?:-focusable)?|visually-hidden|visuallyhidden|u-sr-only|u-visuallyhidden|screen-reader-only|screenreader-only)$/i;
 const HEADING_DETAIL = /^heading "([^"]+)" appears (\d+) times/;
 const SOURCE_EXT = /\.(?:astro|html?|svelte|vue|jsx|tsx|mdx?)$/i;
+const DATA_EXT = /\.(?:ts|js|mjs|cjs|json)$/i;
+const QUOTED_STRING = /(["'`])((?:\\.|(?!\1)[\s\S])*?)\1/g;
 const UTILITY_FORM = /newsletter|search|filter|login|sign-up|signup|subscribe/i;
 const PLURAL_COLLECTION = /^(?:farms|listings|products|properties|parcels)$/i;
 const SINGULAR_COLLECTION = /^(?:farm|listing|product|property|parcel)$/i;
@@ -257,16 +262,19 @@ function inListingCard(stack: readonly Frame[]): boolean {
 export interface SourceScan {
   readonly projectDir: string;
   files: string[] | null;
+  dataFiles: string[] | null;
   parsed: Map<string, ParsedSource>;
 }
 
 interface ParsedSource {
   headings: Map<string, number>;
   concepts: SurfaceHit[];
+  /** Template markup plus data strings, whitespace folded. Empty when unread. */
+  prose: string;
 }
 
 export function sourceScan(projectDir: string): SourceScan {
-  return { projectDir, files: null, parsed: new Map() };
+  return { projectDir, files: null, dataFiles: null, parsed: new Map() };
 }
 
 /** Visible heading copies under src. Hidden, dictionary, chrome, frontmatter, and script copies are left out. */
@@ -298,6 +306,29 @@ export function conceptSourceFiles(
   const found: string[] = [];
   for (const rel of sourceFiles(scan)) {
     if (parsedFile(scan, rel).concepts.some((hit) => captionMatches(hit.detail, needle))) found.push(rel);
+  }
+  found.sort((left, right) => left.localeCompare(right));
+  return found;
+}
+
+/**
+ * Src files whose template markup or data strings contain this sentence.
+ * A quoted string used only as frontmatter logic is left out. The sentence's
+ * trailing punctuation is ignored so a block closer's extra period still matches.
+ */
+export function repeatedSentenceSources(
+  projectDir: string,
+  sentence: string,
+  scan: SourceScan = sourceScan(projectDir),
+): string[] {
+  const needle = sentence.replace(/[.!?]+$/g, "").replace(/\s+/g, " ").trim();
+  if (needle === "") return [];
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const rel of [...sourceFiles(scan), ...dataSourceFiles(scan)]) {
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    if (parsedFile(scan, rel).prose.includes(needle)) found.push(rel);
   }
   found.sort((left, right) => left.localeCompare(right));
   return found;
@@ -621,22 +652,78 @@ function captionMatches(detail: string, needle: string): boolean {
 }
 
 function sourceFiles(scan: SourceScan): string[] {
-  if (scan.files === null) scan.files = srcVisitorFiles(scan.projectDir);
+  if (scan.files === null) scan.files = srcMatchingFiles(scan.projectDir, SOURCE_EXT);
   return scan.files;
+}
+
+function dataSourceFiles(scan: SourceScan): string[] {
+  if (scan.dataFiles === null) scan.dataFiles = srcMatchingFiles(scan.projectDir, DATA_EXT);
+  return scan.dataFiles;
 }
 
 function parsedFile(scan: SourceScan, rel: string): ParsedSource {
   const found = scan.parsed.get(rel);
   if (found !== undefined) return found;
   const raw = readHtml(path.join(scan.projectDir, rel));
-  const markup = raw === null ? null : templateMarkup(rel, raw);
+  if (raw === null) {
+    const empty: ParsedSource = { headings: new Map(), concepts: [], prose: "" };
+    scan.parsed.set(rel, empty);
+    return empty;
+  }
+  if (isDataFile(rel)) {
+    const data: ParsedSource = { headings: new Map(), concepts: [], prose: normalizeSpace(dataStringText(raw)) };
+    scan.parsed.set(rel, data);
+    return data;
+  }
+  const markup = templateMarkup(rel, raw);
   const noted = new Map<string, { count: number; sample: string }>();
-  const concepts = markup === null ? [] : conceptHits(rel, markup, noted);
+  const concepts = conceptHits(rel, markup, noted);
   const headings = new Map<string, number>();
   for (const [key, row] of noted) headings.set(key, row.count);
-  const parsed: ParsedSource = { headings, concepts };
+  const prose = normalizeSpace(`${templateProse(markup)}\n${dataStringText(frontmatterBlock(rel, raw))}`);
+  const parsed: ParsedSource = { headings, concepts, prose };
   scan.parsed.set(rel, parsed);
   return parsed;
+}
+
+function isDataFile(rel: string): boolean {
+  return DATA_EXT.test(rel.slice(rel.lastIndexOf("/") + 1));
+}
+
+/** Quoted strings. A comparison or an error argument is frontmatter logic, not data. */
+function dataStringText(source: string): string {
+  const parts: string[] = [];
+  const regex = new RegExp(QUOTED_STRING.source, QUOTED_STRING.flags);
+  for (const match of source.matchAll(regex)) {
+    const index = match.index ?? 0;
+    if (isLogicString(source, index)) continue;
+    const body = match[2] ?? "";
+    if (body.trim() !== "") parts.push(body);
+  }
+  return parts.join("\n");
+}
+
+function isLogicString(source: string, index: number): boolean {
+  const before = source.slice(Math.max(0, index - 80), index);
+  if (/[=!]=+\s*$/.test(before)) return true;
+  if (/\.(?:includes|startsWith|endsWith|indexOf)\s*\(\s*$/.test(before)) return true;
+  if (/\b(?:Error|TypeError|RangeError)\s*\(\s*$/.test(before)) return true;
+  return false;
+}
+
+function templateProse(markup: string): string {
+  return `${markup}\n${markup.replace(/<[^>]+>/g, " ")}`;
+}
+
+function frontmatterBlock(rel: string, source: string): string {
+  if (!FRONTMATTER_EXT.test(rel)) return "";
+  const match = FRONTMATTER_FENCE.exec(source);
+  if (match === null || match.index !== 0) return "";
+  return match[0];
+}
+
+function normalizeSpace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 const FRONTMATTER_EXT = /\.(?:astro|mdx?)$/i;
@@ -648,7 +735,7 @@ function templateMarkup(rel: string, source: string): string {
   return stripNoise(fenced);
 }
 
-function srcVisitorFiles(projectDir: string): string[] {
+function srcMatchingFiles(projectDir: string, ext: RegExp): string[] {
   const root = path.join(projectDir, "src");
   if (!isDirectory(root)) return [];
   const found: string[] = [];
@@ -670,7 +757,7 @@ function srcVisitorFiles(projectDir: string): string[] {
         walk(abs);
         continue;
       }
-      if (entry.file && SOURCE_EXT.test(entry.name)) found.push(path.relative(projectDir, abs).split("\\").join("/"));
+      if (entry.file && ext.test(entry.name)) found.push(path.relative(projectDir, abs).split("\\").join("/"));
     }
   };
   walk(root);

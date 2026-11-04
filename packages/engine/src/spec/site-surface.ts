@@ -4,6 +4,7 @@
  * Comments, scripts, styles, and non-HTML files are ignored.
  * A sentence of 12 or more words may appear twice on a page. That is the
  * footer disclaimer plus one line beside the inquiry form. A third copy fails.
+ * The hit names that count. The 180-character clip stays on the sentence.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -78,7 +79,7 @@ function repetitionHits(file: string, html: string): SurfaceHit[] {
   const hits: SurfaceHit[] = [];
   for (const row of counts.values()) {
     if (row.count <= REPEAT_LIMIT) continue;
-    hits.push({ file, detail: clip(row.sentence) });
+    hits.push({ file, detail: `${clip(row.sentence)} appears ${String(row.count)} times` });
   }
   return hits;
 }

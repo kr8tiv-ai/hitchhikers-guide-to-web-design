@@ -83,6 +83,7 @@ import {
   formatEmptyGalleryFailure,
   formatHomeListingsFailure,
   repeatedHeading,
+  repeatedSentenceSources,
   scanConceptImages,
   scanDuplicateBlocks,
   scanEmptyGalleries,
@@ -94,6 +95,7 @@ import {
   countVisibleCopy,
   distHtmlForOwnedSource,
   formatFixBeforeFinish,
+  isSurfaceCloseReason,
   isVisitorSource,
   judgeVisibleCopy,
   parseVisibleCopyBaseline,
@@ -1345,7 +1347,7 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
         } catch (error: unknown) {
           const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
           const text = reason === "" ? "The build did not finish." : reason;
-          const outcome = await failOrRerunVisibleCopy(
+          const outcome = await failOrRerunCloseFailure(
             projectDir,
             next.id,
             text,
@@ -1529,7 +1531,7 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
     } catch (error: unknown) {
       const text = error instanceof Error ? publicText(error.message) : "";
       const reason = text === "" ? "The build did not finish." : text;
-      const outcome = await failOrRerunVisibleCopy(
+      const outcome = await failOrRerunCloseFailure(
         projectDir,
         run.promptId,
         reason,
@@ -2488,7 +2490,9 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
  * page, so a prompt is not failed for a page it does not own unless its
  * component is the source. Narration stays on the visible-copy baseline.
  * Placeholder contact and a repeated sentence keep the owned-page rule.
- * They are not pattern counts.
+ * They are not pattern counts. A repeated sentence names how many times it
+ * appears and the src files whose template markup or data strings contain it.
+ * Frontmatter logic is not a source.
  * Empty gallery and home listings are feature checks. They fail a prompt only
  * when it owns that feature on an owned dist page. A page job and an image set
  * own both. A gallery or carousel feature owns the gallery. A listing or card
@@ -2521,7 +2525,9 @@ function surfaceCloseReason(projectDir: string, promptId: string, promptText: st
   const conceptHits = scanConceptImages(dist);
   const duplicateHits = nameDuplicateSources(scanDuplicateBlocks(dist), projectDir, scan);
   const placeholder = formatPlaceholderContactFailure(keep(scanPlaceholderContacts(dist)));
-  const repeated = formatRepeatedSentenceFailure(keep(scanRepeatedSentences(dist)));
+  const repeated = formatRepeatedSentenceFailure(
+    nameRepeatedSources(keep(scanRepeatedSentences(dist)), projectDir, scan),
+  );
   const concept = formatConceptImageFailure(
     fullSite ? conceptHits : conceptHits.filter((hit) => ownsConcept(projectDir, hit, owned, ownedDist, later, scan)),
   );
@@ -2531,6 +2537,23 @@ function surfaceCloseReason(projectDir: string, promptId: string, promptText: st
   );
   const home = formatHomeListingsFailure(feature("listings", scanHomeListings(dist)));
   return [placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
+}
+
+function nameRepeatedSources(hits: readonly SurfaceHit[], projectDir: string, scan: SourceScan): SurfaceHit[] {
+  return hits.map((hit) => {
+    const sentence = repeatedSentenceText(hit.detail);
+    if (sentence === null) return hit;
+    const files = repeatedSentenceSources(projectDir, sentence, scan);
+    if (files.length === 0) return hit;
+    return { ...hit, detail: `${hit.detail}; sources: ${files.join(", ")}` };
+  });
+}
+
+function repeatedSentenceText(detail: string): string | null {
+  const match = / appears (\d+) times$/.exec(detail);
+  if (match === null || match.index === undefined) return null;
+  const sentence = detail.slice(0, match.index).trim();
+  return sentence === "" ? null : sentence;
 }
 
 function nameDuplicateSources(hits: readonly SurfaceHit[], projectDir: string, scan: SourceScan): SurfaceHit[] {
@@ -2721,8 +2744,11 @@ function ownedPageDistHits(projectDir: string, promptText: string, files: readon
 function writeSessionPrompt(projectDir: string, promptId: string, promptPath: string, priorRecovery: string): string {
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const ownedFiles = parseExpectedFiles(promptText);
-  if (!shouldScanVisibleCopy(promptText, ownedFiles)) return promptPath;
-  const hits = [...ownedVisitorHits(projectDir, promptText), ...ownedPageDistHits(projectDir, promptText, ownedFiles)];
+  const surface = isSurfaceCloseReason(priorRecovery);
+  if (!shouldScanVisibleCopy(promptText, ownedFiles) && !surface) return promptPath;
+  const hits = shouldScanVisibleCopy(promptText, ownedFiles)
+    ? [...ownedVisitorHits(projectDir, promptText), ...ownedPageDistHits(projectDir, promptText, ownedFiles)]
+    : [];
   const block = formatFixBeforeFinish(hits, priorRecovery);
   if (block === "") return promptPath;
   const base = readOptional(promptPath);
@@ -2734,16 +2760,26 @@ function writeSessionPrompt(projectDir: string, promptId: string, promptPath: st
 }
 
 /**
- * Visible-copy close failures rerun once. A dist-only or full-site failure
- * on a later prompt does not: that prompt's spawn still has to read the
- * previous prompt's run record, and a second spawn would replace it.
- * An owned-source miss is in a file this prompt can fix, so it still reruns.
- * A site-wide copy pass owns every page. Its increased-count failure reruns
- * once too. The baseline write still leaves the previous run record in place
- * until this prompt writes its own, so the first spawn can read it.
+ * Close failures rerun once. Visible copy keeps its rule: a dist-only or
+ * full-site failure on a later prompt does not, because that spawn still has
+ * to read the previous prompt's run record. An owned-source miss is in a file
+ * this prompt can fix, so it still reruns. A site-wide copy pass reruns when
+ * the count went up. A surface failure on any prompt that is not final QA or
+ * launch reruns once too, including when the reason also lists visible copy.
+ * QA and launch stay on the visible-copy rule.
  */
-function canRerunVisibleCopy(reason: string, startedOverPrevious: boolean): boolean {
-  if (!reason.startsWith("Visible copy failed.")) return false;
+function canRerunCloseFailure(
+  reason: string,
+  startedOverPrevious: boolean,
+  promptText: string,
+  files: readonly string[],
+): boolean {
+  const visible = reason.startsWith("Visible copy failed.");
+  const surface = isSurfaceCloseReason(reason);
+  if (!visible && !surface) return false;
+  const fullSite = promptRequiresFullVisibleCopy(promptText, files);
+  if (!fullSite && surface) return true;
+  if (!visible) return false;
   if (
     startedOverPrevious &&
     !reason.includes("Owned source:") &&
@@ -2754,8 +2790,8 @@ function canRerunVisibleCopy(reason: string, startedOverPrevious: boolean): bool
   return true;
 }
 
-/** One recovery rerun hands the visible-copy reason back. A second failure halts. */
-async function failOrRerunVisibleCopy(
+/** One recovery rerun hands the close reason back. A second failure halts. */
+async function failOrRerunCloseFailure(
   projectDir: string,
   promptId: string,
   reason: string,
@@ -2767,7 +2803,8 @@ async function failOrRerunVisibleCopy(
 ): Promise<"rerun" | "failed"> {
   const run = readRunFile(projectDir);
   const already = run?.promptId === promptId && run.recoveryRerun === true;
-  if (!canRerunVisibleCopy(reason, startedOverPrevious) || already) {
+  const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
+  if (!canRerunCloseFailure(reason, startedOverPrevious, promptText, files) || already) {
     await settleItem(projectDir, promptId, "failed", reason, lines, files, startedAt, outside);
     return "failed";
   }

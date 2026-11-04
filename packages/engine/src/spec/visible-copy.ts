@@ -379,20 +379,47 @@ export function formatHitLine(hit: VisibleCopyHit, rootLabel = ""): string {
 const FIX_BEFORE_INSTRUCTION =
   "Remove the plan metadata attribute or guard it with `import.meta.env.DEV`. Replace TODO and build narration with visitor copy.";
 
+const REPEAT_COPY_INSTRUCTION =
+  "Reword copies in files you own, or remove them, so the sentence appears at most twice on the page. Never edit files owned by other prompts. Never weaken a check.";
+
+const SURFACE_FIX_INSTRUCTION =
+  "Fix the listed failure in files you own. Never edit files owned by other prompts. Never weaken a check.";
+
+/**
+ * A stored close reason has had its line breaks turned into spaces.
+ * The label still counts when it follows visible copy on that one line.
+ */
+const SURFACE_CLOSE_REASON =
+  /(?:^|[^\w])(?:Placeholder contact failed|Repeated sentence failed|Concept image failed|Empty gallery failed|Duplicate block failed|Home listings failed)\./;
+
+/** True when a close reason includes a surface check. QA and launch use the same labels. */
+export function isSurfaceCloseReason(reason: string): boolean {
+  return SURFACE_CLOSE_REASON.test(reason);
+}
+
+function isRepeatedSentenceReason(reason: string): boolean {
+  return /(?:^|[^\w])Repeated sentence failed\./.test(reason);
+}
+
 /**
  * Engine-owned block for the session text. Empty when there is nothing to fix.
- * `failureReason` is the close-check reason from a recovery rerun.
+ * `failureReason` is the close-check reason from a recovery rerun. A visible-copy
+ * failure and a surface failure both land here. A repeated sentence says to
+ * reword the copies in files this prompt owns.
  */
 export function formatFixBeforeFinish(hits: readonly VisibleCopyHit[], failureReason = ""): string {
   const reason = failureReason.trim();
   const shown = sortHits(dedupeHits(hits)).slice(0, HIT_CAP);
-  const failed = reason.startsWith("Visible copy failed.");
-  if (shown.length === 0 && !failed) return "";
+  const visible = reason.startsWith("Visible copy failed.");
+  const surface = isSurfaceCloseReason(reason);
+  if (shown.length === 0 && !visible && !surface) return "";
   const lines = ["## Fix before you finish", ""];
-  if (failed) lines.push(reason, "");
+  if (visible || surface) lines.push(reason, "");
   for (const hit of shown) lines.push(formatHitLine(hit));
   if (shown.length > 0) lines.push("");
-  lines.push(FIX_BEFORE_INSTRUCTION);
+  if (visible || shown.length > 0) lines.push(FIX_BEFORE_INSTRUCTION);
+  if (isRepeatedSentenceReason(reason)) lines.push(REPEAT_COPY_INSTRUCTION);
+  else if (surface) lines.push(SURFACE_FIX_INSTRUCTION);
   return `${lines.join("\n")}\n`;
 }
 
