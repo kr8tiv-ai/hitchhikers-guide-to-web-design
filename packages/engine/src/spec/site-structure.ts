@@ -10,6 +10,10 @@
  * Hidden and screen-reader headings do not count, and neither does a
  * translation dictionary. Header, footer, and nav may repeat a heading.
  * A repeated visible heading names the source files when they are under src.
+ * The tag reader always advances, including on a stray slash. Source scans read
+ * template markup only: a leading Astro or MDX frontmatter fence is removed,
+ * then scripts and styles, before the walk. Each src file is parsed once per
+ * close check and reused for every hit.
  * Page-content hits (a concept caption, a repeated block) fail a prompt when
  * a file it owns or wrote contains the markup. A copy that comes from a
  * component a later prompt owns does not fail an earlier prompt. When the
@@ -120,7 +124,11 @@ export function formatHomeListingsFailure(hits: readonly SurfaceHit[]): string {
   return formatStructureFailure("Home listings failed.", hits);
 }
 
-function conceptHits(file: string, html: string): SurfaceHit[] {
+function conceptHits(
+  file: string,
+  html: string,
+  headings?: Map<string, { count: number; sample: string }>,
+): SurfaceHit[] {
   const hits: SurfaceHit[] = [];
   const listing = isListingSurface(file);
   const flagged = (stack: readonly Frame[]): boolean => listing || inListingCard(stack);
@@ -142,6 +150,7 @@ function conceptHits(file: string, html: string): SurfaceHit[] {
       }
     },
     close(frame, ancestors) {
+      if (headings !== undefined && frame.heading && !frame.chrome && !frame.hidden) noteHeading(headings, frame.text);
       if (!frame.figcaption || frame.hidden) return;
       const short = shortConcept(frame.text);
       if (short === null) return;
@@ -244,31 +253,51 @@ function inListingCard(stack: readonly Frame[]): boolean {
   return stack.some((frame) => frame.listingCard || frame.article);
 }
 
-/** Visible heading copies under src. Hidden, dictionary, and chrome copies are left out. */
-export function duplicateSourceCounts(projectDir: string, detail: string): HeadingSource[] {
+/** One close check. Each src file is parsed once and reused for every hit. */
+export interface SourceScan {
+  readonly projectDir: string;
+  files: string[] | null;
+  parsed: Map<string, ParsedSource>;
+}
+
+interface ParsedSource {
+  headings: Map<string, number>;
+  concepts: SurfaceHit[];
+}
+
+export function sourceScan(projectDir: string): SourceScan {
+  return { projectDir, files: null, parsed: new Map() };
+}
+
+/** Visible heading copies under src. Hidden, dictionary, chrome, frontmatter, and script copies are left out. */
+export function duplicateSourceCounts(
+  projectDir: string,
+  detail: string,
+  scan: SourceScan = sourceScan(projectDir),
+): HeadingSource[] {
   const parsed = repeatedHeading(detail);
   if (parsed === null) return [];
   const key = parsed.sample.toLowerCase();
   const rows: HeadingSource[] = [];
-  for (const rel of srcVisitorFiles(projectDir)) {
-    const html = readHtml(path.join(projectDir, rel));
-    if (html === null) continue;
-    const count = visibleHeadingCounts(html).get(key) ?? 0;
+  for (const rel of sourceFiles(scan)) {
+    const count = parsedFile(scan, rel).headings.get(key) ?? 0;
     if (count > 0) rows.push({ file: rel, count });
   }
   rows.sort((left, right) => left.file.localeCompare(right.file));
   return rows;
 }
 
-/** Source files whose own markup fails the concept check for this caption. */
-export function conceptSourceFiles(projectDir: string, detail: string): string[] {
+/** Source files whose template markup fails the concept check for this caption. */
+export function conceptSourceFiles(
+  projectDir: string,
+  detail: string,
+  scan: SourceScan = sourceScan(projectDir),
+): string[] {
   const needle = detail.replace(/\s+/g, " ").trim().toLowerCase();
   if (needle === "") return [];
   const found: string[] = [];
-  for (const rel of srcVisitorFiles(projectDir)) {
-    const html = readHtml(path.join(projectDir, rel));
-    if (html === null) continue;
-    if (conceptHits(rel, html).some((hit) => captionMatches(hit.detail, needle))) found.push(rel);
+  for (const rel of sourceFiles(scan)) {
+    if (parsedFile(scan, rel).concepts.some((hit) => captionMatches(hit.detail, needle))) found.push(rel);
   }
   found.sort((left, right) => left.localeCompare(right));
   return found;
@@ -412,6 +441,10 @@ function walkHtml(
     }
     const tag = readTag(clean, index);
     if (tag === null) break;
+    if (tag.end <= index) {
+      index += 1;
+      continue;
+    }
     index = tag.end;
     if (tag.closing) {
       closeTag(stack, tag.name, (frame, ancestors) => handlers.close?.(frame, ancestors));
@@ -508,6 +541,7 @@ function readTag(html: string, start: number): ReadTag | null {
       index += 2;
       break;
     }
+    const before = index;
     const attrStart = index;
     while (index < html.length && /[^\s=\/>]/.test(html[index] ?? "")) index += 1;
     const attrName = html.slice(attrStart, index).toLowerCase();
@@ -530,6 +564,8 @@ function readTag(html: string, start: number): ReadTag | null {
       }
     }
     if (attrName !== "") attrs.set(attrName, value);
+    // A lone "/" is not an attribute name and is not "/>". Skip it, or any other byte no branch consumed.
+    if (index === before) index += 1;
   }
   return { name, attrs, closing, selfClosing, end: index };
 }
@@ -584,16 +620,32 @@ function captionMatches(detail: string, needle: string): boolean {
   return text !== "" && (text.includes(needle) || needle.includes(text));
 }
 
-function visibleHeadingCounts(html: string): Map<string, number> {
-  const headings = new Map<string, { count: number; sample: string }>();
-  walkHtml(html, {
-    close(frame) {
-      if (frame.heading && !frame.chrome && !frame.hidden) noteHeading(headings, frame.text);
-    },
-  });
-  const counts = new Map<string, number>();
-  for (const [key, row] of headings) counts.set(key, row.count);
-  return counts;
+function sourceFiles(scan: SourceScan): string[] {
+  if (scan.files === null) scan.files = srcVisitorFiles(scan.projectDir);
+  return scan.files;
+}
+
+function parsedFile(scan: SourceScan, rel: string): ParsedSource {
+  const found = scan.parsed.get(rel);
+  if (found !== undefined) return found;
+  const raw = readHtml(path.join(scan.projectDir, rel));
+  const markup = raw === null ? null : templateMarkup(rel, raw);
+  const noted = new Map<string, { count: number; sample: string }>();
+  const concepts = markup === null ? [] : conceptHits(rel, markup, noted);
+  const headings = new Map<string, number>();
+  for (const [key, row] of noted) headings.set(key, row.count);
+  const parsed: ParsedSource = { headings, concepts };
+  scan.parsed.set(rel, parsed);
+  return parsed;
+}
+
+const FRONTMATTER_EXT = /\.(?:astro|mdx?)$/i;
+const FRONTMATTER_FENCE = /^(?:\uFEFF)?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/** Template markup. A leading Astro or MDX fence is dropped, then scripts and styles. */
+function templateMarkup(rel: string, source: string): string {
+  const fenced = FRONTMATTER_EXT.test(rel) ? source.replace(FRONTMATTER_FENCE, "") : source;
+  return stripNoise(fenced);
 }
 
 function srcVisitorFiles(projectDir: string): string[] {

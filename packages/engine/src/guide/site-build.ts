@@ -76,6 +76,8 @@ import {
 import {
   conceptSourceFiles,
   duplicateSourceCounts,
+  sourceScan,
+  type SourceScan,
   formatConceptImageFailure,
   formatDuplicateBlockFailure,
   formatEmptyGalleryFailure,
@@ -2492,6 +2494,7 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
  * own both. A gallery or carousel feature owns the gallery. A listing or card
  * requirement owns the home listings. A section or art prompt owns neither,
  * even when it lists the page file, unless the id itself is a listing or card.
+ * Concept and duplicate ownership parse each src file once for this check.
  */
 function surfaceCloseReason(projectDir: string, promptId: string, promptText: string, files: readonly string[]): string {
   const fullSite = promptRequiresFullVisibleCopy(promptText, files);
@@ -2514,24 +2517,25 @@ function surfaceCloseReason(projectDir: string, promptId: string, promptText: st
     if (!promptOwnsStructureFeature(promptText, kind)) return [];
     return hits.filter((hit) => ownedDist.has(hit.file));
   };
+  const scan = sourceScan(projectDir);
   const conceptHits = scanConceptImages(dist);
-  const duplicateHits = nameDuplicateSources(scanDuplicateBlocks(dist), projectDir);
+  const duplicateHits = nameDuplicateSources(scanDuplicateBlocks(dist), projectDir, scan);
   const placeholder = formatPlaceholderContactFailure(keep(scanPlaceholderContacts(dist)));
   const repeated = formatRepeatedSentenceFailure(keep(scanRepeatedSentences(dist)));
   const concept = formatConceptImageFailure(
-    fullSite ? conceptHits : conceptHits.filter((hit) => ownsConcept(projectDir, hit, owned, ownedDist, later)),
+    fullSite ? conceptHits : conceptHits.filter((hit) => ownsConcept(projectDir, hit, owned, ownedDist, later, scan)),
   );
   const gallery = formatEmptyGalleryFailure(feature("gallery", scanEmptyGalleries(dist)));
   const duplicate = formatDuplicateBlockFailure(
-    fullSite ? duplicateHits : duplicateHits.filter((hit) => ownsDuplicate(projectDir, hit, owned, ownedDist, later)),
+    fullSite ? duplicateHits : duplicateHits.filter((hit) => ownsDuplicate(projectDir, hit, owned, ownedDist, later, scan)),
   );
   const home = formatHomeListingsFailure(feature("listings", scanHomeListings(dist)));
   return [placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
 }
 
-function nameDuplicateSources(hits: readonly SurfaceHit[], projectDir: string): SurfaceHit[] {
+function nameDuplicateSources(hits: readonly SurfaceHit[], projectDir: string, scan: SourceScan): SurfaceHit[] {
   return hits.map((hit) => {
-    const rows = duplicateSourceCounts(projectDir, hit.detail);
+    const rows = duplicateSourceCounts(projectDir, hit.detail, scan);
     if (rows.length === 0) return hit;
     return { ...hit, detail: `${hit.detail}; sources: ${rows.map((row) => row.file).join(", ")}` };
   });
@@ -2543,8 +2547,9 @@ function ownsConcept(
   owned: ReadonlySet<string>,
   ownedDist: ReadonlySet<string>,
   later: ReadonlySet<string>,
+  scan: SourceScan,
 ): boolean {
-  const sources = conceptSourceFiles(projectDir, hit.detail);
+  const sources = conceptSourceFiles(projectDir, hit.detail, scan);
   const mine = sources.some((file) => owned.has(file));
   if (mine) return true;
   if (sources.some((file) => later.has(file))) return false;
@@ -2557,10 +2562,11 @@ function ownsDuplicate(
   owned: ReadonlySet<string>,
   ownedDist: ReadonlySet<string>,
   later: ReadonlySet<string>,
+  scan: SourceScan,
 ): boolean {
   const parsed = repeatedHeading(hit.detail);
   if (parsed === null) return ownedDist.has(hit.file);
-  const rows = duplicateSourceCounts(projectDir, hit.detail);
+  const rows = duplicateSourceCounts(projectDir, hit.detail, scan);
   let found = 0;
   let mine = 0;
   let laterCount = 0;
