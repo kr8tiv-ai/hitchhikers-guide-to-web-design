@@ -41,6 +41,7 @@ import { RenderApprovalError, pagesWaitingForRender, clearPageRenderRunner } fro
 import { clearReferenceCaptureRunner } from "../spec/reference-shots.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
 import { designDriftFindings } from "../spec/design-drift.ts";
+import { constitutionBlock, VISUAL_CONSTITUTION_REL } from "../spec/visual-constitution.ts";
 import { derivedSiteName, writeDesignMd, writeMotionModule } from "../spec/design-outputs.ts";
 import { REFERENCE_PHASES, recordPhasePrompt } from "../spec/skills.ts";
 import { generateBriefPlan, planFromBrief, type BriefAnswer } from "../spec/brief-plan.ts";
@@ -2563,6 +2564,8 @@ function promptTouchesDesignTokens(files: readonly string[]): boolean {
     const rel = file.replaceAll("\\", "/");
     return (
       rel.endsWith("DESIGN.md") ||
+      rel === VISUAL_CONSTITUTION_REL ||
+      rel.endsWith(`/${VISUAL_CONSTITUTION_REL}`) ||
       rel.endsWith(".hitchhiker/design/tokens.json") ||
       rel.endsWith(".hitchhiker/design/tailwind-theme.css") ||
       rel.endsWith(".hitchhiker/brand/BRAND.md") ||
@@ -2786,7 +2789,9 @@ function writeSessionPrompt(projectDir: string, promptId: string, promptPath: st
   const base = readOptional(promptPath);
   const file = path.join(projectDir, ".hitchhiker", "tmp", `session-${promptId}.md`);
   mkdirSync(path.dirname(file), { recursive: true });
-  const body = base.trim() === "" ? block : `${base.replace(/\s+$/, "")}\n\n${block}`;
+  const rest = base.trim() === "" ? block : `${base.replace(/\s+$/, "")}\n\n${block}`;
+  const constitution = constitutionBlock(projectDir).replace(/\s+$/, "");
+  const body = constitution === "" ? rest : `${constitution}\n\n${rest.replace(/^\s+/, "")}`;
   writeFileSync(file, body.endsWith("\n") ? body : `${body}\n`, "utf8");
   return file;
 }

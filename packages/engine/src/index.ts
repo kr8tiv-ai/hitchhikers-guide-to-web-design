@@ -159,6 +159,7 @@ export type { AnswerRecord } from "./required.ts";
 export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRevisitId } from "./interview.ts";
 export { advanceDesignStages, designGateReason, designReadyForBuild } from "./spec/design-stages.ts";
 export { writeDesignLock } from "./spec/design-lock.ts";
+export { VISUAL_CONSTITUTION_REL, constitutionBlock, renderVisualConstitution } from "./spec/visual-constitution.ts";
 export type { DesignBuildGate, DesignStageName } from "./spec/design-stages.ts";
 export { runPrebuildChecks } from "./spec/prebuild-checks.ts";
 export type { PrebuildCheck, PrebuildReport } from "./spec/prebuild-checks.ts";

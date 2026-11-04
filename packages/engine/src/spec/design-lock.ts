@@ -1,11 +1,14 @@
 /**
  * The owner locks DESIGN.md by approving the style guide.
  * Engine rewrites remove the lock. They do not write a new one.
+ * The lock also writes VISUAL-CONSTITUTION.md. Removing the lock removes
+ * that file. A session does not get a writer for it.
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { sha256File } from "./reference-shots.ts";
+import { VISUAL_CONSTITUTION_REL, writeVisualConstitution } from "./visual-constitution.ts";
 
 export const DESIGN_LOCK_REL = ".hitchhiker/design-lock.json";
 
@@ -27,6 +30,8 @@ export function designLockMatches(projectDir: string): boolean {
 export function removeDesignLock(projectDir: string): void {
   const file = path.join(projectDir, DESIGN_LOCK_REL);
   if (existsSync(file)) rmSync(file);
+  const constitution = path.join(projectDir, VISUAL_CONSTITUTION_REL);
+  if (existsSync(constitution)) rmSync(constitution);
 }
 
 /** Written by an owner approval. A picked direction id is required. */
@@ -39,4 +44,5 @@ export function writeDesignLock(projectDir: string, pickedId: string, at = new D
   mkdirSync(path.dirname(file), { recursive: true });
   const body = { sha256: sha256File(designPath), pickedId: id, at };
   writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`, "utf8");
+  writeVisualConstitution(projectDir);
 }

@@ -25,3 +25,11 @@ export function libraryBanHits(text: string): string[] {
   }
   return hits;
 }
+
+/**
+ * One do-not line for VISUAL-CONSTITUTION.md.
+ * It names the prompt bans without using a phrase LIBRARY_BAN_PATTERNS matches,
+ * so the constitution can sit at the top of a build prompt.
+ */
+export const PROMPT_BAN_CONSTITUTION_LINE =
+  "Do not ban a library, cap upgrades, or invent a photo the owner did not give.";

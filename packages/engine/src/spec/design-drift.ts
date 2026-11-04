@@ -1,13 +1,17 @@
 /**
- * DESIGN.md is the source for font families and colour hex values.
- * tokens.json, the theme CSS, src/styles, and BRAND.md picked families
- * are compared to that file. Each mismatch names the file and the token.
+ * DESIGN.md is the source for font families, colour hex values, and
+ * VISUAL-CONSTITUTION.md. tokens.json, the theme CSS, src/styles, and
+ * BRAND.md picked families are compared to that file. A constitution that
+ * differs from a fresh render is a mismatch too. Each mismatch names the
+ * file and the token.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { designTokenTree, type DesignTokenNode } from "./design-md-lint.ts";
 import { DESIGN_THEME_CSS, DESIGN_TOKENS_JSON } from "./design-export.ts";
+import { designLockMatches } from "./design-lock.ts";
+import { renderVisualConstitution, VISUAL_CONSTITUTION_REL } from "./visual-constitution.ts";
 
 export function designDriftFindings(projectDir: string): string[] {
   const designPath = path.join(projectDir, "DESIGN.md");
@@ -18,9 +22,10 @@ export function designDriftFindings(projectDir: string): string[] {
   } catch {
     return [];
   }
-  const expected = expectedTokens(designTokenTree(markdown));
-  if (expected.families.length === 0 && expected.colors.length === 0) return [];
   const findings: string[] = [];
+  compareConstitution(projectDir, markdown, findings);
+  const expected = expectedTokens(designTokenTree(markdown));
+  if (expected.families.length === 0 && expected.colors.length === 0) return findings;
   compareTokens(projectDir, expected, findings);
   compareCssFile(projectDir, DESIGN_THEME_CSS, expected, findings, true);
   compareStylesDir(projectDir, expected, findings);
@@ -53,6 +58,25 @@ function expectedTokens(root: { [key: string]: DesignTokenNode }): ExpectedToken
     }
   }
   return { families, colors };
+}
+
+function compareConstitution(projectDir: string, markdown: string, findings: string[]): void {
+  const fresh = renderVisualConstitution(markdown);
+  const file = path.join(projectDir, VISUAL_CONSTITUTION_REL);
+  if (!existsSync(file)) {
+    if (designLockMatches(projectDir)) findings.push(mismatch(VISUAL_CONSTITUTION_REL, "body", "the render from DESIGN.md", "nothing"));
+    return;
+  }
+  let found = "";
+  try {
+    found = readFileSync(file, "utf8");
+  } catch {
+    findings.push(mismatch(VISUAL_CONSTITUTION_REL, "body", "the render from DESIGN.md", "nothing"));
+    return;
+  }
+  if (found !== fresh) {
+    findings.push(mismatch(VISUAL_CONSTITUTION_REL, "body", "the render from DESIGN.md", "a different constitution"));
+  }
 }
 
 function compareTokens(projectDir: string, expected: ExpectedTokens, findings: string[]): void {
