@@ -1,14 +1,24 @@
 /**
  * Listing structure gates for built HTML.
- * A concept caption, an empty gallery, a repeated spec or inquiry block, and a
- * home page that names listings without a card each fail on their own.
- * Comments, scripts, and styles are ignored. Header, footer, and nav may
- * repeat a heading.
- * Page-content hits (a concept caption, a repeated block) are filtered later
- * to dist pages the prompt owns. Empty gallery and home listings are feature
- * checks. They fail a prompt only when its requirement ids own that feature
- * and the hit is on a dist page it owns, or the prompt is QA or launch.
- * A section or art requirement does not own those two checks.
+ * A concept still fails on a listing page or inside a listing card. An honest
+ * concept caption on any other page passes. A listing card is an article, or a
+ * class token that is card, cards, or a collection card such as farm-card.
+ * A decorative card class is not a listing card.
+ * An empty gallery, a repeated visible heading or inquiry block, and a home
+ * page that names listings without a card each fail on their own.
+ * Comments, scripts, styles, templates, noscript, and JSON are ignored.
+ * Hidden and screen-reader headings do not count, and neither does a
+ * translation dictionary. Header, footer, and nav may repeat a heading.
+ * A repeated visible heading names the source files when they are under src.
+ * Page-content hits (a concept caption, a repeated block) fail a prompt when
+ * a file it owns or wrote contains the markup. A copy that comes from a
+ * component a later prompt owns does not fail an earlier prompt. When the
+ * source cannot be found, the hit still fails the prompt that owns the dist
+ * page. QA and launch read every page.
+ * Empty gallery and home listings are feature checks. They fail a prompt only
+ * when its requirement ids own that feature and the hit is on a dist page it
+ * owns, or the prompt is QA or launch. A section or art requirement does not
+ * own those two checks.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -24,6 +34,11 @@ const ONE_OF_ONE = /\b1\s+of\s+1\b/gi;
 const GALLERY_WORD = /\b(?:gallery|carousel)\b/i;
 const GALLERY_SKIP = /\b(?:controls?|pager|status|counter|buttons?|nav)\b/i;
 const CARD_TOKEN = /(?:^|-)cards?(?:-|$)/i;
+const LISTING_CARD_TOKEN = /^(?:cards?|(?:farm|listing|product|property|parcel)s?-cards?)$/i;
+const HIDDEN_CLASS =
+  /^(?:sr-only(?:-focusable)?|visually-hidden|visuallyhidden|u-sr-only|u-visuallyhidden|screen-reader-only|screenreader-only)$/i;
+const HEADING_DETAIL = /^heading "([^"]+)" appears (\d+) times/;
+const SOURCE_EXT = /\.(?:astro|html?|svelte|vue|jsx|tsx|mdx?)$/i;
 const UTILITY_FORM = /newsletter|search|filter|login|sign-up|signup|subscribe/i;
 const PLURAL_COLLECTION = /^(?:farms|listings|products|properties|parcels)$/i;
 const SINGULAR_COLLECTION = /^(?:farm|listing|product|property|parcel)$/i;
@@ -48,13 +63,20 @@ interface Frame {
   tag: string;
   gallery: boolean;
   card: boolean;
+  listingCard: boolean;
   article: boolean;
   chrome: boolean;
+  hidden: boolean;
   inquiry: boolean;
   figcaption: boolean;
   heading: boolean;
   text: string;
   imgCount: number;
+}
+
+export interface HeadingSource {
+  file: string;
+  count: number;
 }
 
 export function scanConceptImages(root: string): SurfaceHit[] {
@@ -101,30 +123,29 @@ export function formatHomeListingsFailure(hits: readonly SurfaceHit[]): string {
 function conceptHits(file: string, html: string): SurfaceHit[] {
   const hits: SurfaceHit[] = [];
   const listing = isListingSurface(file);
+  const flagged = (stack: readonly Frame[]): boolean => listing || inListingCard(stack);
   walkHtml(html, {
     text(text, stack) {
       if (!CONCEPT_PHRASE.test(text)) return;
-      if (!listing && !inCard(stack)) return;
+      if (!flagged(stack)) return;
       hits.push({ file, detail: clip(text) });
     },
     open(frame, attrs, ancestors) {
-      const card = frame.card || frame.article || inCard(ancestors);
+      const show = flagged(ancestors) || frame.listingCard || frame.article;
       const alt = attrs.get("alt");
       const title = attrs.get("title");
-      if (alt !== undefined && CONCEPT_PHRASE.test(alt) && (listing || card)) hits.push({ file, detail: clip(alt) });
-      if (title !== undefined && CONCEPT_PHRASE.test(title) && (listing || card)) {
-        hits.push({ file, detail: clip(title) });
-      }
-      if (frame.tag === "img" && alt !== undefined && (listing || card)) {
+      if (alt !== undefined && CONCEPT_PHRASE.test(alt) && show) hits.push({ file, detail: clip(alt) });
+      if (title !== undefined && CONCEPT_PHRASE.test(title) && show) hits.push({ file, detail: clip(title) });
+      if (frame.tag === "img" && alt !== undefined && show) {
         const short = shortConcept(alt);
         if (short !== null) hits.push({ file, detail: short });
       }
     },
     close(frame, ancestors) {
-      if (!frame.figcaption) return;
+      if (!frame.figcaption || frame.hidden) return;
       const short = shortConcept(frame.text);
       if (short === null) return;
-      if (!listing && !inCard(ancestors)) return;
+      if (!flagged(ancestors)) return;
       hits.push({ file, detail: short });
     },
   });
@@ -161,8 +182,8 @@ function duplicateHits(file: string, html: string): SurfaceHit[] {
   const listing = isListingDetailFile(file);
   walkHtml(html, {
     close(frame) {
-      if (frame.heading && !frame.chrome) noteHeading(headings, frame.text);
-      if (listing && frame.inquiry) forms += 1;
+      if (frame.heading && !frame.chrome && !frame.hidden) noteHeading(headings, frame.text);
+      if (listing && frame.inquiry && !frame.hidden) forms += 1;
     },
   });
   for (const row of headings.values()) {
@@ -219,8 +240,48 @@ function controlsSayOneOfOne(flat: string): boolean {
   return false;
 }
 
-function inCard(stack: readonly Frame[]): boolean {
-  return stack.some((frame) => frame.card || frame.article);
+function inListingCard(stack: readonly Frame[]): boolean {
+  return stack.some((frame) => frame.listingCard || frame.article);
+}
+
+/** Visible heading copies under src. Hidden, dictionary, and chrome copies are left out. */
+export function duplicateSourceCounts(projectDir: string, detail: string): HeadingSource[] {
+  const parsed = repeatedHeading(detail);
+  if (parsed === null) return [];
+  const key = parsed.sample.toLowerCase();
+  const rows: HeadingSource[] = [];
+  for (const rel of srcVisitorFiles(projectDir)) {
+    const html = readHtml(path.join(projectDir, rel));
+    if (html === null) continue;
+    const count = visibleHeadingCounts(html).get(key) ?? 0;
+    if (count > 0) rows.push({ file: rel, count });
+  }
+  rows.sort((left, right) => left.file.localeCompare(right.file));
+  return rows;
+}
+
+/** Source files whose own markup fails the concept check for this caption. */
+export function conceptSourceFiles(projectDir: string, detail: string): string[] {
+  const needle = detail.replace(/\s+/g, " ").trim().toLowerCase();
+  if (needle === "") return [];
+  const found: string[] = [];
+  for (const rel of srcVisitorFiles(projectDir)) {
+    const html = readHtml(path.join(projectDir, rel));
+    if (html === null) continue;
+    if (conceptHits(rel, html).some((hit) => captionMatches(hit.detail, needle))) found.push(rel);
+  }
+  found.sort((left, right) => left.localeCompare(right));
+  return found;
+}
+
+export function repeatedHeading(detail: string): { sample: string; count: number } | null {
+  const match = HEADING_DETAIL.exec(detail);
+  if (match?.[1] === undefined || match[2] === undefined) return null;
+  const count = Number(match[2]);
+  if (!Number.isFinite(count)) return null;
+  const sample = match[1].replace(/\s+/g, " ").trim();
+  if (sample === "") return null;
+  return { sample, count };
 }
 
 function linksToListing(href: string, listings: readonly string[]): boolean {
@@ -294,6 +355,21 @@ function hasCardClass(attrs: ReadonlyMap<string, string>): boolean {
   return className.split(/\s+/).some((token) => token !== "" && CARD_TOKEN.test(token));
 }
 
+function hasListingCardClass(attrs: ReadonlyMap<string, string>): boolean {
+  const className = attrs.get("class") ?? "";
+  return className.split(/\s+/).some((token) => token !== "" && LISTING_CARD_TOKEN.test(token));
+}
+
+function isConcealed(tag: string, attrs: ReadonlyMap<string, string>): boolean {
+  if (tag === "template" || tag === "noscript") return true;
+  if (attrs.has("hidden")) return true;
+  if ((attrs.get("aria-hidden") ?? "").toLowerCase() === "true") return true;
+  const className = attrs.get("class") ?? "";
+  if (className.split(/\s+/).some((token) => token !== "" && HIDDEN_CLASS.test(token))) return true;
+  const style = attrs.get("style") ?? "";
+  return /display\s*:\s*none/i.test(style) || /visibility\s*:\s*hidden/i.test(style);
+}
+
 function isChrome(tag: string, attrs: ReadonlyMap<string, string>): boolean {
   if (tag === "header" || tag === "footer" || tag === "nav") return true;
   const role = (attrs.get("role") ?? "").toLowerCase();
@@ -358,21 +434,25 @@ function appendText(stack: readonly Frame[], text: string): void {
   for (let index = stack.length - 1; index >= 0; index -= 1) {
     const frame = stack[index];
     if (frame === undefined) continue;
+    if (frame.hidden) return;
     if (!frame.heading && !frame.figcaption) continue;
     frame.text += piece;
-    if (frame.heading || frame.figcaption) break;
+    break;
   }
 }
 
 function makeFrame(tag: string, attrs: ReadonlyMap<string, string>, ancestors: readonly Frame[]): Frame {
   const parentChrome = ancestors.some((frame) => frame.chrome);
   const chrome = parentChrome || isChrome(tag, attrs);
+  const hidden = ancestors.some((frame) => frame.hidden) || isConcealed(tag, attrs);
   return {
     tag,
     gallery: isGalleryElement(tag, attrs),
     card: hasCardClass(attrs),
+    listingCard: hasListingCardClass(attrs),
     article: tag === "article",
     chrome,
+    hidden,
     inquiry: tag === "form" && !chrome && !isUtilityForm(attrs),
     figcaption: tag === "figcaption",
     heading: tag === "h2" || tag === "h3",
@@ -497,6 +577,53 @@ function stripNoise(html: string): string {
 
 function clip(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, CLIP);
+}
+
+function captionMatches(detail: string, needle: string): boolean {
+  const text = detail.replace(/\s+/g, " ").trim().toLowerCase();
+  return text !== "" && (text.includes(needle) || needle.includes(text));
+}
+
+function visibleHeadingCounts(html: string): Map<string, number> {
+  const headings = new Map<string, { count: number; sample: string }>();
+  walkHtml(html, {
+    close(frame) {
+      if (frame.heading && !frame.chrome && !frame.hidden) noteHeading(headings, frame.text);
+    },
+  });
+  const counts = new Map<string, number>();
+  for (const [key, row] of headings) counts.set(key, row.count);
+  return counts;
+}
+
+function srcVisitorFiles(projectDir: string): string[] {
+  const root = path.join(projectDir, "src");
+  if (!isDirectory(root)) return [];
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: Array<{ name: string; directory: boolean; file: boolean }>;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }).map((entry) => ({
+        name: String(entry.name),
+        directory: entry.isDirectory(),
+        file: entry.isFile(),
+      }));
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const abs = path.join(dir, entry.name);
+      if (entry.directory) {
+        walk(abs);
+        continue;
+      }
+      if (entry.file && SOURCE_EXT.test(entry.name)) found.push(path.relative(projectDir, abs).split("\\").join("/"));
+    }
+  };
+  walk(root);
+  found.sort((left, right) => left.localeCompare(right));
+  return found;
 }
 
 function sortHits(hits: readonly SurfaceHit[]): SurfaceHit[] {

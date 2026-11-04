@@ -74,10 +74,13 @@ import {
   type SurfaceHit,
 } from "../spec/site-surface.ts";
 import {
+  conceptSourceFiles,
+  duplicateSourceCounts,
   formatConceptImageFailure,
   formatDuplicateBlockFailure,
   formatEmptyGalleryFailure,
   formatHomeListingsFailure,
+  repeatedHeading,
   scanConceptImages,
   scanDuplicateBlocks,
   scanEmptyGalleries,
@@ -2468,33 +2471,42 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const copyReason = visibleCopyCloseReason(projectDir, promptId, promptText, files);
-  const surfaceReason = surfaceCloseReason(projectDir, promptText, files);
+  const surfaceReason = surfaceCloseReason(projectDir, promptId, promptText, files);
   const headReason = documentHeadCloseReason(projectDir, promptText, files);
   const reason = [copyReason, surfaceReason, headReason].filter((part) => part !== "").join("\n");
   if (reason !== "") throw new Error(reason);
 }
 
 /**
- * QA and launch read every built page. Any other prompt fails only for a dist
- * page its source files own. A component path owns no dist page, so a prompt
- * is not failed for a file it does not own. Narration stays on the visible-copy
- * baseline. Placeholder contact, a repeated sentence, a concept caption, and a
- * repeated spec or inquiry block use that owned-page rule. They are not pattern
- * counts.
+ * QA and launch read every built page. Any other prompt fails a concept
+ * caption or a repeated block when a file it owns or wrote contains that
+ * markup. A repeated heading it shows once does not fail it when a later
+ * prompt owns the extra copy. When the source cannot be found, the hit still
+ * fails the prompt that owns the dist page. A component path owns no dist
+ * page, so a prompt is not failed for a page it does not own unless its
+ * component is the source. Narration stays on the visible-copy baseline.
+ * Placeholder contact and a repeated sentence keep the owned-page rule.
+ * They are not pattern counts.
  * Empty gallery and home listings are feature checks. They fail a prompt only
  * when it owns that feature on an owned dist page. A page job and an image set
  * own both. A gallery or carousel feature owns the gallery. A listing or card
  * requirement owns the home listings. A section or art prompt owns neither,
  * even when it lists the page file, unless the id itself is a listing or card.
  */
-function surfaceCloseReason(projectDir: string, promptText: string, files: readonly string[]): string {
+function surfaceCloseReason(projectDir: string, promptId: string, promptText: string, files: readonly string[]): string {
   const fullSite = promptRequiresFullVisibleCopy(promptText, files);
+  const owned = new Set(ownedSourcePaths(promptText, files));
   const ownedDist = new Set<string>();
-  for (const rel of ownedSourcePaths(promptText, files)) {
+  for (const rel of owned) {
     for (const html of distHtmlForOwnedSource(rel)) ownedDist.add(html);
   }
-  if (!fullSite && ownedDist.size === 0) return "";
+  let markup = false;
+  for (const rel of owned) {
+    if (isVisitorSource(rel)) markup = true;
+  }
+  if (!fullSite && ownedDist.size === 0 && !markup) return "";
   const dist = path.join(projectDir, "dist");
+  const later = filesOwnedByLaterPrompts(projectDir, promptId, promptText);
   const keep = (hits: readonly SurfaceHit[]): SurfaceHit[] =>
     fullSite ? [...hits] : hits.filter((hit) => ownedDist.has(hit.file));
   const feature = (kind: "gallery" | "listings", hits: readonly SurfaceHit[]): SurfaceHit[] => {
@@ -2502,13 +2514,96 @@ function surfaceCloseReason(projectDir: string, promptText: string, files: reado
     if (!promptOwnsStructureFeature(promptText, kind)) return [];
     return hits.filter((hit) => ownedDist.has(hit.file));
   };
+  const conceptHits = scanConceptImages(dist);
+  const duplicateHits = nameDuplicateSources(scanDuplicateBlocks(dist), projectDir);
   const placeholder = formatPlaceholderContactFailure(keep(scanPlaceholderContacts(dist)));
   const repeated = formatRepeatedSentenceFailure(keep(scanRepeatedSentences(dist)));
-  const concept = formatConceptImageFailure(keep(scanConceptImages(dist)));
+  const concept = formatConceptImageFailure(
+    fullSite ? conceptHits : conceptHits.filter((hit) => ownsConcept(projectDir, hit, owned, ownedDist, later)),
+  );
   const gallery = formatEmptyGalleryFailure(feature("gallery", scanEmptyGalleries(dist)));
-  const duplicate = formatDuplicateBlockFailure(keep(scanDuplicateBlocks(dist)));
+  const duplicate = formatDuplicateBlockFailure(
+    fullSite ? duplicateHits : duplicateHits.filter((hit) => ownsDuplicate(projectDir, hit, owned, ownedDist, later)),
+  );
   const home = formatHomeListingsFailure(feature("listings", scanHomeListings(dist)));
   return [placeholder, repeated, concept, gallery, duplicate, home].filter((part) => part !== "").join("\n");
+}
+
+function nameDuplicateSources(hits: readonly SurfaceHit[], projectDir: string): SurfaceHit[] {
+  return hits.map((hit) => {
+    const rows = duplicateSourceCounts(projectDir, hit.detail);
+    if (rows.length === 0) return hit;
+    return { ...hit, detail: `${hit.detail}; sources: ${rows.map((row) => row.file).join(", ")}` };
+  });
+}
+
+function ownsConcept(
+  projectDir: string,
+  hit: SurfaceHit,
+  owned: ReadonlySet<string>,
+  ownedDist: ReadonlySet<string>,
+  later: ReadonlySet<string>,
+): boolean {
+  const sources = conceptSourceFiles(projectDir, hit.detail);
+  const mine = sources.some((file) => owned.has(file));
+  if (mine) return true;
+  if (sources.some((file) => later.has(file))) return false;
+  return ownedDist.has(hit.file);
+}
+
+function ownsDuplicate(
+  projectDir: string,
+  hit: SurfaceHit,
+  owned: ReadonlySet<string>,
+  ownedDist: ReadonlySet<string>,
+  later: ReadonlySet<string>,
+): boolean {
+  const parsed = repeatedHeading(hit.detail);
+  if (parsed === null) return ownedDist.has(hit.file);
+  const rows = duplicateSourceCounts(projectDir, hit.detail);
+  let found = 0;
+  let mine = 0;
+  let laterCount = 0;
+  let other = 0;
+  for (const row of rows) {
+    found += row.count;
+    if (owned.has(row.file)) mine += row.count;
+    else if (later.has(row.file)) laterCount += row.count;
+    else other += row.count;
+  }
+  if (found < parsed.count) {
+    if (mine >= 2) return true;
+    return ownedDist.has(hit.file);
+  }
+  if (mine >= 2) return true;
+  if (mine === 0) return false;
+  if (laterCount > 0) return false;
+  return other > 0 || mine >= parsed.count;
+}
+
+/** Files a higher prompt id lists. The current prompt's own files are left out. */
+function filesOwnedByLaterPrompts(projectDir: string, promptId: string, promptText: string): Set<string> {
+  const current = /^\d{3}$/.test(promptId) ? promptId : promptOrdinal(promptText);
+  const found = new Set<string>();
+  if (current === null) return found;
+  const dir = path.join(projectDir, ".hitchhiker", "prompts");
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir).map((name) => String(name));
+  } catch {
+    return found;
+  }
+  for (const name of names) {
+    const id = /^(\d{3})\.md$/i.exec(name)?.[1];
+    if (id === undefined || id <= current) continue;
+    for (const rel of parseExpectedFiles(readOptional(path.join(dir, name)))) found.add(rel);
+  }
+  return found;
+}
+
+function promptOrdinal(promptText: string): string | null {
+  const match = /^Prompt\s+(\d{3})\b/m.exec(promptText);
+  return match?.[1] ?? null;
 }
 
 /**
