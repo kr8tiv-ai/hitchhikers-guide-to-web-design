@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Test-local reader. The exported loadGolden lives in @hitchhiker/knowledge.
- * This file does not import that package: engine boundaries allow no workspace deps.
+ * This file does not import that package. The reader stays local.
  */
 
 const CREDIT =

@@ -19,10 +19,13 @@ export interface PackageBoundary {
  * templates on engine for the brand truth gate, prompt 065;
  * @gltf-transform/core, @gltf-transform/extensions, @gltf-transform/functions,
  * draco3dgltf, and meshoptimizer on assets for 3D optimization, prompt 085;
- * qa on the orchestrator for the ship gate, prompt 243e).
+ * qa on the orchestrator for the ship gate, prompt 243e;
+ * design-system is a leaf the engine depends on so DESIGN.md Tokens
+ * is rendered from tokensFor, prompt 245d. The leaf does not depend
+ * on the engine, so the edge is not a cycle).
  */
 export const BOUNDARIES: readonly PackageBoundary[] = [
-  { name: "@hitchhiker/engine", allowDeps: [], allowExternal: ["pdfjs-dist"] },
+  { name: "@hitchhiker/engine", allowDeps: ["@hitchhiker/design-system"], allowExternal: ["pdfjs-dist"] },
   { name: "@hitchhiker/orchestrator", allowDeps: ["@hitchhiker/engine", "@hitchhiker/qa"] },
   { name: "@hitchhiker/grok-plugin", allowDeps: [] },
   {
@@ -53,6 +56,7 @@ export const BOUNDARIES: readonly PackageBoundary[] = [
   { name: "@hitchhiker/deploy", allowDeps: ["@hitchhiker/engine"] },
   { name: "@hitchhiker/knowledge", allowDeps: ["@hitchhiker/crawler", "@hitchhiker/engine"] },
   { name: "@hitchhiker/templates", allowDeps: ["@hitchhiker/engine"] },
+  { name: "@hitchhiker/design-system", allowDeps: [], allowExternal: [] },
 ];
 
 /** Package name, then a slash of either kind, then another path segment. */

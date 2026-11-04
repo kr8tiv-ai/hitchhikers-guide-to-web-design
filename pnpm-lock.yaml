@@ -118,8 +118,13 @@ importers:
         specifier: workspace:*
         version: link:../engine
 
+  packages/design-system: {}
+
   packages/engine:
     dependencies:
+      '@hitchhiker/design-system':
+        specifier: workspace:*
+        version: link:../design-system
       pdfjs-dist:
         specifier: 5.4.530
         version: 5.4.530

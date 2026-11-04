@@ -19,6 +19,7 @@ import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
 import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
+import { renderTokensSection, tokensFor, type BrandFill, type StyleWorld } from "@hitchhiker/design-system";
 
 export const DESIGN_MD_PATH = "DESIGN.md";
 export const MOTION_TS_PATH = "src/scripts/motion.ts";
@@ -94,6 +95,40 @@ export interface DesignNarrative {
   ownerPhotos?: readonly string[];
 }
 
+/** Brand colours and the picked pair, in the shape tokensFor expects. */
+export function designTokenModel(
+  brief: string,
+  answers: readonly BrandAnswer[] = [],
+  fonts?: DesignFontChoice | null,
+): { world: StyleWorld; fill: BrandFill } {
+  const art = translateBrief(brief, answers as readonly ArtAnswer[]);
+  const palette = brandKitFromAnswers(answers, dealDirections(), brief).palette;
+  const chosen = fontChoice(brief, answers, fonts);
+  return { world: art.styleWorld, fill: brandFill(palette, chosen.display, chosen.body) };
+}
+
+function brandFill(palette: BrandPalette, display: string, body: string): BrandFill {
+  return {
+    paper: palette.paper,
+    ink: palette.ink,
+    accent: palette.accent,
+    muted: palette.muted,
+    display,
+    body,
+    sources: {
+      paper: palette.sources.paper,
+      ink: palette.sources.ink,
+      accent: palette.sources.accent,
+      muted: palette.sources.muted,
+    },
+    swatches: palette.swatches.map((swatch) => ({
+      name: swatch.name,
+      hex: swatch.hex,
+      source: swatch.source,
+    })),
+  };
+}
+
 export function renderDesignMd(
   brief: string,
   answers: readonly BrandAnswer[] = [],
@@ -112,6 +147,7 @@ export function renderDesignMd(
   const no3d = refuses3d(documentText(brief, answers));
   const button = buttonPair(palette);
   const name = derivedSiteName(brief, answers, projectName);
+  const tokenModel = designTokenModel(brief, answers, fonts);
   const weightNote = rhythm.fontWeight === null ? "" : `, weight ${rhythm.fontWeight}`;
   const heading = chosen.replaced ? ownerHeadingSentence(chosen.display, wish, rhythm) : "";
   const markdown = [
@@ -193,9 +229,7 @@ export function renderDesignMd(
     "",
     "## Tokens",
     "",
-    `Color tokens: ${colourTokenList(palette)}.`,
-    "Space tokens: space-1 through space-8. Type tokens: display, heading, title, body, caption.",
-    "Motion tokens live in src/scripts/motion.ts.",
+    renderTokensSection(tokensFor(tokenModel.world, tokenModel.fill)),
     "",
     "## Motion principles",
     "",
@@ -295,21 +329,6 @@ function colourYaml(palette: BrandPalette, button: { text: string; background: s
   lines.push(`  button: ${yamlScalar(button.background)}`);
   lines.push(`  onButton: ${yamlScalar(button.text)}`);
   return lines;
-}
-
-function colourTokenList(palette: BrandPalette): string {
-  const parts = [
-    `paper ${palette.paper} Source: ${palette.sources.paper}`,
-    `ink ${palette.ink} Source: ${palette.sources.ink}`,
-    `accent ${palette.accent} Source: ${palette.sources.accent}`,
-    `muted ${palette.muted} Source: ${palette.sources.muted}`,
-  ];
-  for (const swatch of palette.swatches) {
-    const key = colourTokenKey(swatch.name);
-    if (key === "") continue;
-    parts.push(`${key} ${swatch.hex} Source: ${swatch.source}`);
-  }
-  return parts.join(", ");
 }
 
 function colourProse(

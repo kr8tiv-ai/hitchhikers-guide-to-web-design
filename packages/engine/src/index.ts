@@ -235,6 +235,7 @@ export {
   DESIGN_MD_PATH,
   MOTION_TS_PATH,
   flagIgnoredMotionTokens,
+  designTokenModel,
   renderDesignMd,
   renderMotionModule,
   writeDesignMd,

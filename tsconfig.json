@@ -12,6 +12,7 @@
     { "path": "./packages/qa" },
     { "path": "./packages/deploy" },
     { "path": "./packages/knowledge" },
-    { "path": "./packages/templates" }
+    { "path": "./packages/templates" },
+    { "path": "./packages/design-system" }
   ]
 }

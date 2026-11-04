@@ -14,7 +14,8 @@ export class WorkspaceError extends Error {
 }
 
 /**
- * npm names for the twelve packages in CONTEXT-PACKAGE.v2.md section 19.
+ * npm names for the twelve packages in CONTEXT-PACKAGE.v2.md section 19,
+ * plus @hitchhiker/design-system (245d). Thirteen names.
  * packages/cli is published as hitchhikers-guide. Every other package is @hitchhiker/<folder>.
  */
 export const EXPECTED_PACKAGES: readonly string[] = [
@@ -30,6 +31,7 @@ export const EXPECTED_PACKAGES: readonly string[] = [
   "@hitchhiker/deploy",
   "@hitchhiker/knowledge",
   "@hitchhiker/templates",
+  "@hitchhiker/design-system",
 ];
 
 const WORKSPACE_GLOB = "packages/*";

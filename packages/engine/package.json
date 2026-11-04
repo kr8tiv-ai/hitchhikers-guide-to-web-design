@@ -20,6 +20,7 @@
     "test": "node --experimental-strip-types --test test/**/*.test.ts"
   },
   "dependencies": {
+    "@hitchhiker/design-system": "workspace:*",
     "pdfjs-dist": "5.4.530"
   }
 }
