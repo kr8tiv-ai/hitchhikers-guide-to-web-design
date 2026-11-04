@@ -7,6 +7,7 @@ import { withStateLock } from "./lock.ts";
 import { pushbackFor } from "./pushback.ts";
 import type { AnswerRecord } from "./required.ts";
 import { advanceDesignStages, type DesignStageRequest, type DesignStageResult } from "./spec/design-stages.ts";
+import { scheduleReferenceCapture } from "./spec/reference-shots.ts";
 import { loadState, type GuideState } from "./state.ts";
 import { interviewTreeFile } from "./packaged-dir.ts";
 import { autosaveProject } from "./project-file/autosave.ts";
@@ -254,6 +255,15 @@ class InterviewRun {
     this.#pendingId = null;
     this.#lastPushback = null;
     await clearRevisit(this.#projectDir);
+    const kept = stored.find((item) => item.id === record.id);
+    if (
+      kept !== undefined &&
+      (kept.id === "DP-5.1" || kept.id === "DP-5.2") &&
+      kept.value.trim() !== "" &&
+      kept.status !== "SKIPPED"
+    ) {
+      scheduleReferenceCapture(this.#projectDir);
+    }
   }
 
   async #save(

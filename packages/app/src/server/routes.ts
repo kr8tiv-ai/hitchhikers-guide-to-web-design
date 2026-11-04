@@ -104,6 +104,9 @@ import {
   type WalkState,
   interviewTreeFile,
   packagedPackage,
+  approveRender,
+  saveReferenceUpload,
+  saveRenderUpload,
 } from "@hitchhiker/engine";
 import {
   ANSWER_HINT,
@@ -1033,6 +1036,10 @@ async function handlePost(
     await handleApproveForm(req, res, token, projectDir, guideThink, reloadInterview);
     return;
   }
+  if (pathname === "/api/reference-upload") {
+    await handleReferenceUpload(req, res, token, projectDir);
+    return;
+  }
   const header = req.headers["x-hh-csrf"];
   if (typeof header !== "string" || !tokensMatch(token, header)) {
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
@@ -1793,6 +1800,41 @@ async function storeAudio(
   });
 }
 
+async function handleReferenceUpload(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+): Promise<void> {
+  const csrf = queryValue(req.url ?? "", "csrf");
+  if (csrf === null || !tokensMatch(token, csrf)) {
+    sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
+    return;
+  }
+  const kind = queryValue(req.url ?? "", "kind");
+  const body = await readUploadBody(req, res);
+  if (body === null) return;
+  const type = headerOne(req.headers["content-type"]);
+  const part = parseMultipart(body, type);
+  if ("error" in part) {
+    sendJson(req, res, 400, { error: part.error });
+    return;
+  }
+  const ext = path.extname(part.filename).toLowerCase();
+  if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg" && ext !== ".webp") {
+    sendJson(req, res, 415, { error: "Upload a png, jpg, or webp image." });
+    return;
+  }
+  if (kind === "ref") saveReferenceUpload(projectDir, part.filename, part.data);
+  else if (kind === "render") saveRenderUpload(projectDir, queryValue(req.url ?? "", "route") ?? "/", part.data);
+  else {
+    sendJson(req, res, 400, { error: "Upload kind is missing." });
+    return;
+  }
+  res.writeHead(303, { location: "/approve" });
+  res.end();
+}
+
 async function readUploadBody(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1926,12 +1968,14 @@ async function handleApproveForm(
   let action = "";
   let correction = "";
   let confirmFallback = false;
+  let renderRoute = "";
   if (mime === "application/json") {
     try {
       const body: unknown = JSON.parse(raw);
       if (isRecord(body)) {
         if (typeof body.action === "string") action = body.action;
         if (typeof body.correction === "string") correction = body.correction;
+        if (typeof body.route === "string") renderRoute = body.route;
         confirmFallback = body.confirmFallback === true || body.confirmFallback === "yes";
       }
     } catch {
@@ -1942,6 +1986,7 @@ async function handleApproveForm(
     const params = new URLSearchParams(raw);
     action = params.get("action") ?? "";
     correction = params.get("correction") ?? "";
+    renderRoute = params.get("route") ?? "";
     confirmFallback = params.get("confirmFallback") === "yes";
   }
   try {
@@ -2015,6 +2060,24 @@ async function handleApproveForm(
       const stageName = stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
       if (commit === "change") await reviseDesignStage(projectDir, markdown, stageName, typed);
       else await approveDesignStage(projectDir, markdown, stageName, text, acknowledge);
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "approve-render") {
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "design"))) return;
+      try {
+        approveRender(projectDir, renderRoute);
+      } catch (error) {
+        const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "That render is not ready.";
+        const brief = readBriefDesk(projectDir);
+        if (mime === "application/json") {
+          sendJson(req, res, 400, { error: message });
+          return;
+        }
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, message, projectDir), projectDir, token, false);
+        return;
+      }
       res.writeHead(303, { location: "/approve" });
       res.end();
       return;

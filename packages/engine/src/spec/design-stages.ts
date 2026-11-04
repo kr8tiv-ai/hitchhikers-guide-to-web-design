@@ -9,7 +9,10 @@
  *
  * A change edits the artefact and leaves the stage waiting. Only an approval
  * records an approval. A blank answer is not an approval. This module does not
- * call a model and does not start a build.
+ * call a model and does not start a build. A style-guide approval asks the
+ * render runner to draft. That does nothing until a design lock is on disk
+ * and a desk runner is installed. 245a writes the lock and calls onDesignLocked
+ * again if that write happens after this function returns.
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,6 +21,7 @@ import { chooseDirection, onDirectionPicked, readDirectionDeal } from "../brand/
 import type { BrandAnswer } from "../brand/kit-from-interview.ts";
 import { planFromBrief, type BriefAnswer, type PlannedPage } from "./brief-plan.ts";
 import { writeDesignMd, type DesignFontChoice } from "./design-outputs.ts";
+import { onDesignLocked } from "./page-renders.ts";
 import { runPrebuildChecks, type PrebuildReport } from "./prebuild-checks.ts";
 
 export const SITEMAP_REL = ".hitchhiker/sitemap.md";
@@ -106,6 +110,7 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
 
   if (input.approval?.stage === "style-guide") recordText(state, "styleGuide", input.approval.text);
   if (state.styleGuide !== undefined) writeApprovals(projectDir, state);
+  if (input.approval?.stage === "style-guide" && state.styleGuide !== undefined) onDesignLocked(projectDir);
   if (state.styleGuide === undefined) return result("none", projectDir);
 
   if (input.approval?.stage === "direction" && directionPicked(projectDir)) {

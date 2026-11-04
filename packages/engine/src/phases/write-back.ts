@@ -23,6 +23,7 @@ import { planFromBrief } from "../spec/brief-plan.ts";
 import { translateBrief } from "../spec/art-direction.ts";
 import { planMotion } from "../spec/motion.ts";
 import { decideStack, type StackPick } from "../spec/stack.ts";
+import { scheduleReferenceCapture } from "../spec/reference-shots.ts";
 import { visualMotionRequests } from "../spec/visual-motion.ts";
 
 export type BeforeJumpTarget =
@@ -134,6 +135,12 @@ export async function writeBack(projectDir: string, answer: BeforeJumpAnswer): P
     const deployTarget = parseDeployTarget(text) ?? "undecided";
     const config = loadConfig(root);
     await saveConfig(root, { ...config, deployTarget });
+  }
+  if (answer.target === "brief") {
+    const field = answer.field.trim().toLowerCase();
+    if (field === "references" || answer.answerId === "DP-5.1" || answer.answerId === "DP-5.2") {
+      scheduleReferenceCapture(root);
+    }
   }
   return written;
 }

@@ -21,6 +21,16 @@ export {
 export type { BrowserSession, CrawlDeps, CrawlResult, FakePage, Viewport } from "./crawl.ts";
 
 export {
+  MAX_INNER_PAGES,
+  REFERENCE_CAPTURE_TIMEOUT_MS,
+  REFERENCE_VIEWPORT,
+  captureReferenceSite,
+  innerPageUrls,
+  openReferenceBrowser,
+} from "./reference-shots.ts";
+export type { ReferenceBrowser, ReferenceShotBuffer, ReferenceShotDeps, ReferenceShotPage } from "./reference-shots.ts";
+
+export {
   FAMILIES as galleryFamilies,
   FAMILY_STYLE as galleryFamilyStyle,
   familyOf as galleryFamilyOf,

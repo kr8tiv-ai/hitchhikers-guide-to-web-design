@@ -17,6 +17,7 @@ import {
 } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
 import { renderDirectionPicker } from "./direction-desk.ts";
+import { renderReferenceDesk } from "./reference-desk.ts";
 
 export async function presentDesignStage(projectDir: string, brief: string): Promise<void> {
   await emitDesignStages(projectDir, { brief });
@@ -131,6 +132,12 @@ function briefFor(projectDir: string): string {
 
 /** The stage that is waiting. Rendered from the stage files, not from buildStarted. */
 export function renderDesignStagePanel(projectDir: string, token: string, briefMarkdown = ""): string {
+  const html = renderDesignStageBody(projectDir, token, briefMarkdown);
+  const extra = renderReferenceDesk(projectDir, token);
+  return extra === "" ? html : `${html}\n${extra}`;
+}
+
+function renderDesignStageBody(projectDir: string, token: string, briefMarkdown = ""): string {
   const state = stageApprovals(projectDir);
   const sitemap = readText(path.join(projectDir, ".hitchhiker", "sitemap.md"));
   const wireframe = readText(path.join(projectDir, ".hitchhiker", "wireframe.md"));

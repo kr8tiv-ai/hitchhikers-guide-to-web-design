@@ -25,6 +25,7 @@ import { budgetCardCopy, collapseDuplicateFollowUp } from "./session-state.ts";
 import { spaceAfterTerminal } from "./sentence-space.ts";
 import { loadFacts } from "./suggest.ts";
 import { interviewTreeFile } from "../packaged-dir.ts";
+import { scheduleReferenceCapture } from "../spec/reference-shots.ts";
 import { loadTree } from "../tree.ts";
 import { briefTextIssues } from "./validators.ts";
 import type { GuideSession } from "./live-turn.ts";
@@ -1125,6 +1126,7 @@ async function writeSiteBrief(projectDir: string, draft: SiteBrief): Promise<voi
   const dir = path.join(projectDir, ".hitchhiker");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "SITE-BRIEF.md"), renderSiteBrief(draft), "utf8");
+  scheduleReferenceCapture(projectDir);
 }
 
 /** Read the approved brief back. Missing file returns null. */

@@ -10,9 +10,12 @@ import {
   recoverSiteBuild,
   setProjectBuildRunner,
   setBeautyRunner,
+  setPageRenderRunner,
+  setReferenceCaptureRunner,
   setSectionStillRunner,
   type BuildSpawn,
 } from "@hitchhiker/engine";
+import { attachReferenceWork } from "./reference-capture-hook.ts";
 import { attachSectionStills } from "./section-stills-hook.ts";
 import { openBrowser, type BrowserSpawn } from "./open-browser.ts";
 import type { DeskPreflight } from "./card.ts";
@@ -207,6 +210,8 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
           clearProjectBuildRunner(runnerDir);
           setSectionStillRunner(runnerDir, null);
           setBeautyRunner(runnerDir, null);
+          setReferenceCaptureRunner(runnerDir, null);
+          setPageRenderRunner(runnerDir, null);
         }
         app.close();
         closing = closeServer(server);
@@ -230,6 +235,7 @@ function bindBuildRunner(projectDir: string, opts: StartServerOptions): void {
   const live = getBuildRunner();
   setProjectBuildRunner(projectDir, live);
   void attachSectionStills(projectDir);
+  attachReferenceWork(projectDir);
 }
 
 function sendFixed(

@@ -303,6 +303,50 @@ export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts"
 export { PlanCoverageError, checkPlanCoverage, planCoverageMessage, planCoverageRows } from "./spec/plan-coverage.ts";
 export type { CoverageGap, CoverageRequirement, CoverageRow, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
 export {
+  clearReferenceCaptureRunner,
+  collectReferenceShots,
+  countDesignReferenceImages,
+  listReferenceImages,
+  needLine,
+  ownerPhotoFiles,
+  readReferenceAsks,
+  recordReferenceCaptureFailure,
+  refreshReferenceReadme,
+  saveReferenceUpload,
+  scheduleReferenceCapture,
+  setReferenceCaptureRunner,
+  slugify,
+} from "./spec/reference-shots.ts";
+export type {
+  CapturedReferenceShot,
+  CollectReferenceDeps,
+  CollectReferenceResult,
+  CollectedReference,
+  ReferenceCaptureOptions,
+  ReferenceNeed,
+} from "./spec/reference-shots.ts";
+export {
+  DESIGN_LOCK_REL,
+  RENDERS_REL,
+  RenderApprovalError,
+  approveRender,
+  buildRenderPrompt,
+  clearPageRenderRunner,
+  designLockMatches,
+  draftKeyPageRenders,
+  isRenderApproved,
+  listPrimaryPages,
+  onDesignLocked,
+  pagesWaitingForRender,
+  renderApprovalMessage,
+  renderRelForRoute,
+  saveRenderUpload,
+  schedulePageRenders,
+  setPageRenderRunner,
+  syncRenderApprovals,
+} from "./spec/page-renders.ts";
+export type { DraftRenderDeps, PrimaryPage, RenderApproval, WaitingPage } from "./spec/page-renders.ts";
+export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,
   BUILD_IDLE_MS,
@@ -515,6 +559,7 @@ export {
   designLibraryRoot,
   directionDealPath,
   isDocsOrPackUrl,
+  catalogReferences,
   loadDesignReferences,
   loadStudiedPages,
   pickDirection,
@@ -522,6 +567,7 @@ export {
   renderDirectionBlock,
   saveDirectionDeal,
 } from "./brand/directions.ts";
+export type { CatalogReference } from "./brand/directions.ts";
 export type { Direction, DirectionCheck, DirectionDeal, StudiedPage } from "./brand/directions.ts";
 export {
   DecisionLogError,

@@ -669,6 +669,23 @@ const NAMED_REFERENCES: readonly NamedReference[] = [
   },
 ];
 
+export interface CatalogReference {
+  id: string;
+  title: string;
+  url: string;
+  names: readonly string[];
+}
+
+/** Named design-library pages. A reference URL comes from this list or from the owner. */
+export function catalogReferences(): readonly CatalogReference[] {
+  return NAMED_REFERENCES.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    url: entry.url,
+    names: entry.names,
+  }));
+}
+
 const SECTION_BANK: readonly (readonly string[])[] = [
   ["hero", "essay", "gallery", "colophon"],
   ["hero", "story", "detail", "visit"],
