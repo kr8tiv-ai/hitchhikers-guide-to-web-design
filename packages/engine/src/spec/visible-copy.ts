@@ -390,7 +390,7 @@ const SURFACE_FIX_INSTRUCTION =
  * The label still counts when it follows visible copy on that one line.
  */
 const SURFACE_CLOSE_REASON =
-  /(?:^|[^\w])(?:Placeholder contact failed|Repeated sentence failed|Concept image failed|Empty gallery failed|Duplicate block failed|Home listings failed|Design drift failed)\./;
+  /(?:^|[^\w])(?:Placeholder contact failed|Repeated sentence failed|Concept image failed|Empty gallery failed|Duplicate block failed|Home listings failed|Design drift failed|Motion lint failed)\./;
 
 /** A token or font edit that left DESIGN.md. Close checks rerun this once. */
 export function isDesignDriftCloseReason(reason: string): boolean {

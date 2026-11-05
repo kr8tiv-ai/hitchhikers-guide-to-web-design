@@ -7,7 +7,14 @@
  */
 
 import { pathToFileURL } from "node:url";
-import { assertPhoneBudgetBefore3d, packagedModule, type QueueFile } from "@hitchhiker/engine";
+import {
+  assertPhoneBudgetBefore3d,
+  formatMotionFinding,
+  motionLoopFindings,
+  packagedModule,
+  type MotionProbeFacts,
+  type QueueFile,
+} from "@hitchhiker/engine";
 import { AI_CLUSTER_VISION_KEYS, judgeAiCluster, type AiClusterVisionKey } from "./antislop.ts";
 import { applyBeautyRound, judgeBeauty, type BeautyFailure, type BeautyRoundResult, type SectionShot } from "./beauty-gate.ts";
 import {
@@ -24,6 +31,7 @@ import { jury, type AwwwardsScores, type JuryResult } from "./jury.ts";
 import { measureJurorFloor, type JurorSample } from "./juror-floor.ts";
 import { auditImageCredits, auditSourcedMedia } from "./licenses.ts";
 import { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
+import { runMotionProbe } from "./motion-probe.ts";
 import { checkSignature } from "./signature-gate.ts";
 import { judgeRedesignOrder, type RedesignStepShot } from "./redesign-order.ts";
 import { combineSectionVariants, type ApprovedDirection, type SectionVariant, type VariantPick } from "./variants.ts";
@@ -98,6 +106,10 @@ export interface ReviewProject {
   now: string;
   page: string;
   section: string;
+  /** Site preview. When set, the final review runs the motion probe. */
+  previewUrl?: string;
+  /** Fake or previously collected probe facts. Tests never open a browser. */
+  motionProbe?: MotionProbeFacts;
 }
 
 export interface ReviewRun {
@@ -199,13 +211,13 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
   }
 
   try {
-    for (const finding of await gates.checkRecipes(project.pageSource, project.pageFile)) note(finding.detail);
+    for (const finding of await gates.checkRecipes(project.pageSource, project.pageFile)) note(formatMotionFinding(finding));
   } catch (error) {
     note(error instanceof Error ? error.message : "The recipe checker failed.");
   }
 
   try {
-    for (const finding of await gates.checkRecipeDir(project.root)) note(finding.detail);
+    for (const finding of await gates.checkRecipeDir(project.root)) note(formatMotionFinding(finding));
   } catch (error) {
     note(error instanceof Error ? error.message : "The recipe directory check failed.");
   }
@@ -386,6 +398,13 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
     for (const failure of checkSignature(project.root, project.root)) note(failure.message);
   } catch (error) {
     note(error instanceof Error ? error.message : "The signature moment gate failed.");
+  }
+
+  try {
+    const probe = project.motionProbe ?? (project.previewUrl === undefined ? null : (await runMotionProbe(project.previewUrl)).facts);
+    for (const line of motionLoopFindings(project.root, probe)) note(line);
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The motion probe failed.");
   }
 
   return failures;

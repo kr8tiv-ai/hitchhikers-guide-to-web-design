@@ -6,9 +6,11 @@ import gsap from "gsap";
 import { Flip } from "gsap/Flip";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow } from "./host.ts";
+import { takenDuration, takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
-export interface PageTransitionOptions {
+export interface PageTransitionOptions extends MotionTokenChoice {
   duration?: number;
 }
 
@@ -39,7 +41,7 @@ export function createPageTransition(target: unknown, options: PageTransitionOpt
     gsap.registerPlugin(Flip);
     const state = Flip.getState(node);
     update();
-    flipTween = Flip.from(state, { duration: options.duration ?? 0.6, ease: "power2.out" });
+    flipTween = Flip.from(state, { duration: takenDuration(options.duration, 0.6), ease: takenEase(options.ease, "power2.out") });
     return Promise.resolve();
   };
 

@@ -15,6 +15,8 @@ export {
 export type { BriefComparison, PageScore, PairVote } from "./visual-bench.ts";
 export { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
 export type { RecipeFinding, RecipeRule } from "./recipe-check.ts";
+export { runMotionProbe } from "./motion-probe.ts";
+export type { MotionProbeOptions, MotionProbeReport } from "./motion-probe.ts";
 export { juryWithPatterns, patternPageFailures, scorePatterns } from "./pattern-score.ts";
 export {
   CLS_MAX,

@@ -5,9 +5,11 @@
 import gsap from "gsap";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow, type MotionMedia } from "./host.ts";
+import { takenDuration, takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
-export interface PreloaderHandoffOptions {
+export interface PreloaderHandoffOptions extends MotionTokenChoice {
   media?: MotionMedia;
   overlay?: unknown;
   duration?: number;
@@ -47,12 +49,12 @@ export function createPreloaderHandoff(target: unknown, options: PreloaderHandof
       if (!alive || reduced) return;
       const timeline = gsap.timeline();
       if (options.overlay !== undefined) {
-        timeline.to(options.overlay, { opacity: 0, duration: 0.45, ease: "power2.out" });
+        timeline.to(options.overlay, { opacity: 0, duration: takenDuration(options.duration, 0.45), ease: takenEase(options.ease, "power2.out") });
       }
       timeline.fromTo(
         hero,
         { opacity: 0, yPercent: 12 },
-        { opacity: 1, yPercent: 0, duration: options.duration ?? 0.9, ease: "expo.out" },
+        { opacity: 1, yPercent: 0, duration: takenDuration(options.duration, 0.9), ease: takenEase(options.ease, "expo.out") },
       );
       undo.push(() => {
         timeline.kill();

@@ -25,7 +25,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { hiddenChildOptions, type think } from "@hitchhiker/engine";
+import { hiddenChildOptions, parseMotionConstitution, withinConstitution, type think } from "@hitchhiker/engine";
 import { emptyHooksPath, isolatedGitEnv } from "./git-child.ts";
 import {
   planElevateModel,
@@ -309,13 +309,26 @@ function readCode(projectDir: string): string {
   return joined.length > 0 ? joined : "No source files were read.";
 }
 
-function sourcedMenuNote(): string {
-  const lines = loadElevateMenu().map((item) => `${item.source.id} | ${item.source.file} | ${item.source.title}`);
+function sourcedMenuNote(projectDir: string): string {
+  const constitution = constitutionFromProject(projectDir);
+  const lines = loadElevateMenu()
+    .filter((item) => withinConstitution(item.change, constitution))
+    .map((item) => `${item.source.id} | ${item.source.file} | ${item.source.title}`);
   return lines.join("\n");
 }
 
+function constitutionFromProject(projectDir: string): ReturnType<typeof parseMotionConstitution> {
+  const file = path.join(projectDir, "DESIGN.md");
+  if (!existsSync(file)) return null;
+  try {
+    return parseMotionConstitution(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function coldRead(projectDir: string, shots: readonly string[]): ElevateColdRead {
-  const menu = sourcedMenuNote();
+  const menu = sourcedMenuNote(projectDir);
   const code =
     menu.length > 0
       ? `${readCode(projectDir)}\n\nSOURCED MENU\nChoose only from these sourced entries.\n${menu}`

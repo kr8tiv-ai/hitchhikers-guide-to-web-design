@@ -4,9 +4,11 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow, type MotionElement, type MotionMedia } from "./host.ts";
+import { takenDuration, takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { KineticUnit, MotionHandle } from "./types.ts";
 
-export interface KineticTypeOptions {
+export interface KineticTypeOptions extends MotionTokenChoice {
   unit?: KineticUnit;
   scrub?: boolean | number;
   start?: string;
@@ -67,9 +69,9 @@ export function createKineticType(target: unknown, options: KineticTypeOptions =
   const tween = gsap.from(pieces(split, unit), {
     yPercent: 100,
     opacity: 0,
-    duration: 0.9,
+    duration: takenDuration(options.duration, 0.9),
     stagger: 0.08,
-    ease: "expo.out",
+    ease: takenEase(options.ease, "expo.out"),
     scrollTrigger: { trigger: node, start: options.start ?? "top 80%" },
   });
   armKineticMedia(document, undo);

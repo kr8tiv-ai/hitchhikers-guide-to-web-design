@@ -113,6 +113,7 @@ import {
   type VisibleCopyBaseline,
   type VisibleCopyHit,
 } from "../spec/visible-copy.ts";
+import { motionLintReason } from "../spec/motion-lint.ts";
 import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
@@ -2517,7 +2518,8 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   const surfaceReason = surfaceCloseReason(projectDir, promptId, promptText, files);
   const headReason = documentHeadCloseReason(projectDir, promptText, files);
   const signatureReason = signatureCloseText(projectDir, promptId, promptText, files);
-  const reason = [copyReason, surfaceReason, headReason, signatureReason].filter((part) => part !== "").join("\n");
+  const motionReason = motionLintReason(projectDir, files);
+  const reason = [copyReason, surfaceReason, headReason, signatureReason, motionReason].filter((part) => part !== "").join("\n");
   if (reason !== "") throw new Error(reason);
 }
 

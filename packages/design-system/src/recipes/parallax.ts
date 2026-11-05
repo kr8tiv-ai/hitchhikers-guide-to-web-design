@@ -1,9 +1,10 @@
-/** Parallax a media frame with transform and filter. The track stays linear. */
+/** Parallax a media frame with transform and opacity. The track stays linear. */
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { takenEase, type MotionTokenChoice } from "../motion/token-choice.ts";
 import { readDocument, readWindow, type HostDocument } from "./host.ts";
 
-export function mountParallax(selector = "[data-parallax]"): () => void {
+export function mountParallax(selector = "[data-parallax]", choice: MotionTokenChoice = {}): () => void {
   const window = readWindow();
   const document = readDocument();
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -13,11 +14,11 @@ export function mountParallax(selector = "[data-parallax]"): () => void {
   gsap.registerPlugin(ScrollTrigger);
   const tween = gsap.fromTo(
     selector,
-    { yPercent: 12, filter: "blur(8px)" },
+    { yPercent: 12, opacity: 0.85 },
     {
       yPercent: -12,
-      filter: "blur(0px)",
-      ease: "none",
+      opacity: 1,
+      ease: takenEase(choice.ease, "none"),
       scrollTrigger: { start: "top bottom", end: "bottom top", scrub: true },
     },
   );

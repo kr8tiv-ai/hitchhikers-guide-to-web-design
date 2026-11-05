@@ -36,7 +36,7 @@ function escapeScript(source: string): string {
 
 function bundleRecipes(): string {
   const ts = createRequire(path.join(repoRoot, "package.json"))("typescript") as typeof import("typescript");
-  const files = ["host.ts", "handle.ts", "pinned-timeline.ts", "batch-reveal.ts"];
+  const files = ["host.ts", "handle.ts", "token-choice.ts", "pinned-timeline.ts", "batch-reveal.ts"];
   const parts = files.map((name) => {
     const source = readFileSync(path.join(here, "..", "src", "motion", name), "utf8");
     const compiled = ts.transpileModule(source, {

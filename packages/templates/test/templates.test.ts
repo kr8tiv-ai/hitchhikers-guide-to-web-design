@@ -550,6 +550,7 @@ test("shared modules are copied into each starter and the blank page does not im
     ["css-scroll.ts", path.join("src", "hh", "css-scroll.ts")],
     ["anime.ts", path.join("src", "hh", "anime.ts")],
     ["vanilla.ts", path.join("src", "hh", "vanilla.ts")],
+    ["hh-motion-lint.ts", path.join("scripts", "hh-motion-lint.ts")],
     ["optimize-media.ts", path.join("scripts", "optimize-media.ts")],
     ["media-budget.ts", path.join("scripts", "media-budget.ts")],
     ["fetch-assets.ts", path.join("scripts", "fetch-assets.ts")],

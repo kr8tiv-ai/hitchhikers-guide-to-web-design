@@ -243,6 +243,41 @@ export {
   writeMotionModule,
 } from "./spec/design-outputs.ts";
 export {
+  MOTION_CONSTITUTION_HEADING,
+  MOTION_TOKENS_PATH,
+  TICKER_RULES,
+  appetiteOf,
+  deriveMotionConstitution,
+  durationAllowed,
+  parseMotionConstitution,
+  renderMotionConstitution,
+  renderMotionTokensModule,
+  withinConstitution,
+  writeMotionTokens,
+} from "./spec/motion-constitution.ts";
+export type {
+  DurationBand,
+  MotionAppetite,
+  MotionChange,
+  MotionConstitution,
+  NamedEase,
+} from "./spec/motion-constitution.ts";
+export {
+  formatMotionFinding,
+  inspectMotion,
+  isSiteMotionFile,
+  lintMotion,
+  lintMotionFiles,
+  motionLintReason,
+} from "./spec/motion-lint.ts";
+export type { InspectOptions, MotionFinding, MotionLintRule, RecipeRule } from "./spec/motion-lint.ts";
+export {
+  motionLoopFindings,
+  motionProbeProblems,
+  scoreChoreography,
+} from "./spec/motion-score.ts";
+export type { ChoreographyScore, MotionProbeFacts, MotionTimelineChild } from "./spec/motion-score.ts";
+export {
   DESIGN_SECTION_ORDER,
   designSectionBody,
   designTokenTree,

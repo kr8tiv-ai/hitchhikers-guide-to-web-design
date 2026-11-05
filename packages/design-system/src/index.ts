@@ -6,6 +6,7 @@
 export const PACKAGE_NAME = "@hitchhiker/design-system";
 
 export { renderTokensSection } from "./tokens/render.ts";
+export { worldSetFor, type WorldSet } from "./tokens/worlds.ts";
 export { tokensFor } from "./tokens/tokens-for.ts";
 export type { BrandFill, BrandSwatchFill, StyleWorld, TypeStep, WorldTokens } from "./tokens/types.ts";
 export { MOTION_COMPOSE_RULE } from "./motion/compose-rule.ts";

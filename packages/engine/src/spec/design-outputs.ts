@@ -20,6 +20,7 @@ import { writeDesignExports } from "./design-export.ts";
 import { lintMotionSource } from "./motion.ts";
 import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
 import { renderTokensSection, tokensFor, type BrandFill, type StyleWorld } from "@hitchhiker/design-system";
+import { deriveMotionConstitution, renderMotionConstitution, writeMotionTokens } from "./motion-constitution.ts";
 
 export const DESIGN_MD_PATH = "DESIGN.md";
 export const MOTION_TS_PATH = "src/scripts/motion.ts";
@@ -230,6 +231,14 @@ export function renderDesignMd(
     "## Signature moments",
     "",
     "None locked yet.",
+    "",
+    renderMotionConstitution(
+      deriveMotionConstitution({
+        world: art.styleWorld,
+        score: art.motion.score,
+        text: brief,
+      }),
+    ).trimEnd(),
     "",
     "## Tokens",
     "",
@@ -594,6 +603,7 @@ export function commitDesignMarkdown(projectDir: string, markdown: string): stri
   if (changed) removeDesignLock(projectDir);
   writeFileSync(file, next, "utf8");
   writeDesignExports(projectDir, next);
+  writeMotionTokens(projectDir, next);
   if (changed) afterDesignMdWritten?.(projectDir);
   return file;
 }
@@ -620,6 +630,7 @@ export function writeDesignMd(
   if (changed) removeDesignLock(projectDir);
   writeFileSync(file, markdown, "utf8");
   writeDesignExports(projectDir, markdown);
+  writeMotionTokens(projectDir, markdown);
   const chosen = fontChoice(brief, answers, effectiveFonts);
   const rhythm = displayRhythm(typeWishFrom(brief, answers), chosen.display);
   syncResolvedFamilies(projectDir, chosen.display, chosen.body, rhythm.fontWeight);

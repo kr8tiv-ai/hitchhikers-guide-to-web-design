@@ -3,9 +3,11 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow, type MotionElement, type MotionMedia } from "./host.ts";
+import { takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
-export interface HorizontalTrackOptions {
+export interface HorizontalTrackOptions extends MotionTokenChoice {
   panels?: readonly unknown[];
   scrub?: boolean | number;
   start?: string;
@@ -47,7 +49,7 @@ export function createHorizontalTrack(target: unknown, options: HorizontalTrackO
   const undo: Array<() => void> = [];
   const tween = gsap.to(panels, {
     xPercent: -100 * Math.max(panels.length - 1, 0),
-    ease: "none",
+    ease: takenEase(options.ease, "none"),
     scrollTrigger: {
       trigger: track,
       pin: true,

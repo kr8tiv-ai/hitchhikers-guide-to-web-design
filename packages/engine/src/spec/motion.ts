@@ -19,6 +19,7 @@
 
 import type { StackPick } from "./stack.ts";
 import { OPACITY_KEEP_MS } from "../tier-zero-still.ts";
+import { inspectMotion } from "./motion-lint.ts";
 
 export type MotionLib =
   | "gsap"
@@ -612,5 +613,19 @@ export function lintMotionSource(source: string): MotionLintReport {
   if (/display\s*:\s*["']?none["']?/i.test(text) || /visibility\s*:\s*["']?hidden["']?/i.test(text)) {
     reasons.push("Reduced motion must not set display to none or visibility to hidden. The page stays complete.");
   }
+  const motionFindings = inspectMotion(text, "src/scripts/motion.ts", { constitution: null, direct: false });
+  for (const finding of motionFindings) {
+    if (!MERGED_MOTION_RULES.has(finding.rule)) continue;
+    reasons.push(`${finding.file}:${finding.line} ${finding.detail} Fix: ${finding.fix}`);
+  }
   return { ok: reasons.length === 0, reasons };
 }
+
+const MERGED_MOTION_RULES = new Set([
+  "lenis-raf-loop",
+  "scrub-layout",
+  "scrub-filter",
+  "nested-scroll-trigger",
+  "duplicate-tween",
+  "batch-list",
+]);

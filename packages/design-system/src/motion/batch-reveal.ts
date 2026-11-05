@@ -3,9 +3,11 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { motionHandle } from "./handle.ts";
 import { readDocument, readWindow, type MotionMedia } from "./host.ts";
+import { takenDuration, takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
-export interface BatchRevealOptions {
+export interface BatchRevealOptions extends MotionTokenChoice {
   start?: string;
   yPercent?: number;
   stagger?: number;
@@ -45,8 +47,8 @@ export function createBatchReveal(target: unknown, options: BatchRevealOptions =
         yPercent: distance,
         opacity: 0,
         stagger: options.stagger ?? 0.08,
-        duration: 0.9,
-        ease: "expo.out",
+        duration: takenDuration(options.duration, 0.9),
+        ease: takenEase(options.ease, "expo.out"),
       });
       undo.push(() => {
         tween.kill();

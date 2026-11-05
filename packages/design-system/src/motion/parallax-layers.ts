@@ -3,6 +3,8 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow, type MotionMedia } from "./host.ts";
+import { takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
 export interface ParallaxLayer {
@@ -10,7 +12,7 @@ export interface ParallaxLayer {
   travel?: number;
 }
 
-export interface ParallaxLayersOptions {
+export interface ParallaxLayersOptions extends MotionTokenChoice {
   layers?: readonly ParallaxLayer[];
   travel?: number;
 }
@@ -57,7 +59,7 @@ export function createParallaxLayers(target: unknown, options: ParallaxLayersOpt
       { yPercent: travel },
       {
         yPercent: -travel,
-        ease: "none",
+        ease: takenEase(options.ease, "none"),
         scrollTrigger: {
           trigger: node,
           start: "top bottom",

@@ -5,9 +5,11 @@
 import gsap from "gsap";
 import { motionHandle } from "./handle.ts";
 import { asElement, readDocument, readWindow, type MotionPointerEvent } from "./host.ts";
+import { takenDuration, takenEase } from "./token-choice.ts";
+import type { MotionTokenChoice } from "./token-choice.ts";
 import type { MotionHandle } from "./types.ts";
 
-export interface MicroInteractionsOptions {
+export interface MicroInteractionsOptions extends MotionTokenChoice {
   magnetic?: boolean;
   magneticTarget?: unknown;
   media?: unknown;
@@ -52,6 +54,7 @@ export function createMicroInteractions(target: unknown, options: MicroInteracti
 
   const undo: Array<() => void> = [];
   const tweens: Array<{ kill(): void }> = [];
+  const ease = takenEase(options.ease, "power2.out");
   const remember = (tween: { kill(): void }): void => {
     tweens.push(tween);
   };
@@ -65,7 +68,7 @@ export function createMicroInteractions(target: unknown, options: MicroInteracti
     cursor.setAttribute?.("data-motion-cursor", "");
     document.body.appendChild?.(cursor);
     const onMove = (event: MotionPointerEvent): void => {
-      remember(gsap.to(cursor, { x: event.clientX, y: event.clientY, duration: 0.2, ease: "power2.out" }));
+      remember(gsap.to(cursor, { x: event.clientX, y: event.clientY, duration: takenDuration(options.duration, 0.2), ease }));
     };
     window.addEventListener("pointermove", onMove);
     undo.push(() => {
@@ -82,10 +85,10 @@ export function createMicroInteractions(target: unknown, options: MicroInteracti
       const dy = event.clientY - (rect.top + rect.height / 2);
       const x = Math.max(-MAGNET_MAX, Math.min(MAGNET_MAX, dx * 0.25));
       const y = Math.max(-MAGNET_MAX, Math.min(MAGNET_MAX, dy * 0.25));
-      remember(gsap.to(magnet, { x, y, duration: 0.3, ease: "power2.out" }));
+      remember(gsap.to(magnet, { x, y, duration: takenDuration(options.duration, 0.3), ease }));
     };
     const onLeave = (): void => {
-      remember(gsap.to(magnet, { x: 0, y: 0, duration: 0.3, ease: "power2.out" }));
+      remember(gsap.to(magnet, { x: 0, y: 0, duration: takenDuration(options.duration, 0.3), ease }));
     };
     magnet.addEventListener("pointermove", onMove);
     magnet.addEventListener("pointerleave", onLeave);
@@ -99,12 +102,12 @@ export function createMicroInteractions(target: unknown, options: MicroInteracti
     const media = asElement(options.media);
     const uniform = { value: 0 };
     const onEnter = (): void => {
-      remember(gsap.to(media, { scale: 1.03, duration: 0.35, ease: "power2.out" }));
-      remember(gsap.to(uniform, { value: 1, duration: 0.35, ease: "power2.out" }));
+      remember(gsap.to(media, { scale: 1.03, duration: takenDuration(options.duration, 0.35), ease }));
+      remember(gsap.to(uniform, { value: 1, duration: takenDuration(options.duration, 0.35), ease }));
     };
     const onLeave = (): void => {
-      remember(gsap.to(media, { scale: 1, opacity: 1, duration: 0.35, ease: "power2.out" }));
-      remember(gsap.to(uniform, { value: 0, duration: 0.35, ease: "power2.out" }));
+      remember(gsap.to(media, { scale: 1, opacity: 1, duration: takenDuration(options.duration, 0.35), ease }));
+      remember(gsap.to(uniform, { value: 0, duration: takenDuration(options.duration, 0.35), ease }));
     };
     media.addEventListener("pointerenter", onEnter);
     media.addEventListener("pointerleave", onLeave);

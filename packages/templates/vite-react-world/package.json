@@ -5,6 +5,8 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "prebuild": "pnpm run hh-motion-lint",
+    "hh-motion-lint": "node --experimental-strip-types scripts/hh-motion-lint.ts",
     "build": "vite build",
     "optimize-media": "node --experimental-strip-types scripts/optimize-media.ts",
     "fetch-assets": "node --experimental-strip-types scripts/fetch-assets.ts"

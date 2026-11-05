@@ -1,9 +1,10 @@
 /** Fade and translate a block into view. Transform and opacity only. */
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { takenDuration, takenEase, type MotionTokenChoice } from "../motion/token-choice.ts";
 import { readDocument, readWindow, type HostDocument } from "./host.ts";
 
-export function mountReveal(selector = "[data-reveal]"): () => void {
+export function mountReveal(selector = "[data-reveal]", choice: MotionTokenChoice = {}): () => void {
   const window = readWindow();
   const document = readDocument();
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -14,8 +15,8 @@ export function mountReveal(selector = "[data-reveal]"): () => void {
   const tween = gsap.from(selector, {
     yPercent: 16,
     opacity: 0,
-    duration: 0.9,
-    ease: "expo.out",
+    duration: takenDuration(choice.duration, 0.9),
+    ease: takenEase(choice.ease, "expo.out"),
     scrollTrigger: { start: "top 80%", once: true },
   });
   refreshAfterMedia(document);
