@@ -15,7 +15,16 @@ export type { RecipeMapEntry, RecipeMapQuery, TaxonomyId, TaxonomyLetter } from 
 export type { RecipeName } from "./motion/types.ts";
 export { rankVariants, sectionKindFor } from "./components/rank.ts";
 export type { RankedVariant } from "./components/rank.ts";
-export { HERO_VARIANTS, heroStructures, structureFor } from "./components/hero-structure.ts";
+export { HERO_VARIANTS, heroStructures, structureFor, structureForSection } from "./components/hero-structure.ts";
 export type { LayoutFact, VariantStructure } from "./components/structures/types.ts";
+export { checkVariantStructure } from "./components/check-variant-structure.ts";
+export type {
+  StructureBreach,
+  StructureCheck,
+  StructureMeasure,
+  VariantStructureFacts,
+} from "./components/check-variant-structure.ts";
+export { SLOT_NAMES } from "./components/slots.ts";
+export type { SlotName } from "./components/slots.ts";
 export { HERO_VARIANT_IDS, SECTION_KINDS, SECTIONS, variantRecipe } from "./components/catalog.ts";
 export type { SectionKind, SectionSpec } from "./components/catalog.ts";

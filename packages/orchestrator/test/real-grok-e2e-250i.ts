@@ -46,11 +46,9 @@ import {
   type BuildSpawnRequest,
 } from "@hitchhiker/engine";
 
-export const REAL_GROK_E2E_SKIP = "set HH_REAL_GROK_E2E=1 to run a real Grok build";
+import { isGoldenPathFixtureHtml } from "../src/golden-path.ts";
 
-/** The golden-path cassette writes this page. A real build must not match it. */
-export const GOLDEN_PATH_FIXTURE_HTML =
-  "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n";
+export const REAL_GROK_E2E_SKIP = "set HH_REAL_GROK_E2E=1 to run a real Grok build";
 
 const DEFAULT_PROMPTS = 3;
 const DEFAULT_MINUTES = 60;
@@ -332,7 +330,7 @@ function assertBuiltPage(projectDir: string, originalBrief: string): void {
   const file = path.join(projectDir, "dist", "index.html");
   if (!existsSync(file)) throw new Error("dist/index.html is missing. The stack build did not write it.");
   const html = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
-  if (html === GOLDEN_PATH_FIXTURE_HTML) throw new Error("dist/index.html is the golden-path fixture.");
+  if (isGoldenPathFixtureHtml(html)) throw new Error("dist/index.html is the golden-path fixture.");
   const words = briefWords(originalBrief);
   const lower = html.toLowerCase();
   if (words.length === 0 || !words.some((word) => lower.includes(word))) {

@@ -26,6 +26,12 @@ export function structureFor(variant: string): VariantStructure {
   return found;
 }
 
+/** Structure for a section variant. Other sections declare none until they export one. */
+export function structureForSection(section: string, variant: string): VariantStructure | null {
+  if (section.trim().toLowerCase() !== "hero") return null;
+  return ALL[variant] ?? null;
+}
+
 export function heroStructures(): readonly VariantStructure[] {
   return Object.values(ALL);
 }

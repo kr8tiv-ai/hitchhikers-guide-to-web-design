@@ -276,3 +276,6 @@ export type {
   CdpPageInput,
   RunCdpAssertionsInput,
 } from "./cdp-runner.ts";
+export { checkVariantStructure } from "@hitchhiker/engine";
+export { probeVariantStructure, structureProbeExpression } from "./variant-structure-probe.ts";
+export type { ProbeVariantStructureInput, StructureDomReading } from "./variant-structure-probe.ts";

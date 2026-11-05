@@ -296,6 +296,28 @@ export { DESIGN_THEME_CSS, DESIGN_TOKENS_JSON, exportDesignMd, writeDesignExport
 export type { DesignExport } from "./spec/design-export.ts";
 export { readVariantRanking, variantRankingHtml, VARIANTS_REL, writeVariantRanking } from "./spec/variant-rank.ts";
 export type { VariantAlternative, VariantDirection, VariantRecord } from "./spec/variant-rank.ts";
+export {
+  STRUCTURE_WIDTHS,
+  judgeProjectStructure,
+  judgeVariantStructure,
+  mergeStructureFacts,
+  readStructureDocument,
+  signatureStructures,
+  variantStructureClose,
+} from "./spec/variant-structure-gate.ts";
+export type {
+  BuiltPageSection,
+  NamedSignature,
+  VariantStructureCloseResult,
+  VariantStructureJudgement,
+} from "./spec/variant-structure-gate.ts";
+export { checkVariantStructure, structureForSection } from "@hitchhiker/design-system";
+export type {
+  StructureBreach,
+  StructureCheck,
+  StructureMeasure,
+  VariantStructureFacts,
+} from "@hitchhiker/design-system";
 export type { MotionTokenHit } from "./spec/design-outputs.ts";
 export {
   PlanCritiqueError,

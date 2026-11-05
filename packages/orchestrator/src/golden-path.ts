@@ -25,6 +25,7 @@ import {
   openInterview,
   phonePerformanceBudget,
   readBriefDesk,
+  readBuildRun,
   readDirectionDeal,
   restoreProject,
   saveDirectionDeal,
@@ -281,11 +282,7 @@ async function cassetteBuild(projectDir: string): Promise<void> {
   const spawn: BuildSpawn = (request) => {
     const page = path.join(request.cwd, "dist", "index.html");
     mkdirSync(path.dirname(page), { recursive: true });
-    writeFileSync(
-      page,
-      "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n",
-      "utf8",
-    );
+    writeFileSync(page, goldenPathFixtureHtml(cassetteHeroVariant(request.cwd)), "utf8");
     // A tracked src file makes later picks show up as their own untracked paths.
     // An empty src directory is one git entry, so undoing a pick would keep the folder.
     const source = path.join(request.cwd, "src", "page.tsx");
@@ -310,9 +307,64 @@ async function cassetteBuild(projectDir: string): Promise<void> {
   }
   const queue = await loadQueue(projectDir);
   const failed = queue?.items.find((item) => item.status === "failed");
-  if (failed !== undefined) throw new Error("The build did not finish.");
+  if (failed !== undefined) {
+    const run = readBuildRun(projectDir);
+    const detail = run?.reason.replace(/\s+/g, " ").trim() ?? "";
+    throw new Error(detail === "" ? "The build did not finish." : `The build did not finish. ${detail}`);
+  }
   if (!existsSync(path.join(projectDir, "dist", "index.html"))) {
     throw new Error("The pages were not written.");
+  }
+}
+
+const PREVIOUS_FIXTURE_HTML =
+  "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>\n<body><h1>Mostly Towels</h1><p>The shop sells towels for the home.</p></body>\n</html>\n";
+
+/**
+ * Cassette home page. The hero variant matches variants.json so the 245f
+ * structure gate accepts the page. A real build must not return this markup.
+ */
+export function goldenPathFixtureHtml(variant = "cinematic"): string {
+  const id = variant.toLowerCase().replace(/[^a-z0-9-]/g, "") || "cinematic";
+  return [
+    "<!doctype html>",
+    "<html lang=\"en\">",
+    "<head><meta charset=\"utf-8\"><title>Mostly Towels | Towels for the home</title><meta name=\"description\" content=\"Mostly Towels sells soft cotton towels for the home.\"></head>",
+    `<body><section data-section="hero" data-variant="${id}" class="hh-section hh-hero hh-hero--${id}"><div data-slot="media"></div><p data-slot="eyebrow">Cotton towels</p><h1 data-slot="title">Mostly Towels</h1><p data-slot="body">The shop sells towels for the home.</p><div data-slot="actions">Visit the shop</div></section></body>`,
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+/** True when dist/index.html is still the cassette, including the pre-245f page. */
+export function isGoldenPathFixtureHtml(html: string): boolean {
+  const normalized = html.replace(/\r\n/g, "\n");
+  if (normalized === PREVIOUS_FIXTURE_HTML) return true;
+  const variant = /data-variant="([a-z0-9-]+)"/i.exec(normalized)?.[1];
+  return variant !== undefined && normalized === goldenPathFixtureHtml(variant);
+}
+
+function cassetteHeroVariant(projectDir: string): string {
+  const file = path.join(projectDir, ".hitchhiker", "design", "variants.json");
+  if (!existsSync(file)) return "cinematic";
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed)) return "cinematic";
+    const heroes = parsed.filter((row) => {
+      if (typeof row !== "object" || row === null) return false;
+      const section = (row as { section?: unknown }).section;
+      return typeof section === "string" && section.trim().toLowerCase() === "hero";
+    });
+    const home = heroes.find((row) => {
+      const page = (row as { page?: unknown }).page;
+      return typeof page === "string" && page.trim().toLowerCase() === "home";
+    });
+    const chosen = home ?? heroes[0];
+    if (chosen === undefined || typeof chosen !== "object" || chosen === null) return "cinematic";
+    const variant = (chosen as { variant?: unknown }).variant;
+    return typeof variant === "string" && variant.trim() !== "" ? variant.trim() : "cinematic";
+  } catch {
+    return "cinematic";
   }
 }
 

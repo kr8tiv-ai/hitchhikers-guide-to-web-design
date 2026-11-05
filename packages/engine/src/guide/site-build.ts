@@ -114,6 +114,7 @@ import {
   type VisibleCopyHit,
 } from "../spec/visible-copy.ts";
 import { motionLintReason } from "../spec/motion-lint.ts";
+import { variantStructureClose } from "../spec/variant-structure-gate.ts";
 import { readProjectDisplayName } from "../project-file/display-name.ts";
 import { loadFacts } from "./suggest.ts";
 import { judgeTurnCap, turnLimitReason, type TurnCap } from "./site-turn.ts";
@@ -2510,7 +2511,7 @@ export function setSignatureClose(hook: SignatureClose | null): void {
   signatureCloseHook = hook;
 }
 
-/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, a listing structure its requirements own, or a broken signature moment. */
+/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, a listing structure its requirements own, a hero that misses its variant structure, or a broken signature moment. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
@@ -2519,7 +2520,13 @@ function enforcePromptClose(projectDir: string, promptId: string, files: readonl
   const headReason = documentHeadCloseReason(projectDir, promptText, files);
   const signatureReason = signatureCloseText(projectDir, promptId, promptText, files);
   const motionReason = motionLintReason(projectDir, files);
-  const reason = [copyReason, surfaceReason, headReason, signatureReason, motionReason].filter((part) => part !== "").join("\n");
+  const structure = variantStructureClose(projectDir, promptText, files);
+  if (structure.log !== "") {
+    appendBuildLog(projectDir, promptId, structure.log.endsWith("\n") ? structure.log : `${structure.log}\n`);
+  }
+  const reason = [copyReason, surfaceReason, headReason, signatureReason, motionReason, structure.reason]
+    .filter((part) => part !== "")
+    .join("\n");
   if (reason !== "") throw new Error(reason);
 }
 
