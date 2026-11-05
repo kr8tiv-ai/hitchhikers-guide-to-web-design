@@ -14,6 +14,7 @@ const MARKERS: Record<string, string> = {
   assets: "src",
   crawler: "src",
   deploy: "src",
+  "design-system": "src",
   engine: "src",
   "grok-plugin": "skills",
   knowledge: "packs",

@@ -1,0 +1,35 @@
+---
+/**
+ * Gallery section primitive. Slots: eyebrow, title, body, media, actions.
+ * Colours and type come from the 245d token custom properties.
+ * data-recipe names an optional 245d recipe. This file does not call gsap.
+ */
+import "./sections.css";
+import { variantRecipe } from "./catalog.ts";
+
+interface Props {
+  variant?: string;
+  recipe?: string;
+}
+
+const variants = ["editorial-grid", "masonry", "filmstrip"] as const;
+type Variant = (typeof variants)[number];
+
+function known(value: string): value is Variant {
+  return (variants as readonly string[]).includes(value);
+}
+
+const requested = Astro.props.variant ?? "editorial-grid";
+if (!known(requested)) throw new Error(`Unknown gallery variant ${requested}.`);
+const variant: Variant = requested;
+const recipe = Astro.props.recipe ?? variantRecipe("gallery", variant);
+---
+<section data-section="gallery" data-variant={variant} data-recipe={recipe} class={`hh-section hh-gallery hh-gallery--${variant}`}>
+  <div data-slot="media"><slot name="media" /></div>
+  <div class="hh-copy">
+    <p data-slot="eyebrow"><slot name="eyebrow" /></p>
+    <h2 data-slot="title"><slot name="title" /></h2>
+    <div data-slot="body"><slot name="body" /></div>
+    <div data-slot="actions"><slot name="actions" /></div>
+  </div>
+</section>

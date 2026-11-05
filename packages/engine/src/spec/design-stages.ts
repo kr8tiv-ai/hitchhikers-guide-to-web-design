@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { notePhaseFinished } from "../brand/decision-canvas.ts";
 import { chooseDirection, onDirectionDealSaved, onDirectionPicked, readDirectionDeal } from "../brand/directions.ts";
+import { writeVariantRanking } from "./variant-rank.ts";
 import type { BrandAnswer } from "../brand/kit-from-interview.ts";
 import { loadConfig } from "../config.ts";
 import { planFromBrief, type BriefAnswer, type PlannedPage } from "./brief-plan.ts";
@@ -95,6 +96,7 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
 
   if (!existsSync(sitemapPath)) {
     writeFileSync(sitemapPath, renderSitemap(projectDir, brief, answers), "utf8");
+    refreshVariantRanking(projectDir);
     return result("sitemap", projectDir);
   }
 
@@ -268,7 +270,10 @@ function result(wrote: DesignStageResult["wrote"], projectDir: string): DesignSt
 
 function applyChange(projectDir: string, brief: string, answers: readonly BrandAnswer[], text: string): DesignStageResult {
   const sitemapPath = path.join(projectDir, SITEMAP_REL);
-  if (!existsSync(sitemapPath)) writeFileSync(sitemapPath, renderSitemap(projectDir, brief, answers), "utf8");
+  if (!existsSync(sitemapPath)) {
+    writeFileSync(sitemapPath, renderSitemap(projectDir, brief, answers), "utf8");
+    refreshVariantRanking(projectDir);
+  }
   const parsed = parseSitemap(readFileSync(sitemapPath, "utf8"));
   const base = parsed.length > 0 ? parsed : pagesFromBrief(projectDir, brief, answers);
   const edited = reviseSitemap(base, text);
@@ -277,7 +282,20 @@ function applyChange(projectDir: string, brief: string, answers: readonly BrandA
   writeApprovals(projectDir, {});
   removeIfExists(path.join(projectDir, WIREFRAME_REL));
   removeIfExists(path.join(projectDir, "DESIGN.md"));
+  refreshVariantRanking(projectDir);
   return result("none", projectDir);
+}
+
+function refreshVariantRanking(projectDir: string): void {
+  try {
+    const deal = readDirectionDeal(projectDir);
+    if (deal === null || deal.pickedId === null) return;
+    const chosen = deal.directions.find((direction) => direction.id === deal.pickedId);
+    if (chosen === undefined) return;
+    writeVariantRanking(projectDir, chosen);
+  } catch {
+    // The pick stays. The next pick rewrites the ranking.
+  }
 }
 
 function removeIfExists(file: string): void {

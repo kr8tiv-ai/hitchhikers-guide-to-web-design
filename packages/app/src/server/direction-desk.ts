@@ -4,7 +4,7 @@
  * No deal, no buttons, and no decision-log row.
  */
 
-import { DecisionLogError, chooseDirection, readDirectionDeal, rejectedDirectionNames } from "@hitchhiker/engine";
+import { DecisionLogError, chooseDirection, readDirectionDeal, rejectedDirectionNames, variantRankingHtml } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
 
 export function postDirectionChoice(
@@ -56,6 +56,7 @@ export function renderDirectionPicker(projectDir: string): string {
     return `<section data-direction-desk>
             <h2 class="hh-title">Directions</h2>
             <p>Picked ${escapeHtml(name)}.${line} The directions that were shown and not picked stay in the decision log.</p>
+            ${variantRankingHtml(projectDir)}
             <button class="hh-btn hh-btn--secondary" type="button" data-change-direction>Change direction</button>
             <div data-direction-choices hidden>
               ${choices}

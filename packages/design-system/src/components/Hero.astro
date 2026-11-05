@@ -1,0 +1,45 @@
+---
+/**
+ * Hero section primitive. Slots: eyebrow, title, body, media, actions.
+ * Colours and type come from the 245d token custom properties.
+ * data-recipe names an optional 245d recipe. This file does not call gsap.
+ * The media slot is a static image. This file does not start a GL context.
+ */
+import "./sections.css";
+import { variantRecipe } from "./catalog.ts";
+
+interface Props {
+  variant?: string;
+  recipe?: string;
+}
+
+const variants = [
+  "cinematic",
+  "split-editorial",
+  "statement",
+  "marquee",
+  "monument",
+  "object",
+  "layered-depth",
+] as const;
+type Variant = (typeof variants)[number];
+
+function known(value: string): value is Variant {
+  return (variants as readonly string[]).includes(value);
+}
+
+const requested = Astro.props.variant ?? "statement";
+if (!known(requested)) throw new Error(`Unknown hero variant ${requested}.`);
+const variant: Variant = requested;
+const recipe = Astro.props.recipe ?? variantRecipe("hero", variant);
+---
+<section data-section="hero" data-variant={variant} data-recipe={recipe} class={`hh-section hh-hero hh-hero--${variant}`}>
+  <div data-slot="media" data-object-fallback="image"><slot name="media" /></div>
+  <div class="hh-veil" data-layer="veil"></div>
+  <div class="hh-copy">
+    <p data-slot="eyebrow"><slot name="eyebrow" /></p>
+    <h1 data-slot="title"><slot name="title" /></h1>
+    <div data-slot="body"><slot name="body" /></div>
+    <div data-slot="actions"><slot name="actions" /></div>
+  </div>
+</section>

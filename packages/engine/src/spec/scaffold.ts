@@ -5,10 +5,11 @@
  * Prompt ranges stay TBD for the prompt package.
  */
 
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { replaceViaTemp, withStateLock } from "../lock.ts";
+import { packagedPackage } from "../packaged-dir.ts";
 import { renderTemplate } from "../templates.ts";
 
 export class ScaffoldError extends Error {
@@ -396,6 +397,41 @@ function fillState(rendered: string, facts: { siteWhy: string; date: string }): 
   return body;
 }
 
+/**
+ * Copy the design-system section primitives into the site.
+ * scaffoldProject does not write a package.json. When one is already there,
+ * the workspace dependency is added too.
+ */
+function copySectionPrimitives(dir: string): void {
+  const source = path.join(packagedPackage("design-system"), "src", "components");
+  if (!existsSync(path.join(source, "Hero.astro"))) {
+    throw new ScaffoldError("Design-system section primitives are missing.");
+  }
+  mkdirSync(path.join(dir, "src"), { recursive: true });
+  cpSync(source, path.join(dir, "src", "components"), { recursive: true });
+  addDesignSystemDependency(dir);
+}
+
+function addDesignSystemDependency(dir: string): void {
+  const file = path.join(dir, "package.json");
+  if (!existsSync(file)) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
+  const record = parsed as { dependencies?: unknown };
+  const current =
+    typeof record.dependencies === "object" && record.dependencies !== null && !Array.isArray(record.dependencies)
+      ? { ...(record.dependencies as Record<string, string>) }
+      : {};
+  if (current["@hitchhiker/design-system"] === "workspace:*") return;
+  current["@hitchhiker/design-system"] = "workspace:*";
+  writeFileSync(file, `${JSON.stringify({ ...record, dependencies: current }, null, 2)}\n`, "utf8");
+}
+
 function assertSafe(body: string, label: string): void {
   if (body.includes("{{")) {
     throw new ScaffoldError(`${label} still contains a raw token.`);
@@ -474,6 +510,7 @@ export async function scaffoldProject(dir: string, info: ProjectInfo): Promise<s
     for (const file of files) {
       await replaceViaTemp(path.join(hitchhiker, file.name), file.body);
     }
+    copySectionPrimitives(dir);
   });
 
   return files.map((file) => path.join(".hitchhiker", file.name));

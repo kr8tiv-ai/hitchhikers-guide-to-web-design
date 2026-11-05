@@ -7,6 +7,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { packagedPath } from "../packaged-dir.ts";
+import { writeVariantRanking } from "../spec/variant-rank.ts";
 import { DecisionLogError, recordDirectionChoice, rejectedDirectionNames } from "./decision-canvas.ts";
 import { isOverusedFamily } from "./tokens.ts";
 import { winsSentence } from "./type-conflict.ts";
@@ -311,6 +312,14 @@ export function chooseDirection(
   saveDirectionDeal(projectDir, picked);
   noteBrandKitPick(projectDir, picked);
   applyPickedDirection(projectDir, picked);
+  const chosen = picked.directions.find((direction) => direction.id === picked.pickedId);
+  if (chosen !== undefined) {
+    try {
+      writeVariantRanking(projectDir, chosen);
+    } catch {
+      // The ranking is a record of the pick. A failure here must not undo it.
+    }
+  }
   afterDirectionPicked?.(projectDir);
   return picked;
 }

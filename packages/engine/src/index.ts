@@ -294,6 +294,8 @@ export type {
 } from "./spec/design-md-lint.ts";
 export { DESIGN_THEME_CSS, DESIGN_TOKENS_JSON, exportDesignMd, writeDesignExports } from "./spec/design-export.ts";
 export type { DesignExport } from "./spec/design-export.ts";
+export { readVariantRanking, variantRankingHtml, VARIANTS_REL, writeVariantRanking } from "./spec/variant-rank.ts";
+export type { VariantAlternative, VariantDirection, VariantRecord } from "./spec/variant-rank.ts";
 export type { MotionTokenHit } from "./spec/design-outputs.ts";
 export {
   PlanCritiqueError,
