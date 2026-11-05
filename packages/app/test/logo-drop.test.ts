@@ -771,6 +771,205 @@ class SessionSource {
   }
 }
 
+function deskQuestion(
+  id: string,
+  ask: string,
+  input: string[],
+  writes: string[],
+  skipDefault: string,
+): {
+  question: {
+    id: string;
+    module: string;
+    depth: string[];
+    ask: string;
+    why: string;
+    input: string[];
+    skipDefault: string;
+    writes: string[];
+  };
+  pushback: string | null;
+  done: boolean;
+  mapHtml: string;
+  transcriptHtml: string;
+  statusHtml: string;
+  required: boolean;
+} {
+  return {
+    question: {
+      id,
+      module: "towel-check",
+      depth: ["deep"],
+      ask,
+      why: "A test question.",
+      input,
+      skipDefault,
+      writes,
+    },
+    pushback: null,
+    done: false,
+    mapHtml: "",
+    transcriptHtml: "",
+    statusHtml: "",
+    required: false,
+  };
+}
+
+/**
+ * Two skips overlap: the stream paints DP-0.4 while an earlier Guide poll is
+ * still in flight, and the upload has not returned. The file name has to be
+ * on the card immediately, and neither that poll nor a later snapshot that
+ * has no logo may take the card or the name away.
+ */
+test("a logo name survives an earlier skip poll and a snapshot that has no logo", async () => {
+  const early = deskQuestion(
+    "DP-0.2",
+    "What should the site do first?",
+    ["text", "voice"],
+    ["PROJECT.md#goal"],
+    "Decide later.",
+  );
+  const middle = deskQuestion(
+    "DP-0.3",
+    "How hands-on are you with websites?",
+    ["text", "voice"],
+    ["PROJECT.md#skill"],
+    "I'm brand new to all of this.",
+  );
+  const logoCard = deskQuestion(
+    "DP-0.4",
+    "Do you already have a logo, colors, fonts, or photos?",
+    ["upload", "text", "voice"],
+    ["ASSETS.md#brand-assets"],
+    "No brand assets yet.",
+  );
+  let jobSeq = 0;
+  const release = new Set<string>();
+  const done = new Set<string>();
+  let uploadRelease: (() => void) | null = null;
+  let source: SessionSource | null = null;
+  const regionEl = element({ "data-region": "question" });
+  const listeners = new Map<string, (event: FakeEvent) => void>();
+  const env = {
+    document: {
+      querySelector(selector: string): FakeEl | null {
+        if (selector === 'meta[name="hh-csrf"]') return element({ name: "hh-csrf", content: "csrf-token" });
+        if (selector === '[data-region="question"]') return regionEl;
+        return null;
+      },
+      addEventListener(type: string, listener: (event: FakeEvent) => void) {
+        listeners.set(type, listener);
+      },
+      removeEventListener(type: string) {
+        listeners.delete(type);
+      },
+    },
+    EventSource: class extends SessionSource {
+      constructor() {
+        super();
+        source = this;
+      }
+    },
+    fetch: async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url === "/api/session") return Response.json(early);
+      if (url === "/api/skip") {
+        jobSeq += 1;
+        return Response.json({ jobId: `job-${jobSeq}`, status: "running" });
+      }
+      if (url === "/api/guide-job/job-1" || url === "/api/guide-job/job-2") {
+        const id = url.slice("/api/guide-job/".length);
+        if (!release.has(id)) return Response.json({ status: "running" });
+        done.add(id);
+        const session = id === "job-1" ? middle : { ...logoCard, logoFile: null };
+        return Response.json({ status: "done", httpStatus: 200, session });
+      }
+      if (url === "/api/upload") {
+        await new Promise<void>((resolve) => {
+          uploadRelease = resolve;
+        });
+        return Response.json({
+          ok: true,
+          safeName: "hh-98860ac8-paradise-found-logo.png",
+          originalName: "paradise-found-logo.png",
+          bytes: 10,
+        });
+      }
+      return Response.json({ ok: true });
+    },
+  } as DeskEnv;
+  const stop = mountDesk(env);
+  try {
+    await settle();
+    assert.ok(source);
+    listeners.get("click")?.({
+      target: element({ "data-action": "skip" }),
+      preventDefault() {},
+    });
+    await until(() => jobSeq >= 1, "the first skip did not start a Guide job");
+    source.session(JSON.stringify(middle));
+    await settle();
+    assert.match(regionEl.innerHTML, /data-question-id="DP-0.3"/);
+
+    listeners.get("click")?.({
+      target: element({ "data-action": "skip" }),
+      preventDefault() {},
+    });
+    await until(() => jobSeq >= 2, "the second skip did not start a Guide job");
+    source.session(JSON.stringify(logoCard));
+    await settle();
+    assert.match(regionEl.innerHTML, /data-logo-drop/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), false);
+
+    const logo = new File([Uint8Array.from([1, 2, 3, 4])], "paradise-found-logo.png", { type: "image/png" });
+    listeners.get("change")?.({ target: fileTarget(logo), preventDefault() {} });
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+    assert.equal(regionEl.innerHTML.includes("Saved as"), false);
+
+    source.session(JSON.stringify({ ...logoCard, pushback: "Use the original file.", logoFile: null }));
+    await settle();
+    assert.match(regionEl.innerHTML, /data-question-id="DP-0.4"/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+
+    release.add("job-1");
+    await until(() => done.has("job-1"), "the earlier skip snapshot never arrived");
+    await settle();
+    assert.match(regionEl.innerHTML, /data-question-id="DP-0.4"/);
+    assert.match(regionEl.innerHTML, /data-logo-drop/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+
+    assert.ok(uploadRelease);
+    uploadRelease();
+    await settle();
+    assert.match(regionEl.innerHTML, /Saved as paradise-found-logo\.png/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+
+    source.session(JSON.stringify({
+      ...logoCard,
+      pushback: "Saved.",
+      logoFile: {
+        originalName: "paradise-found-logo.png",
+        safeName: "hh-98860ac8-paradise-found-logo.png",
+        bytes: 10,
+      },
+    }));
+    await settle();
+    source.session(JSON.stringify({ ...logoCard, pushback: "Still here.", logoFile: null }));
+    await settle();
+    assert.match(regionEl.innerHTML, /data-question-id="DP-0.4"/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+
+    release.add("job-2");
+    await until(() => done.has("job-2"), "the logo-card snapshot never arrived");
+    await settle();
+    assert.match(regionEl.innerHTML, /data-question-id="DP-0.4"/);
+    assert.match(regionEl.innerHTML, /data-logo-drop/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+  } finally {
+    stop();
+  }
+});
+
 async function until(check: () => boolean, label: string): Promise<void> {
   const deadline = Date.now() + 1_000;
   while (!check()) {

@@ -1117,13 +1117,23 @@ export function mountDesk(env: DeskEnv): () => void {
   let logoSaved: { id: string; text: string } | null = null;
   let logoBlob: string | null = null;
   /**
-   * Logo the person just saved or removed.
-   * Undefined means the next session snapshot is the source of truth.
-   * A skip paints the next card from the event stream, then the Guide job
-   * poll delivers the snapshot from before the upload. That snapshot has no
-   * logo and would drop the file name off the drop zone.
+   * Logo the person picked or removed on the question now showing.
+   * Every paint reads this, including a paint that arrives before the upload
+   * responds. A session snapshot does not clear it. It clears when the
+   * question changes, or when the person removes the file.
    */
-  let logoHold: SessionView["logoFile"] | undefined = undefined;
+  let logoChoice: {
+    questionId: string;
+    originalName: string;
+    /** Null until the upload responds. */
+    safeName: string | null;
+    bytes: number | null;
+    removed: boolean;
+  } | null = null;
+  /** A newer skip, or a stream event that moved the card, retires an older poll. */
+  let turnGen = 0;
+  /** A newer pick or remove retires an upload that is still in flight. */
+  let logoEpoch = 0;
   let chips: HeldChip[] = [];
   let linkDraft = "";
   let attachLive = "";
@@ -2868,10 +2878,12 @@ export function mountDesk(env: DeskEnv): () => void {
   async function followGuideJob(jobId: string): Promise<void> {
     const questionId = view?.question?.id ?? "";
     const submitted = draft;
+    const gen = turnGen;
     pending = true;
     error = null;
     paint();
     const result = await pollGuideJob(jobId, env.fetch);
+    if (gen !== turnGen) return;
     if (!result.ok) {
       error = result.error;
       pending = false;
@@ -2956,6 +2968,7 @@ export function mountDesk(env: DeskEnv): () => void {
     if (signature(session) === signature(view)) return;
     if (voiceActive()) {
       const next = session;
+      streamMoved(next);
       void (async () => {
         await stopVoice();
         if (view === null || signature(next) === signature(view)) return;
@@ -2996,6 +3009,7 @@ export function mountDesk(env: DeskEnv): () => void {
       } else {
         offerOnFocus = null;
       }
+      streamMoved(session);
       assignSession(session);
       draft = "";
       dropLiveDraft = true;
@@ -3014,6 +3028,7 @@ export function mountDesk(env: DeskEnv): () => void {
     // A late session event must not wipe words the person just typed on this card.
     readDraft();
     const typed = sameQuestion ? draft : "";
+    streamMoved(session);
     assignSession(session);
     draft = typed.trim() !== "" ? typed : session.answerDraft !== null ? session.answerDraft : "";
     error = null;
@@ -3059,6 +3074,7 @@ export function mountDesk(env: DeskEnv): () => void {
     skipConfirm = false;
     const questionId = view.question.id;
     const submitted = draft;
+    const gen = ++turnGen;
     pending = true;
     // The debounce would POST /api/draft while this turn holds the project lock.
     pauseDraftSave();
@@ -3083,6 +3099,7 @@ export function mountDesk(env: DeskEnv): () => void {
           : { questionId },
         env.fetch,
       );
+      if (gen !== turnGen) return;
       if (!result.ok) {
         error = result.error;
         return;
@@ -3100,24 +3117,30 @@ export function mountDesk(env: DeskEnv): () => void {
         result.session.pushback !== null &&
         result.session.choices?.forId === questionId;
     } catch {
+      if (gen !== turnGen) return;
       error = DRAFT_KEPT;
     } finally {
-      const again = action === "answer" ? releaseAnswerCheck(advance) : false;
-      if (action !== "answer") {
-        pending = false;
-        if (writer !== null) continueDraftSave();
+      if (gen !== turnGen) {
+        // The stream, or a newer submit, already owns the card. Do not clear its pending.
         stopAnswerProgress();
-        paint();
+      } else {
+        const again = action === "answer" ? releaseAnswerCheck(advance) : false;
+        if (action !== "answer") {
+          pending = false;
+          if (writer !== null) continueDraftSave();
+          stopAnswerProgress();
+          paint();
+        }
+        if (advance) {
+          // A fill may already be in the box the stream painted. Leave that focus.
+          // A pushback parks the words until the person focuses the box. Do not take it.
+          if (draftFocused() && offerOnFocus === null) focusField();
+          else if (focusChoices) focusChoiceGroup();
+          else if (!draftFocused()) focusNewQuestion();
+        }
+        // Same words, same server model and effort. Never a second call beside a live one.
+        if (again) void submit("answer");
       }
-      if (advance) {
-        // A fill may already be in the box the stream painted. Leave that focus.
-        // A pushback parks the words until the person focuses the box. Do not take it.
-        if (draftFocused() && offerOnFocus === null) focusField();
-        else if (focusChoices) focusChoiceGroup();
-        else if (!draftFocused()) focusNewQuestion();
-      }
-      // Same words, same server model and effort. Never a second call beside a live one.
-      if (again) void submit("answer");
     }
   }
 
@@ -3653,23 +3676,40 @@ export function mountDesk(env: DeskEnv): () => void {
     details.insertAdjacentHTML?.("beforeend", languagePanel(id));
   }
 
-  function sameLogo(local: SessionView["logoFile"], remote: SessionView["logoFile"]): boolean {
-    if (local === null || remote === null) return local === remote;
-    return local.safeName === remote.safeName && local.originalName === remote.originalName;
-  }
-
-  /** Keep a logo the person already saved when this snapshot is older than that save. */
-  function adoptSession(session: SessionView): SessionView {
-    if (logoHold === undefined) return session;
-    if (sameLogo(logoHold, session.logoFile)) {
-      logoHold = undefined;
-      return session;
-    }
-    return { ...session, logoFile: logoHold };
+  /** The picked logo wins over whatever logoFile a snapshot carried. */
+  function withLogoChoice(session: SessionView): SessionView {
+    if (logoChoice === null) return session;
+    const id = session.question?.id ?? null;
+    if (id === null || logoChoice.questionId !== id) return session;
+    if (logoChoice.removed) return { ...session, logoFile: null };
+    return {
+      ...session,
+      logoFile: {
+        originalName: logoChoice.originalName,
+        safeName: logoChoice.safeName ?? "",
+        bytes: logoChoice.bytes ?? session.logoFile?.bytes ?? null,
+      },
+    };
   }
 
   function assignSession(session: SessionView): void {
-    view = adoptSession(session);
+    const arriving = session.question?.id ?? null;
+    if (logoChoice !== null && logoChoice.questionId !== arriving) {
+      logoChoice = null;
+      logoEpoch += 1;
+    }
+    view = withLogoChoice(session);
+  }
+
+  /** The event stream already showed this card. The turn that left it must not paint over it. */
+  function streamMoved(session: SessionView): void {
+    const leaving = view?.question?.id ?? null;
+    const arriving = session.question?.id ?? null;
+    if (leaving !== arriving) turnGen += 1;
+  }
+
+  function logoUploadCurrent(epoch: number, questionId: string): boolean {
+    return epoch === logoEpoch && view?.question?.id === questionId;
   }
 
   async function uploadLogo(file: File): Promise<void> {
@@ -3685,6 +3725,18 @@ export function mountDesk(env: DeskEnv): () => void {
       paint();
       return;
     }
+    const leaf = file.name.split(/[/\\]/).pop() ?? "";
+    const picked = leaf !== "" ? leaf : "logo";
+    const epoch = ++logoEpoch;
+    logoChoice = {
+      questionId: question.id,
+      originalName: picked,
+      safeName: null,
+      bytes: file.size,
+      removed: false,
+    };
+    if (view !== null) view = withLogoChoice(view);
+    paint();
     const body = new FormData();
     body.append("file", file, file.name);
     let response: Response;
@@ -3699,6 +3751,7 @@ export function mountDesk(env: DeskEnv): () => void {
         body,
       });
     } catch {
+      if (!logoUploadCurrent(epoch, question.id)) return;
       logoSaved = { id: question.id, text: "The logo did not save. Try again." };
       paint();
       return;
@@ -3709,6 +3762,7 @@ export function mountDesk(env: DeskEnv): () => void {
     } catch {
       payload = null;
     }
+    if (!logoUploadCurrent(epoch, question.id)) return;
     if (!response.ok) {
       const message =
         isRecord(payload) && typeof payload.error === "string"
@@ -3730,13 +3784,14 @@ export function mountDesk(env: DeskEnv): () => void {
     if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
     logoSaved = { id: question.id, text: `Saved as ${shown}.` };
     rememberLogoPreview(file);
-    const slot = {
+    logoChoice = {
+      questionId: question.id,
       originalName: shown,
       safeName,
-      bytes: isRecord(payload) && typeof payload.bytes === "number" ? payload.bytes : null,
+      bytes: isRecord(payload) && typeof payload.bytes === "number" ? payload.bytes : file.size,
+      removed: false,
     };
-    logoHold = slot;
-    if (view !== null) view = { ...view, logoFile: slot };
+    if (view !== null) view = withLogoChoice(view);
     paint();
     rememberDraft(true);
   }
@@ -3758,6 +3813,7 @@ export function mountDesk(env: DeskEnv): () => void {
   async function removeLogo(): Promise<void> {
     const question = view?.question ?? null;
     if (question === null || token === null) return;
+    const epoch = ++logoEpoch;
     let response: Response;
     try {
       response = await env.fetch("/api/logo/remove", {
@@ -3766,10 +3822,12 @@ export function mountDesk(env: DeskEnv): () => void {
         headers: { "x-hh-csrf": token },
       });
     } catch {
+      if (!logoUploadCurrent(epoch, question.id)) return;
       logoSaved = { id: question.id, text: "The logo did not leave the slot. Try again." };
       paint();
       return;
     }
+    if (!logoUploadCurrent(epoch, question.id)) return;
     if (!response.ok) {
       logoSaved = { id: question.id, text: "The logo did not leave the slot. Try again." };
       paint();
@@ -3780,8 +3838,14 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     logoBlob = null;
     logoSaved = null;
-    logoHold = null;
-    if (view !== null) view = { ...view, logoFile: null };
+    logoChoice = {
+      questionId: question.id,
+      originalName: "",
+      safeName: null,
+      bytes: null,
+      removed: true,
+    };
+    if (view !== null) view = withLogoChoice(view);
     draft = draft
       .split("\n")
       .filter((line) => !line.startsWith("Logo file:"))
@@ -4364,6 +4428,7 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function paint(): void {
+    if (view !== null) view = withLogoChoice(view);
     // A fill focuses the box, then inserts the words. Keep that focus across this paint.
     // A pushback parks those words until the person focuses the box. Do not take that focus.
     const returnToDraft = draftFocused() && offerOnFocus === null;
@@ -4422,11 +4487,11 @@ export function mountDesk(env: DeskEnv): () => void {
         speechReady() && engine === "web-speech",
         voiceChromeFor(engine),
       );
+      const slot = view.logoFile;
       const fromSlot =
-        view.logoFile === null ? undefined : `Saved as ${view.logoFile.originalName}.`;
+        slot !== null && slot.safeName !== "" ? `Saved as ${slot.originalName}.` : undefined;
       const saved =
         logoSaved !== null && view.question?.id === logoSaved.id ? logoSaved.text : fromSlot;
-      const slot = view.logoFile;
       const logo = slot === null || logoBlob === null ? slot : { ...slot, previewUrl: logoBlob };
       const html = withInterviewExtras(card, view.question, saved, logo);
       if (!refillSameCard(question, html)) question.innerHTML = html;
