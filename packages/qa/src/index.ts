@@ -1,4 +1,7 @@
-import "@hitchhiker/engine";
+import { setSignatureClose } from "@hitchhiker/engine";
+import { signatureCloseFailure } from "./signature-gate.ts";
+
+setSignatureClose(signatureCloseFailure);
 
 export const PACKAGE_NAME = "@hitchhiker/qa";
 export {
@@ -247,6 +250,8 @@ export {
   opticalFixInstructions,
   opticalMarksFromDesign,
 } from "./optical-checks.ts";
+export { checkSignature, signatureCloseFailure } from "./signature-gate.ts";
+export type { SignatureGateFailure } from "./signature-gate.ts";
 export type {
   OpticalBaselineSample,
   OpticalCentringSample,

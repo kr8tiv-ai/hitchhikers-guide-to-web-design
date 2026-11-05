@@ -227,6 +227,10 @@ export function renderDesignMd(
     "",
     imageDirectionCopy(art.colorGrade, art.light, narrative?.ownerPhotos ?? []),
     "",
+    "## Signature moments",
+    "",
+    "None locked yet.",
+    "",
     "## Tokens",
     "",
     renderTokensSection(tokensFor(tokenModel.world, tokenModel.fill)),
@@ -570,6 +574,28 @@ let afterDesignMdWritten: ((projectDir: string) => void) | null = null;
 /** Registered by the design stages so a changed guide drops the style-guide approval. */
 export function onDesignMdWritten(listener: (projectDir: string) => void): void {
   afterDesignMdWritten = listener;
+}
+
+/**
+ * Writes a lint-clean DESIGN.md the caller already composed.
+ * A change removes the lock and drops the style-guide approval.
+ * The direction rewrite in writeDesignMd does not use this.
+ */
+export function commitDesignMarkdown(projectDir: string, markdown: string): string {
+  const lint = lintDesignMd(markdown);
+  if (!lint.ok) {
+    throw new Error(`DESIGN.md failed lint: ${lint.errors.map((error) => error.message).join(" ")}`);
+  }
+  const file = path.join(projectDir, DESIGN_MD_PATH);
+  mkdirSync(projectDir, { recursive: true });
+  const next = markdown.endsWith("\n") ? markdown : `${markdown}\n`;
+  const previous = existsSync(file) ? readFileSync(file, "utf8") : null;
+  const changed = previous !== null && previous !== next;
+  if (changed) removeDesignLock(projectDir);
+  writeFileSync(file, next, "utf8");
+  writeDesignExports(projectDir, next);
+  if (changed) afterDesignMdWritten?.(projectDir);
+  return file;
 }
 
 export function writeDesignMd(

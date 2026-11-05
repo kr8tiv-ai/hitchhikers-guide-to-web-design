@@ -67,6 +67,8 @@ import {
   type CoverageTask,
 } from "../spec/plan-coverage.ts";
 import { SITE_RULES, type SitePromptSkeleton, type SiteStack } from "../spec/site-prompts.ts";
+import { auditSignature } from "../spec/signature-audit.ts";
+import { readSignatureMoments, signaturePromptBlock } from "../spec/signature-moments.ts";
 import { commitGeneratedFiles } from "../spec/commit-generated.ts";
 import { refreshEnginePromptText } from "../spec/prompt-refresh.ts";
 import { formatDocumentHeadFailure, promptChecksDocumentHead, scanDocumentHead } from "../spec/site-head.ts";
@@ -2186,6 +2188,16 @@ async function retryLock<T>(fn: () => Promise<T>): Promise<T> {
   throw new LockHeld(process.pid);
 }
 
+export function renderBuildPrompt(
+  prompt: SitePromptSkeleton,
+  briefMarkdown: string,
+  packet: string,
+  projectDir: string,
+  library?: DesignLibrary,
+): string {
+  return renderPrompt(prompt, briefMarkdown, packet, projectDir, library);
+}
+
 function renderPrompt(
   prompt: SitePromptSkeleton,
   briefMarkdown: string,
@@ -2196,6 +2208,8 @@ function renderPrompt(
   const brief = briefMarkdown.trim() === "" ? "The brief text was empty." : briefMarkdown.trim();
   const files = prompt.filesModified.length === 0 ? "none" : prompt.filesModified.join(", ");
   const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library);
+  const moments = readSignatureMoments(projectDir);
+  const signature = moments.length === 0 ? "" : signaturePromptBlock(moments, sectionIdOf(prompt));
   const rendered = [
     "---",
     `id: ${prompt.id}`,
@@ -2233,6 +2247,7 @@ function renderPrompt(
     "",
     design,
     "",
+    ...(signature === "" ? [] : [signature.trimEnd(), ""]),
   ].join("\n");
   return relativizePromptText(rendered, projectDir);
 }
@@ -2482,15 +2497,52 @@ function readGallery(file: string): GalleryNote[] {
   return notes;
 }
 
-/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, or a listing structure its requirements own. */
+export type SignatureClose = (projectDir: string, promptId: string, promptText: string) => string;
+
+let signatureCloseHook: SignatureClose | null = null;
+
+/**
+ * qa registers the optical signature gate here. When qa is not loaded, the
+ * close uses the engine audit so a desk build still checks the contract.
+ */
+export function setSignatureClose(hook: SignatureClose | null): void {
+  signatureCloseHook = hook;
+}
+
+/** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, a listing structure its requirements own, or a broken signature moment. */
 function enforcePromptClose(projectDir: string, promptId: string, files: readonly string[]): void {
   commitGeneratedFiles(projectDir, promptId);
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const copyReason = visibleCopyCloseReason(projectDir, promptId, promptText, files);
   const surfaceReason = surfaceCloseReason(projectDir, promptId, promptText, files);
   const headReason = documentHeadCloseReason(projectDir, promptText, files);
-  const reason = [copyReason, surfaceReason, headReason].filter((part) => part !== "").join("\n");
+  const signatureReason = signatureCloseText(projectDir, promptId, promptText, files);
+  const reason = [copyReason, surfaceReason, headReason, signatureReason].filter((part) => part !== "").join("\n");
   if (reason !== "") throw new Error(reason);
+}
+
+function signatureCloseText(
+  projectDir: string,
+  promptId: string,
+  promptText: string,
+  files: readonly string[],
+): string {
+  if (readSignatureMoments(projectDir).length === 0) return "";
+  if (!signatureCloseApplies(projectDir, promptText, files)) return "";
+  if (signatureCloseHook !== null) return signatureCloseHook(projectDir, promptId, promptText).trim();
+  return auditSignature(projectDir, projectDir).failures.map((failure) => failure.message).join("\n");
+}
+
+function signatureCloseApplies(projectDir: string, promptText: string, files: readonly string[]): boolean {
+  if (/once-over/i.test(promptText) || /Signature host:/i.test(promptText)) return true;
+  const parts: string[] = [];
+  for (const rel of files) {
+    if (rel.includes("..")) continue;
+    parts.push(readOptional(path.join(projectDir, rel)));
+  }
+  const corpus = parts.join("\n");
+  if (/data-signature\s*=/.test(corpus)) return true;
+  return /\b(?:pinnedTimeline|scrollCamera|frameSequence|horizontalTrack)\b/.test(corpus);
 }
 
 /**

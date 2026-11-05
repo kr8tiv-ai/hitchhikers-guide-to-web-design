@@ -62,6 +62,10 @@ const PASSING = [
   "",
   "Owner photos come first. Generated stills may show the work and may not show a stock scene.",
   "",
+  "## Signature moments",
+  "",
+  "None locked yet.",
+  "",
 ].join("\n");
 
 test("a duplicated color key fails and the required section order passes", () => {

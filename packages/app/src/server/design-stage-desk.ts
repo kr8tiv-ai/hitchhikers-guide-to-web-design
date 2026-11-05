@@ -15,6 +15,7 @@ import {
   readDirectionDeal,
   runPrebuildChecks,
   saveDirectionDeal,
+  signatureDeskHtml,
   writeDesignLock,
   type DesignStageName,
 } from "@hitchhiker/engine";
@@ -180,6 +181,7 @@ function renderDesignStageBody(projectDir: string, token: string, briefMarkdown 
       <h2>Style guide</h2>
       <p>The style guide is in.</p>
       <pre>${escapeHtml(design)}</pre>
+      ${signatureDeskHtml(projectDir, token)}
       ${renderDirectionPicker(projectDir)}
       ${note}
       ${stageForm(token, "style-guide", "style guide", reason === "")}

@@ -63,6 +63,16 @@ import { MOTION_COMPOSE_RULE } from "@hitchhiker/design-system";
 
 export { MOTION_COMPOSE_RULE };
 
+/**
+ * The only motion language a page or section prompt may use.
+ * Ids are filled from the locked Signature moments. SITE_RULES stays one
+ * shared string, so this sentence is injected beside that block.
+ */
+export function SIGNATURE_RULE(ids: readonly string[]): string {
+  const shown = ids.length === 0 ? "none" : ids.join(", ");
+  return `You may not invent new motion language. You may only build, support or echo the locked signature moments in DESIGN.md (ids: ${shown}).`;
+}
+
 export const SITE_RULES = [
   "TypeScript strict. Do not use any.",
   "No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.",

@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BANNED_PHRASES, BANNED_WORDS } from "../brand/voice.ts";
 import { DENY_HEX } from "../brand/tokens.ts";
-import { designSectionBody, designTokenTree, type DesignTokenNode } from "./design-md-lint.ts";
+import { designSectionBody, designTokenTree, parseSignatureMoments, type DesignTokenNode } from "./design-md-lint.ts";
 import { PROMPT_BAN_CONSTITUTION_LINE } from "./prompt-bans.ts";
 
 export const VISUAL_CONSTITUTION_REL = "VISUAL-CONSTITUTION.md";
@@ -26,6 +26,8 @@ interface Parts {
   type: string;
   motion: string;
   signature: string[];
+  /** Locked contract moments. Empty when DESIGN.md still says none locked yet. */
+  lockedMoments: string[];
 }
 
 /** The constitution a lock would write for this DESIGN.md. */
@@ -39,6 +41,7 @@ export function renderVisualConstitution(markdown: string): string {
     type: typeLine(text),
     motion: motionLine(text),
     signature: signatureMoments(text),
+    lockedMoments: lockedMomentLines(text),
   };
   return fitConstitution(parts, dontList(text));
 }
@@ -184,6 +187,14 @@ function motionLine(markdown: string): string {
   return clipBytes(parts.join(" "), 160);
 }
 
+function lockedMomentLines(markdown: string): string[] {
+  return parseSignatureMoments(markdown).slice(0, 2).map((moment) => {
+    const name = moment.name.replace(/[!！]/g, "").replace(/\s+/g, " ").trim();
+    const section = moment.section.replace(/[!！]/g, "").replace(/\s+/g, " ").trim();
+    return clipBytes(`${moment.id}, ${name}, ${section}`, 110);
+  });
+}
+
 function signatureMoments(markdown: string): string[] {
   const lines = looseSection(markdown, "Signature techniques")
     .split("\n")
@@ -213,9 +224,13 @@ function fitConstitution(parts: Parts, donts: readonly string[]): string {
 function renderConstitution(parts: Parts, donts: readonly string[]): string {
   const idea = parts.brand[0] ?? "The page holds one clear idea.";
   const brand = parts.brand.length > 1 ? [`Brand idea: ${idea}`, parts.brand[1] ?? ""] : [`Brand idea: ${idea}`];
+  const moments = parts.lockedMoments.length === 0
+    ? []
+    : ["Signature moments:", ...parts.lockedMoments.map((line) => `- ${line}`), ""];
   const lines = [
     "# Visual constitution",
     "",
+    ...moments,
     ...brand,
     "",
     `Fonts: ${parts.fonts}`,
@@ -239,6 +254,10 @@ function renderConstitution(parts: Parts, donts: readonly string[]): string {
 
 function shrinkParts(parts: Parts): Parts {
   const next = copyParts(parts);
+  if (next.lockedMoments.length > 1) {
+    next.lockedMoments = next.lockedMoments.slice(0, -1);
+    return next;
+  }
   if (next.signature.length > 1) {
     next.signature = next.signature.slice(0, -1);
     return next;
@@ -282,6 +301,7 @@ function copyParts(parts: Parts): Parts {
     type: parts.type,
     motion: parts.motion,
     signature: [...parts.signature],
+    lockedMoments: [...parts.lockedMoments],
   };
 }
 

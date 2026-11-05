@@ -236,13 +236,27 @@ export {
   MOTION_TS_PATH,
   flagIgnoredMotionTokens,
   designTokenModel,
+  commitDesignMarkdown,
   renderDesignMd,
   renderMotionModule,
   writeDesignMd,
   writeMotionModule,
 } from "./spec/design-outputs.ts";
-export { DESIGN_SECTION_ORDER, designSectionBody, designTokenTree, lintDesignMd } from "./spec/design-md-lint.ts";
-export type { DesignLintError, DesignLintReport, DesignTokenNode } from "./spec/design-md-lint.ts";
+export {
+  DESIGN_SECTION_ORDER,
+  designSectionBody,
+  designTokenTree,
+  isSignatureRecipeName,
+  lintDesignMd,
+  parseSignatureMoments,
+} from "./spec/design-md-lint.ts";
+export type {
+  DesignLintError,
+  DesignLintReport,
+  DesignTokenNode,
+  ParsedSignatureMoment,
+  SignatureBudget,
+} from "./spec/design-md-lint.ts";
 export { DESIGN_THEME_CSS, DESIGN_TOKENS_JSON, exportDesignMd, writeDesignExports } from "./spec/design-export.ts";
 export type { DesignExport } from "./spec/design-export.ts";
 export type { MotionTokenHit } from "./spec/design-outputs.ts";
@@ -389,9 +403,37 @@ export {
   setSectionStillRunner,
   setBeautyRunner,
   setSiteBuildGate,
+  setSignatureClose,
+  renderBuildPrompt,
   siteBuildSettled,
   siteBuildWatchConfig,
 } from "./guide/site-build.ts";
+export type { SignatureClose } from "./guide/site-build.ts";
+export { auditSignature } from "./spec/signature-audit.ts";
+export type {
+  SignatureAudit,
+  SignatureAuditFailure,
+  SignatureBuilt,
+  SignatureMeasure,
+  SignatureReducedSample,
+  SignatureRuntimeReading,
+} from "./spec/signature-audit.ts";
+export {
+  SIGNATURE_CANDIDATES_REL,
+  SIGNATURE_PICK_LOG_REL,
+  SIGNATURE_TASK,
+  SignatureMomentError,
+  inventSignatureMoments,
+  pickSignatureMoments,
+  readSignatureCandidates,
+  readSignatureMoments,
+  renderSignatureBlocks,
+  sectionHostsMoment,
+  signatureDeskHtml,
+  signaturePromptBlock,
+} from "./spec/signature-moments.ts";
+export type { InventSignatureDeps, SignatureThink } from "./spec/signature-moments.ts";
+export { SIGNATURE_RULE } from "./spec/site-rules.ts";
 export {
   auditOutsideAccess,
   buildConfinementArgs,

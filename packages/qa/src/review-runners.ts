@@ -24,6 +24,7 @@ import { jury, type AwwwardsScores, type JuryResult } from "./jury.ts";
 import { measureJurorFloor, type JurorSample } from "./juror-floor.ts";
 import { auditImageCredits, auditSourcedMedia } from "./licenses.ts";
 import { checkRecipeDir, checkRecipes } from "./recipe-check.ts";
+import { checkSignature } from "./signature-gate.ts";
 import { judgeRedesignOrder, type RedesignStepShot } from "./redesign-order.ts";
 import { combineSectionVariants, type ApprovedDirection, type SectionVariant, type VariantPick } from "./variants.ts";
 
@@ -379,6 +380,12 @@ async function gateProblems(project: ReviewProject, gates: QualityGates): Promis
     }
   } catch (error) {
     note(error instanceof Error ? error.message : "The variant combine failed.");
+  }
+
+  try {
+    for (const failure of checkSignature(project.root, project.root)) note(failure.message);
+  } catch (error) {
+    note(error instanceof Error ? error.message : "The signature moment gate failed.");
   }
 
   return failures;

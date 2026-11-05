@@ -67,6 +67,8 @@ import {
   inferAssetRole,
   approveSiteBrief,
   approveSitePlan,
+  inventSignatureMoments,
+  pickSignatureMoments,
   startSiteBuild,
   draftSiteBrief,
   planDraftInFlight,
@@ -1969,6 +1971,7 @@ async function handleApproveForm(
   let correction = "";
   let confirmFallback = false;
   let renderRoute = "";
+  let momentIds: string[] = [];
   if (mime === "application/json") {
     try {
       const body: unknown = JSON.parse(raw);
@@ -1977,6 +1980,7 @@ async function handleApproveForm(
         if (typeof body.correction === "string") correction = body.correction;
         if (typeof body.route === "string") renderRoute = body.route;
         confirmFallback = body.confirmFallback === true || body.confirmFallback === "yes";
+        momentIds = momentList(body.moment);
       }
     } catch {
       sendJson(req, res, 400, { error: "The desk could not read that request." });
@@ -1988,6 +1992,7 @@ async function handleApproveForm(
     correction = params.get("correction") ?? "";
     renderRoute = params.get("route") ?? "";
     confirmFallback = params.get("confirmFallback") === "yes";
+    momentIds = params.getAll("moment");
   }
   try {
     if (action === "launch") {
@@ -2026,6 +2031,27 @@ async function handleApproveForm(
           if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
         }
         await approvePlanWhenFree(projectDir);
+      }
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "signature-invent" || action === "signature-pick") {
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "design"))) return;
+      try {
+        if (action === "signature-invent") await inventSignatureMoments(projectDir);
+        else pickSignatureMoments(projectDir, momentIds);
+      } catch (error: unknown) {
+        const message = error instanceof Error && error.message.trim() !== ""
+          ? error.message.trim()
+          : "Signature moments did not lock.";
+        const brief = readBriefDesk(projectDir);
+        if (mime === "application/json") {
+          sendJson(req, res, 400, { error: message });
+          return;
+        }
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, message, projectDir), projectDir, token, false);
+        return;
       }
       res.writeHead(303, { location: "/approve" });
       res.end();
@@ -5418,6 +5444,12 @@ function turnError(error: unknown): { status: number; message: string } {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function momentList(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() === "" ? [] : [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim() !== "");
 }
 
 function headerOne(value: string | string[] | undefined): string {
