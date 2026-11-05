@@ -59,6 +59,10 @@ export const SECOND_LANGUAGE_RULE =
 export const ONE_BLOCK_PER_PAGE_RULE =
   "Each block renders once per page. A feature added to a page (filters, sort, favorites, a map) attaches to the block that already shows the listings or content. It does not render a second copy of the cards, their headings, or their ids.";
 
+import { MOTION_COMPOSE_RULE } from "@hitchhiker/design-system";
+
+export { MOTION_COMPOSE_RULE };
+
 export const SITE_RULES = [
   "TypeScript strict. Do not use any.",
   "No secrets in source, fixtures, logs, or commits. Keys come from the environment or the OS keychain.",
@@ -66,6 +70,7 @@ export const SITE_RULES = [
   "GPL and AGPL are out. Apache-2.0, BSD, ISC, MIT, Unlicense, Zlib, and MPL-2.0 (file-level, noted in NOTICE) are allowed. Font files may be SIL OFL-1.1.",
   "Do not bundle @theatre/studio. Theatre runtime means @theatre/core only, pinned, never @latest.",
   "The full motion toolkit is available. Any appropriate library may be used (GSAP, Three.js or React Three Fiber, Motion, Lenis, Astro, vanilla JS, Howler and others). Pick what serves the art direction and go beyond the references. One scroll owner, one ticker and one WebGL context per page.",
+  MOTION_COMPOSE_RULE,
   "Reduced motion stays visible and complete.",
   "Phone Lighthouse is at least 90 in performance, accessibility, best practices, and SEO.",
   "Anti-slop: no purple-to-blue gradients, no magnetic buttons, no default Tailwind indigo look, no invented testimonials, no lorem, and no exclamation marks in copy.",

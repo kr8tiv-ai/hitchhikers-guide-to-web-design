@@ -34,7 +34,7 @@ import {
   VISITOR_COPY_RULE,
 } from "./site-rules.ts";
 
-export { SITE_RULES } from "./site-rules.ts";
+export { MOTION_COMPOSE_RULE, SITE_RULES } from "./site-rules.ts";
 
 export type SitePhase =
   | "dont-panic"
