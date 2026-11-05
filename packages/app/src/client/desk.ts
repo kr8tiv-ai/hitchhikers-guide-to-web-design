@@ -1116,6 +1116,14 @@ export function mountDesk(env: DeskEnv): () => void {
   const editing = new Set<string>();
   let logoSaved: { id: string; text: string } | null = null;
   let logoBlob: string | null = null;
+  /**
+   * Logo the person just saved or removed.
+   * Undefined means the next session snapshot is the source of truth.
+   * A skip paints the next card from the event stream, then the Guide job
+   * poll delivers the snapshot from before the upload. That snapshot has no
+   * logo and would drop the file name off the drop zone.
+   */
+  let logoHold: SessionView["logoFile"] | undefined = undefined;
   let chips: HeldChip[] = [];
   let linkDraft = "";
   let attachLive = "";
@@ -1869,11 +1877,11 @@ export function mountDesk(env: DeskEnv): () => void {
     const moved = session.done || session.question?.id !== questionId;
     if (moved) {
       releaseDraft(questionId);
-      view = session;
+      assignSession(session);
     } else if ((session.pushback ?? "") !== "") {
       holdDraftForPushback(session, keptText);
     } else {
-      view = session;
+      assignSession(session);
     }
     draft = "";
     dropLiveDraft = true;
@@ -1883,7 +1891,7 @@ export function mountDesk(env: DeskEnv): () => void {
   }
 
   function holdDraftForPushback(session: SessionView, keptText: string): void {
-    view = session;
+    assignSession(session);
     if (keptText.trim() !== "") {
       offerOnFocus = keptText;
       publishShown(keptText);
@@ -2772,7 +2780,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     const sameCard = session.question !== null && session.question.id === existingId;
     const keepField = pageTyped || (typedValue.trim() !== "" && sameCard);
-    view = session;
+    assignSession(session);
     if (keepField) {
       draft = typedValue;
     } else if (!voiceSession && (typed?.value ?? "").trim() === "") {
@@ -2956,7 +2964,7 @@ export function mountDesk(env: DeskEnv): () => void {
         const same = leavingId !== null && next.question?.id === leavingId;
         // The stream can show the next card before the turn POST drops the old key.
         if (!same && leavingId !== null) releaseDraft(leavingId, false);
-        view = next;
+        assignSession(next);
         draft = kept.trim() === "" ? "" : kept;
         error = null;
         pending = false;
@@ -2988,7 +2996,7 @@ export function mountDesk(env: DeskEnv): () => void {
       } else {
         offerOnFocus = null;
       }
-      view = session;
+      assignSession(session);
       draft = "";
       dropLiveDraft = true;
       error = null;
@@ -3006,7 +3014,7 @@ export function mountDesk(env: DeskEnv): () => void {
     // A late session event must not wipe words the person just typed on this card.
     readDraft();
     const typed = sameQuestion ? draft : "";
-    view = session;
+    assignSession(session);
     draft = typed.trim() !== "" ? typed : session.answerDraft !== null ? session.answerDraft : "";
     error = null;
     notice = null;
@@ -3163,7 +3171,7 @@ export function mountDesk(env: DeskEnv): () => void {
       suggestHold = null;
       cardHold = false;
       ownWords = false;
-      view = held.session;
+      assignSession(held.session);
       draft = "";
       draftNote = null;
       draftFade = false;
@@ -3363,7 +3371,7 @@ export function mountDesk(env: DeskEnv): () => void {
         showFieldError(isRecord(payload) && typeof payload.error === "string" ? payload.error : DRAFT_KEPT);
         return;
       }
-      view = session;
+      assignSession(session);
       error = null;
     } catch {
       showFieldError(DRAFT_KEPT);
@@ -3645,6 +3653,25 @@ export function mountDesk(env: DeskEnv): () => void {
     details.insertAdjacentHTML?.("beforeend", languagePanel(id));
   }
 
+  function sameLogo(local: SessionView["logoFile"], remote: SessionView["logoFile"]): boolean {
+    if (local === null || remote === null) return local === remote;
+    return local.safeName === remote.safeName && local.originalName === remote.originalName;
+  }
+
+  /** Keep a logo the person already saved when this snapshot is older than that save. */
+  function adoptSession(session: SessionView): SessionView {
+    if (logoHold === undefined) return session;
+    if (sameLogo(logoHold, session.logoFile)) {
+      logoHold = undefined;
+      return session;
+    }
+    return { ...session, logoFile: logoHold };
+  }
+
+  function assignSession(session: SessionView): void {
+    view = adoptSession(session);
+  }
+
   async function uploadLogo(file: File): Promise<void> {
     const question = view?.question ?? null;
     if (question === null || !isLogoQuestion(question) || token === null) return;
@@ -3703,16 +3730,13 @@ export function mountDesk(env: DeskEnv): () => void {
     if (!draft.includes(line)) draft = draft.trim() === "" ? line : `${draft.trim()}\n${line}`;
     logoSaved = { id: question.id, text: `Saved as ${shown}.` };
     rememberLogoPreview(file);
-    if (view !== null) {
-      view = {
-        ...view,
-        logoFile: {
-          originalName: shown,
-          safeName,
-          bytes: isRecord(payload) && typeof payload.bytes === "number" ? payload.bytes : null,
-        },
-      };
-    }
+    const slot = {
+      originalName: shown,
+      safeName,
+      bytes: isRecord(payload) && typeof payload.bytes === "number" ? payload.bytes : null,
+    };
+    logoHold = slot;
+    if (view !== null) view = { ...view, logoFile: slot };
     paint();
     rememberDraft(true);
   }
@@ -3756,6 +3780,7 @@ export function mountDesk(env: DeskEnv): () => void {
     }
     logoBlob = null;
     logoSaved = null;
+    logoHold = null;
     if (view !== null) view = { ...view, logoFile: null };
     draft = draft
       .split("\n")
@@ -4287,7 +4312,7 @@ export function mountDesk(env: DeskEnv): () => void {
         absorbLiveStatus(session);
         continue;
       }
-      view = session;
+      assignSession(session);
       paint();
       if (session.briefStatus === "pending" || session.briefStatus === "approved") {
         stopBriefProgress();
@@ -4842,7 +4867,7 @@ export function mountDesk(env: DeskEnv): () => void {
         error = result.error;
         return;
       }
-      view = result.session;
+      assignSession(result.session);
       editing.delete(id);
       error = null;
     } catch {

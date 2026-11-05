@@ -645,3 +645,136 @@ function harness(upload: DeskEnv["fetch"]): { env: DeskEnv; region: FakeEl; fire
 async function settle(): Promise<void> {
   for (let step = 0; step < 8; step += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+const CHIP_NAME = 'class="hh-attach__name">paradise-found-logo.png<';
+
+/**
+ * A skip's event stream paints DP-0.4 before the Guide job poll returns.
+ * The poll body is the snapshot from when the skip finished, so it has no logo.
+ * A file chosen in that gap must still show its name after the snapshot lands.
+ */
+test("a logo chosen while the skip job is still posting keeps its file name", async () => {
+  const before = {
+    question: {
+      id: "DP-0.3",
+      module: "towel-check",
+      depth: ["deep"],
+      ask: "How hands-on are you with websites?",
+      why: "This tells me how much to explain.",
+      input: ["text", "voice"],
+      skipDefault: "I'm brand new to all of this.",
+      writes: ["PROJECT.md#skill"],
+    },
+    pushback: null,
+    done: false,
+    mapHtml: "",
+    transcriptHtml: "",
+    statusHtml: "",
+    required: false,
+  };
+  const landed = {
+    ...before,
+    question: {
+      id: "DP-0.4",
+      module: "towel-check",
+      depth: ["deep"],
+      ask: "Do you already have a logo, colors, fonts, or photos?",
+      why: "Existing assets open a fast path.",
+      input: ["upload", "text", "voice"],
+      skipDefault: "No brand assets yet.",
+      writes: ["ASSETS.md#brand-assets"],
+    },
+  };
+  let releaseJob = false;
+  let jobCalls = 0;
+  let source: SessionSource | null = null;
+  const env = {
+    document: {
+      querySelector(selector: string): FakeEl | null {
+        if (selector === 'meta[name="hh-csrf"]') return element({ name: "hh-csrf", content: "csrf-token" });
+        if (selector === '[data-region="question"]') return regionEl;
+        return null;
+      },
+      addEventListener(type: string, listener: (event: FakeEvent) => void) {
+        listeners.set(type, listener);
+      },
+      removeEventListener(type: string) {
+        listeners.delete(type);
+      },
+    },
+    EventSource: class extends SessionSource {
+      constructor() {
+        super();
+        source = this;
+      }
+    },
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url === "/api/session") return Response.json(before);
+      if (url === "/api/skip") return Response.json({ jobId: "job-logo", status: "running" });
+      if (url === "/api/guide-job/job-logo") {
+        jobCalls += 1;
+        if (!releaseJob) return Response.json({ status: "running" });
+        return Response.json({ status: "done", httpStatus: 200, session: landed });
+      }
+      if (url === "/api/upload") {
+        assert.equal(init?.method, "POST");
+        return Response.json({
+          ok: true,
+          safeName: "hh-98860ac8-paradise-found-logo.png",
+          originalName: "paradise-found-logo.png",
+          bytes: 10,
+        });
+      }
+      return Response.json({ ok: true });
+    },
+  } as DeskEnv;
+  const regionEl = element({ "data-region": "question" });
+  const listeners = new Map<string, (event: FakeEvent) => void>();
+  const stop = mountDesk(env);
+  try {
+    await settle();
+    assert.ok(source);
+    listeners.get("click")?.({
+      target: element({ "data-action": "skip" }),
+      preventDefault() {},
+    });
+    await until(() => jobCalls > 0, "skip did not start a Guide job");
+    source.session(JSON.stringify(landed));
+    await settle();
+    assert.match(regionEl.innerHTML, /data-logo-drop/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), false);
+
+    const logo = new File([Uint8Array.from([1, 2, 3, 4])], "paradise-found-logo.png", { type: "image/png" });
+    listeners.get("change")?.({ target: fileTarget(logo), preventDefault() {} });
+    await settle();
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+
+    releaseJob = true;
+    await until(() => jobCalls > 1, "the stale skip snapshot never arrived");
+    await settle();
+    assert.match(regionEl.innerHTML, /data-logo-drop/);
+    assert.equal(regionEl.innerHTML.includes(CHIP_NAME), true);
+  } finally {
+    stop();
+  }
+});
+
+class SessionSource {
+  listeners = new Map<string, (event?: { data?: string }) => void>();
+  addEventListener(type: string, listener: (event?: { data?: string }) => void): void {
+    this.listeners.set(type, listener);
+  }
+  close(): void {}
+  session(data: string): void {
+    this.listeners.get("session")?.({ data });
+  }
+}
+
+async function until(check: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(label);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
