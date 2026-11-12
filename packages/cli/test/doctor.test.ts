@@ -713,3 +713,102 @@ test("hh doctor --yes installs from the CLI only when the flag is present", asyn
     removeTempDir(pnpm);
   }
 });
+
+function quietBrowsers(): GateBrowserSnapshot {
+  return { cacheDir: "hidden-cache", chromium: true, webkit: true };
+}
+
+test("doctor says API ready when the env key is set and does not print it", async () => {
+  const secret = `xai-${"deskkey99"}`;
+  const calls: string[] = [];
+  const present = await doctor({
+    nodeVersion: "v22.0.0",
+    runner: scripted(gitOk()),
+    env: { XAI_API_KEY: secret, PATH: "", Path: "" },
+    keychain: {
+      getPassword(service, account) {
+        calls.push(`${service} ${account}`);
+        return Promise.resolve(secret);
+      },
+    },
+    readGateBrowsers: quietBrowsers,
+  });
+  const text = formatDoctor(present.report);
+  assert.equal(present.report.apiKeyReady, true);
+  assert.equal(present.report.compProvider, "grok-cli");
+  assert.match(text, /API ready/);
+  assert.match(text, /Using your Grok sign-in/);
+  assert.equal(text.includes(secret), false);
+  assert.equal(text.includes("deskkey99"), false);
+  assert.equal(JSON.stringify(present.report).includes(secret), false);
+  assert.equal(calls.length, 0);
+  assert.equal(text.includes("!"), false);
+
+  const absent = await doctor({
+    nodeVersion: "v22.0.0",
+    runner: scripted(gitOk()),
+    env: { PATH: "", Path: "" },
+    keychain: null,
+    readGateBrowsers: quietBrowsers,
+  });
+  const absentText = formatDoctor(absent.report);
+  assert.equal(absent.report.apiKeyReady, false);
+  assert.equal(absent.report.compProvider, "grok-cli");
+  assert.match(absentText, /Using your Grok sign-in/);
+  assert.equal(absentText.includes("API ready"), false);
+  assert.equal(absentText.includes("!"), false);
+});
+
+test("a keychain key says API ready and the password is not printed", async () => {
+  const secret = `chain-${"notshown8"}`;
+  let seen: { service: string; account: string } | undefined;
+  const outcome = await doctor({
+    nodeVersion: "v22.0.0",
+    runner: scripted(gitOk()),
+    env: { PATH: "", Path: "" },
+    keychain: {
+      getPassword(service, account) {
+        seen = { service, account };
+        return Promise.resolve(secret);
+      },
+    },
+    readGateBrowsers: quietBrowsers,
+  });
+  const text = formatDoctor(outcome.report);
+  assert.deepEqual(seen, { service: "hitchhikers-guide", account: "xai" });
+  assert.equal(outcome.report.apiKeyReady, true);
+  assert.match(text, /API ready/);
+  assert.match(text, /Using your Grok sign-in/);
+  assert.equal(text.includes(secret), false);
+  assert.equal(text.includes("notshown8"), false);
+  assert.equal(JSON.stringify(outcome.report).includes(secret), false);
+});
+
+test("media settings that put the API first report API ready when a key is set", async () => {
+  const dir = tempDir();
+  const secret = `xai-${"mediakey8"}`;
+  try {
+    const folder = path.join(dir, ".hitchhiker", "assets");
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(
+      path.join(folder, "media.json"),
+      `${JSON.stringify({ order: ["api", "grok-cli"], browser: false, api: true })}\n`,
+    );
+    const outcome = await doctor({
+      projectDir: dir,
+      nodeVersion: "v22.0.0",
+      runner: scripted(gitOk()),
+      env: { XAI_API_KEY: secret, PATH: "", Path: "" },
+      keychain: null,
+      readGateBrowsers: quietBrowsers,
+    });
+    const text = formatDoctor(outcome.report);
+    assert.equal(outcome.report.compProvider, "api");
+    assert.match(text, /Comps: API ready\./);
+    assert.equal(text.includes("Using your Grok sign-in"), false);
+    assert.equal(text.includes(secret), false);
+    assert.equal(text.includes("mediakey8"), false);
+  } finally {
+    removeTempDir(dir);
+  }
+});

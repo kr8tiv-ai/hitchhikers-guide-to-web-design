@@ -180,7 +180,7 @@ The PRD, requirements, roadmap, motion spec, section plan, visual direction and 
 ### 4. Improbability Drive: the build
 > *Makes the wildly improbable happen on schedule, one commit at a time.*
 
-The orchestrator runs every prompt in a fresh Grok Build session, picking the model and effort level per prompt. One prompt is one job is one commit. Every three prompts the reviewer takes desktop and mobile screenshots, checks them against the spec and fixes what's off. The watchdog watches for errors and stalls, fixes the small stuff immediately, escalates only when it genuinely has to, and can roll back to the last reviewed commit. You get progress updates the whole way, and a proper reveal at the end.
+The orchestrator runs every prompt in a fresh Grok Build session, picking the model and effort level per prompt. One prompt is one job is one commit. Page prompts carry the sketches you approved. They have to match the composition, the spacing, the scale, and the colours. The words stay in the HTML, and a sketch is never dropped in as a page image. When a page prompt finishes, the built page is photographed beside the sketch. A miss goes back for one fix, then it is photographed again. If it is still off after the rounds in the project config, the queue pauses and shows you the pair. It does not continue as if the page matched. Every three prompts the reviewer takes desktop and mobile screenshots, checks them against the spec and fixes what's off. The watchdog watches for errors and stalls, fixes the small stuff immediately, escalates only when it genuinely has to, and can roll back to the last reviewed commit. You get progress updates the whole way, and a proper reveal at the end.
 
 On this repo, the prompt queue is walked by [`.hh-driver/run-build.ps1`](.hh-driver/README.md) on Windows and by `node .hh-driver/run-build.mjs` on macOS and Linux. Same rules: one prompt per session, a normal `git push`, never a force push. `/hh-drive` is a skill you type. It is not an `hh` subcommand.
 
@@ -199,6 +199,14 @@ Before any of that, you can look at the built pages on this computer. The previe
 The command for that moment is `hh so-long --project <dir>`. It reads the quality check for the version you have now. If that check is missing, belongs to a different version, or is blocked, it stops and tells you why, and it does not call a host. When the check is clear, it recommends Hostinger and also offers to keep a preview on this computer. Nothing is published until you name the host and pass `--yes`. The walkthrough is in [Publish with hh so-long](#publish-with-hh-so-long).
 
 After a publish that actually runs, the same command can check the live address and write the result under the deploy row. A preview on this computer costs nothing. Publishing to a host uses that host's plan. The Approvals page on the desk has a Launch card that says this before you record a yes. Recording the yes does not publish by itself.
+
+### Sketches before the build
+
+The pictures come before the queue. After the style guide is approved and `DESIGN.md` is locked, Imagine draws a few sketches of each primary page: the desktop first screen, the tall desktop page, and the phone. Grey bars stand where the headings will go. The words are written later, in the page.
+
+On the desk you pick the sketch that feels right, write what should change and have that view drawn again, or upload a picture you already have. The one you approve is the picture the build has to match. The first prompt package waits until those sketches are approved. A later page is drawn with the approved home sketch in view, so the set stays in one family. Sections that move can get a short motion clip from the approved desktop sketch. You approve the clip the same way, or you leave it.
+
+The draw uses your signed-in Grok. It does not need an API key. The longer file list, the config, the provider order, and what the API path costs are in [docs/imagine-first.md](docs/imagine-first.md). Where a key may live, if you turn that path on, is in [docs/secrets.md](docs/secrets.md).
 
 ### The crew
 
@@ -628,15 +636,16 @@ The towel fixture does not use `hh brief --approve`. It calls `approveSiteBrief`
 
 ### Design stages
 
-Five stages, in order. A blank note is not an approval. A change request edits the artefact and leaves the stage waiting. None of these stages call a model.
+Six stages, in order. A blank note is not an approval. A change request on the sitemap, the wireframe, or the style guide edits that artefact and leaves the stage waiting. The sitemap, the wireframe, the direction note, and the pre-build list do not call a model. Approving the style guide can start the sketch draw.
 
 1. **Sitemap.** Written to `.hitchhiker/sitemap.md`. Approve it with a non-blank note.
 2. **Wireframe.** Written to `.hitchhiker/wireframe.md` once the sitemap is approved.
-3. **Style guide.** Writes `DESIGN.md` at the project root once the wireframe is approved.
+3. **Style guide.** Writes `DESIGN.md` at the project root once the wireframe is approved. Approving it needs a picked direction and the reference images the project asks for. Once `DESIGN.md` is locked, that approval asks Imagine to draw the sketches. The draw uses your signed-in Grok. It does not start the queue.
 4. **Direction.** Pick one dealt pair and give a reason, then approve. The pick regenerates `DESIGN.md` from the brand kit and that pair, and the style-guide approval clears so you approve the guide again. The palette stays the kit. A direction hue does not replace it.
-5. **Pre-build checks.** A failing check blocks the build. A warning has to be acknowledged, then the stage approved. The record is `.hitchhiker/design-stages.json`.
+5. **Look and feel.** The desk shows the sketches for each primary page: desktop first screen, tall page, and phone. **Use this one** approves a sketch. **Try again with these changes** redraws that view from your words. **Upload my own** adds a picture you made elsewhere. A short motion clip, when a section moves, can be approved with **Use this motion**. The build waits until every required sketch is approved. The stage record is `.hitchhiker/design-stages.json`. The picks are `.hitchhiker/comps.json`.
+6. **Pre-build checks.** A failing check blocks the build. A warning has to be acknowledged, then the stage approved.
 
-Start build is a separate button. It stays closed until `designReadyForBuild` is true: every stage approved, no failing check, warnings acknowledged when any exist. The button and `hh build --resume` both ask the phase lock. The build is legal from design, not from the interview.
+Start build is a separate button. It stays closed until `designReadyForBuild` is true: every stage approved, every required sketch approved, no failing check, warnings acknowledged when any exist. The button and `hh build --resume` both ask the phase lock. The build is legal from design, not from the interview. The sketch path, the compare that runs during the build, and the config are in [docs/imagine-first.md](docs/imagine-first.md).
 
 ### Deep Thought
 
@@ -686,12 +695,13 @@ The desk does not publish `hitchhikers-guide`. Install tools, and `hh tools sear
 
 ## Check this computer
 
-`hh doctor` is the check you run before the interview, and again when a quality gate says it cannot open a browser. The machine lines stay at the top (`node:`, `git:`, `grok:`, `auth:`). Under them, four short sentences say the same thing in everyday language.
+`hh doctor` is the check you run before the interview, and again when a quality gate says it cannot open a browser. The machine lines stay at the top (`node:`, `git:`, `grok:`, `auth:`). Under them, five short sentences say the same thing in everyday language.
 
 1. **Node.js.** The Guide needs Node.js 22 or newer. An older Node is the only check that exits 1. Install Node.js 22 or newer, then run `hh doctor` again.
 2. **Git.** A missing git is a warning. Saves and the queue need it. The desk still starts.
 3. **Grok Build.** The `grok` command has to be on this computer, and you have to be signed in, because the interview and the build call it. When `grok --help` offers a status flag, doctor runs that flag and says whether you are signed in or signed out. When the help text has no such flag, doctor says it cannot tell. It never runs `grok login`, never types a password, and never sends a token.
 4. **Browsers for the quality gates.** The device gate opens Chromium (desktop, and Android Chrome) and WebKit (iPhone and iPad). Doctor looks in Playwright's browser cache for those two programs. A headless-shell build does not count. Whisper and pdftotext stay optional warnings, the same as before. A missing Playwright command is still a warning, and the desk still has an Install button for it.
+5. **Sketches.** Doctor names the Imagine path that would draw the page sketches. The default sentence is `Using your Grok sign-in`. That path needs no key. If `XAI_API_KEY` is set, or the OS keychain holds the key, the same report also says `API ready` and does not print the key. While `grok-cli` is first in the media order, that is still the path doctor names. Doctor names the API path when the order puts `api` first, `api` is true, and a key is present. The places a key may live, and the media file, are in [docs/secrets.md](docs/secrets.md).
 
 Doctor does not download Chromium or WebKit unless you pass `--yes`. Without that flag it only names what is missing and the command you can run yourself: `pnpm exec playwright install chromium webkit` (or just the one that is missing). With `--yes`, and with pnpm on the computer, it runs that install for the browsers that are actually missing. If both are already there, `--yes` downloads nothing. If pnpm is missing, `--yes` still downloads nothing and says so. There is no question prompt, so a pack smoke and any other non-interactive run cannot download a browser by accident.
 
@@ -960,7 +970,7 @@ hh doctor --context [--project <dir>]
 hh doctor --help
 ```
 
-Exit 1 only when Node is older than 22. Other gaps are warnings and exit 0. `--yes` may run `pnpm exec playwright install` for the Chromium or WebKit build that is actually missing. It does not sign you in, approve a brief, or publish. If both browsers are present, `--yes` downloads nothing. If pnpm is missing, `--yes` downloads nothing and says so. `--help` prints `hh doctor [--project <dir>]` and installs nothing.
+Exit 1 only when Node is older than 22. Other gaps are warnings and exit 0. `--yes` may run `pnpm exec playwright install` for the Chromium or WebKit build that is actually missing. It does not sign you in, approve a brief, or publish. If both browsers are present, `--yes` downloads nothing. If pnpm is missing, `--yes` downloads nothing and says so. `--help` prints `hh doctor [--project <dir>]` and installs nothing. The sketch line names the Imagine path that would draw comps, and it never prints a key. [Check this computer](#check-this-computer) has the sentences.
 
 `--context` anywhere in the arguments takes the audit path instead. It prints `Context files agree.` or one line per finding with a fix, and exits 1 when any finding is listed. It does not install browsers. The sentences for the machine check are in [Check this computer](#check-this-computer).
 
@@ -1049,6 +1059,8 @@ The Guide does not read a committed dotenv file. The root `.gitignore` ignores `
 
 `HH_E2E_SERVER`, `HH_E2E_PROJECT`, `HH_GUIDE_REPLAY`, `HH_GUIDE_CASSETTE`, and `HH_OPTIMISTIC` are harness switches for tests and the desk. Leave them unset when you are interviewing a real project. `HH_OPTIMISTIC=1` lets the first typed answer advance before the guide check returns. It does not publish, and it does not skip the phase lock.
 
+Page sketches on the desk use the signed-in Grok CLI. That runner always starts the CLI and does not attach the billed API, even when `api` is true in `.hitchhiker/assets/media.json`. The desk settings screen can turn the browser path on. It does not turn the API path on by itself. Section stills can use the key once `api` is true. The steps are in [docs/secrets.md](docs/secrets.md). The sketch config (`design.comps`, `design.motionRefs`, `design.compare`) is in [docs/imagine-first.md](docs/imagine-first.md).
+
 ### `.hitchhiker/config.json`
 
 One file per project. A missing file means the factory defaults, and reading it writes nothing. Unknown keys throw. The defaults from `defaultConfig()` in [`packages/engine/src/config.ts`](packages/engine/src/config.ts):
@@ -1083,6 +1095,11 @@ The Settings screen at `/settings` writes the model, the effort, and the voice c
 | `.hitchhiker/flow.json` | The saved step. The FAQ says what a missing or unreadable file means. |
 | `.hitchhiker/queue.json` | The Drive queue. |
 | `.hitchhiker/sitemap.md`, `.hitchhiker/wireframe.md`, `.hitchhiker/design-stages.json` | Design stages. |
+| `.hitchhiker/comps.json` | Sketch candidates, approvals, and motion clips. |
+| `.hitchhiker/assets/media.json` | Imagine provider order. The API path stays off until `api` is true. |
+| `reference/renders/` | Approved sketches the build has to match. |
+| `VISUAL-TRUTH.md` | The same approved paths, written for the build prompts. |
+| `qa/compare/` | Side-by-side checks of a built page against its sketch. |
 | `DESIGN.md` | Style guide. Regenerated when a direction is picked. |
 | `.hitchhiker/qa/GATES.json` | Quality check for one git commit. |
 | `.hitchhiker/deploy/DEPLOYS.md` | Publish rows, plus a `## Post-check` section when a checker ran. |

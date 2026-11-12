@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import {
   buildInstallPlan,
@@ -52,6 +52,14 @@ export interface GateBrowserReport extends GateBrowserSnapshot {
   missing: readonly GateBrowserName[];
 }
 
+/** Imagine path that would draw page sketches. `none` means media settings select nothing that can run. */
+export type CompProviderChoice = "grok-cli" | "browser" | "api" | "none";
+
+/** Reads one keychain account. Doctor uses it only to learn whether a key exists. */
+export interface DoctorKeychain {
+  getPassword(service: string, account: string): Promise<string | null>;
+}
+
 export interface DoctorReport {
   nodeOk: boolean;
   nodeVersion: string;
@@ -69,6 +77,16 @@ export interface DoctorReport {
    * report that did not run this check.
    */
   gateBrowsers?: GateBrowserReport;
+  /**
+   * Which Imagine path would draw comps. Omitted only on an older report.
+   * The formatted line names the path and never includes a key.
+   */
+  compProvider?: CompProviderChoice;
+  /**
+   * True when an xAI key is in the environment or the OS keychain.
+   * The key itself is not stored.
+   */
+  apiKeyReady?: boolean;
 }
 
 export interface DoctorOptions {
@@ -83,6 +101,11 @@ export interface DoctorOptions {
   yes?: boolean;
   /** Stand-in for the Playwright browser cache. The default reads that cache. */
   readGateBrowsers?: (env: NodeJS.ProcessEnv) => GateBrowserSnapshot;
+  /**
+   * OS keychain reader for the xAI account. Pass null to skip it.
+   * Omit to try the optional keytar package. The password is not stored or printed.
+   */
+  keychain?: DoctorKeychain | null;
 }
 
 /**
@@ -128,6 +151,7 @@ export function formatDoctor(report: DoctorReport, context?: HintContext): strin
   lines.push(nodeSentence(report));
   lines.push(gitSentence(report));
   lines.push(grokSentence(report));
+  if (report.compProvider !== undefined) lines.push(compSentence(report.compProvider, report.apiKeyReady === true));
   if (report.gateBrowsers !== undefined) lines.push(browserSentence(report.gateBrowsers));
   return lines.join("\n");
 }
@@ -185,6 +209,7 @@ export async function doctor(
     await persistSessionMode(options.projectDir, sessionIdMode);
   }
 
+  const apiKeyReady = await apiKeyReadyFor(env, options.keychain);
   const report: DoctorReport = {
     nodeOk,
     nodeVersion,
@@ -197,6 +222,8 @@ export async function doctor(
     cassette: cassetteLabel(env),
     warnings,
     gateBrowsers: resolveGateBrowsers(env, options.yes === true, runner, options.readGateBrowsers),
+    compProvider: chooseCompProvider(readCompMedia(options.projectDir), apiKeyReady),
+    apiKeyReady,
   };
   return { report, exitCode: nodeOk ? 0 : 1 };
 }
@@ -452,6 +479,152 @@ function describeMissingBrowsers(missing: readonly GateBrowserName[]): string {
   if (missing[0] === "chromium") return "Chromium is missing.";
   if (missing[0] === "webkit") return "WebKit is missing.";
   return "Chromium and WebKit are missing.";
+}
+
+type MediaName = "grok-cli" | "browser" | "api";
+
+interface CompMedia {
+  order: MediaName[];
+  browser: boolean;
+  api: boolean;
+}
+
+const KEYCHAIN_SERVICE = "hitchhikers-guide";
+const KEYCHAIN_ACCOUNT = "xai";
+const KEYTAR_SPECIFIER = "keytar";
+
+/**
+ * Same file and the same flags as readMediaSettings in the assets package.
+ * A missing or unreadable file is the default order, with the browser and the API off.
+ */
+function readCompMedia(projectDir: string | undefined): CompMedia {
+  const defaults = defaultCompMedia();
+  if (projectDir === undefined) return defaults;
+  const file = path.join(projectDir, ".hitchhiker", "assets", "media.json");
+  let text = "";
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return defaults;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return defaults;
+  }
+  if (typeof raw !== "object" || raw === null) return defaults;
+  const record = raw as Record<string, unknown>;
+  return {
+    order: readMediaOrder(record.order),
+    browser: record.browser === true,
+    api: record.api === true,
+  };
+}
+
+function defaultCompMedia(): CompMedia {
+  return { order: ["grok-cli", "browser", "api"], browser: false, api: false };
+}
+
+function readMediaOrder(value: unknown): MediaName[] {
+  if (!Array.isArray(value)) return ["grok-cli", "browser", "api"];
+  const allowed = new Set<string>(["grok-cli", "browser", "api"]);
+  const order: MediaName[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !allowed.has(item)) continue;
+    const name = item as MediaName;
+    if (!order.includes(name)) order.push(name);
+  }
+  return order.length > 0 ? order : ["grok-cli", "browser", "api"];
+}
+
+/**
+ * First path in the media order that can run.
+ * grok-cli needs no key. The browser runs only when that flag is on.
+ * The API runs only when that flag is on and a key exists.
+ */
+function chooseCompProvider(settings: CompMedia, keyReady: boolean): CompProviderChoice {
+  for (const name of settings.order) {
+    if (name === "grok-cli") return "grok-cli";
+    if (name === "browser" && settings.browser) return "browser";
+    if (name === "api" && settings.api && keyReady) return "api";
+  }
+  return "none";
+}
+
+function compSentence(provider: CompProviderChoice, keyReady: boolean): string {
+  if (provider === "api") return "Comps: API ready.";
+  if (provider === "browser") {
+    return keyReady
+      ? "Comps: the browser path in media settings would be used. API ready."
+      : "Comps: the browser path in media settings would be used.";
+  }
+  if (provider === "none") {
+    return keyReady
+      ? "Comps: API ready. Media settings do not select a path that can draw."
+      : "Comps: media settings do not select a path that can draw.";
+  }
+  return keyReady ? "Comps: Using your Grok sign-in. API ready." : "Comps: Using your Grok sign-in.";
+}
+
+/**
+ * True when a key is present. The characters are not returned, logged, or stored.
+ * The environment wins. An empty string, or a value with a newline, does not count.
+ */
+async function apiKeyReadyFor(
+  env: NodeJS.ProcessEnv,
+  keychain: DoctorKeychain | null | undefined,
+): Promise<boolean> {
+  if (secretPresent(env.XAI_API_KEY)) return true;
+  if (keychain === null) return false;
+  const reader = keychain ?? (await loadOptionalKeytar());
+  if (reader === null) return false;
+  try {
+    const stored = await reader.getPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+    return secretPresent(stored);
+  } catch {
+    return false;
+  }
+}
+
+function secretPresent(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (value.includes("\n") || value.includes("\r")) return false;
+  return value.trim() !== "";
+}
+
+async function loadOptionalKeytar(): Promise<DoctorKeychain | null> {
+  try {
+    const loaded = await importOptional(KEYTAR_SPECIFIER);
+    return asKeychain(loaded);
+  } catch {
+    return null;
+  }
+}
+
+function importOptional(specifier: string): Promise<unknown> {
+  return import(specifier) as Promise<unknown>;
+}
+
+function asKeychain(loaded: unknown): DoctorKeychain | null {
+  const source = unwrapModule(loaded);
+  if (source === null) return null;
+  const getPassword = source.getPassword;
+  if (typeof getPassword !== "function") return null;
+  return {
+    getPassword: (service: string, account: string) =>
+      Promise.resolve(getPassword.call(source, service, account)).then((value: unknown) =>
+        typeof value === "string" ? value : null,
+      ),
+  };
+}
+
+function unwrapModule(loaded: unknown): Record<string, unknown> | null {
+  if (typeof loaded !== "object" || loaded === null) return null;
+  const record = loaded as Record<string, unknown>;
+  const inner = record.default;
+  if (typeof inner === "object" && inner !== null) return inner as Record<string, unknown>;
+  return record;
 }
 
 function readNodeVersion(version: string): { major: number; text: string } | null {

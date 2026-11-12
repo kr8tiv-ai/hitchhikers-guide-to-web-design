@@ -7,6 +7,14 @@ The private workspace root stays at `0.0.0` and is not the package npm would rec
 
 This file does not publish. Do not npm publish. Do not git push. Creating the `v0.1.0` tag is not a step in this file. The tag and the registry upload need Matt's explicit yes.
 
+## Unreleased
+
+### Added
+
+- [docs/imagine-first.md](docs/imagine-first.md) describes the sketch flow: draw, pick, change, approve, motion clips, build to the approved sketch, and the compare that can pause the queue. It lists the files, the `design.comps`, `design.motionRefs`, and `design.compare` defaults, the provider order, and the API-path cost of one 5-page site.
+- `hh doctor` names the Imagine path that would draw comps. The default sentence is the Grok sign-in. A key in `XAI_API_KEY` or the OS keychain adds that the API is ready, and the key is not printed.
+- [docs/secrets.md](docs/secrets.md) says where that key lives, and that the desk settings checkbox does not turn the API path on. The switch is `"api": true` in `.hitchhiker/assets/media.json`.
+
 ## 0.1.0
 
 Alpha, prepared 2026-10-22. The local desk, the six phases, the quality gates, Elevate, and launch-behind-a-yes are in the tree. The CLI can be packed on this computer. It is not on npm until a person publishes it.
