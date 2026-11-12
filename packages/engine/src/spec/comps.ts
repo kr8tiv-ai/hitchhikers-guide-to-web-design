@@ -16,6 +16,7 @@ import {
   currentRenderApproval,
   isRenderApproved,
   listPrimaryPages,
+  recordRenderNotes,
   renderDeskProvider,
   renderRelForRoute,
   syncRenderApprovals,
@@ -158,25 +159,36 @@ export function buildCompPrompt(projectDir: string, route: string, view: CompVie
 }
 
 /**
- * Draws every required view. Each file is written before the next request.
+ * Draws every required view. The desk provider is resolved once and reused.
+ * A throw means this provider cannot draw, so the pass records one note and
+ * stops instead of starting it again for every candidate. Each file is written
+ * before the next request.
  * The desk runner serializes calls, so a second lock during a draft runs once after.
  */
 export async function draftComps(projectDir: string, deps: CompDraftDeps = {}): Promise<string[]> {
   if (!designLockMatches(projectDir)) return [];
   refreshReferenceReadme(projectDir);
   const settings = loadConfig(projectDir).design.comps;
-  const views: CompView[] = settings.long ? ["desktop", "desktop-long", "mobile"] : ["desktop", "mobile"];
+  const views = viewsFor(settings.long);
   const pages = listPrimaryPages(projectDir);
   if (pages.length === 0) return [];
   const written: string[] = [];
   let provider: RenderDeskProvider | undefined = deps.provider;
+  let providerDown = false;
+  const useProvider = async (): Promise<RenderDeskProvider> => {
+    if (provider === undefined) provider = await renderDeskProvider(projectDir, deps);
+    return provider;
+  };
   for (const page of pages) {
+    if (providerDown) break;
     const seeded = readDoc(projectDir);
     ensurePage(seeded, page);
     writeDoc(projectDir, seeded);
     for (const view of views) {
+      if (providerDown) break;
       const kept: string[] = [];
       for (let index = 1; index <= settings.candidates; index += 1) {
+        if (providerDown) break;
         const rel = compCandidateRel(page.route, view, index);
         const abs = absFromRel(projectDir, rel);
         const prompt = buildCompPrompt(projectDir, page.route, view);
@@ -186,9 +198,9 @@ export async function draftComps(projectDir: string, deps: CompDraftDeps = {}): 
           continue;
         }
         try {
-          if (provider === undefined) provider = await renderDeskProvider(projectDir, deps);
+          const current = await useProvider();
           const sources = compReferenceFiles(projectDir, page.route, view);
-          const images = await requestImage(projectDir, provider, {
+          const images = await requestImage(projectDir, current, {
             model: settings.model,
             prompt,
             aspect: VIEW_SPEC[view].aspect,
@@ -207,7 +219,10 @@ export async function draftComps(projectDir: string, deps: CompDraftDeps = {}): 
           saveCandidates(projectDir, page, view, kept);
         } catch (error) {
           const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Sketch draft failed.";
-          recordCompNote(projectDir, sketchNote(page, view, message));
+          const note = sketchNote(page, view, message);
+          recordCompNote(projectDir, note);
+          recordRenderNotes(projectDir, [note]);
+          providerDown = true;
         }
       }
       saveCandidates(projectDir, page, view, kept);
@@ -373,8 +388,12 @@ async function requestImage(
   return provider.generateImage({ model: req.model, prompt: req.prompt, aspect: req.aspect, n: 1 });
 }
 
+function viewsFor(long: boolean): CompView[] {
+  return long ? ["desktop", "desktop-long", "mobile"] : ["desktop", "mobile"];
+}
+
 function requiredViews(projectDir: string): CompView[] {
-  return loadConfig(projectDir).design.comps.long ? ["desktop", "desktop-long", "mobile"] : ["desktop", "mobile"];
+  return viewsFor(loadConfig(projectDir).design.comps.long);
 }
 
 function saveCandidates(projectDir: string, page: PrimaryPage, view: CompView, candidates: readonly string[]): void {

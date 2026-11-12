@@ -318,7 +318,8 @@ async function loadDeskProvider(projectDir: string, deps: DraftRenderDeps): Prom
   });
 }
 
-function recordRenderNotes(projectDir: string, notes: readonly string[]): void {
+/** Plain notes for a draft that could not draw. The 245i renders page reads this file. */
+export function recordRenderNotes(projectDir: string, notes: readonly string[]): void {
   const dir = path.join(projectDir, "reference", "renders");
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "README.md");
