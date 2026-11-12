@@ -41,3 +41,9 @@ packages/app/playwright-report/
 *.onnx
 *.param
 *.bin
+
+# 260 driver (box)
+build-plan/logs-260/
+build-plan/state-260.json
+build-plan/STOP-260
+build-plan/driver-260.nohup

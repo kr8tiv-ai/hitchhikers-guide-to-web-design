@@ -29,3 +29,19 @@ Model: `grok-4.7-build-fast --effort xhigh`, one fresh headless session per prom
 
 ## Driver
 `C:\Users\lucid\Desktop\hh-pending-250\run-250.ps1` (outside the worktree). State: `build-plan\state.json` (lane B: `build-plan\state-laneb.json`). Log: `build-plan\run.log`. Grok and test logs: `build-plan\logs\`. Control: create `build-plan\PAUSE` to pause between prompts.
+
+
+# 260: Imagine-first design
+
+Spec: `build-plan/IMAGINE-FIRST-SPEC.md`. Branch `feat/imagine-first-design`. Model `grok-4.7 --effort xhigh`, one fresh headless session per prompt, run by `build-plan/run-260.sh` on the box. Pushes only the feature branch. Nothing merges to main and nothing deploys without Matt's yes.
+
+| Order | Prompt | Depends on |
+|---|---|---|
+| 1 | [260a-imagine-edits-and-reference-video.md](260a-imagine-edits-and-reference-video.md) Imagine client - multi-reference image edits and reference-to-video, through every provider | none |
+| 2 | [260b-comp-sets-and-consistency-chain.md](260b-comp-sets-and-consistency-chain.md) Comp sets - desktop, long and mobile Imagine comps with candidates, approvals and a consistency chain | 260a |
+| 3 | [260c-motion-reference-clips.md](260c-motion-reference-clips.md) Motion references - optional Imagine clips from approved comps for motion-led sections | 260b |
+| 4 | [260d-desk-comps-stage.md](260d-desk-comps-stage.md) Desk comps stage - pick, change, upload and approve comps in plain words | 260b |
+| 5 | [260e-build-prompts-carry-comps.md](260e-build-prompts-carry-comps.md) Build prompts carry the approved comps as visual truth | 260b |
+| 6 | [260f-comp-compare-gate.md](260f-comp-compare-gate.md) Compare gate - built page vs approved comp, side by side, metrics and vision faults, before a section is done | 260e |
+| 7 | [260g-docs-config-and-key.md](260g-docs-config-and-key.md) Docs, config and the Imagine key - how the Imagine-first method works and where the key lives | 260f |
+| 8 | [260z-checkpoint-imagine-first.md](260z-checkpoint-imagine-first.md) Checkpoint - full suite and a fake-provider end-to-end of the Imagine-first flow | 260a, 260b, 260c, 260d, 260e, 260f, 260g |
