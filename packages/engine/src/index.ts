@@ -28,6 +28,8 @@ export type {
   AiConfig,
   AiEffort,
   DeployTarget,
+  CompConfig,
+  CompImageModel,
   DesignGateConfig,
   Effort,
   GuideConfig,
@@ -406,6 +408,7 @@ export type {
 export {
   DESIGN_LOCK_REL,
   RENDERS_REL,
+  RENDER_MODEL,
   RenderApprovalError,
   approveRender,
   buildRenderPrompt,
@@ -424,6 +427,34 @@ export {
   syncRenderApprovals,
 } from "./spec/page-renders.ts";
 export type { DraftRenderDeps, PrimaryPage, RenderApproval, WaitingPage } from "./spec/page-renders.ts";
+export {
+  COMPS_REL,
+  COMP_VIEWS,
+  approveComp,
+  buildCompPrompt,
+  compCandidateRel,
+  compReferenceFiles,
+  compRenderRel,
+  compSlug,
+  compsWaiting,
+  draftComps,
+  isCompApproved,
+  isCompView,
+  listComps,
+  requestCompChange,
+  syncCompApprovals,
+} from "./spec/comps.ts";
+export type {
+  CompApproval,
+  CompDraftDeps,
+  CompFile,
+  CompPage,
+  CompSection,
+  CompView,
+  CompViewRecord,
+  CompWaiting,
+  StoredCompApproval,
+} from "./spec/comps.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,

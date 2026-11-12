@@ -37,7 +37,8 @@ import {
   type QueueStatus,
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
-import { RenderApprovalError, pagesWaitingForRender, clearPageRenderRunner } from "../spec/page-renders.ts";
+import { compsWaiting } from "../spec/comps.ts";
+import { RenderApprovalError, clearPageRenderRunner } from "../spec/page-renders.ts";
 import { clearReferenceCaptureRunner } from "../spec/reference-shots.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
 import { designDriftFindings } from "../spec/design-drift.ts";
@@ -867,11 +868,22 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     await mergeBuildQueue(projectDir, ids);
     return ids;
   }
-  // Only the first prompt generation waits on approved renders. A project
-  // with no sitemap has no primary pages, so this does not block it.
-  // Footer pages are not gated. Later calls already have prompts and return above.
-  const waiting = pagesWaitingForRender(projectDir);
-  if (waiting.length > 0) throw new RenderApprovalError(waiting);
+  // The first prompt generation waits until every primary page has an
+  // approved desktop sketch and an approved phone sketch. The long page
+  // is included when design.comps.long is on. A project with no sitemap
+  // has no primary pages, so this does not block it. Footer pages are
+  // not gated. Later calls already have prompts and return above.
+  const missing = compsWaiting(projectDir);
+  if (missing.length > 0) {
+    throw new RenderApprovalError(
+      missing.map((item) => ({
+        title: item.title,
+        route: item.route,
+        file: item.file,
+        view: item.label,
+      })),
+    );
+  }
   const { prompts } = generateBriefPlan(briefMarkdown, stack, answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);

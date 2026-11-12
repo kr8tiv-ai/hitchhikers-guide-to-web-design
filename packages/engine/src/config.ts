@@ -81,8 +81,29 @@ export interface GuideConfig {
 }
 
 /**
+ * Sketches drawn for each primary page before the build.
+ * The model ids match the Imagine still models this repo already allows.
+ */
+export const COMP_IMAGE_MODELS = [
+  "grok-imagine-image",
+  "grok-imagine-image-2.0",
+  "grok-imagine-image-quality",
+] as const;
+
+export type CompImageModel = (typeof COMP_IMAGE_MODELS)[number];
+
+export interface CompConfig {
+  /** How many sketches to draw for one view. */
+  candidates: number;
+  /** Imagine image model. Only the allowed image ids. */
+  model: CompImageModel;
+  /** Draw the tall desktop sketch as well as the fold and the phone. */
+  long: boolean;
+}
+
+/**
  * Optical micro-detail checks (245x). Defaults stay on. A project file that
- * only sets minReferenceImages still receives this block.
+ * only sets minReferenceImages still receives the optical block and comp defaults.
  */
 export interface OpticalConfig {
   enabled: boolean;
@@ -96,6 +117,7 @@ export interface OpticalConfig {
 export interface DesignGateConfig {
   minReferenceImages: number;
   optical: OpticalConfig;
+  comps: CompConfig;
 }
 
 /**
@@ -156,7 +178,9 @@ const TOP_KEYS = [
 
 const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
 
-const DESIGN_KEYS = ["minReferenceImages", "optical"] as const;
+const DESIGN_KEYS = ["minReferenceImages", "optical", "comps"] as const;
+
+const COMP_KEYS = ["candidates", "model", "long"] as const;
 
 const OPTICAL_KEYS = ["enabled", "baselineUnit", "centringTolerance"] as const;
 
@@ -439,6 +463,30 @@ function readDesign(value: unknown): DesignGateConfig {
       ? readIntInRange("design.minReferenceImages", value.minReferenceImages, 0, 100)
       : defaults.minReferenceImages,
     optical: Object.hasOwn(value, "optical") ? readOptical(value.optical) : defaults.optical,
+    comps: Object.hasOwn(value, "comps") ? readComps(value.comps) : defaults.comps,
+  };
+}
+
+function readComps(value: unknown): CompConfig {
+  const checked = rejectNull("design.comps", value);
+  if (!isRecord(checked)) fail("design.comps", "expected an object.");
+  rejectUnknown(checked, COMP_KEYS, "design.comps");
+  const defaults = defaultConfig().design.comps;
+  return {
+    candidates: Object.hasOwn(checked, "candidates")
+      ? readIntInRange(
+          "design.comps.candidates",
+          rejectNull("design.comps.candidates", checked.candidates),
+          1,
+          4,
+        )
+      : defaults.candidates,
+    model: Object.hasOwn(checked, "model")
+      ? readEnum("design.comps.model", rejectNull("design.comps.model", checked.model), COMP_IMAGE_MODELS)
+      : defaults.model,
+    long: Object.hasOwn(checked, "long")
+      ? readBoolean("design.comps.long", rejectNull("design.comps.long", checked.long))
+      : defaults.long,
   };
 }
 
@@ -539,6 +587,12 @@ export function defaultConfig(): GuideConfig {
         enabled: true,
         baselineUnit: OPTICAL_BASELINE_UNIT,
         centringTolerance: OPTICAL_CENTRING_TOLERANCE,
+      },
+      comps: {
+        candidates: 3,
+        // Keep this id in step with RENDER_MODEL in spec/page-renders.ts.
+        model: "grok-imagine-image",
+        long: true,
       },
     },
   };
