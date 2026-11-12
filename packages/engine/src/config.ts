@@ -102,6 +102,35 @@ export interface CompConfig {
 }
 
 /**
+ * Short motion clips drafted from an approved desktop sketch.
+ * The ids match the Imagine video models this repo already allows.
+ */
+export const MOTION_VIDEO_MODELS = [
+  "grok-imagine-video-1.5",
+  "grok-imagine-video-1.5-lite",
+  "grok-imagine-video",
+] as const;
+
+export type MotionVideoModel = (typeof MOTION_VIDEO_MODELS)[number];
+
+export const MOTION_VIDEO_RESOLUTIONS = ["480p", "720p", "1080p"] as const;
+
+export type MotionVideoResolution = (typeof MOTION_VIDEO_RESOLUTIONS)[number];
+
+export interface MotionRefConfig {
+  /** Draft motion clips and section crops. Off skips both. */
+  enabled: boolean;
+  /** Imagine video model. Only the allowed video ids. */
+  model: MotionVideoModel;
+  /** Length of each clip, in seconds. */
+  seconds: number;
+  /** Frame size sent to Imagine. */
+  resolution: MotionVideoResolution;
+  /** How many motion clips one site may draft. */
+  max: number;
+}
+
+/**
  * Optical micro-detail checks (245x). Defaults stay on. A project file that
  * only sets minReferenceImages still receives the optical block and comp defaults.
  */
@@ -118,6 +147,7 @@ export interface DesignGateConfig {
   minReferenceImages: number;
   optical: OpticalConfig;
   comps: CompConfig;
+  motionRefs: MotionRefConfig;
 }
 
 /**
@@ -178,9 +208,11 @@ const TOP_KEYS = [
 
 const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
 
-const DESIGN_KEYS = ["minReferenceImages", "optical", "comps"] as const;
+const DESIGN_KEYS = ["minReferenceImages", "optical", "comps", "motionRefs"] as const;
 
 const COMP_KEYS = ["candidates", "model", "long"] as const;
+
+const MOTION_REF_KEYS = ["enabled", "model", "seconds", "resolution", "max"] as const;
 
 const OPTICAL_KEYS = ["enabled", "baselineUnit", "centringTolerance"] as const;
 
@@ -464,6 +496,44 @@ function readDesign(value: unknown): DesignGateConfig {
       : defaults.minReferenceImages,
     optical: Object.hasOwn(value, "optical") ? readOptical(value.optical) : defaults.optical,
     comps: Object.hasOwn(value, "comps") ? readComps(value.comps) : defaults.comps,
+    motionRefs: Object.hasOwn(value, "motionRefs") ? readMotionRefs(value.motionRefs) : defaults.motionRefs,
+  };
+}
+
+function readMotionRefs(value: unknown): MotionRefConfig {
+  const checked = rejectNull("design.motionRefs", value);
+  if (!isRecord(checked)) fail("design.motionRefs", "expected an object.");
+  rejectUnknown(checked, MOTION_REF_KEYS, "design.motionRefs");
+  const defaults = defaultConfig().design.motionRefs;
+  return {
+    enabled: Object.hasOwn(checked, "enabled")
+      ? readBoolean("design.motionRefs.enabled", rejectNull("design.motionRefs.enabled", checked.enabled))
+      : defaults.enabled,
+    model: Object.hasOwn(checked, "model")
+      ? readEnum(
+          "design.motionRefs.model",
+          rejectNull("design.motionRefs.model", checked.model),
+          MOTION_VIDEO_MODELS,
+        )
+      : defaults.model,
+    seconds: Object.hasOwn(checked, "seconds")
+      ? readIntInRange(
+          "design.motionRefs.seconds",
+          rejectNull("design.motionRefs.seconds", checked.seconds),
+          1,
+          15,
+        )
+      : defaults.seconds,
+    resolution: Object.hasOwn(checked, "resolution")
+      ? readEnum(
+          "design.motionRefs.resolution",
+          rejectNull("design.motionRefs.resolution", checked.resolution),
+          MOTION_VIDEO_RESOLUTIONS,
+        )
+      : defaults.resolution,
+    max: Object.hasOwn(checked, "max")
+      ? readIntInRange("design.motionRefs.max", rejectNull("design.motionRefs.max", checked.max), 0, 24)
+      : defaults.max,
   };
 }
 
@@ -593,6 +663,13 @@ export function defaultConfig(): GuideConfig {
         // Keep this id in step with RENDER_MODEL in spec/page-renders.ts.
         model: "grok-imagine-image",
         long: true,
+      },
+      motionRefs: {
+        enabled: true,
+        model: "grok-imagine-video-1.5-lite",
+        seconds: 6,
+        resolution: "480p",
+        max: 3,
       },
     },
   };

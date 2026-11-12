@@ -11,6 +11,23 @@ import path from "node:path";
 import { loadConfig } from "../config.ts";
 import { designLockMatches } from "./design-lock.ts";
 import {
+  buildMotionClipPrompt,
+  choreographyFor,
+  easingFeel,
+  isMotionLed,
+  isSafeSectionId,
+  motionQuoteFits,
+  motionVideoBytes,
+  openMotionProvider,
+  recordMotionSpend,
+  redactMotionKey,
+  sectionPlan,
+  sliceLongComp,
+  type MotionRefDeps,
+  type MotionVideoProvider,
+  type SectionBand,
+} from "./motion-refs.ts";
+import {
   approveRender,
   buildRenderPrompt,
   currentRenderApproval,
@@ -30,7 +47,6 @@ import {
   ownerPhotoFiles,
   refreshReferenceReadme,
   sha256File,
-  slugify,
 } from "./reference-shots.ts";
 
 export const COMPS_REL = ".hitchhiker/comps.json";
@@ -83,10 +99,27 @@ export interface CompViewRecord {
   approved?: CompApproval;
 }
 
+export interface MotionApproval {
+  file: string;
+  sha256: string;
+  approvedAt: string;
+}
+
+export interface ApprovedMotionRef {
+  route: string;
+  sectionId: string;
+  file: string;
+  sha256: string;
+  approvedAt: string;
+}
+
 export interface CompSection {
   id: string;
   crop?: string;
   motion?: string;
+  /** Approximate vertical band of the long sketch. Real section edges are not in the file. */
+  band?: SectionBand;
+  motionApproved?: MotionApproval;
 }
 
 export interface CompPage {
@@ -120,6 +153,16 @@ export interface CompWaiting {
 
 export interface CompDraftDeps extends DraftRenderDeps {
   provider?: RenderDeskProvider;
+}
+
+export type { MotionRefDeps, MotionVideoProvider, SectionBand } from "./motion-refs.ts";
+
+export function motionClipRel(route: string, sectionId: string): string {
+  return `reference/comps/${compSlug(route)}/motion/${sectionId}.mp4`;
+}
+
+export function sectionCropRel(route: string, sectionId: string): string {
+  return `reference/comps/${compSlug(route)}/sections/${sectionId}.png`;
 }
 
 export function isCompView(value: string): value is CompView {
@@ -231,6 +274,168 @@ export async function draftComps(projectDir: string, deps: CompDraftDeps = {}): 
   return written;
 }
 
+/**
+ * One short clip per motion-led section of a page whose desktop sketch is approved.
+ * Section crops are written for an approved long sketch. Missing clips and crops
+ * are notes. They do not block the build, and this pass does not wait on the design lock.
+ * Only approveMotionRef marks a clip for the build.
+ */
+export async function draftMotionRefs(projectDir: string, deps: MotionRefDeps = {}): Promise<string[]> {
+  const settings = loadConfig(projectDir).design.motionRefs;
+  if (!settings.enabled) return [];
+  syncCompApprovals(projectDir);
+  const pages = listPrimaryPages(projectDir);
+  const designMd = readOptional(path.join(projectDir, "DESIGN.md"));
+  const motionMd = readMotionMarkdown(projectDir);
+  const led = collectLed(projectDir, pages, designMd, motionMd);
+  const longPages = pages.filter((page) => isCompApproved(projectDir, page.route, "desktop-long"));
+  if (led.length === 0 && longPages.length === 0) return [];
+  for (const page of longPages) writeSectionCrops(projectDir, page);
+
+  const written: string[] = [];
+  let used = 0;
+  let provider: MotionVideoProvider | undefined;
+  let billed = false;
+  let providerDown = false;
+  const easing = easingFeel(designMd);
+  for (const item of led) {
+    if (providerDown || used >= settings.max) break;
+    const prompt = buildMotionClipPrompt({
+      index: item.index,
+      count: item.count,
+      recipe: item.recipe,
+      kind: item.kind,
+      easing,
+    });
+    const rel = motionClipRel(item.page.route, item.id);
+    const abs = absFromRel(projectDir, rel);
+    const promptAbs = absFromRel(projectDir, motionPromptRel(rel));
+    if (alreadyDrawn(abs, promptAbs, prompt)) {
+      rememberMotion(projectDir, item.page, item.id, rel);
+      used += 1;
+      continue;
+    }
+    if (!isSafeSectionId(item.id)) {
+      recordCompNote(projectDir, clipNote(item.page, item.title, "This section id cannot be a file name."));
+      continue;
+    }
+    if (provider === undefined) {
+      try {
+        const opened = await openMotionProvider(projectDir, deps);
+        provider = opened.provider;
+        billed = opened.billed;
+      } catch (error) {
+        const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "No Imagine provider is available.";
+        recordCompNote(projectDir, redactMotionKey(message, deps.key));
+        providerDown = true;
+        break;
+      }
+    }
+    if (provider === undefined) {
+      providerDown = true;
+      break;
+    }
+    let quoteUsd = 0;
+    if (billed) {
+      const quote = await motionQuoteFits(projectDir, {
+        model: settings.model,
+        resolution: settings.resolution,
+        seconds: settings.seconds,
+        prompt,
+      });
+      if (!quote.ok) {
+        recordCompNote(projectDir, redactMotionKey(clipNote(item.page, item.title, quote.note), deps.key));
+        providerDown = true;
+        break;
+      }
+      quoteUsd = quote.usd;
+    }
+    try {
+      const started = await provider.startVideo({
+        model: settings.model,
+        prompt,
+        seconds: settings.seconds,
+        resolution: settings.resolution,
+        aspect: "16:9",
+        referenceImages: [compRenderRel(item.page.route, "desktop")],
+        generateAudio: false,
+      });
+      if (billed) await recordMotionSpend(projectDir, `motion-${compSlug(item.page.route)}-${item.id}`, quoteUsd, started.id);
+      const polled = await provider.pollVideo(started.id);
+      const bytes = await motionVideoBytes(polled, deps.fetchImpl, deps.key);
+      if (bytes === null || bytes.byteLength === 0) {
+        recordCompNote(projectDir, clipNote(item.page, item.title, "Imagine returned no video."));
+        continue;
+      }
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, bytes);
+      writeFileSync(promptAbs, prompt, "utf8");
+      rememberMotion(projectDir, item.page, item.id, rel);
+      written.push(rel);
+      used += 1;
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Motion draft failed.";
+      recordCompNote(projectDir, redactMotionKey(clipNote(item.page, item.title, message), deps.key));
+      providerDown = true;
+    }
+  }
+  return written;
+}
+
+export function approveMotionRef(projectDir: string, route: string, sectionId: string): MotionApproval {
+  const page = requirePrimary(projectDir, route);
+  const doc = readDoc(projectDir);
+  const row = doc.pages.find((item) => sameRoute(item.route, page.route));
+  const section = row?.sections.find((item) => item.id === sectionId);
+  if (section === undefined || section.motion === undefined || section.motion.trim() === "") {
+    throw new Error("No motion clip for that section.");
+  }
+  const rel = section.motion;
+  const abs = containedAbs(projectDir, rel);
+  if (abs === null) throw new Error("That motion clip is outside the project.");
+  if (!existsSync(abs)) throw new Error("No motion clip for that section.");
+  let info;
+  try {
+    info = statSync(abs);
+  } catch {
+    throw new Error("No motion clip for that section.");
+  }
+  if (!info.isFile()) throw new Error("No motion clip for that section.");
+  const approval: MotionApproval = {
+    file: rel.replace(/\\/g, "/"),
+    sha256: sha256File(abs),
+    approvedAt: new Date().toISOString(),
+  };
+  const fresh = readDoc(projectDir);
+  const freshRow = ensurePage(fresh, page);
+  const freshSection = freshRow.sections.find((item) => item.id === sectionId);
+  if (freshSection === undefined || freshSection.motion !== section.motion) {
+    throw new Error("No motion clip for that section.");
+  }
+  freshSection.motionApproved = approval;
+  writeDoc(projectDir, fresh);
+  return approval;
+}
+
+/** Clips whose stored sha256 still matches the file. Unapproved clips stay on disk and stay out of this list. */
+export function approvedMotionRefs(projectDir: string): ApprovedMotionRef[] {
+  syncCompApprovals(projectDir);
+  const rows: ApprovedMotionRef[] = [];
+  for (const page of readDoc(projectDir).pages) {
+    for (const section of page.sections) {
+      if (section.motionApproved === undefined || !motionApprovalMatches(projectDir, section)) continue;
+      rows.push({
+        route: page.route,
+        sectionId: section.id,
+        file: section.motionApproved.file,
+        sha256: section.motionApproved.sha256,
+        approvedAt: section.motionApproved.approvedAt,
+      });
+    }
+  }
+  return rows;
+}
+
 export function listComps(projectDir: string): CompFile {
   syncCompApprovals(projectDir);
   return readDoc(projectDir);
@@ -311,6 +516,13 @@ export function syncCompApprovals(projectDir: string): StoredCompApproval[] {
       if (record?.approved === undefined) continue;
       if (!compApprovalMatches(projectDir, row.route, view, record.approved)) {
         delete record.approved;
+        changed = true;
+      }
+    }
+    for (const section of row.sections) {
+      if (section.motionApproved === undefined) continue;
+      if (!motionApprovalMatches(projectDir, section)) {
+        delete section.motionApproved;
         changed = true;
       }
     }
@@ -516,18 +728,140 @@ function blankView(view: CompView): CompViewRecord {
 }
 
 function mergeSections(existing: readonly CompSection[], titles: readonly string[]): CompSection[] {
-  const ids: string[] = [];
-  for (const title of titles) {
-    const base = slugify(title) || "section";
-    let id = base;
-    let n = 2;
-    while (ids.includes(id)) {
-      id = `${base}-${n}`;
-      n += 1;
-    }
-    ids.push(id);
+  return sectionPlan(titles).map((id) => existing.find((item) => item.id === id) ?? { id });
+}
+
+interface LedSection {
+  page: PrimaryPage;
+  id: string;
+  title: string;
+  index: number;
+  count: number;
+  recipe: string;
+  kind: string;
+}
+
+function collectLed(
+  projectDir: string,
+  pages: readonly PrimaryPage[],
+  designMd: string,
+  motionMd: string,
+): LedSection[] {
+  const rows: LedSection[] = [];
+  for (const page of pages) {
+    if (!isCompApproved(projectDir, page.route, "desktop")) continue;
+    const ids = sectionPlan(page.sections);
+    const where = { route: page.route, slug: compSlug(page.route) };
+    ids.forEach((id, index) => {
+      const title = page.sections[index] ?? id;
+      const section = { id, title };
+      if (!isMotionLed(section, where, designMd, motionMd)) return;
+      const move = choreographyFor(section, where, designMd, motionMd);
+      rows.push({ page, id, title, index, count: ids.length, recipe: move.recipe, kind: move.kind });
+    });
   }
-  return ids.map((id) => existing.find((item) => item.id === id) ?? { id });
+  return rows;
+}
+
+function writeSectionCrops(projectDir: string, page: PrimaryPage): void {
+  const ids = sectionPlan(page.sections);
+  if (ids.length === 0) return;
+  const source = absFromRel(projectDir, compRenderRel(page.route, "desktop-long"));
+  const bytes = existsSync(source) ? readFileSync(source) : Buffer.alloc(0);
+  const sliced = sliceLongComp(bytes, ids.length);
+  const crops = sliced.crops;
+  let blocked = crops === null;
+  const planned: { id: string; rel: string; bytes: Buffer }[] = [];
+  if (crops !== null) {
+    let cursor = 0;
+    for (let index = 0; index < ids.length; index += 1) {
+      const id = ids[index];
+      const band = sliced.bands[index];
+      if (id === undefined || band === undefined || band.height < 1) continue;
+      const file = crops[cursor];
+      cursor += 1;
+      if (file === undefined || !isSafeSectionId(id)) {
+        blocked = true;
+        break;
+      }
+      planned.push({ id, rel: sectionCropRel(page.route, id), bytes: file });
+    }
+  }
+  if (!blocked) {
+    for (const item of planned) {
+      const abs = absFromRel(projectDir, item.rel);
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, item.bytes);
+    }
+  }
+  const doc = readDoc(projectDir);
+  const row = ensurePage(doc, page);
+  for (let index = 0; index < ids.length; index += 1) {
+    const id = ids[index];
+    const band = sliced.bands[index];
+    if (id === undefined || band === undefined) continue;
+    const section = row.sections.find((item) => item.id === id);
+    if (section === undefined) continue;
+    section.band = { y: band.y, height: band.height, approximate: true };
+    if (!blocked && band.height >= 1 && isSafeSectionId(id)) section.crop = sectionCropRel(page.route, id);
+    else delete section.crop;
+  }
+  writeDoc(projectDir, doc);
+  if (blocked) {
+    recordCompNote(
+      projectDir,
+      `${page.title} (${page.route}) long page: the section bands are approximate because the long sketch could not be sliced.`,
+    );
+  }
+  if (ids.some((id) => !isSafeSectionId(id))) {
+    recordCompNote(projectDir, `${page.title} (${page.route}) long page: a section id cannot be a file name.`);
+  }
+}
+
+function rememberMotion(projectDir: string, page: PrimaryPage, sectionId: string, rel: string): void {
+  const doc = readDoc(projectDir);
+  const row = ensurePage(doc, page);
+  const section = row.sections.find((item) => item.id === sectionId);
+  if (section === undefined) return;
+  section.motion = rel;
+  writeDoc(projectDir, doc);
+}
+
+function clipNote(page: PrimaryPage, section: string, message: string): string {
+  return `${page.title} (${page.route}) ${section}: ${message}`;
+}
+
+function readMotionMarkdown(projectDir: string): string {
+  const parts = [
+    readOptional(path.join(projectDir, "MOTION.md")),
+    readOptional(path.join(projectDir, ".hitchhiker", "MOTION.md")),
+  ].filter((item) => item.trim() !== "");
+  return parts.join("\n");
+}
+
+function motionPromptRel(clipRel: string): string {
+  return clipRel.replace(/\.mp4$/i, ".prompt.txt");
+}
+
+function motionApprovalMatches(projectDir: string, section: CompSection): boolean {
+  const approval = section.motionApproved;
+  const motion = section.motion?.replace(/\\/g, "/");
+  if (approval === undefined || motion === undefined) return false;
+  if (approval.file.replace(/\\/g, "/") !== motion) return false;
+  const abs = containedAbs(projectDir, motion);
+  if (abs === null || !existsSync(abs)) return false;
+  try {
+    return sha256File(abs) === approval.sha256;
+  } catch {
+    return false;
+  }
+}
+
+function containedAbs(projectDir: string, rel: string): string | null {
+  const root = path.resolve(projectDir);
+  const abs = path.resolve(root, rel);
+  if (abs !== root && !abs.startsWith(`${root}${path.sep}`)) return null;
+  return abs;
 }
 
 function compApprovalMatches(projectDir: string, route: string, view: CompView, approval: CompApproval): boolean {
@@ -613,6 +947,27 @@ function readView(value: unknown, view: CompView): CompViewRecord {
   return next;
 }
 
+function readBand(value: unknown): SectionBand | undefined {
+  if (!isRecord(value)) return undefined;
+  const { y, height } = value;
+  if (typeof y !== "number" || typeof height !== "number") return undefined;
+  if (!Number.isInteger(y) || !Number.isInteger(height) || y < 0 || height < 0) return undefined;
+  return { y, height, approximate: value.approximate !== false };
+}
+
+function readMotionApproval(value: unknown): MotionApproval | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.file !== "string" || typeof value.sha256 !== "string" || typeof value.approvedAt !== "string") {
+    return undefined;
+  }
+  if (value.file.trim() === "" || value.sha256.trim() === "" || value.approvedAt.trim() === "") return undefined;
+  return {
+    file: value.file.replace(/\\/g, "/"),
+    sha256: value.sha256,
+    approvedAt: value.approvedAt,
+  };
+}
+
 function readApproval(value: unknown): CompApproval | undefined {
   if (!isRecord(value)) return undefined;
   if (typeof value.file !== "string" || typeof value.sha256 !== "string" || typeof value.approvedAt !== "string") return undefined;
@@ -631,8 +986,12 @@ function readSections(value: unknown): CompSection[] {
   for (const item of value) {
     if (!isRecord(item) || typeof item.id !== "string" || item.id.trim() === "") continue;
     const section: CompSection = { id: item.id.trim() };
-    if (typeof item.crop === "string" && item.crop.trim() !== "") section.crop = item.crop;
-    if (typeof item.motion === "string" && item.motion.trim() !== "") section.motion = item.motion;
+    if (typeof item.crop === "string" && item.crop.trim() !== "") section.crop = item.crop.replace(/\\/g, "/");
+    if (typeof item.motion === "string" && item.motion.trim() !== "") section.motion = item.motion.replace(/\\/g, "/");
+    const band = readBand(item.band);
+    if (band !== undefined) section.band = band;
+    const motionApproved = readMotionApproval(item.motionApproved);
+    if (motionApproved !== undefined) section.motionApproved = motionApproved;
     sections.push(section);
   }
   return sections;
