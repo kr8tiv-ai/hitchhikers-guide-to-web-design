@@ -51,6 +51,27 @@ import {
 
 export const COMPS_REL = ".hitchhiker/comps.json";
 
+type CompTruthHook = (projectDir: string) => void;
+
+let compTruthHook: CompTruthHook | null = null;
+
+/**
+ * visual-truth.ts registers this. comps.ts does not import that module.
+ * A hook error is swallowed so a truth file cannot undo an approval.
+ */
+export function setCompTruthHook(hook: CompTruthHook | null): void {
+  compTruthHook = hook;
+}
+
+function publishCompTruth(projectDir: string): void {
+  if (compTruthHook === null) return;
+  try {
+    compTruthHook(projectDir);
+  } catch {
+    // The approval is already stored. A truth file must not undo it.
+  }
+}
+
 export const COMP_VIEWS = ["desktop", "desktop-long", "mobile"] as const;
 export type CompView = (typeof COMP_VIEWS)[number];
 
@@ -464,6 +485,7 @@ export function approveMotionRef(projectDir: string, route: string, sectionId: s
   }
   freshSection.motionApproved = approval;
   writeDoc(projectDir, fresh);
+  publishCompTruth(projectDir);
   return approval;
 }
 
@@ -511,6 +533,7 @@ export function approveComp(projectDir: string, route: string, view: CompView, c
   record.approved = approval;
   writeDoc(projectDir, doc);
   if (view === "desktop") approveRender(projectDir, page.route, approvedAt);
+  publishCompTruth(projectDir);
   return approval;
 }
 

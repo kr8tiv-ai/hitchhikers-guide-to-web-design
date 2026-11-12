@@ -38,6 +38,7 @@ import {
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
 import { compsWaiting } from "../spec/comps.ts";
+import { visualTruthForPrompt, writeVisualTruth } from "../spec/visual-truth.ts";
 import { RenderApprovalError, clearPageRenderRunner } from "../spec/page-renders.ts";
 import { clearReferenceCaptureRunner } from "../spec/reference-shots.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
@@ -810,6 +811,7 @@ export async function draftBriefPlan(projectDir: string, briefMarkdown: string):
   const stack = chosenStack(projectDir, briefMarkdown, answers);
   const existing = readPromptTasks(projectDir);
   if (existing.length > 0) {
+    writeVisualTruth(projectDir);
     return existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
@@ -824,6 +826,7 @@ export async function draftBriefPlan(projectDir: string, briefMarkdown: string):
     answers,
     planned.pages.flatMap((page) => page.sections),
   );
+  writeVisualTruth(projectDir);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
   const library = await attachDesignSelection(projectDir, readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
@@ -861,6 +864,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   if (existing.length > 0) {
     const coverage = checkPlanCoverage(planned.requirements, existing);
     if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+    writeVisualTruth(projectDir);
     const ids = existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
@@ -888,6 +892,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);
   writeDesignMd(projectDir, briefMarkdown, answers);
+  writeVisualTruth(projectDir);
   writeMotionModule(
     projectDir,
     briefMarkdown,
@@ -2221,7 +2226,8 @@ function renderPrompt(
 ): string {
   const brief = briefMarkdown.trim() === "" ? "The brief text was empty." : briefMarkdown.trim();
   const files = prompt.filesModified.length === 0 ? "none" : prompt.filesModified.join(", ");
-  const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library);
+  const truth = visualTruthForPrompt(projectDir, prompt, brief);
+  const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library, truth);
   const moments = readSignatureMoments(projectDir);
   const signature = moments.length === 0 ? "" : signaturePromptBlock(moments, sectionIdOf(prompt));
   const rendered = [

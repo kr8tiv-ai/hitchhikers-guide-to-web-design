@@ -167,6 +167,7 @@ export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRe
 export { advanceDesignStages, designGateReason, designReadyForBuild } from "./spec/design-stages.ts";
 export { writeDesignLock } from "./spec/design-lock.ts";
 export { VISUAL_CONSTITUTION_REL, constitutionBlock, renderVisualConstitution } from "./spec/visual-constitution.ts";
+export { COMP_MATCH_PREFIX, COMP_OPEN_LINE, VISUAL_TRUTH_REL, visualTruthForPrompt, writeVisualTruth } from "./spec/visual-truth.ts";
 export type { DesignBuildGate, DesignStageName } from "./spec/design-stages.ts";
 export { runPrebuildChecks } from "./spec/prebuild-checks.ts";
 export type { PrebuildCheck, PrebuildReport } from "./spec/prebuild-checks.ts";
@@ -382,7 +383,7 @@ export {
 } from "./spec/section-stills.ts";
 export type { SectionStillPlan, SectionStillSlot, SuppliedStill } from "./spec/section-stills.ts";
 export type { BriefAnswer, BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
-export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
+export { featureRequirementId, pageRequirementId, visualTargetOf } from "./spec/site-prompts.ts";
 export { PlanCoverageError, checkPlanCoverage, planCoverageMessage, planCoverageRows } from "./spec/plan-coverage.ts";
 export type { CoverageGap, CoverageRequirement, CoverageRow, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
 export {
