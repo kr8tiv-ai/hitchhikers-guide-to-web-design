@@ -422,12 +422,21 @@ function processBaseName(pid) {
       return match?.[1] ?? "";
     }
     if (os.platform() === "linux") {
+      let comm = "";
       try {
-        const comm = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim();
-        if (comm) return comm;
+        comm = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim();
       } catch {
-        // Fall through to ps. Some locked-down hosts hide /proc.
+        // Fall through. Some locked-down hosts hide /proc.
       }
+      if (comm && /^(node|powershell|pwsh)(\.exe)?$/i.test(comm)) return comm;
+      try {
+        // This host names the node main thread MainThread. The executable is still node.
+        const exe = path.basename(fs.readlinkSync(`/proc/${pid}/exe`));
+        if (exe) return exe;
+      } catch {
+        // The process ended, or /proc/exe is hidden.
+      }
+      if (comm) return comm;
     }
     const out = spawnSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8" });
     return path.basename(String(out.stdout ?? "").trim());

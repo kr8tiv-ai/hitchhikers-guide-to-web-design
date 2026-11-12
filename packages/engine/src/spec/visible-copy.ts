@@ -385,6 +385,11 @@ const REPEAT_COPY_INSTRUCTION =
 const SURFACE_FIX_INSTRUCTION =
   "Fix the listed failure in files you own. Never edit files owned by other prompts. Never weaken a check.";
 
+const COMP_COMPARE_PREFIX = "Comp compare failed.";
+
+const COMP_FIX_INSTRUCTION =
+  "Fix the listed failure in files you own. Match the approved sketch. The sketch path is listed above. Words stay in the page, not in an image. Never edit files owned by other prompts. Never weaken a check.";
+
 /**
  * A stored close reason has had its line breaks turned into spaces.
  * The label still counts when it follows visible copy on that one line.
@@ -402,6 +407,14 @@ export function isSurfaceCloseReason(reason: string): boolean {
   return SURFACE_CLOSE_REASON.test(reason);
 }
 
+/**
+ * The compare gate hands this back on its own fix spawn.
+ * It is not a surface close reason, so the one-shot surface rerun stays separate.
+ */
+export function isCompCompareCloseReason(reason: string): boolean {
+  return reason.trim().startsWith(COMP_COMPARE_PREFIX);
+}
+
 function isRepeatedSentenceReason(reason: string): boolean {
   return /(?:^|[^\w])Repeated sentence failed\./.test(reason);
 }
@@ -417,13 +430,15 @@ export function formatFixBeforeFinish(hits: readonly VisibleCopyHit[], failureRe
   const shown = sortHits(dedupeHits(hits)).slice(0, HIT_CAP);
   const visible = reason.startsWith("Visible copy failed.");
   const surface = isSurfaceCloseReason(reason);
-  if (shown.length === 0 && !visible && !surface) return "";
+  const comp = isCompCompareCloseReason(reason);
+  if (shown.length === 0 && !visible && !surface && !comp) return "";
   const lines = ["## Fix before you finish", ""];
-  if (visible || surface) lines.push(reason, "");
+  if (visible || surface || comp) lines.push(reason, "");
   for (const hit of shown) lines.push(formatHitLine(hit));
   if (shown.length > 0) lines.push("");
   if (visible || shown.length > 0) lines.push(FIX_BEFORE_INSTRUCTION);
   if (isRepeatedSentenceReason(reason)) lines.push(REPEAT_COPY_INSTRUCTION);
+  else if (comp) lines.push(COMP_FIX_INSTRUCTION);
   else if (surface) lines.push(SURFACE_FIX_INSTRUCTION);
   return `${lines.join("\n")}\n`;
 }

@@ -142,12 +142,32 @@ export interface OpticalConfig {
   centringTolerance: number;
 }
 
+/**
+ * Built page versus the approved sketch.
+ * layoutMin is coarse luminance similarity on a 32 by 18 grid. 1 is the same layout.
+ * paletteMax is the mean CIEDE2000 distance between two 5-colour palettes.
+ * edgeMax is the mean per-band edge-density difference. It stays loose because
+ * live text adds edges the sketch does not have.
+ * rounds is how many times the page is compared. A miss before the last round
+ * is handed back as one fix, then the page is shot again. Still missing after
+ * the last round pauses the queue.
+ * motionBlocking false means a choreography note is written and does not pause.
+ */
+export interface CompareConfig {
+  layoutMin: number;
+  paletteMax: number;
+  edgeMax: number;
+  rounds: number;
+  motionBlocking: boolean;
+}
+
 /** How many reference images a design must have before the build. */
 export interface DesignGateConfig {
   minReferenceImages: number;
   optical: OpticalConfig;
   comps: CompConfig;
   motionRefs: MotionRefConfig;
+  compare: CompareConfig;
 }
 
 /**
@@ -208,13 +228,24 @@ const TOP_KEYS = [
 
 const MEDIA_KEYS = ["maxVariantsPerImage", "maxRunBytes", "maxWidth"] as const;
 
-const DESIGN_KEYS = ["minReferenceImages", "optical", "comps", "motionRefs"] as const;
+const DESIGN_KEYS = ["minReferenceImages", "optical", "comps", "motionRefs", "compare"] as const;
 
 const COMP_KEYS = ["candidates", "model", "long"] as const;
 
 const MOTION_REF_KEYS = ["enabled", "model", "seconds", "resolution", "max"] as const;
 
 const OPTICAL_KEYS = ["enabled", "baselineUnit", "centringTolerance"] as const;
+
+const COMPARE_KEYS = ["layoutMin", "paletteMax", "edgeMax", "rounds", "motionBlocking"] as const;
+
+/** Coarse layout similarity. Below this, the built page does not match the sketch. */
+const COMPARE_LAYOUT_MIN = 0.55;
+/** Mean CIEDE2000 between the two 5-colour palettes. Above this, the colours drifted. */
+const COMPARE_PALETTE_MAX = 18;
+/** Mean per-band edge difference. Loose, because live words add edges. */
+const COMPARE_EDGE_MAX = 0.45;
+/** Compare attempts. A miss before the last one is one fix, then a reshoot. */
+const COMPARE_ROUNDS = 2;
 
 /** A project with no design block still asks for six reference images. */
 const MIN_REFERENCE_IMAGES = 6;
@@ -497,7 +528,49 @@ function readDesign(value: unknown): DesignGateConfig {
     optical: Object.hasOwn(value, "optical") ? readOptical(value.optical) : defaults.optical,
     comps: Object.hasOwn(value, "comps") ? readComps(value.comps) : defaults.comps,
     motionRefs: Object.hasOwn(value, "motionRefs") ? readMotionRefs(value.motionRefs) : defaults.motionRefs,
+    compare: Object.hasOwn(value, "compare") ? readCompare(value.compare) : defaults.compare,
   };
+}
+
+function readCompare(value: unknown): CompareConfig {
+  const checked = rejectNull("design.compare", value);
+  if (!isRecord(checked)) fail("design.compare", "expected an object.");
+  rejectUnknown(checked, COMPARE_KEYS, "design.compare");
+  const defaults = defaultConfig().design.compare;
+  return {
+    layoutMin: Object.hasOwn(checked, "layoutMin")
+      ? readUnitInterval("design.compare.layoutMin", rejectNull("design.compare.layoutMin", checked.layoutMin))
+      : defaults.layoutMin,
+    paletteMax: Object.hasOwn(checked, "paletteMax")
+      ? readBoundedNumber(
+          "design.compare.paletteMax",
+          rejectNull("design.compare.paletteMax", checked.paletteMax),
+          100,
+        )
+      : defaults.paletteMax,
+    edgeMax: Object.hasOwn(checked, "edgeMax")
+      ? readUnitInterval("design.compare.edgeMax", rejectNull("design.compare.edgeMax", checked.edgeMax))
+      : defaults.edgeMax,
+    rounds: Object.hasOwn(checked, "rounds")
+      ? readIntInRange("design.compare.rounds", rejectNull("design.compare.rounds", checked.rounds), 1, 5)
+      : defaults.rounds,
+    motionBlocking: Object.hasOwn(checked, "motionBlocking")
+      ? readBoolean(
+          "design.compare.motionBlocking",
+          rejectNull("design.compare.motionBlocking", checked.motionBlocking),
+        )
+      : defaults.motionBlocking,
+  };
+}
+
+function readUnitInterval(field: string, value: unknown): number {
+  return readBoundedNumber(field, value, 1);
+}
+
+function readBoundedNumber(field: string, value: unknown, max: number): number {
+  const amount = readFiniteNumber(field, value);
+  if (amount < 0 || amount > max) fail(field, `${amount} is outside 0 to ${max}.`);
+  return amount;
 }
 
 function readMotionRefs(value: unknown): MotionRefConfig {
@@ -670,6 +743,13 @@ export function defaultConfig(): GuideConfig {
         seconds: 6,
         resolution: "480p",
         max: 3,
+      },
+      compare: {
+        layoutMin: COMPARE_LAYOUT_MIN,
+        paletteMax: COMPARE_PALETTE_MAX,
+        edgeMax: COMPARE_EDGE_MAX,
+        rounds: COMPARE_ROUNDS,
+        motionBlocking: false,
       },
     },
   };

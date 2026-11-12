@@ -22,4 +22,5 @@ export {
 } from "./phase-lock.ts";
 export type { EnterFlowOptions, FlowDecision, FlowEdge, FlowFrom, FlowPhase, FlowRequest } from "./phase-lock.ts";
 export { runGoldenPath } from "./golden-path.ts";
+export { runCompGate, setCompGateDeps } from "./comp-close.ts";
 export type { GoldenPathInput, GoldenPathResult } from "./golden-path.ts";

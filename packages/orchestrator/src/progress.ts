@@ -259,7 +259,7 @@ function parsePause(value: unknown): NonNullable<QueueFile["pause"]> {
     throw new ProgressError("Queue pause must be an object.");
   }
   for (const key of Object.keys(value)) {
-    if (key !== "at" && key !== "after") {
+    if (key !== "at" && key !== "after" && key !== "reason" && key !== "composites") {
       throw new ProgressError("Queue pause has an unknown field.");
     }
   }
@@ -269,7 +269,39 @@ function parsePause(value: unknown): NonNullable<QueueFile["pause"]> {
   if (typeof value.after !== "string" || (value.after !== "" && !ID_PATTERN.test(value.after))) {
     throw new ProgressError("Queue pause needs the prompt it follows.");
   }
-  return { at: value.at, after: value.after };
+  const pause: NonNullable<QueueFile["pause"]> = { at: value.at, after: value.after };
+  if (value.reason !== undefined) pause.reason = parsePauseReason(value.reason);
+  if (value.composites !== undefined) pause.composites = parseComposites(value.composites);
+  return pause;
+}
+
+function parsePauseReason(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 40 || !/^[a-z0-9-]+$/.test(value)) {
+    throw new ProgressError("Queue pause reason is not valid.");
+  }
+  if (SECRET_PATTERN.test(value.toLowerCase())) throw new ProgressError("Queue pause looks like a secret.");
+  return value;
+}
+
+function parseComposites(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 24) {
+    throw new ProgressError("Queue pause pictures must be a list.");
+  }
+  const pictures: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item.length === 0 || item.length > 180) {
+      throw new ProgressError("Queue pause picture path is not valid.");
+    }
+    if (item.includes("\\") || item.includes("..") || item.startsWith("/") || path.isAbsolute(item)) {
+      throw new ProgressError("Queue pause picture path is not valid.");
+    }
+    if (!/^[a-z0-9][a-z0-9._/-]*$/i.test(item)) {
+      throw new ProgressError("Queue pause picture path is not valid.");
+    }
+    if (SECRET_PATTERN.test(item.toLowerCase())) throw new ProgressError("Queue pause looks like a secret.");
+    pictures.push(item);
+  }
+  return pictures;
 }
 
 function parseItem(value: unknown, seen: Set<string>): QueueFile["items"][number] {

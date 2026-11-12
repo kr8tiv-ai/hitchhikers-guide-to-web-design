@@ -508,6 +508,75 @@ export function approvedMotionRefs(projectDir: string): ApprovedMotionRef[] {
   return rows;
 }
 
+export interface ApprovedCompView {
+  route: string;
+  view: CompView;
+  file: string;
+  viewport: [number, number];
+  fullPage: boolean;
+}
+
+/**
+ * Approved views whose file still matches the stored sha256.
+ * Reads comps.json and does not rewrite it.
+ */
+export function approvedCompViews(projectDir: string, route: string): ApprovedCompView[] {
+  const page = readDoc(projectDir).pages.find((item) => sameRoute(item.route, route));
+  if (page === undefined) return [];
+  const rows: ApprovedCompView[] = [];
+  for (const view of COMP_VIEWS) {
+    const record = viewRecord(page, view);
+    const approved = record?.approved;
+    if (record === undefined || approved === undefined) continue;
+    if (!compApprovalMatches(projectDir, page.route, view, approved)) continue;
+    rows.push({
+      route: page.route,
+      view,
+      file: approved.file.replace(/\\/g, "/"),
+      viewport: [record.viewport[0], record.viewport[1]],
+      fullPage: view === "desktop-long",
+    });
+  }
+  return rows;
+}
+
+export interface ApprovedSectionClip {
+  route: string;
+  sectionId: string;
+  file: string;
+  band?: SectionBand;
+}
+
+/** Approved motion clips for one page. Reads comps.json and does not rewrite it. */
+export function approvedSectionClips(
+  projectDir: string,
+  route: string,
+  sectionId?: string,
+): ApprovedSectionClip[] {
+  const page = readDoc(projectDir).pages.find((item) => sameRoute(item.route, route));
+  if (page === undefined) return [];
+  const clips: ApprovedSectionClip[] = [];
+  for (const section of page.sections) {
+    if (sectionId !== undefined && section.id !== sectionId) continue;
+    if (section.motionApproved === undefined || !motionApprovalMatches(projectDir, section)) continue;
+    const clip: ApprovedSectionClip = {
+      route: page.route,
+      sectionId: section.id,
+      file: section.motionApproved.file,
+    };
+    if (section.band !== undefined) clip.band = section.band;
+    clips.push(clip);
+  }
+  return clips;
+}
+
+/** Routes whose comps.json page lists this section. Does not rewrite the file. */
+export function compRoutesForSection(projectDir: string, sectionId: string): string[] {
+  return readDoc(projectDir)
+    .pages.filter((page) => page.sections.some((section) => section.id === sectionId))
+    .map((page) => page.route);
+}
+
 export function listComps(projectDir: string): CompFile {
   syncCompApprovals(projectDir);
   return readDoc(projectDir);

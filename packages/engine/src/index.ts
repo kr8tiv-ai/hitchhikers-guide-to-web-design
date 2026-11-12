@@ -32,6 +32,7 @@ export type {
   CompImageModel,
   DesignGateConfig,
   MotionRefConfig,
+  CompareConfig,
   MotionVideoModel,
   MotionVideoResolution,
   Effort,
@@ -457,8 +458,13 @@ export {
   requiredCompViews,
   sectionCropRel,
   syncCompApprovals,
+  approvedCompViews,
+  approvedSectionClips,
+  compRoutesForSection,
 } from "./spec/comps.ts";
 export type {
+  ApprovedCompView,
+  ApprovedSectionClip,
   ApprovedMotionRef,
   CompApproval,
   CompDraftDeps,
@@ -474,6 +480,16 @@ export type {
   SectionBand,
   StoredCompApproval,
 } from "./spec/comps.ts";
+export {
+  runCompGate,
+} from "./spec/comp-gate.ts";
+export type {
+  CompFault,
+  CompFixTurn,
+  CompGateDeps,
+  CompGateResult,
+} from "./spec/comp-gate.ts";
+export { isCompCompareCloseReason } from "./spec/visible-copy.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,
@@ -511,6 +527,7 @@ export {
   setProjectBuildRunner,
   setSectionStillRunner,
   setBeautyRunner,
+  setCompGateDeps,
   setSiteBuildGate,
   setSignatureClose,
   renderBuildPrompt,

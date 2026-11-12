@@ -418,6 +418,13 @@ function cloneQueue(queue: QueueFile): QueueFile {
   const copy: QueueFile = {
     items: queue.items.map((item) => ({ id: item.id, kind: item.kind, status: item.status })),
   };
-  if (queue.pause !== undefined) copy.pause = { at: queue.pause.at, after: queue.pause.after };
+  if (queue.pause !== undefined) {
+    copy.pause = {
+      at: queue.pause.at,
+      after: queue.pause.after,
+      ...(queue.pause.reason !== undefined ? { reason: queue.pause.reason } : {}),
+      ...(queue.pause.composites !== undefined ? { composites: [...queue.pause.composites] } : {}),
+    };
+  }
   return copy;
 }
