@@ -216,62 +216,112 @@ export async function draftComps(projectDir: string, deps: CompDraftDeps = {}): 
   const pages = listPrimaryPages(projectDir);
   if (pages.length === 0) return [];
   const written: string[] = [];
-  let provider: RenderDeskProvider | undefined = deps.provider;
-  let providerDown = false;
-  const useProvider = async (): Promise<RenderDeskProvider> => {
-    if (provider === undefined) provider = await renderDeskProvider(projectDir, deps);
-    return provider;
-  };
+  const draw = openDrawer(projectDir, deps);
   for (const page of pages) {
-    if (providerDown) break;
+    if (draw.state.providerDown) break;
     const seeded = readDoc(projectDir);
     ensurePage(seeded, page);
     writeDoc(projectDir, seeded);
     for (const view of views) {
-      if (providerDown) break;
-      const kept: string[] = [];
-      for (let index = 1; index <= settings.candidates; index += 1) {
-        if (providerDown) break;
-        const rel = compCandidateRel(page.route, view, index);
-        const abs = absFromRel(projectDir, rel);
-        const prompt = buildCompPrompt(projectDir, page.route, view);
-        const promptAbs = absFromRel(projectDir, promptRel(rel));
-        if (alreadyDrawn(abs, promptAbs, prompt)) {
-          kept.push(rel);
-          continue;
-        }
-        try {
-          const current = await useProvider();
-          const sources = compReferenceFiles(projectDir, page.route, view);
-          const images = await requestImage(projectDir, current, {
-            model: settings.model,
-            prompt,
-            aspect: VIEW_SPEC[view].aspect,
-            sources,
-          });
-          const bytes = firstBytes(images);
-          if (bytes === null || bytes.byteLength === 0) {
-            recordCompNote(projectDir, sketchNote(page, view, "Imagine returned no image."));
-            continue;
-          }
-          mkdirSync(path.dirname(abs), { recursive: true });
-          writeFileSync(abs, bytes);
-          writeFileSync(promptAbs, prompt, "utf8");
-          kept.push(rel);
-          written.push(rel);
-          saveCandidates(projectDir, page, view, kept);
-        } catch (error) {
-          const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Sketch draft failed.";
-          const note = sketchNote(page, view, message);
-          recordCompNote(projectDir, note);
-          recordRenderNotes(projectDir, [note]);
-          providerDown = true;
-        }
-      }
-      saveCandidates(projectDir, page, view, kept);
+      if (draw.state.providerDown) break;
+      const files = await drawViewCandidates(projectDir, page, view, settings, draw.useProvider, draw.state, false);
+      written.push(...files);
     }
   }
   return written;
+}
+
+/**
+ * Draws one view again after the owner asks for a change.
+ * Numbered sketches are replaced. An uploaded sketch on that view stays.
+ * Other views are not requested and their files stay as they are.
+ */
+export async function redrawCompView(
+  projectDir: string,
+  route: string,
+  view: CompView,
+  deps: CompDraftDeps = {},
+): Promise<string[]> {
+  if (!isCompView(view)) throw new Error(`No sketch view matches ${String(view)}.`);
+  if (!designLockMatches(projectDir)) throw new Error("DESIGN.md is not locked.");
+  const page = requirePrimary(projectDir, route);
+  refreshReferenceReadme(projectDir);
+  const settings = loadConfig(projectDir).design.comps;
+  const seeded = readDoc(projectDir);
+  ensurePage(seeded, page);
+  writeDoc(projectDir, seeded);
+  const draw = openDrawer(projectDir, deps);
+  const written = await drawViewCandidates(projectDir, page, view, settings, draw.useProvider, draw.state, true);
+  if (draw.state.providerDown && written.length === 0) throw new Error("The sketch did not redraw.");
+  return written;
+}
+
+/** Adds an owner upload as a sketch to pick. It does not approve it. */
+export function addCompCandidate(
+  projectDir: string,
+  route: string,
+  view: CompView,
+  bytes: Uint8Array,
+  extension: string,
+): string {
+  if (!isCompView(view)) throw new Error(`No sketch view matches ${String(view)}.`);
+  const page = requirePrimary(projectDir, route);
+  if (bytes.byteLength === 0) throw new Error("File is empty.");
+  const ext = uploadExtension(extension);
+  if (ext === null) throw new Error("Upload a png, jpg, or webp image.");
+  const slug = compSlug(page.route);
+  let index = 1;
+  let rel = `reference/comps/${slug}/${view}-upload-${index}${ext}`;
+  while (existsSync(absFromRel(projectDir, rel))) {
+    index += 1;
+    if (index > 1000) throw new Error("Too many uploads for this sketch.");
+    rel = `reference/comps/${slug}/${view}-upload-${index}${ext}`;
+  }
+  const abs = absFromRel(projectDir, rel);
+  mkdirSync(path.dirname(abs), { recursive: true });
+  writeFileSync(abs, bytes);
+  const doc = readDoc(projectDir);
+  const row = ensurePage(doc, page);
+  const record = ensureView(row, view);
+  if (!record.candidates.includes(rel)) record.candidates = [...record.candidates, rel];
+  writeDoc(projectDir, doc);
+  return rel;
+}
+
+/**
+ * Approves one sketch for every required view of every primary page.
+ * Harnesses that stand in for the owner call this after the sitemap is final.
+ * A page that is already approved is left alone. An empty project approves nothing.
+ */
+export function approveRequiredSketches(projectDir: string, bytes: Uint8Array): string[] {
+  if (bytes.byteLength === 0) throw new Error("File is empty.");
+  const approved: string[] = [];
+  for (const page of listPrimaryPages(projectDir)) {
+    for (const view of requiredViews(projectDir)) {
+      if (isCompApproved(projectDir, page.route, view)) continue;
+      const rel = compCandidateRel(page.route, view, 1);
+      const abs = absFromRel(projectDir, rel);
+      if (!existsSync(abs)) {
+        mkdirSync(path.dirname(abs), { recursive: true });
+        writeFileSync(abs, bytes);
+      }
+      approved.push(approveComp(projectDir, page.route, view, rel).file);
+    }
+  }
+  return approved;
+}
+
+/** Views the build waits on. The long page is included when design.comps.long is on. */
+export function requiredCompViews(projectDir: string): CompView[] {
+  return requiredViews(projectDir);
+}
+
+export function compViewFacts(view: CompView): {
+  aspect: "16:9" | "1:2" | "9:19.5";
+  label: string;
+} {
+  const spec = VIEW_SPEC[view];
+  return { aspect: spec.aspect, label: spec.label };
 }
 
 /**
@@ -598,6 +648,109 @@ async function requestImage(
     return provider.generateImage({ model: req.model, prompt, aspect: req.aspect, n: 1 });
   }
   return provider.generateImage({ model: req.model, prompt: req.prompt, aspect: req.aspect, n: 1 });
+}
+
+interface DrawState {
+  providerDown: boolean;
+}
+
+function openDrawer(
+  projectDir: string,
+  deps: CompDraftDeps,
+): { state: DrawState; useProvider: () => Promise<RenderDeskProvider> } {
+  const state: DrawState = { providerDown: false };
+  let provider: RenderDeskProvider | undefined = deps.provider;
+  const useProvider = async (): Promise<RenderDeskProvider> => {
+    if (provider === undefined) provider = await renderDeskProvider(projectDir, deps);
+    return provider;
+  };
+  return { state, useProvider };
+}
+
+async function drawViewCandidates(
+  projectDir: string,
+  page: PrimaryPage,
+  view: CompView,
+  settings: { model: string; candidates: number },
+  useProvider: () => Promise<RenderDeskProvider>,
+  state: DrawState,
+  keepExtras: boolean,
+): Promise<string[]> {
+  const extras = keepExtras ? keptUploadCandidates(projectDir, page.route, view) : [];
+  const kept: string[] = [];
+  const written: string[] = [];
+  for (let index = 1; index <= settings.candidates; index += 1) {
+    if (state.providerDown) break;
+    const rel = compCandidateRel(page.route, view, index);
+    const abs = absFromRel(projectDir, rel);
+    const prompt = buildCompPrompt(projectDir, page.route, view);
+    const promptAbs = absFromRel(projectDir, promptRel(rel));
+    if (alreadyDrawn(abs, promptAbs, prompt)) {
+      kept.push(rel);
+      continue;
+    }
+    try {
+      const current = await useProvider();
+      const sources = compReferenceFiles(projectDir, page.route, view);
+      const images = await requestImage(projectDir, current, {
+        model: settings.model,
+        prompt,
+        aspect: VIEW_SPEC[view].aspect,
+        sources,
+      });
+      const bytes = firstBytes(images);
+      if (bytes === null || bytes.byteLength === 0) {
+        recordCompNote(projectDir, sketchNote(page, view, "Imagine returned no image."));
+        continue;
+      }
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, bytes);
+      writeFileSync(promptAbs, prompt, "utf8");
+      kept.push(rel);
+      written.push(rel);
+      saveCandidates(projectDir, page, view, mergeCandidates(kept, extras));
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Sketch draft failed.";
+      const note = sketchNote(page, view, message);
+      recordCompNote(projectDir, note);
+      recordRenderNotes(projectDir, [note]);
+      state.providerDown = true;
+    }
+  }
+  saveCandidates(projectDir, page, view, mergeCandidates(kept, extras));
+  return written;
+}
+
+function mergeCandidates(kept: readonly string[], extras: readonly string[]): string[] {
+  const seen = new Set(kept);
+  const next = [...kept];
+  for (const extra of extras) {
+    if (seen.has(extra)) continue;
+    seen.add(extra);
+    next.push(extra);
+  }
+  return next;
+}
+
+function keptUploadCandidates(projectDir: string, route: string, view: CompView): string[] {
+  const pattern = new RegExp(`^${escapeRegExp(view)}-upload-\\d+\\.(png|jpe?g|webp)$`, "i");
+  return readCandidates(projectDir, route, view).filter((rel) => {
+    if (!pattern.test(path.posix.basename(rel))) return false;
+    return existsSync(absFromRel(projectDir, rel));
+  });
+}
+
+function uploadExtension(extension: string): ".png" | ".jpg" | ".webp" | null {
+  const raw = extension.trim().toLowerCase();
+  const withDot = raw.startsWith(".") ? raw : raw === "" ? "" : `.${raw}`;
+  if (withDot === ".jpg" || withDot === ".jpeg") return ".jpg";
+  if (withDot === ".png") return ".png";
+  if (withDot === ".webp") return ".webp";
+  return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function viewsFor(long: boolean): CompView[] {

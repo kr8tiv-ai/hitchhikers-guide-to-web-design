@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   advanceDesignStages,
+  approveRequiredSketches,
   approveSiteBrief,
   approveSitePlan,
   chooseDirection,
@@ -261,6 +262,8 @@ function passStages(projectDir: string, brief: string): void {
   writeDesignLock(projectDir, deal.pickedId);
   advanceDesignStages(projectDir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(projectDir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+  // The owner stand-in approves the required page sketches. The build stays closed without them.
+  approveRequiredSketches(projectDir, GATE_PNG);
 }
 
 function writeStack(projectDir: string): void {

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
-import { writeGateShots } from "./design-then-build.ts";
+import { plantRequiredSketches, writeGateShots } from "./design-then-build.ts";
 import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -75,6 +75,7 @@ test("a finished interview drafts the brief, approves it, and starts one build",
     await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();
     await page.getByRole("button", { name: "Approve style guide" }).click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
+    plantRequiredSketches(projectDir);
     await page.getByRole("button", { name: "Approve direction" }).click();
     await page.getByRole("button", { name: "Approve pre-build checks" }).click();
     await expect(page.locator("[data-start-build]")).toBeEnabled();

@@ -23,6 +23,7 @@ import { createDeskApp, type GuideThink, type TurnHandler } from "./routes.ts";
 import type { ToolRuntime } from "./tool-desk.ts";
 
 export type { TurnHandler } from "./routes.ts";
+export { setDeskCompProvider } from "./comp-provider.ts";
 
 const LOOPBACK = "127.0.0.1";
 

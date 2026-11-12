@@ -106,7 +106,14 @@ import {
   type WalkState,
   interviewTreeFile,
   packagedPackage,
+  addCompCandidate,
+  approveComp,
+  approveMotionRef,
   approveRender,
+  compsWaiting,
+  isCompView,
+  redrawCompView,
+  requestCompChange,
   saveReferenceUpload,
   saveRenderUpload,
 } from "@hitchhiker/engine";
@@ -169,6 +176,7 @@ import { renderLaunchCard } from "../approval.ts";
 import { dressBrandKit, loadBrandKit, postBrandDecision, renderBrandKitError } from "./brand-desk.ts";
 import { postDirectionChoice, renderDirectionPicker } from "./direction-desk.ts";
 import { approveMain, brandBriefMain, dashboardBriefNote, type ApproveStage } from "./brief-page.ts";
+import { deskCompProvider } from "./comp-provider.ts";
 import { approveDesignStage, presentDesignStage, renderDesignStagePanel, reviseDesignStage } from "./design-stage-desk.ts";
 import { issueToken, tokensMatch } from "./csrf.ts";
 import { applyProjectChrome, projectChrome, runProjectPost } from "./project-desk.ts";
@@ -1042,6 +1050,10 @@ async function handlePost(
     await handleReferenceUpload(req, res, token, projectDir);
     return;
   }
+  if (pathname === "/api/comp-upload") {
+    await handleCompUpload(req, res, token, projectDir);
+    return;
+  }
   const header = req.headers["x-hh-csrf"];
   if (typeof header !== "string" || !tokensMatch(token, header)) {
     sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
@@ -1837,6 +1849,48 @@ async function handleReferenceUpload(
   res.end();
 }
 
+async function handleCompUpload(
+  req: IncomingMessage,
+  res: ServerResponse,
+  token: string,
+  projectDir: string,
+): Promise<void> {
+  const csrf = queryValue(req.url ?? "", "csrf");
+  if (csrf === null || !tokensMatch(token, csrf)) {
+    sendJson(req, res, 403, { error: "The desk refused this request. Reload the page." });
+    return;
+  }
+  const view = queryValue(req.url ?? "", "view") ?? "";
+  if (!isCompView(view)) {
+    sendJson(req, res, 400, { error: "That sketch is not on the desk." });
+    dropRequest(req);
+    return;
+  }
+  const body = await readUploadBody(req, res);
+  if (body === null) return;
+  const type = headerOne(req.headers["content-type"]);
+  const part = parseMultipart(body, type);
+  if ("error" in part) {
+    sendJson(req, res, 400, { error: part.error });
+    return;
+  }
+  const ext = path.extname(part.filename).toLowerCase();
+  if (ext !== ".png" && ext !== ".jpg" && ext !== ".jpeg" && ext !== ".webp") {
+    sendJson(req, res, 415, { error: "Upload a png, jpg, or webp image." });
+    return;
+  }
+  if (!(await allowDeskMove(req, res, "application/json", token, projectDir, "design"))) return;
+  try {
+    addCompCandidate(projectDir, queryValue(req.url ?? "", "route") ?? "/", view, part.data, ext);
+  } catch (error: unknown) {
+    const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "That upload did not save.";
+    sendJson(req, res, 400, { error: message });
+    return;
+  }
+  res.writeHead(303, { location: "/approve" });
+  res.end();
+}
+
 async function readUploadBody(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1971,6 +2025,10 @@ async function handleApproveForm(
   let correction = "";
   let confirmFallback = false;
   let renderRoute = "";
+  let compView = "";
+  let candidate = "";
+  let changes = "";
+  let sectionId = "";
   let momentIds: string[] = [];
   if (mime === "application/json") {
     try {
@@ -1979,6 +2037,10 @@ async function handleApproveForm(
         if (typeof body.action === "string") action = body.action;
         if (typeof body.correction === "string") correction = body.correction;
         if (typeof body.route === "string") renderRoute = body.route;
+        if (typeof body.view === "string") compView = body.view;
+        if (typeof body.candidate === "string") candidate = body.candidate;
+        if (typeof body.changes === "string") changes = body.changes;
+        if (typeof body.section === "string") sectionId = body.section;
         confirmFallback = body.confirmFallback === true || body.confirmFallback === "yes";
         momentIds = momentList(body.moment);
       }
@@ -1991,6 +2053,10 @@ async function handleApproveForm(
     action = params.get("action") ?? "";
     correction = params.get("correction") ?? "";
     renderRoute = params.get("route") ?? "";
+    compView = params.get("view") ?? "";
+    candidate = params.get("candidate") ?? "";
+    changes = params.get("changes") ?? "";
+    sectionId = params.get("section") ?? "";
     confirmFallback = params.get("confirmFallback") === "yes";
     momentIds = params.getAll("moment");
   }
@@ -2069,6 +2135,7 @@ async function handleApproveForm(
         stage === "wireframe" ||
         stage === "style-guide" ||
         stage === "direction" ||
+        stage === "look-and-feel" ||
         stage === "prebuild";
       if (!knownStage || text === "") {
         const brief = readBriefDesk(projectDir);
@@ -2083,7 +2150,7 @@ async function handleApproveForm(
       if (!(await allowDeskMove(req, res, mime, token, projectDir, "design"))) return;
       const brief = readBriefDesk(projectDir);
       const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
-      const stageName = stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
+      const stageName = stage as "sitemap" | "wireframe" | "style-guide" | "direction" | "look-and-feel" | "prebuild";
       if (commit === "change") await reviseDesignStage(projectDir, markdown, stageName, typed);
       else await approveDesignStage(projectDir, markdown, stageName, text, acknowledge);
       res.writeHead(303, { location: "/approve" });
@@ -2096,6 +2163,41 @@ async function handleApproveForm(
         approveRender(projectDir, renderRoute);
       } catch (error) {
         const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "That render is not ready.";
+        const brief = readBriefDesk(projectDir);
+        if (mime === "application/json") {
+          sendJson(req, res, 400, { error: message });
+          return;
+        }
+        await deliverHtml(req, res, 400, renderApproveBrief(token, null, brief, message, projectDir), projectDir, token, false);
+        return;
+      }
+      res.writeHead(303, { location: "/approve" });
+      res.end();
+      return;
+    }
+    if (action === "approve-comp" || action === "comp-change" || action === "approve-motion") {
+      if (!(await allowDeskMove(req, res, mime, token, projectDir, "design"))) return;
+      try {
+        if (action === "approve-comp") {
+          if (!isCompView(compView)) throw new Error("That sketch is not on the desk.");
+          if (candidate.trim() === "") throw new Error("Pick a sketch first.");
+          approveComp(projectDir, renderRoute, compView, candidate);
+          if (compsWaiting(projectDir).length === 0) {
+            const brief = readBriefDesk(projectDir);
+            const markdown = brief.draft !== null ? renderSiteBrief(brief.draft) : (readSiteBrief(projectDir) ?? "");
+            await approveDesignStage(projectDir, markdown, "look-and-feel", "Approved.");
+          }
+        } else if (action === "comp-change") {
+          if (!isCompView(compView)) throw new Error("That sketch is not on the desk.");
+          requestCompChange(projectDir, renderRoute, compView, changes);
+          const provider = deskCompProvider(projectDir);
+          await redrawCompView(projectDir, renderRoute, compView, provider === undefined ? {} : { provider });
+        } else {
+          if (sectionId.trim() === "") throw new Error("That motion is not on the desk.");
+          approveMotionRef(projectDir, renderRoute, sectionId);
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "That sketch did not save.";
         const brief = readBriefDesk(projectDir);
         if (mime === "application/json") {
           sendJson(req, res, 400, { error: message });
@@ -2786,6 +2888,10 @@ async function handleGet(
   }
   if (pathname === "/client/tile.js") {
     sendBytes(req, res, 200, "text/javascript; charset=utf-8", Buffer.from(browserModule(TILE_SOURCE)));
+    return;
+  }
+  if (pathname === "/desk/sketch") {
+    await sendSketch(req, res, projectDir, rawUrl);
     return;
   }
   if (pathname.startsWith("/src/") || pathname.startsWith("/public/")) {
@@ -4784,6 +4890,46 @@ async function storeUpload(projectDir: string, safeName: string, data: Buffer): 
     throw new Error("Upload path escaped the desk folder.");
   }
   await writeFile(target, data);
+}
+
+const SKETCH_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+};
+
+/** Serves one file from the project's reference folder. Anything else is the same 404. */
+async function sendSketch(
+  req: IncomingMessage,
+  res: ServerResponse,
+  projectDir: string,
+  rawUrl: string,
+): Promise<void> {
+  const asked = queryValue(rawUrl, "file");
+  const body = asked === null ? null : await sketchBytes(projectDir, asked);
+  if (body === null) {
+    sendBytes(req, res, 404, "text/plain; charset=utf-8", Buffer.from("That file is not on the desk.\n"));
+    return;
+  }
+  sendBytes(req, res, 200, body.type, body.bytes);
+}
+
+async function sketchBytes(
+  projectDir: string,
+  fileParam: string,
+): Promise<{ type: string; bytes: Buffer } | null> {
+  if (fileParam.includes("\0") || fileParam.includes("\\") || fileParam.includes("..")) return null;
+  const rel = fileParam.replace(/^\/+/, "");
+  if (!rel.startsWith("reference/") || rel.includes("//")) return null;
+  const type = SKETCH_TYPES[path.extname(rel).toLowerCase()];
+  if (type === undefined) return null;
+  const rest = rel.slice("reference/".length);
+  if (rest === "" || rest.startsWith("/") || path.isAbsolute(rest)) return null;
+  const bytes = await readInside(path.join(projectDir, "reference"), rest);
+  if (bytes === null) return null;
+  return { type, bytes };
 }
 
 async function readInside(root: string, relPath: string): Promise<Buffer | null> {

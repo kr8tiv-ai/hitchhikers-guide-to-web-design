@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { saveDirectionDeal, readDirectionDeal, chooseDirection, dealDirections } from "../src/brand/directions.ts";
+import { approveRequiredSketches } from "../src/spec/comps.ts";
 import { writeDesignLock } from "../src/spec/design-lock.ts";
 import { advanceDesignStages, designReadyForBuild } from "../src/spec/design-stages.ts";
 import { writeDesignMd } from "../src/spec/design-outputs.ts";
@@ -166,10 +167,13 @@ test("reference images use the configured minimum and count captured shots", { t
       approval: { stage: "prebuild", text: "Approved." },
       acknowledge: true,
     });
+    approveRequiredSketches(dir, PNG);
     const overridden = designReadyForBuild(dir, BRIEF);
     assert.equal(overridden.ok, true, overridden.reason);
 
     rmSync(path.join(dir, ".hitchhiker", "config.json"));
+    rmSync(path.join(dir, "reference", "comps"), { recursive: true, force: true });
+    rmSync(path.join(dir, "reference", "renders"), { recursive: true, force: true });
     const back = designReadyForBuild(dir, BRIEF);
     assert.equal(back.ok, false);
     assert.match(back.reason, /Add at least 6 reference images before the build/);
@@ -192,6 +196,7 @@ test("reference images use the configured minimum and count captured shots", { t
         approval: { stage: "prebuild", text: "Approved." },
         acknowledge: true,
       });
+      approveRequiredSketches(captured, PNG);
       const ready = designReadyForBuild(captured, BRIEF);
       assert.equal(ready.ok, true, ready.reason);
     } finally {
@@ -220,6 +225,7 @@ test("a missing, unsectioned, or unlocked DESIGN.md blocks the build", { timeout
       approval: { stage: "prebuild", text: "Approved." },
       acknowledge: true,
     });
+    approveRequiredSketches(dir, PNG);
     const ready = designReadyForBuild(dir, BRIEF);
     assert.equal(ready.ok, true, ready.reason);
 

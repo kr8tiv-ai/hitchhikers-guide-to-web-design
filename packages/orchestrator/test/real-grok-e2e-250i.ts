@@ -13,6 +13,7 @@ import {
   BUILD_EFFORT,
   BUILD_MODEL,
   advanceDesignStages,
+  approveRequiredSketches,
   approveSiteBrief,
   approveSitePlan,
   chooseDirection,
@@ -402,6 +403,7 @@ function passDesignStages(projectDir: string, brief: string): void {
     approval: { stage: "prebuild", text: "Approved." },
     acknowledge: true,
   });
+  approveRequiredSketches(projectDir, GATE_PNG);
 }
 
 function contentType(file: string): string {

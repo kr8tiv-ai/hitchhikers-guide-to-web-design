@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { createSiteProject, dealDirections, deterministicBrief, draftBriefPlan, projectPlanCoverage, renderSiteBrief, saveDirectionDeal, saveProjectFile } from "@hitchhiker/engine";
-import { writeGateShots } from "./design-then-build.ts";
+import { plantRequiredSketches, writeGateShots } from "./design-then-build.ts";
 import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -179,6 +179,7 @@ test("the design stages keep the Run 8 pages, the kit, the pick, and the checks"
     await expect(picked).not.toContainText("bloom");
     await page.getByRole("button", { name: "Approve style guide" }).click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
+    plantRequiredSketches(dir);
     await page.getByRole("button", { name: "Approve direction" }).click();
     const checks = page.locator("[data-design-stage='prebuild']");
     await expect(checks).toBeVisible();

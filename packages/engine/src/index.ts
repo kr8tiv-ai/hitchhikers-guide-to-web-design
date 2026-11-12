@@ -429,18 +429,21 @@ export {
   setPageRenderRunner,
   syncRenderApprovals,
 } from "./spec/page-renders.ts";
-export type { DraftRenderDeps, PrimaryPage, RenderApproval, WaitingPage } from "./spec/page-renders.ts";
+export type { DraftRenderDeps, PrimaryPage, RenderApproval, RenderDeskProvider, WaitingPage } from "./spec/page-renders.ts";
 export {
   COMPS_REL,
   COMP_VIEWS,
+  addCompCandidate,
   approveComp,
   approveMotionRef,
+  approveRequiredSketches,
   approvedMotionRefs,
   buildCompPrompt,
   compCandidateRel,
   compReferenceFiles,
   compRenderRel,
   compSlug,
+  compViewFacts,
   compsWaiting,
   draftComps,
   draftMotionRefs,
@@ -448,7 +451,9 @@ export {
   isCompView,
   listComps,
   motionClipRel,
+  redrawCompView,
   requestCompChange,
+  requiredCompViews,
   sectionCropRel,
   syncCompApprovals,
 } from "./spec/comps.ts";

@@ -7,7 +7,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { loadQueue, saveQueue, siteBuildSettled, withStateLock, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
+import { approveRequiredSketches, loadQueue, saveQueue, siteBuildSettled, withStateLock, type BuildSpawn, type ThinkRequest, type ThinkResult } from "@hitchhiker/engine";
 import { startServer, type ServerHandle } from "../src/server/server.ts";
 import { startLivePid } from "./live-pid.ts";
 import { removeTempDir } from "./remove-temp.ts";
@@ -93,7 +93,7 @@ function tokenFrom(html: string): string {
 }
 
 /** Brief approval drafts the plan. Start build is the click that starts the runner. */
-async function approveBriefThenPlan(port: number, token: string): Promise<void> {
+async function approveBriefThenPlan(port: number, token: string, dir: string): Promise<void> {
   const form = { "content-type": "application/x-www-form-urlencoded" };
   const drafted = await raw(port, "POST", "/approve", form, `csrf=${token}&action=approve`);
   assert.equal(drafted.status, 303);
@@ -125,6 +125,7 @@ async function approveBriefThenPlan(port: number, token: string): Promise<void> 
     const step = await raw(port, "POST", "/approve", form, `csrf=${token}&action=stage&stage=${stage}&commit=approve`);
     assert.equal(step.status, 303, stage);
   }
+  approveRequiredSketches(dir, GATE_PNG);
   const started = await raw(port, "POST", "/approve", form, `csrf=${token}&action=start-build`);
   assert.equal(started.status, 303);
 }
@@ -168,7 +169,7 @@ test("approve starts one build and the drive shows model, effort, and files", as
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
     const home = await raw(handle.port, "GET", "/approve");
     const token = tokenFrom(home.body);
-    await approveBriefThenPlan(handle.port, token);
+    await approveBriefThenPlan(handle.port, token, dir);
     let progress = "";
     for (let attempt = 0; attempt < 200; attempt += 1) {
       const next = await raw(handle.port, "GET", "/api/drive/progress");
@@ -293,7 +294,7 @@ test("a failing stub shows the failure and Retry starts the same prompt again", 
     handle = await startServer({ projectDir: dir, open: false, guideThink: guideThink() as never, buildSpawn });
     const home = await raw(handle.port, "GET", "/approve");
     const token = tokenFrom(home.body);
-    await approveBriefThenPlan(handle.port, token);
+    await approveBriefThenPlan(handle.port, token, dir);
     let page = "";
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const next = await raw(handle.port, "GET", "/hh-dashboard");

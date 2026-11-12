@@ -8,6 +8,7 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   advanceDesignStages,
+  approveRequiredSketches,
   chooseDirection,
   clearProjectBuildRunner,
   dealDirections,
@@ -124,6 +125,7 @@ test("Start build and hh next --run spawn through the injected runner once", asy
     writeDesignLock(dir, deal.pickedId);
     advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
     advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+    approveRequiredSketches(dir, png);
     assert.equal(calls, 0);
     const started = await startSiteBuild(dir);
     assert.equal(started.buildStarted, true);
