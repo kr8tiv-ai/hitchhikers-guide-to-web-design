@@ -1,8 +1,8 @@
 /**
- * One text-free render per primary page, approved before site prompts.
- * Drafting waits for .hitchhiker/design-lock.json (245a writes that on
- * style-guide approval and then calls onDesignLocked). The paid API
- * provider is never constructed here. A missing runner does nothing.
+ * Desktop render approval for each primary page, and the runner that draws
+ * the comp set after the design lock. renders.json stays the desktop
+ * approval from 245i. Drafting does not attach the billed API.
+ * A missing runner does nothing.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -10,12 +10,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { packagedModule } from "../packaged-dir.ts";
 import { DESIGN_LOCK_REL, designLockMatches } from "./design-lock.ts";
-import { ownerPhotoFiles, refreshReferenceReadme, sha256File } from "./reference-shots.ts";
+import { ownerPhotoFiles, sha256File } from "./reference-shots.ts";
 
 export { DESIGN_LOCK_REL, designLockMatches };
 export const RENDERS_REL = ".hitchhiker/renders.json";
 
-const RENDER_MODEL = "grok-imagine-image";
+/** Default Imagine still model. design.comps.model uses the same id. */
+export const RENDER_MODEL = "grok-imagine-image";
 
 export interface PrimaryPage {
   title: string;
@@ -35,6 +36,8 @@ export interface WaitingPage {
   title: string;
   route: string;
   file: string;
+  /** Plain view name when a sketch is missing, for example "phone". */
+  view?: string;
 }
 
 interface SpawnRequest {
@@ -65,13 +68,20 @@ export interface DraftRenderDeps {
   fetchImpl?: typeof fetch;
 }
 
-interface DeskImage {
+export interface RenderImage {
   b64?: string;
   url?: string;
 }
 
-interface DeskProvider {
-  generateImage(req: { model: string; prompt: string; aspect: string; n: number }): Promise<DeskImage[]>;
+export interface RenderDeskProvider {
+  generateImage(req: { model: string; prompt: string; aspect: string; n: number }): Promise<RenderImage[]>;
+  editImage?(req: {
+    model: string;
+    prompt: string;
+    sources: readonly string[];
+    n: number;
+    aspect?: string;
+  }): Promise<{ images: RenderImage[]; note?: string }>;
 }
 
 interface DeskModule {
@@ -82,7 +92,7 @@ interface DeskModule {
       env?: NodeJS.ProcessEnv;
       browserDriver?: DraftRenderDeps["browserDriver"];
     },
-  ): DeskProvider;
+  ): RenderDeskProvider;
 }
 
 type RenderRunner = (projectDir: string) => Promise<void>;
@@ -95,14 +105,30 @@ export class RenderApprovalError extends Error {
   readonly waiting: WaitingPage[];
 
   constructor(waiting: readonly WaitingPage[]) {
-    const pages = waiting.map((page) => ({ title: page.title, route: page.route, file: page.file }));
+    const pages = waiting.map((page) => copyWaiting(page));
     super(renderApprovalMessage(pages));
     this.name = "RenderApprovalError";
     this.waiting = pages;
   }
 }
 
+function copyWaiting(page: WaitingPage): WaitingPage {
+  const copy: WaitingPage = { title: page.title, route: page.route, file: page.file };
+  if (page.view !== undefined && page.view !== "") copy.view = page.view;
+  return copy;
+}
+
 export function renderApprovalMessage(waiting: readonly WaitingPage[]): string {
+  const sketches = waiting.some((page) => page.view !== undefined && page.view !== "");
+  if (sketches) {
+    const names = waiting
+      .map((page) => {
+        const label = page.view !== undefined && page.view !== "" ? page.view : "sketch";
+        return `${page.title} (${page.route}), ${label}`;
+      })
+      .join("; ");
+    return `These pages still need an approved sketch: ${names}.`;
+  }
   const names = waiting.map((page) => `${page.title} (${page.route})`).join(", ");
   return `These primary pages still need an approved render: ${names}.`;
 }
@@ -219,41 +245,10 @@ export function buildRenderPrompt(projectDir: string, route: string | PrimaryPag
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
+/** Draws the comp set. The desk runner calls this after the design lock. */
 export async function draftKeyPageRenders(projectDir: string, deps: DraftRenderDeps = {}): Promise<string[]> {
-  if (!designLockMatches(projectDir)) return [];
-  refreshReferenceReadme(projectDir);
-  const written: string[] = [];
-  const notes: string[] = [];
-  let provider: DeskProvider | null = null;
-  for (const page of listPrimaryPages(projectDir)) {
-    const rel = renderRelForRoute(page.route);
-    const abs = absFromRel(projectDir, rel);
-    const prompt = buildRenderPrompt(projectDir, page);
-    mkdirSync(path.dirname(abs), { recursive: true });
-    writeFileSync(abs.replace(/\.png$/i, ".prompt.txt"), prompt, "utf8");
-    if (existsSync(abs)) continue;
-    try {
-      provider ??= await loadDeskProvider(projectDir, deps);
-      const images = await provider.generateImage({
-        model: RENDER_MODEL,
-        prompt,
-        aspect: "16:9",
-        n: 1,
-      });
-      const bytes = firstImageBytes(images);
-      if (bytes === null || bytes.byteLength === 0) {
-        notes.push(`${page.route}: the provider returned no image bytes.`);
-        continue;
-      }
-      writeFileSync(abs, bytes);
-      written.push(rel);
-    } catch (error) {
-      const message = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : "Render draft failed.";
-      notes.push(`${page.route}: ${message}`);
-    }
-  }
-  if (notes.length > 0) recordRenderNotes(projectDir, notes);
-  return written;
+  const { draftComps } = await import("./comps.ts");
+  return draftComps(projectDir, deps);
 }
 
 export function saveRenderUpload(projectDir: string, route: string, bytes: Uint8Array): string {
@@ -276,13 +271,17 @@ export function approveRender(projectDir: string, route: string, approvedAt = ne
   return row;
 }
 
-export function isRenderApproved(projectDir: string, route: string): boolean {
+/** The desktop approval when the file still matches the stored sha256. */
+export function currentRenderApproval(projectDir: string, route: string): RenderApproval | null {
   const rel = renderRelForRoute(route);
   const row = readApprovals(projectDir).find((item) => sameRoute(item.route, route));
-  if (row === undefined || row.file.replace(/\\/g, "/") !== rel) return false;
-  const abs = absFromRel(projectDir, rel);
-  if (!existsSync(abs)) return false;
-  return sha256File(abs) === row.sha256;
+  if (row === undefined || row.file.replace(/\\/g, "/") !== rel) return null;
+  if (!approvalMatches(projectDir, row)) return null;
+  return row;
+}
+
+export function isRenderApproved(projectDir: string, route: string): boolean {
+  return currentRenderApproval(projectDir, route) !== null;
 }
 
 /** Drops approvals whose file is missing or whose bytes changed. */
@@ -304,7 +303,12 @@ export function pagesWaitingForRender(projectDir: string): WaitingPage[] {
   return waiting;
 }
 
-async function loadDeskProvider(projectDir: string, deps: DraftRenderDeps): Promise<DeskProvider> {
+/** Desk image provider. The key, client, and fetch arguments are ignored, so the billed API is not attached. */
+export async function renderDeskProvider(projectDir: string, deps: DraftRenderDeps): Promise<RenderDeskProvider> {
+  return loadDeskProvider(projectDir, deps);
+}
+
+async function loadDeskProvider(projectDir: string, deps: DraftRenderDeps): Promise<RenderDeskProvider> {
   const href = pathToFileURL(packagedModule("assets", "src/section-generate.ts")).href;
   const mod = (await import(href)) as DeskModule;
   return mod.resolveDeskProvider(projectDir, {
@@ -314,13 +318,8 @@ async function loadDeskProvider(projectDir: string, deps: DraftRenderDeps): Prom
   });
 }
 
-function firstImageBytes(images: readonly DeskImage[]): Uint8Array | null {
-  const image = images[0];
-  if (image === undefined || typeof image.b64 !== "string" || image.b64.trim() === "") return null;
-  return Buffer.from(image.b64, "base64");
-}
-
-function recordRenderNotes(projectDir: string, notes: readonly string[]): void {
+/** Plain notes for a draft that could not draw. The 245i renders page reads this file. */
+export function recordRenderNotes(projectDir: string, notes: readonly string[]): void {
   const dir = path.join(projectDir, "reference", "renders");
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "README.md");
@@ -521,6 +520,7 @@ function styleShots(projectDir: string): string[] {
   const names: string[] = [];
   for (const name of readdirSync(dir)) {
     if (!/\.(png|jpe?g|webp)$/i.test(name)) continue;
+    if (/logo/i.test(name)) continue;
     names.push(`reference/refs/${name}`);
   }
   names.sort();

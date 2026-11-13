@@ -5,12 +5,18 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { approveRequiredSketches } from "@hitchhiker/engine";
 import { expect, type Page } from "@playwright/test";
 
 const GATE_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
+
+/** Approves the required page sketches after the sitemap has stopped changing. */
+export function plantRequiredSketches(projectDir: string): void {
+  approveRequiredSketches(projectDir, GATE_PNG);
+}
 
 export function writeGateShots(projectDir: string): void {
   const refs = path.join(projectDir, "reference", "refs");
@@ -32,6 +38,7 @@ export async function approveDesignAndStart(page: Page, projectDir: string): Pro
   await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible();
   await page.getByRole("button", { name: "Approve style guide" }).click();
   await expect(page.locator("[data-direction-desk]")).toContainText("Picked");
+  plantRequiredSketches(projectDir);
   await page.getByRole("button", { name: "Approve direction" }).click();
   await expect(page.locator("[data-design-stage='prebuild']")).toBeVisible();
   await page.getByRole("button", { name: "Approve pre-build checks" }).click();

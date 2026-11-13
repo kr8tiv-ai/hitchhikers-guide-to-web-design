@@ -1,5 +1,6 @@
 /**
- * Sitemap, then a section wireframe, then DESIGN.md, then a direction, then pre-build checks.
+ * Sitemap, then a section wireframe, then DESIGN.md, then a direction,
+ * then the look of the page sketches, then pre-build checks.
  *
  * The direction pick stays after the style guide so approving the wireframe still
  * writes DESIGN.md. A pick after that regenerates DESIGN.md from the brand kit
@@ -28,13 +29,14 @@ import { designLockMatches } from "./design-lock.ts";
 import { onDesignMdWritten, writeDesignMd, type DesignFontChoice } from "./design-outputs.ts";
 import { onDesignLocked } from "./page-renders.ts";
 import { runPrebuildChecks, type PrebuildReport } from "./prebuild-checks.ts";
+import { compsWaiting } from "./comps.ts";
 import { countGateReferenceImages } from "./reference-shots.ts";
 
 export const SITEMAP_REL = ".hitchhiker/sitemap.md";
 export const WIREFRAME_REL = ".hitchhiker/wireframe.md";
 export const STAGE_APPROVALS_REL = ".hitchhiker/design-stages.json";
 
-export type DesignStageName = "sitemap" | "wireframe" | "style-guide" | "direction" | "prebuild";
+export type DesignStageName = "sitemap" | "wireframe" | "style-guide" | "direction" | "look-and-feel" | "prebuild";
 
 export interface DesignStageRequest {
   brief: string;
@@ -60,6 +62,8 @@ interface StageApprovals {
   wireframe?: string;
   styleGuide?: string;
   direction?: string;
+  /** Recorded when every required sketch is approved. The build gate reads the sketches, not this string. */
+  lookAndFeel?: string;
   prebuild?: string;
   warningsAck?: boolean;
 }
@@ -131,6 +135,11 @@ export function advanceDesignStages(projectDir: string, input: DesignStageReques
   if (state.direction !== undefined) writeApprovals(projectDir, state);
   if (state.direction === undefined) return result("none", projectDir);
 
+  if (input.approval?.stage === "look-and-feel" && compsWaiting(projectDir).length === 0) {
+    recordText(state, "lookAndFeel", input.approval.text);
+  }
+  if (state.lookAndFeel !== undefined) writeApprovals(projectDir, state);
+
   if (input.approval?.stage === "prebuild" && designGateReason(projectDir, "prebuild") === "") {
     recordPrebuild(projectDir, state, brief, input);
   }
@@ -185,6 +194,15 @@ export function designReadyForBuild(projectDir: string, brief: string): DesignBu
     return { ok: false, reason: "Acknowledge the pre-build warnings before the build.", checks };
   }
   if (state.prebuild === undefined) return { ok: false, reason: "Approve the pre-build checks before the build.", checks };
+  const missing = compsWaiting(projectDir)[0];
+  if (missing !== undefined) {
+    const title = missing.title.trim() === "" ? "This page" : missing.title;
+    return {
+      ok: false,
+      reason: `Approve the ${missing.label} sketch for ${title} (${missing.route}) before the build.`,
+      checks,
+    };
+  }
   return { ok: true, reason: "", checks };
 }
 
@@ -216,9 +234,17 @@ function hasValidPick(projectDir: string): boolean {
 
 function clearLostPick(projectDir: string): void {
   const state = readApprovals(projectDir);
-  if (state.direction === undefined && state.styleGuide === undefined && state.prebuild === undefined) return;
+  if (
+    state.direction === undefined &&
+    state.styleGuide === undefined &&
+    state.prebuild === undefined &&
+    state.lookAndFeel === undefined
+  ) {
+    return;
+  }
   delete state.direction;
   delete state.styleGuide;
+  delete state.lookAndFeel;
   delete state.prebuild;
   delete state.warningsAck;
   writeApprovals(projectDir, state);
@@ -728,8 +754,16 @@ function refreshStyleGuideAfterDirection(projectDir: string): void {
     const answers = loadInterviewAnswers(projectDir);
     writeDesignMd(projectDir, brief, answers, fontsFor(projectDir));
     const state = readApprovals(projectDir);
-    if (state.styleGuide === undefined && state.prebuild === undefined && state.warningsAck !== true) return;
+    if (
+      state.styleGuide === undefined &&
+      state.prebuild === undefined &&
+      state.lookAndFeel === undefined &&
+      state.warningsAck !== true
+    ) {
+      return;
+    }
     delete state.styleGuide;
+    delete state.lookAndFeel;
     delete state.prebuild;
     delete state.warningsAck;
     writeApprovals(projectDir, state);
@@ -748,6 +782,7 @@ function readApprovals(projectDir: string): StageApprovals {
   if (typeof parsed.wireframe === "string" && parsed.wireframe.trim() !== "") state.wireframe = parsed.wireframe;
   if (typeof parsed.styleGuide === "string" && parsed.styleGuide.trim() !== "") state.styleGuide = parsed.styleGuide;
   if (typeof parsed.direction === "string" && parsed.direction.trim() !== "") state.direction = parsed.direction;
+  if (typeof parsed.lookAndFeel === "string" && parsed.lookAndFeel.trim() !== "") state.lookAndFeel = parsed.lookAndFeel;
   if (typeof parsed.prebuild === "string" && parsed.prebuild.trim() !== "") state.prebuild = parsed.prebuild;
   if (parsed.warningsAck === true) state.warningsAck = true;
   return state;
@@ -759,6 +794,7 @@ function writeApprovals(projectDir: string, state: StageApprovals): void {
   if (state.wireframe !== undefined) body.wireframe = state.wireframe;
   if (state.styleGuide !== undefined) body.styleGuide = state.styleGuide;
   if (state.direction !== undefined) body.direction = state.direction;
+  if (state.lookAndFeel !== undefined) body.lookAndFeel = state.lookAndFeel;
   if (state.prebuild !== undefined) body.prebuild = state.prebuild;
   if (state.warningsAck === true) body.warningsAck = true;
   writeFileSync(path.join(projectDir, STAGE_APPROVALS_REL), `${JSON.stringify(body, null, 2)}\n`, "utf8");

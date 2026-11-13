@@ -4,7 +4,8 @@
  * the same block. No model call.
  *
  * Patterns stay within about 4,000 tokens. The gate card stays under 800
- * and is not cut to make the patterns fit. Golden text is an example.
+ * and is not cut to make the patterns fit. Approved comp lines stay whole.
+ * Golden text and technique notes are cut first. Golden text is an example.
  */
 
 import { readFileSync } from "node:fs";
@@ -74,11 +75,13 @@ export function designLanguageFor(
   prompt: SitePromptSkeleton,
   artDirection: string,
   library: DesignLibrary,
+  visualTruth = "",
 ): string {
   const section = sectionIdOf(prompt);
   const golden = fillSlots(readGolden(prompt, library.goldenDir), prompt, section);
   const notes = techniqueNotes(prompt, library, goldenName(prompt));
-  const fitted = fitPatterns(golden, notes);
+  const truth = visualTruth.trim();
+  const fitted = fitPatterns(golden, notes, truth);
   const assets = assetPaths(library.assetsMarkdown, section);
   const gate = gateCard(library.facts, assets);
   const direction = oneLine(artDirection, "Follow the site brief and add one signature idea of your own.");
@@ -116,6 +119,7 @@ export function designLanguageFor(
     "### Gates",
     "",
     gate,
+    ...(truth === "" ? [] : ["", "### Visual truth", "", truth]),
   ].join("\n");
 }
 
@@ -282,13 +286,19 @@ function gateCard(facts: string, assets: readonly string[]): string {
   return build(fallback, assets.slice(0, 4));
 }
 
-function fitPatterns(golden: string, notes: string): { golden: string; notes: string } {
+function fitPatterns(golden: string, notes: string, reserved = ""): { golden: string; notes: string } {
   let nextNotes = notes.length > FIT_REQUEST_CAPS.pack ? `${notes.slice(0, FIT_REQUEST_CAPS.pack)}\n[technique notes trimmed]` : notes;
   let nextGolden = golden.length > FIT_REQUEST_CAPS.template ? `${golden.slice(0, FIT_REQUEST_CAPS.template)}\n[example trimmed]` : golden;
-  while (estimateTokens(`${nextGolden}\n${nextNotes}`) > DESIGN_PATTERN_TOKEN_CAP && nextNotes.length > 160) {
+  const held = reserved.trim();
+  const budget = held === "" ? DESIGN_PATTERN_TOKEN_CAP : DESIGN_PATTERN_TOKEN_CAP - 40;
+  const weight = (sampleGolden: string, sampleNotes: string): number =>
+    held === ""
+      ? estimateTokens(`${sampleGolden}\n${sampleNotes}`)
+      : estimateTokens(`${sampleGolden}\n${sampleNotes}\n${held}`);
+  while (weight(nextGolden, nextNotes) > budget && nextNotes.length > 160) {
     nextNotes = `${nextNotes.slice(0, Math.floor(nextNotes.length * 0.7)).trim()}\n[technique notes trimmed]`;
   }
-  while (estimateTokens(`${nextGolden}\n${nextNotes}`) > DESIGN_PATTERN_TOKEN_CAP && nextGolden.length > 400) {
+  while (weight(nextGolden, nextNotes) > budget && nextGolden.length > 400) {
     nextGolden = `${nextGolden.slice(0, Math.floor(nextGolden.length * 0.8)).trim()}\n[example trimmed]`;
   }
   return { golden: nextGolden, notes: nextNotes };

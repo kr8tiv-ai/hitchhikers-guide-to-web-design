@@ -135,6 +135,18 @@ A hero film or scroll film adds an Imagine video slot with no quote and no confi
 
 Ambient sound is off unless the brief opts in. The control is visible, labelled, and keyboard reachable. It starts muted. The choice is remembered in `localStorage` and the control says so. Reduced motion does not start sound unless the visitor turns it on.
 
+## Page sketches before the build
+
+The library still teaches technique. The pictures the build has to match are separate, and they come before the queue.
+
+After the style guide is approved and `DESIGN.md` is locked, Imagine draws a few sketches of each primary page: the desktop first screen (16:9, 1440 by 810), the tall desktop page (1:2, 1440 by 2880) when `design.comps.long` is on, and the phone (9:19.5, 390 by 845). The default is three sketches per view. Grey bars stand where headings will go. The words are written later, in HTML. A sketch is never used as a page image.
+
+On the desk you pick one, write what should change and have that view drawn again, or upload a picture of your own. The approved home desktop becomes a reference for later pages, so the set stays in one family. Sections that move can have a short silent clip drafted from the approved desktop sketch. **Use this motion** is the approval. A missing clip does not block the build.
+
+Page prompts carry the approved paths. They have to match the composition, the spacing, the scale, and the colours. When a page prompt finishes, the built page is shot beside the sketch. A miss is one fix, then another shot. Still off after the configured rounds, the queue pauses with the pair and the sentence "The built page does not match the approved sketch." Resume is the existing Drive Resume.
+
+The draw on the desk uses the signed-in Grok CLI and does not attach a billed key. The full file list, the `design.comps`, `design.motionRefs`, and `design.compare` defaults, the provider order, and the API-path arithmetic are in [imagine-first.md](imagine-first.md).
+
 ## Benchmark
 
 `bench/visual/` is not part of `pnpm -r test`. Briefs: `briefs/paradise.md`, `briefs/bold-tech.md`, `briefs/playful-retail.md`. The runner exits unless `--run` is passed. It is Matt's call after review. Do not scrape aura.build. A hand export goes in `bench/visual/aura/`. Pass means, on every brief: pairwise vision prefers the desk page over plain Grok at 375 and 1440 in both orders; beauty richness is at least 9 of 10 in every section and at least 3 above plain Grok's mean; the richness index is at least 10 times plain Grok; originality is at least 8 of 10 and at least 4 above plain Grok's mean; the clone detector finds no template clone; the three desk pages differ. Against aura.build the desk is not lower on any rubric line and wins the pairwise judgement on at least two of three briefs. A tie fails. Results, when the runner is used, go to `bench/visual/results/<date>.md`.

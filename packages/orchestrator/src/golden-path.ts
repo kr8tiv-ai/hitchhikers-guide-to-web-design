@@ -13,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   advanceDesignStages,
+  approveRequiredSketches,
   approveSiteBrief,
   approveSitePlan,
   chooseDirection,
@@ -29,6 +30,7 @@ import {
   readDirectionDeal,
   restoreProject,
   saveDirectionDeal,
+  setCompGateDeps,
   setProjectBuildRunner,
   siteBuildSettled,
   startSiteBuild,
@@ -261,6 +263,8 @@ function passStages(projectDir: string, brief: string): void {
   writeDesignLock(projectDir, deal.pickedId);
   advanceDesignStages(projectDir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(projectDir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+  // The owner stand-in approves the required page sketches. The build stays closed without them.
+  approveRequiredSketches(projectDir, GATE_PNG);
 }
 
 function writeStack(projectDir: string): void {
@@ -296,24 +300,46 @@ async function cassetteBuild(projectDir: string): Promise<void> {
     };
   };
   setProjectBuildRunner(projectDir, spawn);
-  const started = await startSiteBuild(projectDir);
-  if (!started.buildStarted) throw new Error("The build did not finish.");
-  for (let pass = 0; pass < 4; pass += 1) {
-    await siteBuildSettled(projectDir);
+  // The fixture build has no browser and no model. The compare gate still runs
+  // in the close. These fakes keep a sketched page from pausing the walk.
+  setCompGateDeps(projectDir, {
+    preview: async () => ({ url: "http://127.0.0.1:4311/", port: 4311, close: async () => undefined }),
+    shoot: async (req) => ({ width: req.viewport.width, height: req.viewport.height }),
+    compare: async () => ({
+      layout: 1,
+      palette: 0,
+      edge: [0, 0, 0, 0, 0, 0],
+      width: 320,
+      height: 68,
+      shotWidth: 1440,
+      leftInk: 40,
+      rightInk: 40,
+    }),
+    think: async () => ({ faults: [] }),
+  });
+  try {
+    const started = await startSiteBuild(projectDir);
+    if (!started.buildStarted) throw new Error("The build did not finish.");
+    for (let pass = 0; pass < 4; pass += 1) {
+      await siteBuildSettled(projectDir);
+      const queue = await loadQueue(projectDir);
+      const waiting = queue?.items.some((item) => item.status === "queued" || item.status === "running") === true;
+      if (!waiting) break;
+      await ensureSiteBuild(projectDir);
+    }
     const queue = await loadQueue(projectDir);
-    const waiting = queue?.items.some((item) => item.status === "queued" || item.status === "running") === true;
-    if (!waiting) break;
-    await ensureSiteBuild(projectDir);
-  }
-  const queue = await loadQueue(projectDir);
-  const failed = queue?.items.find((item) => item.status === "failed");
-  if (failed !== undefined) {
-    const run = readBuildRun(projectDir);
-    const detail = run?.reason.replace(/\s+/g, " ").trim() ?? "";
-    throw new Error(detail === "" ? "The build did not finish." : `The build did not finish. ${detail}`);
-  }
-  if (!existsSync(path.join(projectDir, "dist", "index.html"))) {
-    throw new Error("The pages were not written.");
+    if (queue?.pause !== undefined) throw new Error("The build did not finish.");
+    const failed = queue?.items.find((item) => item.status === "failed");
+    if (failed !== undefined) {
+      const run = readBuildRun(projectDir);
+      const detail = run?.reason.replace(/\s+/g, " ").trim() ?? "";
+      throw new Error(detail === "" ? "The build did not finish." : `The build did not finish. ${detail}`);
+    }
+    if (!existsSync(path.join(projectDir, "dist", "index.html"))) {
+      throw new Error("The pages were not written.");
+    }
+  } finally {
+    setCompGateDeps(projectDir, null);
   }
 }
 

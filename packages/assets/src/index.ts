@@ -29,7 +29,9 @@ export type { EnsureUpscalerDeps, EnsureUpscalerResult, UpscalerManifestEntry } 
 export { KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE, MissingApiKeyError, readApiKey } from "./keychain.ts";
 export type { KeychainGet, ReadKeyDeps } from "./keychain.ts";
 export {
+  FILE_DATA_URI_MAX_BYTES,
   IMAGINE_ORIGIN,
+  IMAGE_EDITS_PATH,
   IMAGE_GENERATIONS_PATH,
   ImagineHttpError,
   POLL_CAP_MS,
@@ -39,12 +41,15 @@ export {
   VideoJobError,
   VideoPollTimeout,
   createImagineClient,
+  editImage,
   fetchBytes,
+  fileToDataUri,
   generateImage,
   pollVideo,
   startVideo,
 } from "./imagine-http.ts";
 export type {
+  EditRequest,
   GeneratedImage,
   HttpDeps,
   ImageRequest,
@@ -53,6 +58,8 @@ export type {
   VideoRequest,
   VideoResolution,
 } from "./imagine-http.ts";
+export { quoteEdit } from "./prices.ts";
+export type { EditJob } from "./prices.ts";
 export { RealSubjectError, planBatch, readSpend, recordSpend, runBatch, spendFile } from "./imagine-run.ts";
 export {
   ImagineHandsBack,
@@ -63,7 +70,14 @@ export {
   readMediaSettings,
   resolveDeskProvider,
 } from "./section-generate.ts";
-export type { GenerateSectionResult, ImaginePageDriver, MediaProvider, MediaSettings } from "./section-generate.ts";
+export type {
+  GenerateSectionResult,
+  ImaginePageDriver,
+  MediaEditResult,
+  MediaProvider,
+  MediaSettings,
+  MediaVideoRequest,
+} from "./section-generate.ts";
 export {
   AVIF_QUALITY,
   DEFAULT_VARIANT_WIDTHS,

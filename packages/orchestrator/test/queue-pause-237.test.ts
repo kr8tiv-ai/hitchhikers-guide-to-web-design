@@ -57,3 +57,41 @@ test("a queue-wide pause survives a reload and blocks advance until resume", asy
     removeTempDir(dir);
   }
 });
+
+test("a compare pause keeps its reason and pictures, and advance stays paused", async () => {
+  const dir = tempProject();
+  const state: GuideState = {
+    phase: "Don't Panic",
+    slice: "The Guide",
+    promptId: "interview:DP-4.2",
+    lastGoodCommit: "abc1234",
+    blockers: [],
+    nextAction: "003",
+    updatedAt: WHEN,
+  };
+  try {
+    await saveQueue(dir, {
+      items: [
+        { id: "001", kind: "build", status: "passed" },
+        { id: "003", kind: "build", status: "paused" },
+      ],
+      pause: {
+        at: "2026-11-12T12:00:00.000Z",
+        after: "001",
+        reason: "comp-mismatch",
+        composites: ["qa/compare/003/desktop.jpg"],
+      },
+    });
+    await saveState(dir, state);
+    await assert.rejects(
+      () => advance({ projectDir: dir, finishedId: "001", outcome: "passed", commit: "abc1234" }),
+      (error: unknown) => error instanceof ProgressError && /paused/.test(error.message) && !/unknown field/.test(error.message),
+    );
+    const loaded = await loadQueue(dir);
+    assert.equal(loaded?.pause?.reason, "comp-mismatch");
+    assert.deepEqual(loaded?.pause?.composites, ["qa/compare/003/desktop.jpg"]);
+    assert.equal(loaded?.items[1]?.status, "paused");
+  } finally {
+    removeTempDir(dir);
+  }
+});

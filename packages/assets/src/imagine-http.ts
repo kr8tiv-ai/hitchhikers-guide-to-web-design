@@ -7,6 +7,10 @@
  * and the video request_id to id. Image bytes come back as data[].url or
  * data[].b64_json (mapped to b64).
  *
+ * Edits post to /v1/images/edits. One source is `image`. Two to five
+ * sources are `images`. Reference-to-video sends `reference_images` and
+ * cannot be combined with a first-frame image.
+ *
  * Polling waits 2 seconds, then doubles up to 30 seconds, and stops after
  * 10 minutes of waiting. That cadence is the one this prompt sets. The doc
  * examples sleep 5 seconds. The SDK default interval is 100 milliseconds.
@@ -16,9 +20,16 @@
  * an error payload cannot leak into the message.
  */
 
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
+
 export const IMAGINE_ORIGIN = "https://api.x.ai";
 export const IMAGE_GENERATIONS_PATH = "/v1/images/generations";
+export const IMAGE_EDITS_PATH = "/v1/images/edits";
 export const VIDEO_GENERATIONS_PATH = "/v1/videos/generations";
+
+/** Local guard so a data URI stays a reasonable request. Not an xAI field. 20 MB. */
+export const FILE_DATA_URI_MAX_BYTES = 20 * 1024 * 1024;
 
 export const POLL_START_MS = 2_000;
 export const POLL_MAX_INTERVAL_MS = 30_000;
@@ -68,10 +79,23 @@ export interface ImageRequest {
   quality?: "low" | "medium" | "auto";
 }
 
+export interface EditRequest {
+  model: string;
+  prompt: string;
+  /** http(s) URLs or data:image URIs. One sends `image`. Two to five send `images`. */
+  sources: readonly string[];
+  n: number;
+  aspect?: string;
+  resolution?: "1k" | "2k";
+  quality?: "low" | "medium" | "auto";
+}
+
 export interface VideoRequest {
   model: string;
   prompt: string;
   image?: string;
+  /** Style references. Cannot be combined with `image`. At most five. */
+  referenceImages?: readonly string[];
   seconds: number;
   resolution: VideoResolution;
   aspect?: string;
@@ -93,6 +117,7 @@ export interface PollDeps {
 
 export interface ImagineClient {
   generateImage(req: ImageRequest, deps: HttpDeps): Promise<GeneratedImage[]>;
+  editImage(req: EditRequest, deps: HttpDeps): Promise<GeneratedImage[]>;
   startVideo(req: VideoRequest, deps: HttpDeps): Promise<{ id: string }>;
   pollVideo(id: string, deps: PollDeps): Promise<{ url: string }>;
 }
@@ -131,14 +156,14 @@ export class VideoJobError extends Error {
 }
 
 export function createImagineClient(): ImagineClient {
-  return { generateImage, startVideo, pollVideo };
+  return { generateImage, editImage, startVideo, pollVideo };
 }
 
 export function generateImage(req: ImageRequest, deps: HttpDeps): Promise<GeneratedImage[]> {
   assertKey(deps.key);
   assertFetch(deps.fetchImpl);
   validateImageRequest(req);
-  const body: Record<string, string | number> = {
+  const body: { [key: string]: Json } = {
     model: req.model,
     prompt: req.prompt,
     n: req.n,
@@ -149,11 +174,62 @@ export function generateImage(req: ImageRequest, deps: HttpDeps): Promise<Genera
   return postJson(imageUrl(), body, deps).then(readImages);
 }
 
+export function editImage(req: EditRequest, deps: HttpDeps): Promise<GeneratedImage[]> {
+  assertKey(deps.key);
+  assertFetch(deps.fetchImpl);
+  validateEditRequest(req);
+  const body: { [key: string]: Json } = {
+    model: req.model,
+    prompt: req.prompt,
+    n: req.n,
+  };
+  if (req.aspect !== undefined) body.aspect_ratio = req.aspect;
+  if (req.resolution !== undefined) body.resolution = req.resolution;
+  if (req.quality !== undefined) body.quality = req.quality;
+  const encoded = req.sources.map((url) => ({ type: "image_url", url }));
+  const only = encoded[0];
+  if (encoded.length === 1 && only !== undefined) body.image = only;
+  else body.images = encoded;
+  return postJson(editUrl(), body, deps).then(readImages);
+}
+
+/** Read a local png, jpeg, or webp and return a data:image URI. */
+export async function fileToDataUri(filePath: string): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = DATA_URI_MIME[ext];
+  if (mime === undefined) {
+    throw new ImagineHttpError(0, "Imagine image file must be a png, jpeg, or webp.");
+  }
+  let info;
+  try {
+    info = await stat(filePath);
+  } catch {
+    throw new ImagineHttpError(0, "Imagine image file could not be read.");
+  }
+  if (!info.isFile()) {
+    throw new ImagineHttpError(0, "Imagine image file could not be read.");
+  }
+  if (info.size <= 0) {
+    throw new ImagineHttpError(0, "Imagine image file is empty.");
+  }
+  if (info.size > FILE_DATA_URI_MAX_BYTES) {
+    throw new ImagineHttpError(0, "Imagine image file must be 20 MB or smaller.");
+  }
+  const bytes = await readFile(filePath);
+  if (bytes.byteLength > FILE_DATA_URI_MAX_BYTES) {
+    throw new ImagineHttpError(0, "Imagine image file must be 20 MB or smaller.");
+  }
+  if (!magicMatches(bytes, ext)) {
+    throw new ImagineHttpError(0, "Imagine image file must be a png, jpeg, or webp.");
+  }
+  return `data:${mime};base64,${bytes.toString("base64")}`;
+}
+
 export function startVideo(req: VideoRequest, deps: HttpDeps): Promise<{ id: string }> {
   assertKey(deps.key);
   assertFetch(deps.fetchImpl);
   validateVideoRequest(req);
-  const body: Record<string, string | number | boolean> = {
+  const body: { [key: string]: Json } = {
     model: req.model,
     prompt: req.prompt,
     duration: req.seconds,
@@ -161,6 +237,9 @@ export function startVideo(req: VideoRequest, deps: HttpDeps): Promise<{ id: str
   };
   if (req.aspect !== undefined) body.aspect_ratio = req.aspect;
   if (req.image !== undefined) body.image = req.image;
+  if (req.referenceImages !== undefined) {
+    body.reference_images = req.referenceImages.map((url) => ({ url }));
+  }
   if (req.generateAudio !== undefined) body.generate_audio = req.generateAudio;
   return postJson(videoUrl(), body, deps).then(readRequestId);
 }
@@ -251,11 +330,31 @@ export function validateVideoRequest(req: VideoRequest): void {
   if (req.aspect !== undefined && !VIDEO_ASPECTS.includes(req.aspect as (typeof VIDEO_ASPECTS)[number])) {
     throw new ImagineHttpError(0, `Imagine aspect "${req.aspect}" is not a listed video ratio.`);
   }
+  if (req.image !== undefined && req.referenceImages !== undefined) {
+    throw new ImagineHttpError(0, "Imagine video cannot take a first-frame image and reference images together.");
+  }
   if (req.image !== undefined) assertImageSource(req.image);
+  if (req.referenceImages !== undefined) assertReferenceImages(req.referenceImages);
+}
+
+function validateEditRequest(req: EditRequest): void {
+  assertModel(req.model);
+  assertPrompt(req.prompt);
+  assertEditSources(req.sources);
+  if (req.aspect !== undefined && !IMAGE_ASPECTS.includes(req.aspect as (typeof IMAGE_ASPECTS)[number])) {
+    throw new ImagineHttpError(0, `Imagine aspect "${req.aspect}" is not a listed image ratio.`);
+  }
+  if (!Number.isInteger(req.n) || req.n < 1 || req.n > 10) {
+    throw new ImagineHttpError(0, "Imagine image count must be a whole number from 1 to 10.");
+  }
 }
 
 function imageUrl(): string {
   return `${IMAGINE_ORIGIN}${IMAGE_GENERATIONS_PATH}`;
+}
+
+function editUrl(): string {
+  return `${IMAGINE_ORIGIN}${IMAGE_EDITS_PATH}`;
 }
 
 function videoUrl(): string {
@@ -268,7 +367,7 @@ function videoStatusUrl(id: string): string {
 
 async function postJson(
   url: string,
-  body: Record<string, string | number | boolean>,
+  body: { [key: string]: Json },
   deps: HttpDeps,
 ): Promise<unknown> {
   const payload = JSON.stringify(body);
@@ -430,15 +529,40 @@ function assertPrompt(prompt: string): void {
 }
 
 function assertImageSource(image: string): void {
+  assertRemoteImage(image, "Imagine video image must be an https URL or a data URI.");
+}
+
+function assertEditSources(sources: readonly string[]): void {
+  if (!Array.isArray(sources) || sources.length < 1 || sources.length > 5) {
+    throw new ImagineHttpError(0, "Imagine edit needs 1 to 5 source images.");
+  }
+  for (const source of sources) {
+    assertRemoteImage(source, "Imagine edit source must be an http(s) URL or a data:image URI.");
+  }
+}
+
+function assertReferenceImages(images: readonly string[]): void {
+  if (!Array.isArray(images) || images.length < 1 || images.length > 5) {
+    throw new ImagineHttpError(0, "Imagine video reference images must be 1 to 5.");
+  }
+  for (const image of images) {
+    assertRemoteImage(image, "Imagine video reference image must be an http(s) URL or a data:image URI.");
+  }
+}
+
+function assertRemoteImage(image: string, message: string): void {
+  if (typeof image !== "string" || image.length === 0) {
+    throw new ImagineHttpError(0, message);
+  }
   if (image.startsWith("data:image/")) return;
   let url: URL;
   try {
     url = new URL(image);
   } catch {
-    throw new ImagineHttpError(0, "Imagine video image must be an https URL or a data URI.");
+    throw new ImagineHttpError(0, message);
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new ImagineHttpError(0, "Imagine video image must be an https URL or a data URI.");
+    throw new ImagineHttpError(0, message);
   }
 }
 
@@ -497,4 +621,52 @@ function defaultSleep(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const DATA_URI_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+};
+
+type Json = string | number | boolean | Json[] | { [key: string]: Json };
+
+function magicMatches(bytes: Uint8Array, ext: string): boolean {
+  if (ext === ".png") return isPng(bytes);
+  if (ext === ".jpg" || ext === ".jpeg") return isJpeg(bytes);
+  if (ext === ".webp") return isWebp(bytes);
+  return false;
+}
+
+function isPng(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
 }

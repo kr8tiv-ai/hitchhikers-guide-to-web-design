@@ -13,7 +13,7 @@ import path from "node:path";
 import { BUILD_EFFORT, BUILD_MODEL, type SpawnLike } from "@hitchhiker/engine";
 import { RealSubjectError } from "./imagine-run.ts";
 import { DEFAULT_VARIANT_WIDTHS, variantWidthsForProject } from "./media-budget.ts";
-import { createImagineClient, type GeneratedImage, type ImagineClient } from "./imagine-http.ts";
+import { createImagineClient, type EditRequest, type GeneratedImage, type ImagineClient } from "./imagine-http.ts";
 import {
   assetsFile,
   generatedDir,
@@ -47,7 +47,15 @@ export interface MediaVideoRequest {
   resolution: "480p" | "720p" | "1080p";
   aspect?: string;
   image?: string;
+  /** Style references. Cannot be combined with `image`. */
+  referenceImages?: readonly string[];
   generateAudio?: boolean;
+}
+
+export interface MediaEditResult {
+  images: GeneratedImage[];
+  /** Set when the references were described in the prompt instead of sent as pictures. */
+  note?: string;
 }
 
 export interface MediaPoll {
@@ -71,6 +79,7 @@ export interface ImaginePageDriver {
 
 export interface MediaProvider {
   generateImage(req: MediaImageRequest): Promise<GeneratedImage[]>;
+  editImage?(req: EditRequest): Promise<MediaEditResult>;
   startVideo?(req: MediaVideoRequest): Promise<{ id: string }>;
   pollVideo?(id: string): Promise<MediaPoll>;
 }
@@ -149,6 +158,8 @@ export function readMediaSettings(projectDir: string): MediaSettings {
 }
 
 const VIDEO_CREDIT = "Concept video, generated with Grok Imagine";
+const TEXT_ONLY_NOTE =
+  "References were text-only. Nothing could take them as pictures, so the paths were written into the prompt.";
 
 export function grokCliProvider(projectDir: string, run: SpawnLike, env: NodeJS.ProcessEnv = process.env): MediaProvider {
   let serial = 0;
@@ -170,21 +181,46 @@ export function grokCliProvider(projectDir: string, run: SpawnLike, env: NodeJS.
       const bytes = await readFile(dest);
       return [{ b64: Buffer.from(bytes).toString("base64") }];
     },
+    async editImage(req) {
+      serial += 1;
+      const dest = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.png`);
+      const refs = req.sources.map((source) => absoluteReference(projectDir, source));
+      const lines = [
+        "Use features.image_gen on the existing Grok login and save the still to the path below.",
+        "No API key is attached.",
+        `Use these reference images as image inputs: ${refs.join(", ")}`,
+        `Model: ${req.model}`,
+      ];
+      if (req.aspect !== undefined) lines.push(`Aspect ratio: ${req.aspect}`);
+      lines.push(`Count: ${req.n}`);
+      if (req.resolution !== undefined) lines.push(`Resolution: ${req.resolution}`);
+      if (req.quality !== undefined) lines.push(`Quality: ${req.quality}`);
+      lines.push(`Save the image bytes to ${dest}`, "Prompt:", req.prompt);
+      await runCli(projectDir, run, safeEnv, dest, lines);
+      const bytes = await readFile(dest);
+      return { images: [{ b64: Buffer.from(bytes).toString("base64") }] };
+    },
     async startVideo(req) {
+      if (req.image !== undefined && req.referenceImages !== undefined) {
+        throw new Error("A video cannot take a first-frame image and reference images together.");
+      }
       serial += 1;
       const dest = path.join(projectDir, ".hitchhiker", "assets", "cli-out", `${serial}.mp4`);
       const audio = req.generateAudio === true ? "true" : "false";
-      await runCli(projectDir, run, safeEnv, dest, [
+      const lines = [
         "Use features.video_gen on the existing Grok login and save the video to the path below.",
         "No API key is attached.",
         `generate_audio: ${audio}`,
         `Model: ${req.model}`,
         `Seconds: ${req.seconds}`,
         `Resolution: ${req.resolution}`,
-        `Save the video bytes to ${dest}`,
-        "Prompt:",
-        req.prompt,
-      ]);
+      ];
+      if (req.referenceImages !== undefined && req.referenceImages.length > 0) {
+        const refs = req.referenceImages.map((source) => absoluteReference(projectDir, source));
+        lines.push(`Use these reference images as video inputs: ${refs.join(", ")}`);
+      }
+      lines.push(`Save the video bytes to ${dest}`, "Prompt:", req.prompt);
+      await runCli(projectDir, run, safeEnv, dest, lines);
       await readFile(dest);
       return { id: dest };
     },
@@ -199,6 +235,9 @@ export function browserHandsBackProvider(projectDir = "", driver?: ImaginePageDr
   if (driver === undefined) {
     return {
       async generateImage() {
+        throw new ImagineHandsBack("Browser Imagine is on, and no signed-in session is attached. Nothing was generated.");
+      },
+      async editImage() {
         throw new ImagineHandsBack("Browser Imagine is on, and no signed-in session is attached. Nothing was generated.");
       },
     };
@@ -250,6 +289,21 @@ export function apiMediaProvider(deps: { key: string; fetchImpl: typeof fetch; c
         http,
       );
     },
+    async editImage(req) {
+      const images = await client.editImage(
+        {
+          model: req.model,
+          prompt: req.prompt,
+          sources: req.sources,
+          n: req.n,
+          ...(req.aspect === undefined ? {} : { aspect: req.aspect }),
+          ...(req.resolution === undefined ? {} : { resolution: req.resolution }),
+          ...(req.quality === undefined ? {} : { quality: req.quality }),
+        },
+        http,
+      );
+      return { images };
+    },
     async startVideo(req) {
       return client.startVideo(
         {
@@ -259,6 +313,7 @@ export function apiMediaProvider(deps: { key: string; fetchImpl: typeof fetch; c
           resolution: req.resolution,
           ...(req.aspect === undefined ? {} : { aspect: req.aspect }),
           ...(req.image === undefined ? {} : { image: req.image }),
+          ...(req.referenceImages === undefined ? {} : { referenceImages: req.referenceImages }),
           ...(req.generateAudio === undefined ? {} : { generateAudio: req.generateAudio }),
         },
         http,
@@ -343,18 +398,41 @@ export async function generateSectionStills(
 
 function chainProvider(chain: readonly MediaProvider[]): MediaProvider {
   let videoOwner: MediaProvider | undefined;
+  const generateImage = async (req: MediaImageRequest): Promise<GeneratedImage[]> => {
+    let last = "No Imagine provider is available.";
+    for (const provider of chain) {
+      try {
+        return await provider.generateImage(req);
+      } catch (error) {
+        if (error instanceof ImagineHandsBack) throw error;
+        last = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : last;
+      }
+    }
+    throw new Error(last);
+  };
   return {
-    async generateImage(req) {
+    generateImage,
+    async editImage(req) {
       let last = "No Imagine provider is available.";
+      let capable = false;
       for (const provider of chain) {
+        if (provider.editImage === undefined) continue;
+        capable = true;
         try {
-          return await provider.generateImage(req);
+          return await provider.editImage(req);
         } catch (error) {
           if (error instanceof ImagineHandsBack) throw error;
           last = error instanceof Error && error.message.trim() !== "" ? error.message.trim() : last;
         }
       }
-      throw new Error(last);
+      if (capable) throw new Error(last);
+      const images = await generateImage({
+        model: req.model,
+        prompt: textOnlyPrompt(req),
+        aspect: req.aspect ?? "auto",
+        n: req.n,
+      });
+      return { images, note: TEXT_ONLY_NOTE };
     },
     async startVideo(req) {
       let last = "No Imagine provider is available.";
@@ -376,6 +454,15 @@ function chainProvider(chain: readonly MediaProvider[]): MediaProvider {
       return videoOwner.pollVideo(id);
     },
   };
+}
+
+function absoluteReference(projectDir: string, source: string): string {
+  if (source.startsWith("data:image/") || /^https?:\/\//i.test(source)) return source;
+  return path.resolve(projectDir, source);
+}
+
+function textOnlyPrompt(req: EditRequest): string {
+  return `${req.prompt}\n\n${TEXT_ONLY_NOTE}\n${req.sources.join("\n")}`;
 }
 
 function deskEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

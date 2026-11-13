@@ -15,6 +15,7 @@ import {
   readBriefDesk,
   startSiteBuild,
 } from "../src/guide/brief-desk.ts";
+import { approveRequiredSketches } from "../src/spec/comps.ts";
 import { writeDesignLock } from "../src/spec/design-lock.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import { clearProjectBuildRunner, setProjectBuildRunner, siteBuildSettled, type BuildSpawn } from "../src/guide/site-build.ts";
@@ -87,6 +88,7 @@ function passStages(dir: string, brief: string): void {
   writeDesignLock(dir, deal.pickedId);
   advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+  approveRequiredSketches(dir, png);
 }
 
 test("plan approval and every design stage spawn nothing, and Start build spawns once", async () => {

@@ -15,6 +15,7 @@ import {
   readBriefDesk,
   startSiteBuild,
 } from "../src/guide/brief-desk.ts";
+import { approveRequiredSketches } from "../src/spec/comps.ts";
 import { writeDesignLock } from "../src/spec/design-lock.ts";
 import { advanceDesignStages } from "../src/spec/design-stages.ts";
 import type { SiteBrief } from "../src/guide/schemas.ts";
@@ -99,6 +100,7 @@ function passStages(dir: string, brief: string): void {
   writeDesignLock(dir, deal.pickedId);
   advanceDesignStages(dir, { brief, approval: { stage: "direction", text: "Approved." } });
   advanceDesignStages(dir, { brief, approval: { stage: "prebuild", text: "Approved." } });
+  approveRequiredSketches(dir, png);
 }
 
 async function readyToBuild(dir: string): Promise<void> {

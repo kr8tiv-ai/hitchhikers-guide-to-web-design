@@ -37,7 +37,10 @@ import {
   type QueueStatus,
 } from "../queue-file.ts";
 import { writeBrandKit } from "../brand/kit-from-interview.ts";
-import { RenderApprovalError, pagesWaitingForRender, clearPageRenderRunner } from "../spec/page-renders.ts";
+import { compsWaiting } from "../spec/comps.ts";
+import { runCompGate, type CompFixTurn, type CompGateDeps } from "../spec/comp-gate.ts";
+import { visualTruthForPrompt, writeVisualTruth } from "../spec/visual-truth.ts";
+import { RenderApprovalError, clearPageRenderRunner } from "../spec/page-renders.ts";
 import { clearReferenceCaptureRunner } from "../spec/reference-shots.ts";
 import { extractReferenceDesign, resolveReferenceTransport } from "../brand/reference-system.ts";
 import { designDriftFindings } from "../spec/design-drift.ts";
@@ -101,6 +104,7 @@ import {
   countVisibleCopy,
   distHtmlForOwnedSource,
   formatFixBeforeFinish,
+  isCompCompareCloseReason,
   isDesignDriftCloseReason,
   isSurfaceCloseReason,
   isVisitorSource,
@@ -311,6 +315,7 @@ const watchOverrides = new Map<string, SiteBuildWatch>();
 const buildGates = new Map<string, SiteBuildGate>();
 const sectionStillRunners = new Map<string, (projectDir: string) => Promise<void>>();
 const beautyRunners = new Map<string, (projectDir: string, promptId: string) => Promise<void>>();
+const compGates = new Map<string, CompGateDeps>();
 
 interface LiveBuild {
   projectDir: string;
@@ -405,6 +410,16 @@ export function setBeautyRunner(
 }
 
 /**
+ * Tests replace the compare shooter, the review, and the preview.
+ * Null clears the override. A desk build uses the real preview and Chromium.
+ */
+export function setCompGateDeps(projectDir: string, deps: CompGateDeps | null): void {
+  const key = path.resolve(projectDir);
+  if (deps === null) compGates.delete(key);
+  else compGates.set(key, deps);
+}
+
+/**
  * Tests point selection at a design-library directory (the folder that
  * contains `entries/`). Null uses the packaged library. A process-wide
  * seam, cleared by the test when the call returns.
@@ -425,6 +440,7 @@ export function resetSiteBuildWatch(projectDir: string): void {
   buildGates.delete(key);
   sectionStillRunners.delete(key);
   beautyRunners.delete(key);
+  compGates.delete(key);
   clearReferenceCaptureRunner(projectDir);
   clearPageRenderRunner(projectDir);
   liveBuilds.delete(key);
@@ -809,6 +825,7 @@ export async function draftBriefPlan(projectDir: string, briefMarkdown: string):
   const stack = chosenStack(projectDir, briefMarkdown, answers);
   const existing = readPromptTasks(projectDir);
   if (existing.length > 0) {
+    writeVisualTruth(projectDir);
     return existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
@@ -823,6 +840,7 @@ export async function draftBriefPlan(projectDir: string, briefMarkdown: string):
     answers,
     planned.pages.flatMap((page) => page.sections),
   );
+  writeVisualTruth(projectDir);
   const packet = renderContextPacket(buildContextPacket(projectDir, "site-prompt"));
   const library = await attachDesignSelection(projectDir, readDesignLibrary(projectDir, briefMarkdown), briefMarkdown);
   const dir = path.join(projectDir, ".hitchhiker", "prompts");
@@ -860,6 +878,7 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
   if (existing.length > 0) {
     const coverage = checkPlanCoverage(planned.requirements, existing);
     if (!coverage.ok) throw new PlanCoverageError(coverage.uncovered);
+    writeVisualTruth(projectDir);
     const ids = existing
       .map((task) => task.promptId)
       .filter((id): id is string => typeof id === "string" && id !== "");
@@ -867,15 +886,27 @@ export async function prepareSiteBuild(projectDir: string, briefMarkdown: string
     await mergeBuildQueue(projectDir, ids);
     return ids;
   }
-  // Only the first prompt generation waits on approved renders. A project
-  // with no sitemap has no primary pages, so this does not block it.
-  // Footer pages are not gated. Later calls already have prompts and return above.
-  const waiting = pagesWaitingForRender(projectDir);
-  if (waiting.length > 0) throw new RenderApprovalError(waiting);
+  // The first prompt generation waits until every primary page has an
+  // approved desktop sketch and an approved phone sketch. The long page
+  // is included when design.comps.long is on. A project with no sitemap
+  // has no primary pages, so this does not block it. Footer pages are
+  // not gated. Later calls already have prompts and return above.
+  const missing = compsWaiting(projectDir);
+  if (missing.length > 0) {
+    throw new RenderApprovalError(
+      missing.map((item) => ({
+        title: item.title,
+        route: item.route,
+        file: item.file,
+        view: item.label,
+      })),
+    );
+  }
   const { prompts } = generateBriefPlan(briefMarkdown, stack, answers);
   writeSectionStillPlan(projectDir, briefMarkdown, answers, planned.pages);
   writeBrandKit(projectDir, answers);
   writeDesignMd(projectDir, briefMarkdown, answers);
+  writeVisualTruth(projectDir);
   writeMotionModule(
     projectDir,
     briefMarkdown,
@@ -1356,6 +1387,17 @@ async function runQueue(projectDir: string, spawnFn: BuildSpawn): Promise<void> 
           const gate = buildGates.get(key);
           if (gate !== undefined) await gate({ projectDir, promptId: next.id, files: attempt.files });
           enforcePromptClose(projectDir, next.id, attempt.files);
+          // 245l's screenshot loop is not in this tree, so the compare gate is its own close step.
+          const comp = await closeWithCompGate(
+            projectDir,
+            next.id,
+            spawnFn,
+            attempt.lines,
+            attempt.files,
+            attempt.startedAt,
+            outside.hits,
+          );
+          if (comp !== "ok") return;
           const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : "";
           await settleItem(projectDir, next.id, "passed", reason, attempt.lines, attempt.files, attempt.startedAt, outside.hits);
           await maybeRunSectionStills(projectDir, next.id);
@@ -1453,7 +1495,7 @@ function enqueueControl<T>(projectDir: string, fn: () => Promise<T>): Promise<T>
 
 /**
  * A running row with a dead child. Verify a clean end, or queue one rerun.
- * Does not spawn. The caller starts the queue outside any nested lock.
+ * The compare gate may run one fix spawn. The caller starts the queue outside any nested lock.
  */
 async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "idle"> {
   if (jobs.has(path.resolve(projectDir))) return "idle";
@@ -1537,6 +1579,16 @@ async function adoptDeadRun(projectDir: string): Promise<"continue" | "halt" | "
       const gate = buildGates.get(path.resolve(projectDir));
       if (gate !== undefined) await gate({ projectDir, promptId: run.promptId, files });
       enforcePromptClose(projectDir, run.promptId, files);
+      const comp = await closeWithCompGate(
+        projectDir,
+        run.promptId,
+        runnerFor(projectDir),
+        run.lastLines,
+        files,
+        run.startedAt,
+        outside.hits,
+      );
+      if (comp !== "ok") return "halt";
       const recovered = recoveredReason(run.promptId);
       const reason = outside.readPath !== "" ? outsideWarning(outside.readPath) : recovered;
       await settleItem(projectDir, run.promptId, "passed", reason, run.lastLines, files, run.startedAt, outside.hits);
@@ -2094,7 +2146,15 @@ async function rememberPauseAfter(projectDir: string): Promise<void> {
   if (queue?.pause === undefined) return;
   const after = lastFinishedPrompt(queue.items);
   if (after === queue.pause.after) return;
-  await saveBuildQueue(projectDir, { items: queue.items, pause: { at: queue.pause.at, after } });
+  await saveBuildQueue(projectDir, {
+    items: queue.items,
+    pause: {
+      at: queue.pause.at,
+      after,
+      ...(queue.pause.reason !== undefined ? { reason: queue.pause.reason } : {}),
+      ...(queue.pause.composites !== undefined ? { composites: queue.pause.composites } : {}),
+    },
+  });
 }
 
 async function requeue(projectDir: string, promptId: string, from: "failed" | "interrupted"): Promise<void> {
@@ -2209,7 +2269,8 @@ function renderPrompt(
 ): string {
   const brief = briefMarkdown.trim() === "" ? "The brief text was empty." : briefMarkdown.trim();
   const files = prompt.filesModified.length === 0 ? "none" : prompt.filesModified.join(", ");
-  const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library);
+  const truth = visualTruthForPrompt(projectDir, prompt, brief);
+  const design = designLanguageFor(prompt, artDirectionLine(projectDir, briefMarkdown, prompt), library, truth);
   const moments = readSignatureMoments(projectDir);
   const signature = moments.length === 0 ? "" : signaturePromptBlock(moments, sectionIdOf(prompt));
   const rendered = [
@@ -2509,6 +2570,141 @@ let signatureCloseHook: SignatureClose | null = null;
  */
 export function setSignatureClose(hook: SignatureClose | null): void {
   signatureCloseHook = hook;
+}
+
+/**
+ * Compare the built page with the approved sketch after the other close checks.
+ * A miss runs one fix spawn, then a reshoot. Out of rounds, the queue pauses.
+ * A thrown fix spawn fails the prompt. A pause is not turned into a failure.
+ */
+async function closeWithCompGate(
+  projectDir: string,
+  promptId: string,
+  spawnFn: BuildSpawn | null,
+  lines: readonly string[],
+  files: readonly string[],
+  startedAt: string,
+  outside?: OutsideAccess[],
+): Promise<"ok" | "paused" | "failed"> {
+  const injected = compGates.get(path.resolve(projectDir));
+  try {
+    const result = await runCompGate(projectDir, promptId, null, {
+      log: (line) => appendBuildLog(projectDir, promptId, line),
+      rerun: async (turn) => {
+        if (spawnFn === null) throw new Error("The build did not start.");
+        await spawnCompFix(projectDir, spawnFn, promptId, turn);
+      },
+      ...(injected ?? {}),
+    });
+    if (result.status !== "paused") return "ok";
+    try {
+      await noteCompPause(projectDir, promptId, result.reason, lines, files, startedAt);
+    } catch {
+      // The queue is already paused. Do not mark the prompt failed.
+    }
+    return "paused";
+  } catch (error: unknown) {
+    const queue = await loadBuildQueue(projectDir).catch(() => null);
+    if (queue?.pause?.reason === "comp-mismatch") {
+      try {
+        await noteCompPause(
+          projectDir,
+          promptId,
+          "The compare could not finish, so the queue is paused.",
+          lines,
+          files,
+          startedAt,
+        );
+      } catch {
+        // The queue is already paused. Do not mark the prompt failed.
+      }
+      return "paused";
+    }
+    const reason = error instanceof Error ? publicText(error.message) : "The build did not finish.";
+    await settleItem(
+      projectDir,
+      promptId,
+      "failed",
+      reason === "" ? "The build did not finish." : reason,
+      lines,
+      files,
+      startedAt,
+      outside,
+    );
+    return "failed";
+  }
+}
+
+/** One fix spawn. It does not run the close again, so the compare gate does not call itself. */
+async function spawnCompFix(
+  projectDir: string,
+  spawnFn: BuildSpawn,
+  promptId: string,
+  turn: CompFixTurn,
+): Promise<void> {
+  const previous = readRunFile(projectDir);
+  const same = previous?.promptId === promptId;
+  const startedAt = same && previous !== null ? previous.startedAt : new Date().toISOString();
+  writeRun(projectDir, {
+    promptId,
+    status: "running",
+    model: same && previous !== null && previous.model !== "" ? previous.model : BUILD_MODEL,
+    effort: same && previous !== null && previous.effort !== "" ? previous.effort : BUILD_EFFORT,
+    startedAt,
+    elapsedMs: same && previous !== null ? elapsed(previous) : 0,
+    lastLines: same && previous !== null ? previous.lastLines : [],
+    filesWritten: same && previous !== null ? previous.filesWritten : [],
+    reason: publicText(turn.text),
+    pid: null,
+    recovery: turn.text,
+    recoveryRerun: false,
+  });
+  const promptPath = path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`);
+  const spawned = await spawnPrompt(projectDir, spawnFn, promptId, promptPath, "");
+  if (spawned.halt) throw new Error("The build did not start.");
+  if (spawned.attempt.result.code !== 0 || spawned.attempt.result.errorCode !== null) {
+    throw new Error("The build did not finish.");
+  }
+}
+
+/** Leave the prompt paused with an interrupted run, so a dead-child adopt cannot pass it. */
+async function noteCompPause(
+  projectDir: string,
+  promptId: string,
+  reason: string,
+  lines: readonly string[],
+  files: readonly string[],
+  startedAt: string,
+): Promise<void> {
+  const queue = await loadBuildQueue(projectDir);
+  if (queue !== null) {
+    let changed = false;
+    for (const item of queue.items) {
+      if (item.id !== promptId || item.status === "paused") continue;
+      item.status = "paused";
+      changed = true;
+    }
+    if (changed) await saveBuildQueue(projectDir, queue);
+  }
+  const previous = readRunFile(projectDir);
+  const same = previous?.promptId === promptId;
+  const started = same && previous !== null ? previous.startedAt : startedAt;
+  const text = publicText(reason);
+  const sentence = text === "" ? "The built page does not match the approved sketch." : text;
+  writeRun(projectDir, {
+    promptId,
+    status: "interrupted",
+    model: BUILD_MODEL,
+    effort: BUILD_EFFORT,
+    startedAt: started,
+    elapsedMs: Math.max(0, Date.now() - Date.parse(started)),
+    lastLines: same && previous !== null ? previous.lastLines : [...lines],
+    filesWritten: same && previous !== null ? previous.filesWritten : [...files],
+    reason: sentence,
+    pid: null,
+    recovery: sentence,
+    recoveryRerun: false,
+  });
 }
 
 /** Save leftover project files, then fail the prompt when dist it owns still has bad visitor copy, a placeholder contact, a repeated sentence, a bad document head, a listing structure its requirements own, a hero that misses its variant structure, or a broken signature moment. */
@@ -2841,7 +3037,8 @@ function writeSessionPrompt(projectDir: string, promptId: string, promptPath: st
   const promptText = readOptional(path.join(projectDir, ".hitchhiker", "prompts", `${promptId}.md`));
   const ownedFiles = parseExpectedFiles(promptText);
   const surface = isSurfaceCloseReason(priorRecovery);
-  if (!shouldScanVisibleCopy(promptText, ownedFiles) && !surface) return promptPath;
+  const compFix = isCompCompareCloseReason(priorRecovery);
+  if (!shouldScanVisibleCopy(promptText, ownedFiles) && !surface && !compFix) return promptPath;
   const hits = shouldScanVisibleCopy(promptText, ownedFiles)
     ? [...ownedVisitorHits(projectDir, promptText), ...ownedPageDistHits(projectDir, promptText, ownedFiles)]
     : [];

@@ -17,6 +17,9 @@
  * price, so that pair throws.
  *
  * Section stills do not use this card. They have no quote, no cap, and no confirm.
+ *
+ * An edit is the output still price plus one input still price per source.
+ * Inputs are billed. There is no separate edit model id.
  */
 
 export const PRICE_CARD_DATE = "2026-09-29";
@@ -37,6 +40,17 @@ export interface VideoJob {
   resolution: "480p" | "720p" | "1080p";
   seconds: number;
   prompt: string;
+}
+
+export interface EditJob {
+  kind: "edit";
+  model: StillJob["model"];
+  resolution: StillJob["resolution"];
+  prompt: string;
+  /** Output images, billed at the still rate. */
+  count: number;
+  /** Input images. Each is billed at the same still rate. */
+  sources: number;
 }
 
 export type ImagineJob = StillJob | VideoJob;
@@ -132,6 +146,15 @@ export function quoteJob(job: ImagineJob): JobQuote {
   return { usd: centsToUsd(priced.cents), line: priced.line };
 }
 
+/** Output price plus one input price per source, at the still rate for that model. */
+export function quoteEdit(job: EditJob): JobQuote {
+  if (job === null || typeof job !== "object" || job.kind !== "edit") {
+    throw new Error("Imagine edit quote needs an edit job.");
+  }
+  const priced = priceEdit(job);
+  return { usd: centsToUsd(priced.cents), line: priced.line };
+}
+
 export function quote(job: ImagineJob): BatchQuote;
 export function quote(jobs: readonly ImagineJob[]): BatchQuote;
 export function quote(jobOrJobs: ImagineJob | readonly ImagineJob[]): BatchQuote {
@@ -211,6 +234,21 @@ function priceStill(job: StillJob): Priced {
   };
 }
 
+function priceEdit(job: EditJob): Priced {
+  const model = readToken(job.model, "model");
+  const resolution = readToken(job.resolution, "resolution");
+  const count = positiveWhole(job.count, "count");
+  const sources = positiveWhole(job.sources, "sources");
+  readPrompt(job.prompt);
+  const centsEach = stillUnitCents(model, resolution);
+  const cents = addCents(multiply(centsEach, count), multiply(centsEach, sources));
+  const floor = model === "grok-imagine-image-quality" ? ", floor" : "";
+  return {
+    cents,
+    line: `${model} at ${resolution}, count ${count}, inputs ${sources}${floor}, card ${PRICE_CARD_DATE}`,
+  };
+}
+
 function priceVideo(job: VideoJob): Priced {
   const model = readToken(job.model, "model");
   const resolution = readToken(job.resolution, "resolution");
@@ -269,7 +307,7 @@ function readPrompt(value: unknown): void {
   }
 }
 
-function positiveWhole(value: unknown, noun: "seconds" | "count"): number {
+function positiveWhole(value: unknown, noun: "seconds" | "count" | "sources"): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0 || !Number.isSafeInteger(value)) {
     throw new Error(`Imagine ${noun} must be a positive whole number.`);
   }

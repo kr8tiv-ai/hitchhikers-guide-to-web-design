@@ -226,6 +226,17 @@ function encodePng(image: RgbImage): Buffer {
   ]);
 }
 
+/** One horizontal band of a PNG this decoder already understands. No new image library. */
+export function cropPngBand(bytes: Buffer, y: number, height: number): Buffer {
+  const image = decodePng(bytes);
+  if (!Number.isInteger(y) || !Number.isInteger(height) || y < 0 || height < 1 || y + height > image.height) {
+    throw new MoodImageError("PNG crop is outside the image.");
+  }
+  const stride = image.width * image.channels;
+  const pixels = Buffer.from(image.pixels.subarray(y * stride, (y + height) * stride));
+  return encodePng({ width: image.width, height, channels: image.channels, pixels });
+}
+
 function resample(image: RgbImage, width: number, height: number): RgbImage {
   const pixels = Buffer.alloc(width * height * image.channels);
   for (let y = 0; y < height; y += 1) {

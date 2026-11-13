@@ -1,5 +1,5 @@
 /**
- * Sitemap, wireframe, style guide, direction, and pre-build checks.
+ * Sitemap, wireframe, style guide, direction, look and feel, then pre-build checks.
  * Each stage waits for the previous approval. Start build is a separate step.
  * A blank answer is not an approval. This module does not start a build.
  */
@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   advanceDesignStages,
+  compsWaiting,
   dealDirections,
   designGateReason,
   designReadyForBuild,
@@ -21,7 +22,7 @@ import {
 } from "@hitchhiker/engine";
 import { escapeHtml } from "../card.ts";
 import { renderDirectionPicker } from "./direction-desk.ts";
-import { renderReferenceDesk } from "./reference-desk.ts";
+import { renderCompsDesk, renderReferenceDesk } from "./reference-desk.ts";
 
 export async function presentDesignStage(projectDir: string, brief: string): Promise<void> {
   await emitDesignStages(projectDir, { brief });
@@ -198,6 +199,8 @@ function renderDesignStageBody(projectDir: string, token: string, briefMarkdown 
       ${stageForm(token, "direction", "direction", reason === "")}
     </section>`;
   }
+  const waiting = compsWaiting(projectDir);
+  if (!state.prebuild && waiting.length > 0) return renderCompsDesk(projectDir, token);
   const brief = briefMarkdown.trim() !== "" ? briefMarkdown : briefFor(projectDir);
   const report = runPrebuildChecks(brief, projectDir);
   if (!state.prebuild) {
@@ -221,5 +224,7 @@ function renderDesignStageBody(projectDir: string, token: string, briefMarkdown 
     </section>`;
   }
   const gate = designReadyForBuild(projectDir, brief);
-  return startBuildForm(token, gate.ok, gate.reason);
+  const start = startBuildForm(token, gate.ok, gate.reason);
+  if (waiting.length === 0) return start;
+  return `${start}\n${renderCompsDesk(projectDir, token)}`;
 }

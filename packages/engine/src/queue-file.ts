@@ -32,6 +32,10 @@ export interface QueuePause {
   at: string;
   /** Last finished prompt. Empty when nothing has finished. */
   after: string;
+  /** Short machine reason, for example comp-mismatch. Old files omit this. */
+  reason?: string;
+  /** Project-relative pictures the owner should look at. Old files omit this. */
+  composites?: string[];
 }
 
 export interface QueueFile {
@@ -48,6 +52,10 @@ export class QueueFileError extends Error {
 
 const ID_PATTERN = /^[a-z0-9-]+$/;
 const PAUSE_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const PAUSE_REASON = /^[a-z0-9-]+$/;
+const COMPOSITE_PATH = /^[a-z0-9][a-z0-9._/-]*$/i;
+const COMPOSITE_MAX = 24;
+const COMPOSITE_LEN = 180;
 
 /** Key shapes that still fit the id charset, plus secret words. */
 const SECRET_PATTERN =
@@ -119,13 +127,45 @@ function assertItem(value: unknown, seen: Set<string>): QueueItem {
   return { id, kind, status: record.status };
 }
 
+function assertPauseReason(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 40 || !PAUSE_REASON.test(value)) {
+    throw new QueueFileError("Queue pause reason is not valid.");
+  }
+  if (looksLikeSecret(value)) throw new QueueFileError("Queue pause looks like a secret.");
+  return value;
+}
+
+function assertComposites(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > COMPOSITE_MAX) {
+    throw new QueueFileError("Queue pause pictures must be a list.");
+  }
+  const pictures: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item.length === 0 || item.length > COMPOSITE_LEN) {
+      throw new QueueFileError("Queue pause picture path is not valid.");
+    }
+    if (
+      item.includes("\\") ||
+      item.includes("..") ||
+      item.startsWith("/") ||
+      path.isAbsolute(item) ||
+      !COMPOSITE_PATH.test(item)
+    ) {
+      throw new QueueFileError("Queue pause picture path is not valid.");
+    }
+    if (looksLikeSecret(item)) throw new QueueFileError("Queue pause looks like a secret.");
+    pictures.push(item);
+  }
+  return pictures;
+}
+
 function assertPause(value: unknown): QueuePause {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new QueueFileError("Queue pause must be an object.");
   }
   const record = value as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (key !== "at" && key !== "after") {
+    if (key !== "at" && key !== "after" && key !== "reason" && key !== "composites") {
       throw new QueueFileError("Queue pause has an unknown field.");
     }
   }
@@ -138,7 +178,10 @@ function assertPause(value: unknown): QueuePause {
   if (record.after !== "" && looksLikeSecret(record.after)) {
     throw new QueueFileError("Queue pause looks like a secret.");
   }
-  return { at: record.at, after: record.after };
+  const pause: QueuePause = { at: record.at, after: record.after };
+  if (record.reason !== undefined) pause.reason = assertPauseReason(record.reason);
+  if (record.composites !== undefined) pause.composites = assertComposites(record.composites);
+  return pause;
 }
 
 function assertQueue(value: unknown): QueueFile {

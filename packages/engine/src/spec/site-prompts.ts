@@ -18,6 +18,8 @@
  *   motion entry. A desktop 3D gate is added only for those effects.
  * - Art direction is one Babel Fish entry, then one Deep Thought entry per
  *   section, before any layout prompt.
+ * - visualTargetOf names the page or section a prompt builds. Setup, tokens,
+ *   SEO, and deploy prompts name none. The body builder attaches comps.
  */
 
 import { ART_GUIDANCE } from "./art-direction.ts";
@@ -269,6 +271,29 @@ export function pageRequirementId(pageId: string): string {
 
 export function featureRequirementId(feature: string): string {
   return `REQ-FEAT-${slugId(feature)}`;
+}
+
+/**
+ * The page or section this prompt builds. Null for setup, tokens, SEO, deploy,
+ * and the other prompts that do not own a picture.
+ * A page prompt returns the route only. A section prompt returns the section id.
+ */
+export function visualTargetOf(
+  prompt: Pick<SitePromptSkeleton, "title" | "requirements" | "route">,
+): { route?: string; sectionId?: string } | null {
+  if (typeof prompt.route === "string" && prompt.route !== "") return { route: prompt.route };
+  for (const requirement of prompt.requirements) {
+    if (requirement === "REQ-ART-DIRECTION") continue;
+    const match = /^REQ-(?:STRUCT|COPY|IMAGE|ART)-(.+)$/.exec(requirement);
+    const sectionId = match?.[1];
+    if (sectionId !== undefined && sectionId !== "") return { sectionId };
+  }
+  if (prompt.requirements.some((requirement) => requirement.startsWith("REQ-FX-"))) {
+    const bound = /\bon the ([a-z0-9-]+) section\b/i.exec(prompt.title);
+    const sectionId = bound?.[1]?.toLowerCase();
+    if (sectionId !== undefined && sectionId !== "") return { sectionId };
+  }
+  return null;
 }
 
 const ROUTE_RE =

@@ -28,7 +28,13 @@ export type {
   AiConfig,
   AiEffort,
   DeployTarget,
+  CompConfig,
+  CompImageModel,
   DesignGateConfig,
+  MotionRefConfig,
+  CompareConfig,
+  MotionVideoModel,
+  MotionVideoResolution,
   Effort,
   GuideConfig,
   InterviewDepth,
@@ -162,6 +168,7 @@ export { InterviewError, emitDesignStages, openInterview, readRevisitId, writeRe
 export { advanceDesignStages, designGateReason, designReadyForBuild } from "./spec/design-stages.ts";
 export { writeDesignLock } from "./spec/design-lock.ts";
 export { VISUAL_CONSTITUTION_REL, constitutionBlock, renderVisualConstitution } from "./spec/visual-constitution.ts";
+export { COMP_MATCH_PREFIX, COMP_OPEN_LINE, VISUAL_TRUTH_REL, visualTruthForPrompt, writeVisualTruth } from "./spec/visual-truth.ts";
 export type { DesignBuildGate, DesignStageName } from "./spec/design-stages.ts";
 export { runPrebuildChecks } from "./spec/prebuild-checks.ts";
 export type { PrebuildCheck, PrebuildReport } from "./spec/prebuild-checks.ts";
@@ -377,7 +384,7 @@ export {
 } from "./spec/section-stills.ts";
 export type { SectionStillPlan, SectionStillSlot, SuppliedStill } from "./spec/section-stills.ts";
 export type { BriefAnswer, BriefPlan, PlanRequirement, PlannedPage } from "./spec/brief-plan.ts";
-export { featureRequirementId, pageRequirementId } from "./spec/site-prompts.ts";
+export { featureRequirementId, pageRequirementId, visualTargetOf } from "./spec/site-prompts.ts";
 export { PlanCoverageError, checkPlanCoverage, planCoverageMessage, planCoverageRows } from "./spec/plan-coverage.ts";
 export type { CoverageGap, CoverageRequirement, CoverageRow, CoverageTask, PlanCoverage } from "./spec/plan-coverage.ts";
 export {
@@ -406,6 +413,7 @@ export type {
 export {
   DESIGN_LOCK_REL,
   RENDERS_REL,
+  RENDER_MODEL,
   RenderApprovalError,
   approveRender,
   buildRenderPrompt,
@@ -423,7 +431,65 @@ export {
   setPageRenderRunner,
   syncRenderApprovals,
 } from "./spec/page-renders.ts";
-export type { DraftRenderDeps, PrimaryPage, RenderApproval, WaitingPage } from "./spec/page-renders.ts";
+export type { DraftRenderDeps, PrimaryPage, RenderApproval, RenderDeskProvider, WaitingPage } from "./spec/page-renders.ts";
+export {
+  COMPS_REL,
+  COMP_VIEWS,
+  addCompCandidate,
+  approveComp,
+  approveMotionRef,
+  approveRequiredSketches,
+  approvedMotionRefs,
+  buildCompPrompt,
+  compCandidateRel,
+  compReferenceFiles,
+  compRenderRel,
+  compSlug,
+  compViewFacts,
+  compsWaiting,
+  draftComps,
+  draftMotionRefs,
+  isCompApproved,
+  isCompView,
+  listComps,
+  motionClipRel,
+  redrawCompView,
+  requestCompChange,
+  requiredCompViews,
+  sectionCropRel,
+  syncCompApprovals,
+  approvedCompViews,
+  approvedSectionClips,
+  compRoutesForSection,
+} from "./spec/comps.ts";
+export type {
+  ApprovedCompView,
+  ApprovedSectionClip,
+  ApprovedMotionRef,
+  CompApproval,
+  CompDraftDeps,
+  CompFile,
+  CompPage,
+  CompSection,
+  CompView,
+  CompViewRecord,
+  CompWaiting,
+  MotionApproval,
+  MotionRefDeps,
+  MotionVideoProvider,
+  SectionBand,
+  StoredCompApproval,
+} from "./spec/comps.ts";
+export {
+  runCompGate,
+} from "./spec/comp-gate.ts";
+export type {
+  CompFault,
+  CompFixTurn,
+  CompGateDeps,
+  CompGateResult,
+} from "./spec/comp-gate.ts";
+export { isCompCompareCloseReason } from "./spec/visible-copy.ts";
 export {
   BUILD_EFFORT,
   BUILD_EXIT_GRACE_MS,
@@ -461,6 +527,7 @@ export {
   setProjectBuildRunner,
   setSectionStillRunner,
   setBeautyRunner,
+  setCompGateDeps,
   setSiteBuildGate,
   setSignatureClose,
   renderBuildPrompt,

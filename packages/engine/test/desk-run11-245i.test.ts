@@ -11,8 +11,10 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   RenderApprovalError,
+  approveComp,
   approveRender,
   buildRenderPrompt,
+  compCandidateRel,
   clearReferenceCaptureRunner,
   collectReferenceShots,
   countDesignReferenceImages,
@@ -75,6 +77,22 @@ const THREE_PAGES = `# Sitemap
 function approveFile(dir: string, route: string, label: string): void {
   saveRenderUpload(dir, route, png(label));
   approveRender(dir, route, WHEN);
+}
+
+/**
+ * Phone and long sketches, approved beside the desktop render.
+ * The default comp set waits for both. The tests below still gate on the desktop file.
+ */
+function approvePhoneAndLong(dir: string): void {
+  for (const route of ["/", "/visit", "/about"]) {
+    for (const view of ["mobile", "desktop-long"] as const) {
+      const rel = compCandidateRel(route, view, 1);
+      const abs = path.join(dir, ...rel.split("/"));
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, png(`${route}-${view}`));
+      approveComp(dir, route, view, rel);
+    }
+  }
 }
 
 test("named references with urls are captured and a name without a url asks the owner", async () => {
@@ -212,6 +230,7 @@ test("prepareSiteBuild waits until every primary page has an approved render", a
   const dir = tempDir();
   try {
     writeSitemap(dir, THREE_PAGES);
+    approvePhoneAndLong(dir);
     approveFile(dir, "/", "home");
     approveFile(dir, "/visit", "visit");
     await assert.rejects(() => prepareSiteBuild(dir, BRIEF), (error: unknown) => {
@@ -235,6 +254,7 @@ test("an owner mock counts once approved and a later edit withdraws approval", a
   const dir = tempDir();
   try {
     writeSitemap(dir, THREE_PAGES);
+    approvePhoneAndLong(dir);
     const rel = saveRenderUpload(dir, "/about", png("about"));
     saveRenderUpload(dir, "/", png("home"));
     saveRenderUpload(dir, "/visit", png("visit"));

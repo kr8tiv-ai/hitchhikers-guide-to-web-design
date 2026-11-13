@@ -701,6 +701,79 @@ textarea {
   }
 }
 
+/* Page sketches. One column on a phone, a row from 40rem. The card keeps the real aspect. */
+[data-design-stage="look"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-design-stage="look"] article,
+[data-design-stage="look"] fieldset,
+[data-comp-view],
+[data-comp-motion] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-design-stage="look"] fieldset {
+  border: 1px solid var(--color-line);
+  padding: var(--space-3);
+}
+
+[data-design-stage="look"] textarea,
+[data-design-stage="look"] input[type="file"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hh-comp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.hh-comp-card {
+  display: block;
+  min-width: 0;
+  margin: 0;
+}
+
+.hh-comp-card img,
+[data-comp-motion] video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  background: var(--color-line);
+}
+
+.hh-comp-card[data-aspect="16:9"] img {
+  aspect-ratio: 16 / 9;
+}
+
+.hh-comp-card[data-aspect="1:2"] img {
+  aspect-ratio: 1 / 2;
+}
+
+.hh-comp-card[data-aspect="9:19.5"] img {
+  aspect-ratio: 9 / 19.5;
+}
+
+.hh-comp-card:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 40rem) {
+  .hh-comp-grid {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+}
+
 .hh-table-wrap {
   min-width: 0;
   overflow-x: auto;
@@ -1057,7 +1130,8 @@ p.hh-error__next {
   .hh-btn[aria-busy="true"]::after,
   [aria-busy="true"] .hh-btn--primary::after,
   .hh-qcard[aria-busy="true"] .hh-qcard__input,
-  .hh-voice-pulse {
+  .hh-voice-pulse,
+  [data-comp-motion] video {
     animation: none;
     transition: none;
   }

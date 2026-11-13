@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
 import { isInsideDeskRepo } from "@hitchhiker/engine";
-import { writeGateShots } from "./design-then-build.ts";
+import { plantRequiredSketches, writeGateShots } from "./design-then-build.ts";
 import { removeTempDir } from "../test/remove-temp.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -137,6 +137,7 @@ test("a new project approves the brief, the plan, and each design stage", async 
     await expect(page.locator("[data-design-stage='style-guide']")).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Approve style guide" }).click();
     await expect(page.locator("[data-direction-desk]")).toContainText("Picked", { timeout: 30_000 });
+    plantRequiredSketches(dest);
     await page.getByRole("button", { name: "Approve direction" }).click();
     await expect(page.locator("[data-design-stage='prebuild']")).toBeVisible();
     expect(existsSync(path.join(dest, ".hitchhiker", "queue.json"))).toBe(false);
