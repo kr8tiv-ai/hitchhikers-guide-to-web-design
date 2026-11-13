@@ -10,6 +10,7 @@ import {
   recoverSiteBuild,
   setProjectBuildRunner,
   setBeautyRunner,
+  setCompGateDeps,
   setPageRenderRunner,
   setReferenceCaptureRunner,
   setSectionStillRunner,
@@ -101,6 +102,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
       clearProjectBuildRunner(runnerDir);
       setSectionStillRunner(runnerDir, null);
       setBeautyRunner(runnerDir, null);
+      setCompGateDeps(runnerDir, null);
     }
     bindBuildRunner(dir, opts);
     runnerDir = path.resolve(dir);
@@ -211,6 +213,7 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
           clearProjectBuildRunner(runnerDir);
           setSectionStillRunner(runnerDir, null);
           setBeautyRunner(runnerDir, null);
+          setCompGateDeps(runnerDir, null);
           setReferenceCaptureRunner(runnerDir, null);
           setPageRenderRunner(runnerDir, null);
         }
@@ -222,11 +225,35 @@ export async function startServer(opts: StartServerOptions): Promise<ServerHandl
   };
 }
 
+const STUB_COMP_GATE = {
+  preview: async () => ({ url: "http://127.0.0.1:4311/", port: 4311, close: async () => undefined }),
+  shoot: async (req: { viewport: { width: number; height: number } }) => ({
+    width: req.viewport.width,
+    height: req.viewport.height,
+  }),
+  compare: async () => ({
+    layout: 1,
+    palette: 0,
+    edge: [0, 0, 0, 0, 0, 0],
+    width: 320,
+    height: 68,
+    shotWidth: 1440,
+    leftInk: 40,
+    rightInk: 40,
+  }),
+  think: async () => ({ faults: [] }),
+};
+
 function bindBuildRunner(projectDir: string, opts: StartServerOptions): void {
   if (opts.buildSpawn !== undefined) {
     setProjectBuildRunner(projectDir, opts.buildSpawn);
+    // A stub spawn never builds a real site. The compare gate still runs in
+    // the close once sketches are approved, so these fakes keep it from
+    // pausing the queue when the preview cannot start.
+    setCompGateDeps(projectDir, STUB_COMP_GATE);
     return;
   }
+  setCompGateDeps(projectDir, null);
   const underTest = process.env.NODE_TEST_CONTEXT !== undefined || process.execArgv.includes("--test");
   if (opts.guideThink !== undefined || underTest) {
     setProjectBuildRunner(projectDir, null);
